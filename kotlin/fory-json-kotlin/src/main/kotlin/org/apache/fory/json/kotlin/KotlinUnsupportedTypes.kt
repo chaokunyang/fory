@@ -50,8 +50,7 @@ internal object KotlinUnsupportedTypes {
         !Collection::class.java.isAssignableFrom(type)) ||
         Sequence::class.java.isAssignableFrom(type) ->
         "iterables and sequences may be lazy, infinite, or one-shot"
-      Iterator::class.java.isAssignableFrom(type) ->
-        "iterators are live destructive cursors"
+      Iterator::class.java.isAssignableFrom(type) -> "iterators are live destructive cursors"
       ClosedRange::class.java.isAssignableFrom(type) ||
         OpenEndRange::class.java.isAssignableFrom(type) ->
         "range interfaces have no single constructible concrete schema"
@@ -60,15 +59,17 @@ internal object KotlinUnsupportedTypes {
         TimeMark::class.java.isAssignableFrom(type) ||
         ComparableTimeMark::class.java.isAssignableFrom(type) ->
         "time sources and marks retain ambient process state"
-      type == Regex::class.java || name.startsWith("kotlin.text.MatcherMatchResult") ||
+      type == Regex::class.java ||
+        name.startsWith("kotlin.text.MatcherMatchResult") ||
         name.startsWith("kotlin.text.MatchResult") ||
         name.startsWith("kotlin.text.MatchGroup") ->
         "regular expressions and match state require an application-owned resource policy"
       Random::class.java.isAssignableFrom(type) -> "random generators retain mutable entropy state"
-      kotlin.Function::class.java.isAssignableFrom(type) || name.startsWith("kotlin.jvm.functions.") ->
-        "function values retain executable state"
+      kotlin.Function::class.java.isAssignableFrom(type) ||
+        name.startsWith("kotlin.jvm.functions.") -> "function values retain executable state"
       name.startsWith("kotlin.reflect.") -> "reflection values are class or callable authority"
-      name.startsWith("kotlin.coroutines.") -> "coroutine values retain scheduler or continuation state"
+      name.startsWith("kotlin.coroutines.") || name.startsWith("kotlinx.coroutines.") ->
+        "coroutine values retain scheduler or continuation state"
       name.startsWith("kotlin.properties.") -> "property delegates retain executable state"
       name.startsWith("kotlin.sequences.") -> "sequences may be lazy, infinite, or one-shot"
       else -> null

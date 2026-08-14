@@ -20,18 +20,21 @@
 package org.apache.fory.json.resolver;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotEquals;
+import static org.testng.Assert.assertSame;
 import static org.testng.Assert.expectThrows;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
-import org.apache.fory.json.codec.GeneratedJsonCodec.GeneratedMapKey;
-import org.apache.fory.json.codec.MapKeyCodec;
 import org.apache.fory.json.meta.JsonFieldAccessor;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.type.Types;
 import org.testng.annotations.Test;
 
 public class JsonGeneratedClassRegistryTest {
@@ -52,7 +55,7 @@ public class JsonGeneratedClassRegistryTest {
   }
 
   @Test
-  public void mergeSourceCapabilities() {
+  public void mergeSourceCodecs() {
     TypeRef<?> type = TypeRef.of(String.class);
     Map<TypeRef<?>, GeneratedJsonCodec<?>> codecs = new HashMap<>();
     Set<Class<?>> added = new LinkedHashSet<>();
@@ -67,32 +70,46 @@ public class JsonGeneratedClassRegistryTest {
         () ->
             JsonGeneratedClassRegistry.mergeSourceCodecs(
                 Collections.singletonMap(type, new OtherSourceCodec()), codecs, added));
+  }
 
-    Map<TypeRef<?>, GeneratedMapKey> mapKeys = new HashMap<>();
-    JsonGeneratedClassRegistry.mergeSourceMapKeys(
-        Collections.singletonMap(
-            type, new GeneratedMapKey(new StringKeyCodec(), new Class<?>[] {String.class})),
-        mapKeys);
-    JsonGeneratedClassRegistry.mergeSourceMapKeys(
-        Collections.singletonMap(
-            type, new GeneratedMapKey(new StringKeyCodec(), new Class<?>[] {String.class})),
-        mapKeys);
-    expectThrows(
-        IllegalStateException.class,
-        () ->
-            JsonGeneratedClassRegistry.mergeSourceMapKeys(
-                Collections.singletonMap(
-                    type,
-                    new GeneratedMapKey(
-                        new StringKeyCodec(), new Class<?>[] {String.class, Object.class})),
-                mapKeys));
-    expectThrows(
-        IllegalStateException.class,
-        () ->
-            JsonGeneratedClassRegistry.mergeSourceMapKeys(
-                Collections.singletonMap(
-                    type, new GeneratedMapKey(new OtherKeyCodec(), new Class<?>[] {String.class})),
-                mapKeys));
+  @Test
+  public void generatedCapabilityType() {
+    TypeRef<?> raw = TypeRef.of(String.class);
+    TypeRef<?> nonNull = TypeRef.of(String.class, ordinary(false));
+    TypeRef<?> nullable = TypeRef.of(String.class, ordinary(true));
+    assertEquals(JsonSharedRegistry.generatedCapabilityType(nonNull), raw);
+    assertEquals(JsonSharedRegistry.generatedCapabilityType(nullable), raw);
+
+    assertPreserved(TypeExtMeta.of(Types.UINT8, false, false, false, false));
+    assertPreserved(TypeExtMeta.of(Types.UNKNOWN, false, true, false, false));
+    assertPreserved(TypeExtMeta.of(Types.UNKNOWN, false, false, true, false));
+    assertPreserved(TypeExtMeta.of(Types.UNKNOWN, false, false, false, true));
+
+    TypeRef<?> nullableElement = TypeRef.of(String.class, ordinary(true));
+    TypeRef<?> list =
+        TypeRef.ofDeclaredTypeArguments(
+            java.util.List.class,
+            ordinary(false),
+            Collections.singletonList(nullableElement),
+            null);
+    TypeRef<?> generated = JsonSharedRegistry.generatedCapabilityType(list);
+    assertEquals(generated.getTypeArguments().get(0), nullableElement);
+    assertNotEquals(generated, TypeRef.of(list.getType()));
+
+    TypeRef<?> key = TypeRef.of(Integer.class, ordinary(false));
+    TypeRef<?> value = TypeRef.of(String.class, ordinary(true));
+    List<TypeRef<?>> mapArguments = java.util.Arrays.asList(key, value);
+    TypeRef<?> map = TypeRef.ofDeclaredTypeArguments(Map.class, ordinary(true), mapArguments, null);
+    assertEquals(JsonSharedRegistry.generatedCapabilityType(map).getTypeArguments(), mapArguments);
+  }
+
+  private static void assertPreserved(TypeExtMeta metadata) {
+    TypeRef<?> type = TypeRef.of(String.class, metadata);
+    assertSame(JsonSharedRegistry.generatedCapabilityType(type), type);
+  }
+
+  private static TypeExtMeta ordinary(boolean nullable) {
+    return TypeExtMeta.of(Types.UNKNOWN, nullable, false, false, false);
   }
 
   private static class SourceCodec extends GeneratedJsonCodec<String> {
@@ -108,18 +125,4 @@ public class JsonGeneratedClassRegistryTest {
   }
 
   private static final class OtherSourceCodec extends SourceCodec {}
-
-  private static class StringKeyCodec implements MapKeyCodec {
-    @Override
-    public String toName(Object key) {
-      return (String) key;
-    }
-
-    @Override
-    public Object fromName(String name) {
-      return name;
-    }
-  }
-
-  private static final class OtherKeyCodec extends StringKeyCodec {}
 }

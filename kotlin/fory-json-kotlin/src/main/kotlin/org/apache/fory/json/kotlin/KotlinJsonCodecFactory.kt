@@ -24,6 +24,7 @@ import org.apache.fory.json.JsonCodecFactory
 import org.apache.fory.json.codec.ArrayCodec
 import org.apache.fory.json.codec.JsonValueCodec
 import org.apache.fory.json.codec.ScalarCodecs
+import org.apache.fory.json.resolver.ExactTypeRequiredException
 import org.apache.fory.json.resolver.JsonTypeResolver
 import org.apache.fory.json.resolver.UnsupportedJsonTypeException
 import org.apache.fory.reflect.TypeRef
@@ -33,10 +34,11 @@ internal object KotlinJsonCodecFactory : JsonCodecFactory {
   override fun create(type: TypeRef<*>, resolver: JsonTypeResolver): JsonValueCodec<*>? {
     val rawType = type.rawType
     val semanticId = type.typeExtMeta?.typeId() ?: 0
-    if (semanticId in Types.UINT8..Types.UINT64 &&
-      semanticId != Types.VAR_UINT32 &&
-      semanticId != Types.VAR_UINT64 &&
-      semanticId != Types.TAGGED_UINT64
+    if (
+      semanticId in Types.UINT8..Types.UINT64 &&
+        semanticId != Types.VAR_UINT32 &&
+        semanticId != Types.VAR_UINT64 &&
+        semanticId != Types.TAGGED_UINT64
     ) {
       return KotlinUnsignedCodecs.scalar(
         semanticId,
@@ -45,7 +47,9 @@ internal object KotlinJsonCodecFactory : JsonCodecFactory {
       )
     }
     if (semanticId in Types.UINT8_ARRAY..Types.UINT64_ARRAY) {
-      KotlinUnsignedArrayCodecs.create(type)?.let { return it }
+      KotlinUnsignedArrayCodecs.create(type)?.let {
+        return it
+      }
       return ArrayCodec.createUnsignedPrimitive(rawType, semanticId)
     }
     if (rawType == Unit::class.java) {
@@ -59,25 +63,40 @@ internal object KotlinJsonCodecFactory : JsonCodecFactory {
       if (type.typeExtMeta?.nullable() == true) return ScalarCodecs.VoidCodec.INSTANCE
       throw UnsupportedJsonTypeException("Kotlin Nothing has no JSON value")
     }
-    KotlinMapKeyCodecs.create(type, resolver)?.let { return it }
+    KotlinMapKeyCodecs.create(type, resolver)?.let {
+      return it
+    }
     if (Map::class.java.isAssignableFrom(rawType)) {
       val arguments = type.typeArguments
       if (arguments.size == 2 && KotlinValueClassMetadata.isValueClass(arguments[0].rawType)) {
         return KotlinValueClassCodecs.createMap(type, resolver)
       }
     }
-    KotlinProductCodecs.create(type, resolver)?.let { return it }
-    KotlinRangeCodecs.create(type)?.let { return it }
-    KotlinProgressionCodecs.create(type)?.let { return it }
-    KotlinTemporalCodecs.create(type)?.let { return it }
+    KotlinProductCodecs.create(type, resolver)?.let {
+      return it
+    }
+    KotlinRangeCodecs.create(type)?.let {
+      return it
+    }
+    KotlinProgressionCodecs.create(type)?.let {
+      return it
+    }
+    KotlinTemporalCodecs.create(type)?.let {
+      return it
+    }
     if (rawType == TimedValue::class.java) return KotlinTimedValueCodec()
     KotlinUnsupportedTypes.reject(rawType)
-    if (Collection::class.java.isAssignableFrom(rawType) ||
-      Map::class.java.isAssignableFrom(rawType)
+    if (
+      Collection::class.java.isAssignableFrom(rawType) || Map::class.java.isAssignableFrom(rawType)
     ) {
       return null
     }
     if (KotlinValueClassMetadata.isValueClass(rawType)) {
+      if (!type.hasTypeExtMeta()) {
+        throw ExactTypeRequiredException(
+          "Kotlin JSON value class ${rawType.name} requires an exact declared occurrence",
+        )
+      }
       return KotlinValueClassCodecs.create(type)
     }
     if (rawType.getAnnotation(Metadata::class.java) == null) return null

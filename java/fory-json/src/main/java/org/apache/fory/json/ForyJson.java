@@ -789,8 +789,7 @@ public final class ForyJson {
     return value;
   }
 
-  private static boolean readOuterNull(
-      JsonReader reader, TypeRef<?> type, JsonTypeInfo typeInfo) {
+  private static boolean readOuterNull(JsonReader reader, TypeRef<?> type, JsonTypeInfo typeInfo) {
     if (!typeInfo.nullable() && !typeInfo.rejectsNull()) {
       return false;
     }
@@ -856,8 +855,9 @@ public final class ForyJson {
    *
    * <p>The resolver is constructed first and retained by all five readers and writers. Codecs
    * obtain dynamic child bindings from the active reader or writer instead of receiving a resolver
-   * through every capability call. The last-root cache is state-local and only avoids repeated
-   * resolver lookup for an identical declared type and fallback pair.
+   * through every capability call. Three state-local last-root caches independently cover runtime
+   * classes, declared classes, and exact {@link TypeRef} tokens; each avoids resolver lookup only
+   * on an identity hit.
    */
   private static final class JsonState {
     private final JsonTypeResolver typeResolver;
@@ -948,6 +948,8 @@ public final class ForyJson {
       if (lastDeclaredRootType == type && typeInfo != null) {
         return typeInfo;
       }
+      // Keep Class roots on the resolver's identity-key path. Converting here to TypeRef would
+      // allocate on every alternating-root state-cache miss even when the schema is already bound.
       typeInfo = typeResolver.getTypeInfo(type, type);
       lastDeclaredRootType = type;
       lastDeclaredRootInfo = typeInfo;

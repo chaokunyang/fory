@@ -195,7 +195,9 @@ public final class JsonFieldInfo {
                 : resolvedObjectModelType;
     writeType = writeTypeRef == null ? null : writeTypeRef.getType();
     this.writeRawType =
-        writeUnboxedRequired ? writeFallback : semanticRawType(writeTypeRef, writeFallback);
+        writeTypeRef == null
+            ? null
+            : writeUnboxedRequired ? writeFallback : writeTypeRef.getRawType();
     readTypeRef =
         readFallback == null
             ? null
@@ -204,7 +206,7 @@ public final class JsonFieldInfo {
                 : resolvedObjectModelType;
     readType = readTypeRef == null ? null : readTypeRef.getType();
     this.readRawType =
-        readUnboxedRequired ? readFallback : semanticRawType(readTypeRef, readFallback);
+        readTypeRef == null ? null : readUnboxedRequired ? readFallback : readTypeRef.getRawType();
     this.codecAnnotation = codecAnnotation;
     this.valueCodecClass = valueCodecClass;
     this.formatAnnotation = formatAnnotation;
@@ -530,17 +532,15 @@ public final class JsonFieldInfo {
     if (memberType == null || carrier == null || logicalType == null) {
       return false;
     }
-    // A substituted type parameter uses the boxed generic ABI even when its actual argument is a
-    // value class. Only a real descriptor mismatch on a direct logical occurrence enters the
-    // phase-two unboxed binding.
-    if (ownerType.resolveType(memberType).getType().equals(logicalType.getType())) {
+    boolean requiresCarrier = UnboxedValueCodec.requiresCarrier(carrier, logicalType);
+    if (!requiresCarrier) {
       return false;
     }
-    return UnboxedValueCodec.requiresCarrier(carrier, logicalType);
-  }
-
-  private static Class<?> semanticRawType(TypeRef<?> type, Class<?> fallback) {
-    return type == null ? null : type.getRawType();
+    // A same-carrier semantic primitive still needs its canonical representation operation. An
+    // erased generic Object occurrence remains boxed when its substituted member type already
+    // matches the logical type; a true lowered value-class mismatch remains phase-two bound.
+    return carrier == logicalType.getRawType()
+        || !ownerType.resolveType(memberType).getType().equals(logicalType.getType());
   }
 
   public void resolveTypes(JsonTypeResolver typeResolver) {
@@ -569,8 +569,7 @@ public final class JsonFieldInfo {
         if (writeUnboxedValueCodec instanceof DirectUnboxedValueCodec) {
           writeTypeInfo = canonical;
         } else if (writeUnboxedValueCodec instanceof TransparentUnboxedValueCodec) {
-          writeTypeInfo =
-              ((TransparentUnboxedValueCodec) writeUnboxedValueCodec).valueTypeInfo();
+          writeTypeInfo = ((TransparentUnboxedValueCodec) writeUnboxedValueCodec).valueTypeInfo();
         } else {
           throw unsupportedUnboxed(writeRawType, "write");
         }

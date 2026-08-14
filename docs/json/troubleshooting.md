@@ -19,28 +19,27 @@ license: |
   limitations under the License.
 ---
 
-| Symptom                                   | Likely cause and action                                                                                                                             |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ForyJsonException` while parsing         | Invalid JSON grammar, type mismatch, unsupported mapping, depth or graph-memory violation, validator failure, or trailing content                   |
-| `InsecureException`                       | Fory's disallow list or the configured `JsonTypeChecker` rejected a class                                                                           |
-| `IllegalArgumentException` from a builder | Check the configured depth, graph-memory, concurrency, retained-buffer, and cached-field-name limits                                                |
-| Declared write is rejected                | The value is not assignable to the declared type, the type contains a wildcard/type variable, or null was supplied for a primitive                  |
-| Immutable value is not populated          | Use a record, a valid `JsonCreator`, or an exact custom codec                                                                                       |
-| `JsonValue` read fails                    | Add one plain `String` `JsonCreator`, or register an exact custom codec                                                                             |
-| Raw JSON output is invalid                | Supply exactly one trusted, complete JSON value to the `JsonRawValue` property                                                                      |
-| Ordinary object cannot be constructed     | Add a usable no-argument constructor, use a record or `JsonCreator`, or register a custom codec; Android and GraalVM native image are stricter      |
-| Ordinary accessor annotation fails        | The method is not an eligible public JavaBean accessor, or field mode is enabled                                                                    |
-| Any annotation fails                      | Use exactly one field-backed form or one valid method-backed pair with resolved `Map<String, V>` types; method annotations require non-field mode   |
-| Codec annotation fails                    | Resolve same-node or hierarchy conflicts, remove a hidden nested override, or use a public no-argument codec class                                  |
-| Subtype is rejected                       | The base is not declared on the write, the runtime class is not an exact table entry, or the input wire shape differs from the configured inclusion |
-| Collection cannot be read                 | Target a supported interface/common implementation or register a custom codec                                                                       |
-| OutputStream write fails                  | The underlying `IOException` is wrapped as the cause of `ForyJsonException`                                                                         |
-| Kotlin null or missing member fails       | Check the exact `jsonTypeRef`, constructor default, and nullable occurrence; null does not request a compiler default                               |
-| Raw/star/projected Kotlin generic fails   | Supply a complete `jsonTypeRef<T>()`; `in` and star projections cannot reconstruct one exact schema                                                 |
-| Unsupported Kotlin metadata               | Compile the model with a supported Kotlin 2.3 compiler and ensure its validated JVM members match the metadata                                      |
-| Generated Kotlin companion is missing     | Apply `fory-json-kotlin-ksp`, annotate the source model or exact Mixin, and package KSP class/resource output                                       |
-| Kotlin model works on JVM but not Android | Android has no reflective Kotlin fallback; add `@JsonType` or an exact generated Mixin and retain the generated consumer rules                      |
-| Kotlin model is absent in Native Image    | Install `ForyJsonKotlin` from a reachable `ForyJsonProvider`, enable code generation, and make the exact binding reachable from that configuration  |
+| Symptom                                    | Likely cause and action                                                                                                                             |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ForyJsonException` while parsing          | Invalid JSON grammar, type mismatch, unsupported mapping, depth or graph-memory violation, validator failure, or trailing content                   |
+| `InsecureException`                        | Fory's disallow list or the configured `JsonTypeChecker` rejected a class                                                                           |
+| `IllegalArgumentException` from a builder  | Check the configured depth, graph-memory, concurrency, retained-buffer, and cached-field-name limits                                                |
+| Declared write is rejected                 | The value is not assignable to the declared type, the type contains a wildcard/type variable, or null was supplied for a primitive                  |
+| Immutable value is not populated           | Use a record, a valid `JsonCreator`, or an exact custom codec                                                                                       |
+| `JsonValue` read fails                     | Add one plain `String` `JsonCreator`, or register an exact custom codec                                                                             |
+| Raw JSON output is invalid                 | Supply exactly one trusted, complete JSON value to the `JsonRawValue` property                                                                      |
+| Ordinary object cannot be constructed      | Add a usable no-argument constructor, use a record or `JsonCreator`, or register a custom codec; Android and GraalVM native image are stricter      |
+| Ordinary accessor annotation fails         | The method is not an eligible public JavaBean accessor, or field mode is enabled                                                                    |
+| Any annotation fails                       | Use exactly one field-backed form or one valid method-backed pair with resolved `Map<String, V>` types; method annotations require non-field mode   |
+| Codec annotation fails                     | Resolve same-node or hierarchy conflicts, remove a hidden nested override, or use a public no-argument codec class                                  |
+| Subtype is rejected                        | The base is not declared on the write, the runtime class is not an exact table entry, or the input wire shape differs from the configured inclusion |
+| Collection cannot be read                  | Target a supported interface/common implementation or register a custom codec                                                                       |
+| OutputStream write fails                   | The underlying `IOException` is wrapped as the cause of `ForyJsonException`                                                                         |
+| Kotlin null or missing member fails        | Check the exact `jsonTypeRef`, constructor default, and nullable occurrence; null does not request a compiler default                               |
+| Raw/star/projected Kotlin generic fails    | Supply a complete `jsonTypeRef<T>()`; `in` and star projections cannot reconstruct one exact schema                                                 |
+| Unsupported Kotlin metadata                | Compile the model with a supported Kotlin 2.3 compiler and ensure its validated JVM members match the metadata                                      |
+| Kotlin model fails after Android shrinking | Apply KSP, annotate the source model or exact Mixin, and verify that the generated exact retention rules are packaged                               |
+| Kotlin model is absent in Native Image     | Install `ForyJsonKotlin` from a reachable `ForyJsonProvider`, enable code generation, and make the exact binding reachable from that configuration  |
 
 Fory JSON mapping, syntax, codec, depth, graph-memory, validator, and output failures use
 `ForyJsonException`. User codec code may still throw its own runtime exception. Creator and

@@ -23,6 +23,7 @@ import java.lang.reflect.Modifier
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
@@ -65,7 +66,16 @@ class KotlinBuiltInCodecsTest {
     val uint: UInt,
     val ulong: ULong,
     val nullable: UInt?,
+    val tag: String,
   )
+
+  class MutableUnsignedHolder {
+    var ubyte: UByte = 0u
+    var ushort: UShort = 0u
+    var uint: UInt = 0u
+    var ulong: ULong = 0u
+    var tag: String = ""
+  }
 
   data class DurationHolder(
     val zero: Duration,
@@ -107,22 +117,16 @@ class KotlinBuiltInCodecsTest {
         jsonTypeRef<UIntRange>(),
       ),
     )
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("{\"start\":1}", intType)
-    }
+    assertFailsWith<ForyJsonException> { fory.fromJson("{\"start\":1}", intType) }
     assertFailsWith<ForyJsonException> {
       fory.fromJson("{\"start\":1,\"start\":2,\"endInclusive\":3}", intType)
     }
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("{\"start\":1,\"unknown\":3}", intType)
-    }
+    assertFailsWith<ForyJsonException> { fory.fromJson("{\"start\":1,\"unknown\":3}", intType) }
 
     val ownerBytes = GraphMemoryEstimates.shallowObjectBytes(IntRange::class.java)
-    val exact =
-      ForyJsonKotlin.builder().withMaxGraphMemoryBytes(ownerBytes.toLong()).build()
+    val exact = ForyJsonKotlin.builder().withMaxGraphMemoryBytes(ownerBytes.toLong()).build()
     assertEquals(1..2, exact.fromJson("{\"start\":1,\"endInclusive\":2}", intType))
-    val short =
-      ForyJsonKotlin.builder().withMaxGraphMemoryBytes((ownerBytes - 1).toLong()).build()
+    val short = ForyJsonKotlin.builder().withMaxGraphMemoryBytes((ownerBytes - 1).toLong()).build()
     assertFailsWith<ForyJsonException> {
       short.fromJson("{\"start\":1,\"endInclusive\":2}", intType)
     }
@@ -134,7 +138,10 @@ class KotlinBuiltInCodecsTest {
     assertRoundTrip(IntProgression.fromClosedRange(-10, 20, 3), jsonTypeRef<IntProgression>())
     assertRoundTrip(LongProgression.fromClosedRange(20, -10, -3), jsonTypeRef<LongProgression>())
     assertRoundTrip(UIntProgression.fromClosedRange(1u, 20u, 3), jsonTypeRef<UIntProgression>())
-    assertRoundTrip(ULongProgression.fromClosedRange(20uL, 1uL, -3), jsonTypeRef<ULongProgression>())
+    assertRoundTrip(
+      ULongProgression.fromClosedRange(20uL, 1uL, -3),
+      jsonTypeRef<ULongProgression>()
+    )
 
     assertFailsWith<ForyJsonException> {
       fory.fromJson(
@@ -150,14 +157,12 @@ class KotlinBuiltInCodecsTest {
     }
     val type = jsonTypeRef<IntProgression>()
     val ownerBytes = GraphMemoryEstimates.shallowObjectBytes(IntProgression::class.java)
-    val exact =
-      ForyJsonKotlin.builder().withMaxGraphMemoryBytes(ownerBytes.toLong()).build()
+    val exact = ForyJsonKotlin.builder().withMaxGraphMemoryBytes(ownerBytes.toLong()).build()
     assertEquals(
       IntProgression.fromClosedRange(1, 7, 3),
       exact.fromJson("{\"first\":1,\"last\":7,\"step\":3}", type),
     )
-    val short =
-      ForyJsonKotlin.builder().withMaxGraphMemoryBytes((ownerBytes - 1).toLong()).build()
+    val short = ForyJsonKotlin.builder().withMaxGraphMemoryBytes((ownerBytes - 1).toLong()).build()
     assertFailsWith<ForyJsonException> {
       short.fromJson("{\"first\":1,\"last\":7,\"step\":3}", type)
     }
@@ -211,25 +216,75 @@ class KotlinBuiltInCodecsTest {
     assertEquals(UShort.MAX_VALUE, fory.fromJson("65535", jsonTypeRef<UShort>()))
     assertEquals(UInt.MAX_VALUE, fory.fromJson("4294967295", jsonTypeRef<UInt>()))
     assertEquals(ULong.MAX_VALUE, fory.fromJson("18446744073709551615", jsonTypeRef<ULong>()))
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("4294967295", jsonTypeRef<UByte>())
-    }
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("4294967295", jsonTypeRef<UShort>())
-    }
+    assertFailsWith<ForyJsonException> { fory.fromJson("4294967295", jsonTypeRef<UByte>()) }
+    assertFailsWith<ForyJsonException> { fory.fromJson("4294967295", jsonTypeRef<UShort>()) }
 
-    val interpreted = ForyJsonKotlin.builder().withCodegen(false).build()
+    assertUnsignedDirect(Types.UINT8, java.lang.Byte.TYPE, "readUByteRaw", "writeUByteRaw")
+    assertUnsignedDirect(Types.UINT16, java.lang.Short.TYPE, "readUShortRaw", "writeUShortRaw")
+    assertUnsignedDirect(Types.UINT32, java.lang.Integer.TYPE, "readUIntRaw", "writeUIntRaw")
+    assertUnsignedDirect(Types.UINT64, java.lang.Long.TYPE, "readULongRaw", "writeULongRaw")
+
     val type = jsonTypeRef<UnsignedScalarHolder>()
-    val value =
+    val latin1 =
       UnsignedScalarHolder(
         UByte.MAX_VALUE,
         UShort.MAX_VALUE,
         UInt.MAX_VALUE,
         ULong.MAX_VALUE,
         null,
+        "ascii",
       )
-    assertEquals(value, interpreted.fromJson(interpreted.toJson(value, type), type))
-    assertEquals(null, interpreted.fromJson("null", jsonTypeRef<UInt?>()))
+    val utf16 = latin1.copy(tag = "\u4e2d")
+    val latin1Json =
+      "{\"ubyte\":255,\"ushort\":65535,\"uint\":4294967295," +
+        "\"ulong\":18446744073709551615,\"nullable\":null,\"tag\":\"ascii\"}"
+    val utf16Json = latin1Json.replace("ascii", "\u4e2d")
+    forEachJsonMode { json ->
+      assertEquals(latin1Json, json.toJson(latin1, type))
+      assertEquals(latin1, json.fromJson(latin1Json, type))
+      assertEquals(utf16, json.fromJson(utf16Json, type))
+      val bytes = json.toJsonBytes(latin1, type)
+      assertEquals(latin1Json, bytes.toString(Charsets.UTF_8))
+      assertEquals(latin1, json.fromJson(bytes, type))
+
+      val mutable = MutableUnsignedHolder()
+      mutable.ubyte = UByte.MAX_VALUE
+      mutable.ushort = UShort.MAX_VALUE
+      mutable.uint = UInt.MAX_VALUE
+      mutable.ulong = ULong.MAX_VALUE
+      mutable.tag = "\u4e2d"
+      val mutableType = jsonTypeRef<MutableUnsignedHolder>()
+      val mutableJson = json.toJson(mutable, mutableType)
+      val decodedMutable = json.fromJson(mutableJson, mutableType)
+      assertEquals(UByte.MAX_VALUE, decodedMutable.ubyte)
+      assertEquals(UShort.MAX_VALUE, decodedMutable.ushort)
+      assertEquals(UInt.MAX_VALUE, decodedMutable.uint)
+      assertEquals(ULong.MAX_VALUE, decodedMutable.ulong)
+
+      assertFailsWith<ForyJsonException> {
+        json.fromJson(latin1Json.replace("\"ubyte\":255", "\"ubyte\":256"), type)
+      }
+      assertFailsWith<ForyJsonException> {
+        json.fromJson(latin1Json.replace("\"ushort\":65535", "\"ushort\":65536"), type)
+      }
+      assertFailsWith<ForyJsonException> {
+        json.fromJson(latin1Json.replace("\"uint\":4294967295", "\"uint\":4294967296"), type)
+      }
+      assertFailsWith<ForyJsonException> {
+        json.fromJson(
+          latin1Json.replace(
+            "\"ulong\":18446744073709551615",
+            "\"ulong\":18446744073709551616",
+          ),
+          type,
+        )
+      }
+      assertFailsWith<ForyJsonException> {
+        json.fromJson(latin1Json.replace("\"ubyte\":255", "\"ubyte\":null"), type)
+      }
+    }
+    assertEquals(null, fory.fromJson("null", jsonTypeRef<UInt?>()))
+    assertUnsignedGeneratedCode(latin1, utf16, latin1Json, utf16Json)
   }
 
   @Test
@@ -273,15 +328,9 @@ class KotlinBuiltInCodecsTest {
 
   @Test
   fun unsignedArrayOverflow() {
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("[256]", jsonTypeRef<UByteArray>())
-    }
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("[65536]", jsonTypeRef<UShortArray>())
-    }
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("[4294967296]", jsonTypeRef<UIntArray>())
-    }
+    assertFailsWith<ForyJsonException> { fory.fromJson("[256]", jsonTypeRef<UByteArray>()) }
+    assertFailsWith<ForyJsonException> { fory.fromJson("[65536]", jsonTypeRef<UShortArray>()) }
+    assertFailsWith<ForyJsonException> { fory.fromJson("[4294967296]", jsonTypeRef<UIntArray>()) }
     assertFailsWith<ForyJsonException> {
       fory.fromJson("[18446744073709551616]", jsonTypeRef<ULongArray>())
     }
@@ -358,9 +407,7 @@ class KotlinBuiltInCodecsTest {
         "P9999999999999DT-9999999999999H",
       )) {
       assertFailsWith<IllegalArgumentException> { Duration.parseIsoString(text) }
-      assertFailsWith<ForyJsonException> {
-        fory.fromJson("\"$text\"", jsonTypeRef<Duration>())
-      }
+      assertFailsWith<ForyJsonException> { fory.fromJson("\"$text\"", jsonTypeRef<Duration>()) }
     }
     assertEquals(1.seconds, fory.fromJson("\"PT\\u0031S\"", jsonTypeRef<Duration>()))
     assertEquals(2.seconds, fory.fromJson("\"PT2S\"", jsonTypeRef<Duration>()))
@@ -432,9 +479,7 @@ class KotlinBuiltInCodecsTest {
         "+1000000000-12-31T23:59:59-00:00:01",
       )) {
       assertFailsWith<IllegalArgumentException> { Instant.parse(text) }
-      assertFailsWith<ForyJsonException> {
-        fory.fromJson("\"$text\"", jsonTypeRef<Instant>())
-      }
+      assertFailsWith<ForyJsonException> { fory.fromJson("\"$text\"", jsonTypeRef<Instant>()) }
     }
   }
 
@@ -458,9 +503,7 @@ class KotlinBuiltInCodecsTest {
         "{00112233-4455-6677-8899-aabbccddeeff}",
         "00112233-4455-6677-8899-aabbccddeefg",
       )) {
-      assertFailsWith<ForyJsonException> {
-        fory.fromJson("\"$text\"", jsonTypeRef<Uuid>())
-      }
+      assertFailsWith<ForyJsonException> { fory.fromJson("\"$text\"", jsonTypeRef<Uuid>()) }
     }
   }
 
@@ -484,21 +527,19 @@ class KotlinBuiltInCodecsTest {
     assertFailsWith<ForyJsonException> {
       fory.fromJson("{\"value\":null,\"duration\":\"PT1S\"}", type)
     }
-    @Suppress("UNCHECKED_CAST")
-    val invalid = TimedValue(null, 1.seconds) as TimedValue<String>
-    assertFailsWith<ForyJsonException> {
-      fory.toJson(invalid, type)
-    }
+    @Suppress("UNCHECKED_CAST") val invalid = TimedValue(null, 1.seconds) as TimedValue<String>
+    assertFailsWith<ForyJsonException> { fory.toJson(invalid, type) }
     assertEquals(value, fory.fromJson(fory.toJson(value, type), type))
   }
 
   @Test
   fun nullOnly() {
     val value = NullOnly(null)
-    assertEquals(value, fory.fromJson(fory.toJson(value, jsonTypeRef<NullOnly>()), jsonTypeRef<NullOnly>()))
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("{\"value\":0}", jsonTypeRef<NullOnly>())
-    }
+    assertEquals(
+      value,
+      fory.fromJson(fory.toJson(value, jsonTypeRef<NullOnly>()), jsonTypeRef<NullOnly>())
+    )
+    assertFailsWith<ForyJsonException> { fory.fromJson("{\"value\":0}", jsonTypeRef<NullOnly>()) }
   }
 
   @Test
@@ -508,28 +549,16 @@ class KotlinBuiltInCodecsTest {
     assertEquals(null, fory.fromJson("null", nullableType))
     assertEquals("{}", fory.toJson(Unit, nullableType))
     assertEquals(Unit, fory.fromJson("{}", nullableType))
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("null", jsonTypeRef<Unit>())
-    }
+    assertFailsWith<ForyJsonException> { fory.fromJson("null", jsonTypeRef<Unit>()) }
   }
 
   @Test
   fun rejectedTypes() {
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("[]", jsonTypeRef<Sequence<Int>>())
-    }
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("\"a+\"", jsonTypeRef<Regex>())
-    }
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("{}", jsonTypeRef<kotlin.random.Random>())
-    }
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("[]", emptyList<Int>()::class.java)
-    }
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("[]", EntryValue.entries::class.java)
-    }
+    assertFailsWith<ForyJsonException> { fory.fromJson("[]", jsonTypeRef<Sequence<Int>>()) }
+    assertFailsWith<ForyJsonException> { fory.fromJson("\"a+\"", jsonTypeRef<Regex>()) }
+    assertFailsWith<ForyJsonException> { fory.fromJson("{}", jsonTypeRef<kotlin.random.Random>()) }
+    assertFailsWith<ForyJsonException> { fory.fromJson("[]", emptyList<Int>()::class.java) }
+    assertFailsWith<ForyJsonException> { fory.fromJson("[]", EntryValue.entries::class.java) }
   }
 
   private fun <K> assertMapRoundTrip(
@@ -544,6 +573,126 @@ class KotlinBuiltInCodecsTest {
 
   private fun <T> assertRoundTrip(value: T, type: org.apache.fory.reflect.TypeRef<T>) {
     assertEquals(value, roundTrip(value, type))
+  }
+
+  private fun assertUnsignedDirect(
+    typeId: Int,
+    carrier: Class<*>,
+    readName: String,
+    writeName: String,
+  ) {
+    val direct = KotlinUnsignedCodecs.scalar(typeId, false, false) as DirectUnboxedValueCodec
+    assertEquals(carrier, direct.carrierType())
+    val readMethod = direct.readCarrierMethod()
+    assertEquals(readName, readMethod.name)
+    assertTrue(Modifier.isStatic(readMethod.modifiers))
+    assertEquals(carrier, readMethod.returnType)
+    assertEquals(listOf(JsonReader::class.java), readMethod.parameterTypes.toList())
+    val writeMethod = direct.writeCarrierMethod()
+    assertEquals(writeName, writeMethod.name)
+    assertTrue(Modifier.isStatic(writeMethod.modifiers))
+    assertEquals(java.lang.Void.TYPE, writeMethod.returnType)
+    assertEquals(listOf(JsonWriter::class.java, carrier), writeMethod.parameterTypes.toList())
+  }
+
+  private fun assertUnsignedGeneratedCode(
+    latin1: UnsignedScalarHolder,
+    utf16: UnsignedScalarHolder,
+    latin1Json: String,
+    utf16Json: String,
+  ) {
+    val json = newKotlinJson(KotlinJsonTestMode.SYNCHRONOUS)
+    val type = jsonTypeRef<UnsignedScalarHolder>()
+    json.toJson(latin1, type)
+    json.toJsonBytes(latin1, type)
+    json.fromJson(latin1Json, type)
+    json.fromJson(utf16Json, type)
+    json.fromJson(latin1Json.toByteArray(), type)
+
+    val mutable = MutableUnsignedHolder()
+    mutable.ubyte = UByte.MAX_VALUE
+    mutable.ushort = UShort.MAX_VALUE
+    mutable.uint = UInt.MAX_VALUE
+    mutable.ulong = ULong.MAX_VALUE
+    mutable.tag = "ascii"
+    val mutableType = jsonTypeRef<MutableUnsignedHolder>()
+    val mutableJson = json.toJson(mutable, mutableType)
+    json.toJsonBytes(mutable, mutableType)
+    json.fromJson(mutableJson, mutableType)
+    json.fromJson(mutableJson.replace("ascii", "\u4e2d"), mutableType)
+    json.fromJson(mutableJson.toByteArray(), mutableType)
+
+    assertUnsignedGeneratedClasses(generatedClassBytes(json, "Unsigned"))
+    assertUnsignedGeneratedClasses(generatedClassBytes(json, "MutableU"))
+  }
+
+  private fun assertUnsignedGeneratedClasses(classes: Map<String, ByteArray>) {
+    val readers = classes.filterKeys { it.contains("ReaderForyJsonCodec") }
+    val writers = classes.filterKeys { it.contains("WriterForyJsonCodec") }
+    assertEquals(3, readers.size, readers.keys.toString())
+    assertEquals(2, writers.size, writers.keys.toString())
+    readers.forEach { (name, bytes) ->
+      val refs = generatedMethodRefs(bytes)
+      assertUnsignedReadRef(name, refs, "readUByteRaw", "B")
+      assertUnsignedReadRef(name, refs, "readUShortRaw", "S")
+      assertUnsignedReadRef(name, refs, "readUIntRaw", "I")
+      assertUnsignedReadRef(name, refs, "readULongRaw", "J")
+      assertNoUnsignedBoxing(name, refs)
+    }
+    writers.forEach { (name, bytes) ->
+      val refs = generatedMethodRefs(bytes)
+      assertUnsignedWriteRef(name, refs, "writeUByteRaw", "B")
+      assertUnsignedWriteRef(name, refs, "writeUShortRaw", "S")
+      assertUnsignedWriteRef(name, refs, "writeUIntRaw", "I")
+      assertUnsignedWriteRef(name, refs, "writeULongRaw", "J")
+      assertNoUnsignedBoxing(name, refs)
+    }
+  }
+
+  private fun assertUnsignedReadRef(
+    className: String,
+    refs: List<GeneratedMethodRef>,
+    methodName: String,
+    carrierDescriptor: String,
+  ) {
+    assertTrue(
+      refs.any {
+        it.owner == "org/apache/fory/json/kotlin/KotlinUnsignedCodecs" &&
+          it.name == methodName &&
+          it.descriptor == "(Lorg/apache/fory/json/reader/JsonReader;)$carrierDescriptor"
+      },
+      "$className does not invoke $methodName with the exact primitive carrier: $refs",
+    )
+  }
+
+  private fun assertUnsignedWriteRef(
+    className: String,
+    refs: List<GeneratedMethodRef>,
+    methodName: String,
+    carrierDescriptor: String,
+  ) {
+    assertTrue(
+      refs.any {
+        it.owner == "org/apache/fory/json/kotlin/KotlinUnsignedCodecs" &&
+          it.name == methodName &&
+          it.descriptor == "(Lorg/apache/fory/json/writer/JsonWriter;$carrierDescriptor)V"
+      },
+      "$className does not invoke $methodName with the exact primitive carrier: $refs",
+    )
+  }
+
+  private fun assertNoUnsignedBoxing(className: String, refs: List<GeneratedMethodRef>) {
+    val unsignedOwners = setOf("kotlin/UByte", "kotlin/UShort", "kotlin/UInt", "kotlin/ULong")
+    val boxedOwners =
+      setOf("java/lang/Byte", "java/lang/Short", "java/lang/Integer", "java/lang/Long")
+    assertFalse(
+      refs.any { it.owner in boxedOwners && it.name == "valueOf" },
+      "$className boxes a direct unsigned carrier: $refs",
+    )
+    assertFalse(
+      refs.any { it.owner in unsignedOwners && (it.name == "box-impl" || it.name == "unbox-impl") },
+      "$className materializes a direct unsigned wrapper: $refs",
+    )
   }
 
   private fun <T> roundTrip(value: T, type: org.apache.fory.reflect.TypeRef<T>): T =

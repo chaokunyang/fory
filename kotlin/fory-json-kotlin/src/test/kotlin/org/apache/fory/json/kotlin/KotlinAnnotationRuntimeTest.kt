@@ -21,6 +21,7 @@ package org.apache.fory.json.kotlin
 
 import java.util.Optional
 import kotlin.jvm.JvmInline
+import kotlin.jvm.JvmName
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -83,14 +84,10 @@ class KotlinAnnotationRuntimeTest {
   )
 
   data class ChildCodecModel(
-    @field:JsonCodec(elementCodec = TaggedKotlinStringCodec::class)
-    val values: List<String>,
-    @field:JsonCodec(contentCodec = TaggedKotlinStringCodec::class)
-    val optional: Optional<String>,
-    @field:JsonCodec(valueCodec = TaggedKotlinStringCodec::class)
-    val entries: Map<String, String>,
-    @field:JsonCodec(keyCodec = TaggedIntKeyCodec::class)
-    val keyed: Map<Int, String>,
+    @field:JsonCodec(elementCodec = TaggedKotlinStringCodec::class) val values: List<String>,
+    @field:JsonCodec(contentCodec = TaggedKotlinStringCodec::class) val optional: Optional<String>,
+    @field:JsonCodec(valueCodec = TaggedKotlinStringCodec::class) val entries: Map<String, String>,
+    @field:JsonCodec(keyCodec = TaggedIntKeyCodec::class) val keyed: Map<Int, String>,
   )
 
   data class ConflictingCodec(
@@ -108,10 +105,11 @@ class KotlinAnnotationRuntimeTest {
     @get:JsonProperty("getter_name") val getterValue: String,
     @param:JsonProperty("parameter_name") val parameterValue: String,
     @set:JsonProperty("setter_name") var setterValue: String,
-    @JsonProperty("bare_name") val bareValue: String,
+    @param:JsonProperty("bare_name") val bareValue: String,
   )
 
-  class SecondaryCreator private constructor(
+  class SecondaryCreator
+  private constructor(
     val value: String,
     val count: Int,
     @get:JsonIgnore val selected: Boolean,
@@ -131,7 +129,8 @@ class KotlinAnnotationRuntimeTest {
     override fun hashCode(): Int = 31 * (31 * value.hashCode() + count) + selected.hashCode()
   }
 
-  class FactoryCreator private constructor(
+  class FactoryCreator
+  private constructor(
     @get:JsonProperty("wire_value") val value: String,
     @get:JsonIgnore val selected: Boolean,
   ) {
@@ -146,6 +145,24 @@ class KotlinAnnotationRuntimeTest {
       other is FactoryCreator && value == other.value && selected == other.selected
 
     override fun hashCode(): Int = 31 * value.hashCode() + selected.hashCode()
+  }
+
+  class MangledFactoryCreator
+  private constructor(
+    @get:JsonProperty("wire_value") val value: String,
+  ) {
+    companion object {
+      @JvmStatic
+      @JvmName("create-value")
+      @JsonCreator
+      fun create(@JsonProperty("wire_value") sourceValue: String): MangledFactoryCreator =
+        MangledFactoryCreator(sourceValue)
+    }
+
+    override fun equals(other: Any?): Boolean =
+      other is MangledFactoryCreator && value == other.value
+
+    override fun hashCode(): Int = value.hashCode()
   }
 
   class MixinSelectedCreator {
@@ -173,12 +190,12 @@ class KotlinAnnotationRuntimeTest {
   @JsonCreator(value = ["displayName"])
   constructor(sourceText: String)
 
-  class ValueClassCreator private constructor(
+  class ValueClassCreator
+  private constructor(
     val id: ExplicitCreatorId,
     @get:JsonIgnore val selected: Boolean,
   ) {
-    @JsonCreator(value = ["id"])
-    constructor(sourceId: ExplicitCreatorId) : this(sourceId, true)
+    @JsonCreator(value = ["id"]) constructor(sourceId: ExplicitCreatorId) : this(sourceId, true)
 
     override fun equals(other: Any?): Boolean =
       other is ValueClassCreator && id == other.id && selected == other.selected
@@ -277,6 +294,16 @@ class KotlinAnnotationRuntimeTest {
       assertEquals(expected, json.fromJson(json.toJson(expected, type), type))
       assertEquals(expected, json.fromJson(json.toJsonBytes(expected, type), type))
       assertFailsWith<ForyJsonException> { json.fromJson("{\"wire_value\":null}", type) }
+    }
+  }
+
+  @Test
+  fun mangledStaticFactory() {
+    forEachJsonMode { json ->
+      val type = jsonTypeRef<MangledFactoryCreator>()
+      val expected = MangledFactoryCreator.create("漢")
+      assertEquals(expected, json.fromJson("{\"wire_value\":\"漢\"}", type))
+      assertEquals(expected, json.fromJson(json.toJsonBytes(expected, type), type))
     }
   }
 

@@ -35,15 +35,15 @@ Before timing, setup verifies that every library:
 - emits structurally equivalent JSON from String and byte APIs; and
 - round-trips its own String and byte output.
 
-The Gradle build also fails unless the generated Fory companion, operation class, per-model R8
-resource, and Moshi adapter are present for every object model. This prevents missing processor
-output from silently changing the measured path.
+The Gradle build also fails unless the Moshi KSP adapter is present for every object model. Fory
+uses its normal HotSpot metadata path in this benchmark; Android retention rules do not participate
+in the measured runtime.
 
 ## Build and run
 
-Install the current `fory-json-kotlin` and `fory-json-kotlin-ksp` artifacts in Maven local first.
-Use Gradle 9.3.0 and a JDK 17 or later toolchain. Install the pinned Python report dependencies
-before running the report tests or producing charts:
+Install the current `fory-json-kotlin` artifact in Maven local first. Use Gradle 9.3.0 and a JDK 17
+or later toolchain. Install the pinned Python report dependencies before running the report tests
+or producing charts:
 
 ```bash
 python -m pip install -r requirements.txt

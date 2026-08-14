@@ -118,11 +118,7 @@ final class JsonGeneratedCodecBuilder extends CodecBuilder {
       }
       String name = DirectMethodCodegen.getterName(getter);
       addDirectMethod(name, getter.getReturnType(), getter.getDeclaringClass(), "target");
-      return directInvoke(
-          name,
-          property.name(),
-          TypeRef.of(getter.getGenericReturnType()),
-          object);
+      return directInvoke(name, property.name(), TypeRef.of(getter.getGenericReturnType()), object);
     }
     return getFieldValue(object, writeDescriptor(property));
   }
@@ -138,10 +134,7 @@ final class JsonGeneratedCodecBuilder extends CodecBuilder {
         String name = DirectMethodCodegen.getterName(getter);
         addDirectMethod(name, getter.getReturnType(), getter.getDeclaringClass(), "target");
         return directInvoke(
-            name,
-            declaration.javaName(),
-            TypeRef.of(getter.getGenericReturnType()),
-            object);
+            name, declaration.javaName(), TypeRef.of(getter.getGenericReturnType()), object);
       }
       return new Expression.Invoke(
           object,
@@ -233,8 +226,7 @@ final class JsonGeneratedCodecBuilder extends CodecBuilder {
     }
   }
 
-  Expression directInvoke(
-      String name, String valueName, TypeRef<?> type, Expression... arguments) {
+  Expression directInvoke(String name, String valueName, TypeRef<?> type, Expression... arguments) {
     return new Expression.Invoke(
         new Expression.Reference("this", TypeRef.of(Object.class)),
         name,
@@ -255,7 +247,10 @@ final class JsonGeneratedCodecBuilder extends CodecBuilder {
     Object[] parameters = new Object[expected << 1];
     Expression[] arguments = new Expression[expected];
     for (int i = 0; i < expected; i++) {
-      Class<?> type = isStatic ? targetParameters[i] : i == 0 ? method.getDeclaringClass() : targetParameters[i - 1];
+      Class<?> type =
+          isStatic
+              ? targetParameters[i]
+              : i == 0 ? method.getDeclaringClass() : targetParameters[i - 1];
       parameters[i << 1] = type;
       parameters[(i << 1) + 1] = "value" + i;
       arguments[i] = tryInlineCast(inline(values[i]), TypeRef.of(type));

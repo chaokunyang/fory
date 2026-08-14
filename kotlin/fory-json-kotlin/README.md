@@ -6,22 +6,36 @@ supported Kotlin semantic types while using the standard Fory JSON APIs.
 
 ## Installation
 
-Use the same Fory version for the runtime and the Kotlin Symbol Processing (KSP) processor:
+Add the Kotlin JSON runtime:
 
 ```kotlin
 plugins {
   kotlin("jvm") version "2.3.20"
-  id("com.google.devtools.ksp") version "2.3.8"
 }
 
 dependencies {
   implementation("org.apache.fory:fory-json-kotlin:1.7.0-SNAPSHOT")
+}
+```
+
+The runtime reads Kotlin/JVM metadata directly and does not require `kotlin-reflect` or KSP.
+
+For an Android build that enables R8 or ProGuard, also apply KSP 2.3.8 and use the matching
+processor version:
+
+```kotlin
+plugins {
+  id("com.google.devtools.ksp") version "2.3.8"
+}
+
+dependencies {
   ksp("org.apache.fory:fory-json-kotlin-ksp:1.7.0-SNAPSHOT")
 }
 ```
 
-Apply KSP to the module that compiles models annotated with `@JsonType`. The generated output must
-be packaged with the application. The runtime does not require `kotlin-reflect`.
+Annotate application models with `@JsonType`, or define source-owned `@JsonMixin` declarations, so
+KSP can package their exact retention rules. KSP owns a Mixin request when either its source or its
+exact target is Kotlin. The processor does not replace runtime metadata mapping.
 
 ## Usage
 
@@ -29,11 +43,9 @@ Create a `ForyJson` instance with the Kotlin module installed and retain complet
 declared Kotlin roots:
 
 ```kotlin
-import org.apache.fory.json.annotation.JsonType
 import org.apache.fory.json.kotlin.ForyJsonKotlin
 import org.apache.fory.json.kotlin.jsonTypeRef
 
-@JsonType
 data class Account(
   val id: ULong,
   val name: String,
@@ -67,10 +79,10 @@ contravariant projections are not complete schemas and are rejected.
 ## Platforms
 
 The module supports Kotlin/JVM on HotSpot, GraalVM Native Image, and Android API 26 or later.
-GraalVM and Android applications must use KSP-generated operations for Kotlin construction,
-singletons, and value classes. Android release builds must package the generated R8 consumer rules;
-GraalVM builds must use the Fory JSON provider workflow and must not add reflection configuration
-for application models.
+Standard JVM and Android builds read the model's Kotlin metadata. Android builds that enable R8 or
+ProGuard must package the exact KSP-generated retention rules instead of broad keep rules. GraalVM
+builds use the Fory JSON provider workflow and must not add reflection configuration for application
+models.
 
 Kotlin/Native, Kotlin/JS, and Kotlin/Wasm are not supported by this JVM module.
 

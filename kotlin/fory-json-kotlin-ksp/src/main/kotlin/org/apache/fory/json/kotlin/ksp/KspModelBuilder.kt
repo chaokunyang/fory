@@ -34,16 +34,14 @@ import com.google.devtools.ksp.symbol.KSNode
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSTypeAlias
-import com.google.devtools.ksp.symbol.KSTypeParameter
 import com.google.devtools.ksp.symbol.Modifier
 import com.google.devtools.ksp.symbol.Nullability
 import com.google.devtools.ksp.symbol.Origin
-import com.google.devtools.ksp.symbol.Variance
-import org.apache.fory.codegen.GeneratedClassNames
 
 internal const val JSON_TYPE: String = "org.apache.fory.json.annotation.JsonType"
 internal const val JSON_MIXIN: String = "org.apache.fory.json.annotation.JsonMixin"
 private const val JSON_SUB_TYPES = "org.apache.fory.json.annotation.JsonSubTypes"
+private const val JSON_CODEC = "org.apache.fory.json.annotation.JsonCodec"
 private const val JSON_ANY_SETTER = "org.apache.fory.json.annotation.JsonAnySetter"
 private const val JSON_VALIDATOR = "org.apache.fory.json.annotation.JsonValidator"
 private const val JSON_CREATOR = "org.apache.fory.json.annotation.JsonCreator"
@@ -51,12 +49,17 @@ private const val JSON_MIXIN_REMOVE = "org.apache.fory.json.annotation.JsonMixin
 private const val JSON_ANNOTATION_PACKAGE = "org.apache.fory.json.annotation."
 private const val DEFAULT_MARKER = "Lkotlin/jvm/internal/DefaultConstructorMarker;"
 
-/** KSP-side producer for immutable operations of one real Kotlin source declaration. */
+/** KSP-side producer for exact runtime-metadata retention of one source declaration. */
 @OptIn(KspExperimental::class)
 internal class KspModelBuilder(
   private val resolver: Resolver,
   private val logger: KSPLogger,
 ) {
+  private data class CreatorMembers(
+    val members: List<JvmMember>,
+    val parameters: Map<String, JvmType>,
+  )
+
   fun direct(target: KSClassDeclaration): JsonModel? {
     if (target.origin != Origin.KOTLIN || target.containingFile == null) return null
     if (hasAnnotation(target, JSON_MIXIN)) return null
@@ -67,7 +70,6 @@ internal class KspModelBuilder(
     if (source.containingFile == null || source.origin !in SOURCE_ORIGINS) return null
     val target = mixinTarget(source) ?: return null
     if (source.origin == Origin.JAVA && !isKotlin(target.origin)) return null
-    if (!isNameable(source)) return fail(source, "@JsonMixin source must be public or internal")
     return if (isKotlin(target.origin)) {
       kotlinModel(target, source)
     } else {
@@ -80,55 +82,20 @@ internal class KspModelBuilder(
     mixin: KSClassDeclaration,
   ): JsonModel? {
     val targetName = binaryName(target) ?: return fail(target, "@JsonMixin target must be named")
-    val generatedPackage = mixin.packageName.asString()
-    if (!isAccessibleFrom(target, generatedPackage)) {
-      return fail(target, "@JsonMixin target is not accessible from the Mixin package")
-    }
-    val closed = effectiveTypeAnnotation(target, mixin, JSON_SUB_TYPES)
-    val concrete =
-      target.classKind == ClassKind.CLASS &&
-        Modifier.ABSTRACT !in target.modifiers &&
-        Modifier.SEALED !in target.modifiers
-    val generateCompanion = concrete && !closed
     val members =
-      if (generateCompanion) javaMembers(target, generatedPackage, mixin) else emptyList()
-    val anySetter = if (generateCompanion) javaAnySetter(target, mixin) else null
-    val validators = if (generateCompanion) validators(target, mixin) else emptyList()
-    val creator = if (generateCompanion) javaCreator(target, mixin) else null
+      javaMembers(target, mixin) +
+        mixinMembers(mixin) +
+        listOfNotNull(javaAnySetter(target, mixin), javaCreator(target, mixin)) +
+        validators(target, mixin)
     return JsonModel(
-      packageName = generatedPackage,
       targetBinaryName = targetName,
-      targetSourceName = target.qualifiedName?.asString() ?: targetName.replace('$', '.'),
-      companionSimpleName = generatedSimpleName(targetName, mixin),
-      operationSimpleName = generatedSimpleName(targetName, mixin) + "_Operations",
-      generateCompanion = generateCompanion,
       members = members,
-      anySetter = anySetter,
-      validators = validators,
-      creator = creator,
-      singleton = false,
-      valueClass = null,
       mixinBinaryName = binaryName(mixin),
       originatingFiles = originatingFiles(target, mixin),
       retainedAnnotations = annotations(target) + annotations(mixin),
       retainedTypes = (annotationTypes(target) + annotationTypes(mixin)) - targetName,
-      mixinMembers = mixinMembers(mixin),
+      codecTypes = codecTypes(target) + codecTypes(mixin),
     )
-  }
-
-  private fun generatedSimpleName(
-    targetBinaryName: String,
-    mixin: KSClassDeclaration?,
-  ): String {
-    if (mixin == null) {
-      return GeneratedClassNames.withSuffix(targetBinaryName, "_ForyJsonCodec")
-        .substringAfterLast('.')
-    }
-    val mixinName = binaryName(mixin)!!
-    return GeneratedClassNames.escapeBinarySimpleName(mixinName.substringAfterLast('.')) +
-      "_ForyJsonMixin_" +
-      GeneratedClassNames.escapeBinarySimpleName(targetBinaryName) +
-      "_ForyJsonCodec"
   }
 
   private fun mixinTarget(source: KSClassDeclaration): KSClassDeclaration? {
@@ -150,37 +117,11 @@ internal class KspModelBuilder(
   private fun isKotlin(origin: Origin): Boolean =
     origin == Origin.KOTLIN || origin == Origin.KOTLIN_LIB
 
-  private fun isNameable(declaration: KSClassDeclaration): Boolean {
-    var current: KSClassDeclaration? = declaration
-    while (current != null) {
-      if (Modifier.PRIVATE in current.modifiers || Modifier.PROTECTED in current.modifiers) {
-        return false
-      }
-      current = current.parentDeclaration as? KSClassDeclaration
-    }
-    return true
-  }
-
-  private fun isAccessibleFrom(declaration: KSClassDeclaration, packageName: String): Boolean {
-    var current: KSClassDeclaration? = declaration
-    while (current != null) {
-      val modifiers = resolver.effectiveJavaModifiers(current)
-      if (Modifier.PRIVATE in modifiers) return false
-      if (Modifier.PUBLIC !in modifiers && current.packageName.asString() != packageName)
-        return false
-      current = current.parentDeclaration as? KSClassDeclaration
-    }
-    return true
-  }
-
   private fun kotlinModel(
     target: KSClassDeclaration,
     mixin: KSClassDeclaration?,
   ): JsonModel? {
     val targetName = binaryName(target) ?: return fail(target, "@JsonType target must be named")
-    if (!isNameable(target)) {
-      return fail(target, "Kotlin JSON target must be public or internal")
-    }
     if (Modifier.INNER in target.modifiers) {
       return fail(target, "Kotlin JSON does not support inner classes")
     }
@@ -199,60 +140,54 @@ internal class KspModelBuilder(
       target.classKind == ClassKind.CLASS &&
         Modifier.ABSTRACT !in target.modifiers &&
         Modifier.SEALED !in target.modifiers
-    val valueClass = Modifier.VALUE in target.modifiers
-    val generateCompanion = singleton || concrete && !closed
-    val generatedPackage = mixin?.packageName?.asString() ?: target.packageName.asString()
-    val companion = generatedSimpleName(targetName, mixin)
-    val valueOperations = if (generateCompanion && valueClass) valueClass(target) else null
-    val creator =
-      if (generateCompanion && !singleton && !valueClass) kotlinCreator(target, mixin) else null
-    val members =
-      if (generateCompanion && !singleton && !valueClass) {
-        members(target, creator) ?: return null
+    val valueClass = isValueClass(target)
+    val retainModel = concrete && !closed
+    val creatorMembers =
+      if (retainModel && !singleton && !valueClass) {
+        kotlinCreator(target, mixin) ?: return null
       } else {
-        emptyList()
+        null
+      }
+    val targetMembers =
+      when {
+        singleton ->
+          listOf(
+            JvmMember(
+              MemberKind.FIELD,
+              targetName,
+              "INSTANCE",
+              "L${targetName.replace('.', '/')};",
+            )
+          )
+        valueClass -> valueClassMembers(target) ?: return null
+        creatorMembers != null ->
+          (members(target, creatorMembers) ?: return null) + creatorMembers.members
+        else -> emptyList()
       }
     val anySetter = effectiveMethods(target, mixin, JSON_ANY_SETTER)
-    if (generateCompanion && creator != null && anySetter.isNotEmpty()) {
+    if (creatorMembers != null && anySetter.isNotEmpty()) {
       return fail(
         anySetter.first(),
         "@JsonAnySetter is not supported on a Kotlin constructor model"
       )
     }
-    val validators = validators(target, mixin)
-    val files = originatingFiles(target, mixin)
+    val members =
+      targetMembers + (mixin?.let(::mixinMembers) ?: emptyList()) + validators(target, mixin)
     return JsonModel(
-      packageName = generatedPackage,
       targetBinaryName = targetName,
-      targetSourceName = targetName.replace('$', '.'),
-      companionSimpleName = companion,
-      operationSimpleName = companion + "_Operations",
-      generateCompanion = generateCompanion,
       members = members,
-      anySetter = null,
-      validators = validators,
-      creator = creator,
-      singleton = singleton,
-      valueClass = valueOperations,
       mixinBinaryName = mixin?.let(::binaryName),
-      originatingFiles = files,
+      originatingFiles = originatingFiles(target, mixin),
       retainedAnnotations = annotations(target) + (mixin?.let(::annotations) ?: emptySet()),
       retainedTypes =
         (annotationTypes(target) + (mixin?.let(::annotationTypes) ?: emptySet())) - targetName,
-      mixinMembers = mixin?.let(::mixinMembers) ?: emptyList(),
+      codecTypes = codecTypes(target) + (mixin?.let(::codecTypes) ?: emptySet()),
     )
   }
 
-  private fun valueClass(target: KSClassDeclaration): ValueClassOperations? {
-    val layers = ArrayList<ValueClassLayer>()
+  private fun valueClassMembers(target: KSClassDeclaration): List<JvmMember>? {
+    val members = ArrayList<JvmMember>()
     var declaration = target
-    var occurrenceExpression = "type"
-    var substitutions =
-      target.typeParameters
-        .mapIndexed { index, parameter -> parameter to "type.getTypeArguments().get($index)" }
-        .toMap()
-    var terminalType: KSType
-    var terminalExpression: String
     while (true) {
       val constructor =
         declaration.primaryConstructor
@@ -261,134 +196,49 @@ internal class KspModelBuilder(
         return fail(constructor, "Kotlin value class must have one underlying parameter")
       }
       val underlying = constructor.parameters.single().type.resolve()
-      val underlyingExpression = typeExpression(underlying, substitutions) ?: return null
-      val rawDescriptor =
-        descriptor(constructor)
-          ?: return fail(
-            constructor,
-            "Cannot map Kotlin value-class constructor to a JVM descriptor"
-          )
-      val normalized = normalizeConstructorDescriptor(rawDescriptor, listOf(carrier(underlying)))
-      val method = parseMethodDescriptor(normalized)
-      if (
-        method.parameters.size != 1 ||
-          (method.result != "V" && method.result != method.parameters.single().descriptor)
-      ) {
-        return fail(constructor, "Kotlin value-class constructor-impl has an invalid JVM shape")
-      }
-      val carrier = method.parameters.single()
-      layers +=
-        ValueClassLayer(
-          ownerBinaryName = binaryName(declaration)!!,
-          carrierType = carrier,
-          occurrenceTypeExpression = occurrenceExpression,
-          underlyingTypeExpression = underlyingExpression,
+      val carrier = valueClassCarrier(constructor, underlying) ?: return null
+      val owner = binaryName(declaration)!!
+      val ownerDescriptor = "L${owner.replace('.', '/')};"
+      val fieldName =
+        constructor.parameters.single().name?.asString()
+          ?: return fail(constructor, "Kotlin value-class parameter must be named")
+      members += JvmMember(MemberKind.FIELD, owner, fieldName, carrier.descriptor)
+      members +=
+        JvmMember(MemberKind.METHOD, owner, "<init>", methodDescriptor(listOf(carrier), "V"))
+      members +=
+        JvmMember(
+          MemberKind.METHOD,
+          owner,
+          "constructor-impl",
+          methodDescriptor(listOf(carrier), carrier.descriptor),
+        )
+      members +=
+        JvmMember(
+          MemberKind.METHOD,
+          owner,
+          "box-impl",
+          methodDescriptor(listOf(carrier), ownerDescriptor),
+        )
+      members +=
+        JvmMember(
+          MemberKind.METHOD,
+          owner,
+          "unbox-impl",
+          methodDescriptor(emptyList(), carrier.descriptor)
         )
       val underlyingDeclaration = actual(underlying.declaration) as? KSClassDeclaration
-      if (underlyingDeclaration == null || Modifier.VALUE !in underlyingDeclaration.modifiers) {
-        terminalType = underlying
-        terminalExpression = underlyingExpression
+      if (underlyingDeclaration == null || !isValueClass(underlyingDeclaration)) {
         break
       }
-      occurrenceExpression = underlyingExpression
-      substitutions =
-        underlyingDeclaration.typeParameters
-          .mapIndexed { index, parameter ->
-            val argument =
-              underlying.arguments.getOrNull(index)
-                ?: return fail(
-                  underlyingDeclaration,
-                  "Nested value class needs exact type arguments"
-                )
-            val argumentType =
-              argument.type?.resolve()
-                ?: return fail(argument, "Star-projected value-class arguments are unsupported")
-            parameter to (typeExpression(argumentType, substitutions) ?: return null)
-          }
-          .toMap()
       declaration = underlyingDeclaration
     }
-    return ValueClassOperations(
-      layers = layers,
-      terminalType = carrier(terminalType),
-      terminalTypeExpression = terminalExpression,
-    )
+    return members
   }
-
-  private fun typeExpression(
-    type: KSType,
-    substitutions: Map<KSTypeParameter, String>,
-    covariant: Boolean = false,
-  ): String? {
-    val declaration = actual(type.declaration)
-    if (declaration is KSTypeParameter) {
-      return substitutions[declaration]
-        ?: fail(declaration, "Unresolved Kotlin value-class type parameter ${declaration.name}")
-    }
-    val classDeclaration =
-      declaration as? KSClassDeclaration
-        ?: return fail(declaration, "Unsupported Kotlin value-class underlying type")
-    val classLiteral = logicalClassLiteral(type, classDeclaration)
-    val metadata =
-      "org.apache.fory.meta.TypeExtMeta.of(" +
-        "${semanticTypeId(classDeclaration)}, " +
-        "${type.nullability == Nullability.NULLABLE}, false, false, $covariant)"
-    if (type.arguments.isEmpty()) {
-      return "org.apache.fory.reflect.TypeRef.of($classLiteral, $metadata)"
-    }
-    val arguments = ArrayList<String>(type.arguments.size)
-    for (argument in type.arguments) {
-      if (argument.variance == Variance.CONTRAVARIANT) {
-        return fail(argument, "Contravariant Kotlin value-class types are unsupported")
-      }
-      val argumentType =
-        argument.type?.resolve()
-          ?: return fail(argument, "Star-projected Kotlin value-class types are unsupported")
-      arguments +=
-        typeExpression(argumentType, substitutions, argument.variance == Variance.COVARIANT)
-          ?: return null
-    }
-    return "org.apache.fory.reflect.TypeRef.ofDeclaredTypeArguments(" +
-      "$classLiteral, $metadata, java.util.Arrays.asList(${arguments.joinToString(", ")}), null)"
-  }
-
-  private fun logicalClassLiteral(type: KSType, declaration: KSClassDeclaration): String {
-    val name = declaration.qualifiedName?.asString().orEmpty()
-    if (name in PRIMITIVES) {
-      val descriptor =
-        if (type.nullability == Nullability.NULLABLE && name in UNSIGNED) {
-          "L${name.replace('.', '/')};"
-        } else if (type.nullability == Nullability.NULLABLE) {
-          BOXES.getValue(PRIMITIVES.getValue(name))
-        } else {
-          PRIMITIVES.getValue(name)
-        }
-      return JvmType(descriptor).classLiteral
-    }
-    ARRAYS[name]?.let {
-      return JvmType(it).classLiteral
-    }
-    val binary = JAVA_TYPES[name] ?: binaryName(declaration) ?: "java.lang.Object"
-    return JvmType("L${binary.replace('.', '/')};").classLiteral
-  }
-
-  private fun semanticTypeId(declaration: KSClassDeclaration): String =
-    when (declaration.qualifiedName?.asString()) {
-      "kotlin.UByte" -> "org.apache.fory.type.Types.UINT8"
-      "kotlin.UShort" -> "org.apache.fory.type.Types.UINT16"
-      "kotlin.UInt" -> "org.apache.fory.type.Types.UINT32"
-      "kotlin.ULong" -> "org.apache.fory.type.Types.UINT64"
-      "kotlin.UByteArray" -> "org.apache.fory.type.Types.UINT8_ARRAY"
-      "kotlin.UShortArray" -> "org.apache.fory.type.Types.UINT16_ARRAY"
-      "kotlin.UIntArray" -> "org.apache.fory.type.Types.UINT32_ARRAY"
-      "kotlin.ULongArray" -> "org.apache.fory.type.Types.UINT64_ARRAY"
-      else -> "0"
-    }
 
   private fun kotlinCreator(
     target: KSClassDeclaration,
     mixin: KSClassDeclaration?,
-  ): JsonCreator? {
+  ): CreatorMembers? {
     val selected = ArrayList<KSFunctionDeclaration>()
     target
       .getConstructors()
@@ -424,7 +274,7 @@ internal class KspModelBuilder(
       descriptor(constructor)
         ?: return fail(constructor, "Cannot map Kotlin constructor to a JVM descriptor")
     val parameterTypes = constructor.parameters.map { carrier(it.type.resolve()) }
-    val descriptor = normalizeConstructorDescriptor(rawDescriptor, parameterTypes)
+    val descriptor = normalizeValueCarriers(rawDescriptor, parameterTypes)
     val parsed = parseMethodDescriptor(descriptor)
     val count = constructor.parameters.size
     val types =
@@ -457,21 +307,21 @@ internal class KspModelBuilder(
       constructor.parameters.mapIndexed { index, parameter ->
         parameter.name?.asString() ?: return fail(parameter, "Unnamed constructor parameter $index")
       }
-    return JsonCreator(
-      parameterNames = names,
-      parameterTypes = types,
-      optional = optional,
-      invocationOwner = binaryName(target)!!,
-      invocationName = "<init>",
-      invocationDescriptor = invocation,
-      defaultDescriptor = defaultDescriptor,
+    val owner = binaryName(target)!!
+    val executable = methodDescriptor(types, "V")
+    val members = linkedSetOf(JvmMember(MemberKind.METHOD, owner, "<init>", executable))
+    members += JvmMember(MemberKind.METHOD, owner, "<init>", invocation)
+    defaultDescriptor?.let { members += JvmMember(MemberKind.METHOD, owner, "<init>", it) }
+    return CreatorMembers(
+      members = members.toList(),
+      parameters = names.indices.associate { names[it] to types[it] },
     )
   }
 
   private fun kotlinFactory(
     target: KSClassDeclaration,
     factory: KSFunctionDeclaration,
-  ): JsonCreator? {
+  ): CreatorMembers? {
     val owner =
       factory.parentDeclaration as? KSClassDeclaration
         ?: return fail(factory, "Kotlin @JsonCreator factory must be a target member")
@@ -491,14 +341,15 @@ internal class KspModelBuilder(
       return fail(factory, "Invalid Kotlin @JsonCreator static factory")
     }
     val targetName = binaryName(target)!!
-    val parameterTypes = factory.parameters.map { carrier(it.type.resolve()) }
+    val sourceTypes = factory.parameters.map { propertyCarrier(it.type.resolve()) }
     val rawDescriptor =
       descriptor(factory)
         ?: return fail(factory, "Cannot map Kotlin @JsonCreator factory to a JVM descriptor")
-    val normalized = normalizeConstructorDescriptor(rawDescriptor, parameterTypes)
+    val normalized = normalizeValueCarriers(rawDescriptor, sourceTypes)
     val parsed = parseMethodDescriptor(normalized)
     if (
-      parsed.parameters != parameterTypes || parsed.result != "L${targetName.replace('.', '/')};"
+      parsed.parameters.size != factory.parameters.size ||
+        parsed.result != "L${targetName.replace('.', '/')};"
     ) {
       return fail(factory, "Kotlin @JsonCreator factory must return its exact owner")
     }
@@ -506,14 +357,15 @@ internal class KspModelBuilder(
       factory.parameters.mapIndexed { index, parameter ->
         parameter.name?.asString() ?: return fail(parameter, "Unnamed factory parameter $index")
       }
-    return JsonCreator(
-      parameterNames = names,
-      parameterTypes = parameterTypes,
-      optional = BooleanArray(parameterTypes.size),
-      invocationOwner = targetName,
-      invocationName = resolver.getJvmName(factory) ?: factory.simpleName.asString(),
-      invocationDescriptor = methodDescriptor(parameterTypes, parsed.result),
-      defaultDescriptor = null,
+    val name = resolver.getJvmName(factory) ?: factory.simpleName.asString()
+    val members = ArrayList<JvmMember>(if (companionFactory) 2 else 1)
+    members += JvmMember(MemberKind.METHOD, targetName, name, normalized)
+    if (companionFactory) {
+      members += JvmMember(MemberKind.METHOD, binaryName(owner)!!, name, normalized)
+    }
+    return CreatorMembers(
+      members = members,
+      parameters = names.indices.associate { names[it] to parsed.parameters[it] },
     )
   }
 
@@ -536,7 +388,7 @@ internal class KspModelBuilder(
     return direct + companions
   }
 
-  private fun normalizeConstructorDescriptor(
+  private fun normalizeValueCarriers(
     descriptor: String,
     sourceTypes: List<JvmType>,
   ): String {
@@ -563,7 +415,6 @@ internal class KspModelBuilder(
 
   private fun javaMembers(
     target: KSClassDeclaration,
-    generatedPackage: String,
     mixin: KSClassDeclaration,
   ): List<JvmMember> {
     val result = linkedMapOf<String, JvmMember>()
@@ -571,23 +422,17 @@ internal class KspModelBuilder(
       if (property.origin !in JAVA_ORIGINS || !property.hasBackingField) continue
       val owner = property.parentDeclaration as? KSClassDeclaration ?: continue
       val modifiers = resolver.effectiveJavaModifiers(property)
-      if (
-        Modifier.JAVA_STATIC in modifiers ||
-          Modifier.JAVA_TRANSIENT in modifiers ||
-          !isMemberAccessible(property, owner, generatedPackage)
-      ) {
+      if (Modifier.JAVA_STATIC in modifiers || Modifier.JAVA_TRANSIENT in modifiers) {
         continue
       }
-      val type = carrier(property.type.resolve())
+      val type = propertyDescriptor(property)
       if (type.descriptor == "Ljava/lang/Class;") continue
       val member =
         JvmMember(
           MemberKind.FIELD,
           binaryName(owner)!!,
-          false,
           property.simpleName.asString(),
           type.descriptor,
-          Modifier.FINAL !in modifiers,
         )
       result["F#${member.ownerBinaryName}#${member.name}#${member.descriptor}"] = member
     }
@@ -609,22 +454,22 @@ internal class KspModelBuilder(
       val descriptor = descriptor(function) ?: continue
       val method = parseMethodDescriptor(descriptor)
       val annotated = hasEffectiveJsonAnnotation(function, mixin)
-      val kind =
+      val selected =
         when {
           method.parameters.isEmpty() &&
             method.result != "V" &&
             method.result != "Ljava/lang/Class;" &&
-            (annotated || isGetterName(name, method.result)) -> MemberKind.GETTER
+            (annotated || isGetterName(name, method.result)) -> true
           method.parameters.size == 1 &&
             method.result == "V" &&
-            (annotated || name.startsWith("set") && name.length > 3) -> MemberKind.SETTER
-          else -> continue
+            (annotated || name.startsWith("set") && name.length > 3) -> true
+          else -> false
         }
+      if (!selected) continue
       val member =
         JvmMember(
-          kind,
+          MemberKind.METHOD,
           binaryName(owner)!!,
-          owner.classKind == ClassKind.INTERFACE,
           name,
           descriptor,
         )
@@ -643,7 +488,7 @@ internal class KspModelBuilder(
   private fun javaAnySetter(
     target: KSClassDeclaration,
     mixin: KSClassDeclaration,
-  ): JvmAnySetter? {
+  ): JvmMember? {
     val methods = effectiveMethods(target, mixin, JSON_ANY_SETTER)
     if (methods.size > 1) {
       return fail(methods[1], "At most one effective @JsonAnySetter method is allowed")
@@ -667,9 +512,9 @@ internal class KspModelBuilder(
       return fail(method, "Invalid effective @JsonAnySetter method")
     }
     val owner = method.parentDeclaration as KSClassDeclaration
-    return JvmAnySetter(
+    return JvmMember(
+      MemberKind.METHOD,
       binaryName(owner)!!,
-      owner.classKind == ClassKind.INTERFACE,
       resolver.getJvmName(method) ?: method.simpleName.asString(),
       descriptor,
     )
@@ -678,8 +523,8 @@ internal class KspModelBuilder(
   private fun validators(
     target: KSClassDeclaration,
     mixin: KSClassDeclaration?,
-  ): List<JvmValidator> {
-    val result = ArrayList<JvmValidator>()
+  ): List<JvmMember> {
+    val result = ArrayList<JvmMember>()
     for (method in effectiveMethods(target, mixin, JSON_VALIDATOR)) {
       val descriptor = descriptor(method)
       val modifiers = resolver.effectiveJavaModifiers(method)
@@ -697,19 +542,20 @@ internal class KspModelBuilder(
       }
       val owner = method.parentDeclaration as? KSClassDeclaration ?: continue
       result +=
-        JvmValidator(
+        JvmMember(
+          MemberKind.METHOD,
           binaryName(owner)!!,
-          owner.classKind == ClassKind.INTERFACE,
           resolver.getJvmName(method) ?: method.simpleName.asString(),
+          descriptor,
         )
     }
-    return result.sortedWith(compareBy(JvmValidator::ownerBinaryName, JvmValidator::name))
+    return result.sortedWith(compareBy(JvmMember::ownerBinaryName, JvmMember::name))
   }
 
   private fun javaCreator(
     target: KSClassDeclaration,
     mixin: KSClassDeclaration,
-  ): JsonCreator? {
+  ): JvmMember? {
     val candidates = ArrayList<KSFunctionDeclaration>()
     target
       .getConstructors()
@@ -741,38 +587,12 @@ internal class KspModelBuilder(
     ) {
       return fail(creator, "Invalid effective @JsonCreator executable")
     }
-    val names = creatorNames(creator, mixin)
-    if (names.size != method.parameters.size || names.toSet().size != names.size) {
-      return fail(creator, "@JsonCreator property names must be unique and match its parameters")
-    }
-    return JsonCreator(
-      parameterNames = names,
-      parameterTypes = method.parameters,
-      optional = BooleanArray(method.parameters.size),
-      invocationOwner = binaryName(target)!!,
-      invocationName =
-        if (factory) resolver.getJvmName(creator) ?: creator.simpleName.asString() else "<init>",
-      invocationDescriptor = descriptor,
-      defaultDescriptor = null,
+    return JvmMember(
+      MemberKind.METHOD,
+      binaryName(target)!!,
+      if (factory) resolver.getJvmName(creator) ?: creator.simpleName.asString() else "<init>",
+      descriptor,
     )
-  }
-
-  private fun creatorNames(
-    creator: KSFunctionDeclaration,
-    mixin: KSClassDeclaration,
-  ): List<String> {
-    val source = matchingMixinFunction(creator, mixin)
-    val annotation =
-      source?.annotations?.firstOrNull { annotationName(it) == JSON_CREATOR }
-        ?: creator.annotations.firstOrNull { annotationName(it) == JSON_CREATOR }
-    val explicit =
-      annotation?.arguments?.firstOrNull { it.name?.asString() == "value" }?.value as? List<*>
-    val names = explicit?.filterIsInstance<String>().orEmpty()
-    return if (names.isNotEmpty()) names
-    else
-      creator.parameters.mapIndexed { index, parameter ->
-        parameter.name?.asString() ?: "arg$index"
-      }
   }
 
   private fun effectiveFunctions(target: KSClassDeclaration): List<KSFunctionDeclaration> {
@@ -872,34 +692,31 @@ internal class KspModelBuilder(
   private fun hasJsonAnnotation(source: KSAnnotated): Boolean =
     source.annotations.any { annotationName(it).startsWith(JSON_ANNOTATION_PACKAGE) }
 
-  private fun isMemberAccessible(
-    declaration: KSDeclaration,
-    owner: KSClassDeclaration,
-    generatedPackage: String,
-  ): Boolean {
-    val modifiers = resolver.effectiveJavaModifiers(declaration)
-    if (Modifier.PRIVATE in modifiers) return false
-    return Modifier.PUBLIC in modifiers || owner.packageName.asString() == generatedPackage
-  }
-
-  private fun mixinMembers(mixin: KSClassDeclaration): List<String> {
-    val result = linkedSetOf<String>()
+  private fun mixinMembers(mixin: KSClassDeclaration): List<JvmMember> {
+    val result = linkedMapOf<String, JvmMember>()
+    val owner = binaryName(mixin) ?: return emptyList()
+    fun add(member: JvmMember) {
+      result["${member.kind}#${member.name}#${member.descriptor}"] = member
+    }
     for (property in mixin.declarations.filterIsInstance<KSPropertyDeclaration>()) {
       val selected =
         hasJsonAnnotation(property) ||
           property.getter?.let(::hasJsonAnnotation) == true ||
           property.setter?.let(::hasJsonAnnotation) == true
       if (!selected) continue
-      val type = carrier(property.type.resolve())
-      if (property.hasBackingField)
-        result += "${type.sourceName} ${property.simpleName.asString()};"
+      val type = propertyDescriptor(property)
+      if (property.hasBackingField) {
+        add(JvmMember(MemberKind.FIELD, owner, property.simpleName.asString(), type.descriptor))
+      }
       property.getter?.let { getter ->
         val name = resolver.getJvmName(getter) ?: return@let
-        result += "${type.sourceName} $name();"
+        add(
+          JvmMember(MemberKind.METHOD, owner, name, methodDescriptor(emptyList(), type.descriptor))
+        )
       }
       property.setter?.let { setter ->
         val name = resolver.getJvmName(setter) ?: return@let
-        result += "void $name(${type.sourceName});"
+        add(JvmMember(MemberKind.METHOD, owner, name, methodDescriptor(listOf(type), "V")))
       }
     }
     for (function in mixinCallables(mixin)) {
@@ -907,73 +724,51 @@ internal class KspModelBuilder(
       if (!selected) continue
       val descriptor = descriptor(function) ?: continue
       val name = resolver.getJvmName(function) ?: function.simpleName.asString()
-      result += if (name == "<init>") constructorRule(descriptor) else methodRule(name, descriptor)
+      add(JvmMember(MemberKind.METHOD, owner, name, descriptor))
     }
-    return result.sorted()
+    return result.values.sortedWith(
+      compareBy(JvmMember::name, JvmMember::descriptor, JvmMember::kind)
+    )
   }
 
-  private fun methodRule(name: String, descriptor: String): String {
-    val method = parseMethodDescriptor(descriptor)
-    val result = if (method.result == "V") "void" else JvmType(method.result).sourceName
-    return "$result $name(${method.parameters.joinToString(",") { it.sourceName }});"
-  }
-
-  private fun constructorRule(descriptor: String): String =
-    "<init>(${parseMethodDescriptor(descriptor).parameters.joinToString(",") { it.sourceName }});"
-
-  private fun members(target: KSClassDeclaration, creator: JsonCreator?): List<JvmMember>? {
+  private fun members(target: KSClassDeclaration, creator: CreatorMembers): List<JvmMember>? {
     val result = ArrayList<JvmMember>()
-    val owner = binaryName(target)!!
-    val creatorTypes =
-      creator
-        ?.parameterNames
-        ?.withIndex()
-        ?.associate { (index, name) -> name to creator.parameterTypes[index] }
-        .orEmpty()
-    for (property in target.declarations.filterIsInstance<KSPropertyDeclaration>()) {
-      if (Modifier.CONST in property.modifiers || property.isDelegated()) continue
-      val carrier = creatorTypes[property.simpleName.asString()] ?: carrier(property.type.resolve())
-      if (hasAnnotation(property, "kotlin.jvm.JvmField")) {
-        if (
-          Modifier.PUBLIC in resolver.effectiveJavaModifiers(property) && property.hasBackingField
-        ) {
-          result +=
-            JvmMember(
-              MemberKind.FIELD,
-              owner,
-              false,
-              property.simpleName.asString(),
-              carrier.descriptor,
-              property.isMutable,
-            )
-        }
-        continue
+    val creatorTypes = creator.parameters
+    for (property in target.getAllProperties()) {
+      if (Modifier.CONST in property.modifiers || property.extensionReceiver != null) continue
+      val owner = property.parentDeclaration as? KSClassDeclaration ?: continue
+      val ownerName = binaryName(owner) ?: continue
+      val carrier = creatorTypes[property.simpleName.asString()] ?: propertyDescriptor(property)
+      if (!property.isDelegated() && property.hasBackingField) {
+        result +=
+          JvmMember(
+            MemberKind.FIELD,
+            ownerName,
+            property.simpleName.asString(),
+            carrier.descriptor,
+          )
       }
       property.getter?.let { getter ->
-        if (isAccessible(property, getter.modifiers)) {
-          val name =
-            resolver.getJvmName(getter)
-              ?: return fail(getter, "Cannot determine the JVM getter for ${property.simpleName}")
-          result +=
-            JvmMember(
-              MemberKind.GETTER,
-              owner,
-              false,
-              name,
-              methodDescriptor(emptyList(), carrier.descriptor),
-            )
-        }
+        val name =
+          resolver.getJvmName(getter)
+            ?: return fail(getter, "Cannot determine the JVM getter for ${property.simpleName}")
+        result +=
+          JvmMember(
+            MemberKind.METHOD,
+            ownerName,
+            name,
+            methodDescriptor(emptyList(), carrier.descriptor),
+          )
       }
       property.setter?.let { setter ->
-        if (property.isMutable && isAccessible(property, setter.modifiers)) {
+        if (property.isMutable && !property.isDelegated()) {
           val name =
             resolver.getJvmName(setter)
               ?: return fail(setter, "Cannot determine the JVM setter for ${property.simpleName}")
           result +=
             JvmMember(
-              MemberKind.SETTER,
-              owner,
-              false,
+              MemberKind.METHOD,
+              ownerName,
               name,
               methodDescriptor(listOf(carrier), "V"),
             )
@@ -983,13 +778,14 @@ internal class KspModelBuilder(
     return result.sortedWith(compareBy(JvmMember::name, JvmMember::descriptor, JvmMember::kind))
   }
 
-  private fun isAccessible(
-    property: KSPropertyDeclaration,
-    accessorModifiers: Set<Modifier>
-  ): Boolean =
-    Modifier.PRIVATE !in accessorModifiers &&
-      Modifier.PROTECTED !in accessorModifiers &&
-      Modifier.PUBLIC in resolver.effectiveJavaModifiers(property)
+  private fun propertyDescriptor(property: KSPropertyDeclaration): JvmType {
+    val descriptor = jvmSignature(property)
+    return if (descriptor == null || descriptor == "V" || descriptor == "<ERROR>") {
+      propertyCarrier(property.type.resolve())
+    } else {
+      JvmType(descriptor)
+    }
+  }
 
   private fun carrier(type: KSType): JvmType {
     val declaration = actual(type.declaration)
@@ -1012,26 +808,49 @@ internal class KspModelBuilder(
     return JvmType("L${binary.replace('.', '/')};")
   }
 
+  private fun propertyCarrier(type: KSType): JvmType {
+    if (type.nullability == Nullability.NULLABLE) return carrier(type)
+    val declaration = actual(type.declaration) as? KSClassDeclaration ?: return carrier(type)
+    if (!isValueClass(declaration)) return carrier(type)
+    val constructor = declaration.primaryConstructor ?: return carrier(type)
+    if (constructor.parameters.size != 1) return carrier(type)
+    val underlying = constructor.parameters.single().type.resolve()
+    return valueClassCarrier(constructor, underlying) ?: carrier(type)
+  }
+
+  private fun valueClassCarrier(
+    constructor: KSFunctionDeclaration,
+    underlying: KSType,
+  ): JvmType? {
+    val rawDescriptor =
+      descriptor(constructor)
+        ?: return fail(constructor, "Cannot map Kotlin value-class constructor to a JVM descriptor")
+    val normalized = normalizeValueCarriers(rawDescriptor, listOf(carrier(underlying)))
+    val method = parseMethodDescriptor(normalized)
+    if (
+      method.parameters.size != 1 ||
+        (method.result != "V" && method.result != method.parameters.single().descriptor)
+    ) {
+      return fail(constructor, "Kotlin value-class constructor-impl has an invalid JVM shape")
+    }
+    return method.parameters.single()
+  }
+
   private fun isUnboxedValue(type: KSType, carrier: JvmType): Boolean {
     if (type.nullability == Nullability.NULLABLE) return false
     val declaration = actual(type.declaration) as? KSClassDeclaration ?: return false
-    return Modifier.VALUE in declaration.modifiers &&
+    return isValueClass(declaration) &&
       carrier.descriptor != "L${binaryName(declaration)!!.replace('.', '/')};"
   }
 
+  private fun isValueClass(declaration: KSClassDeclaration): Boolean =
+    // KSP classpath symbols can omit VALUE, but @JvmInline is binary-retained compiler identity.
+    Modifier.VALUE in declaration.modifiers || hasAnnotation(declaration, JVM_INLINE)
+
   private fun annotations(target: KSClassDeclaration): Set<String> {
-    val result = linkedSetOf("kotlin.Metadata")
-    collectAnnotations(target, result)
-    target.declarations.forEach { declaration ->
-      collectAnnotations(declaration, result)
-      if (declaration is com.google.devtools.ksp.symbol.KSFunctionDeclaration) {
-        declaration.parameters.forEach { collectAnnotations(it, result) }
-      }
-      if (declaration is KSPropertyDeclaration) {
-        declaration.getter?.let { collectAnnotations(it, result) }
-        declaration.setter?.let { collectAnnotations(it, result) }
-      }
-    }
+    val result = linkedSetOf<String>()
+    if (isKotlin(target.origin)) result += "kotlin.Metadata"
+    annotationSources(target).forEach { collectAnnotations(it, result) }
     return result
   }
 
@@ -1044,15 +863,73 @@ internal class KspModelBuilder(
 
   private fun annotationTypes(target: KSClassDeclaration): Set<String> {
     val result = linkedSetOf<String>()
-    fun collect(source: KSAnnotated) {
+    annotationSources(target).forEach { source ->
       source.annotations
-        .filter { annotationName(it).startsWith(JSON_ANNOTATION_PACKAGE) }
+        .filter {
+          val annotation = annotationName(it)
+          annotation.startsWith(JSON_ANNOTATION_PACKAGE) && annotation != JSON_CODEC
+        }
         .flatMap { it.arguments.asSequence() }
         .forEach { argument -> collectTypeValue(argument.value, result) }
     }
-    collect(target)
-    target.declarations.forEach { collect(it) }
     return result
+  }
+
+  private fun codecTypes(target: KSClassDeclaration): Set<String> {
+    val result = linkedSetOf<String>()
+    annotationSources(target).forEach { source ->
+      source.annotations
+        .filter { annotationName(it) == JSON_CODEC }
+        .forEach { annotation ->
+          annotation.arguments.forEachIndexed { index, argument ->
+            val slot = argument.name?.asString()
+            if (slot in CODEC_SLOTS || slot == null && index == 0) {
+              collectCodecType(argument.value, result)
+            }
+          }
+        }
+    }
+    return result
+  }
+
+  private fun collectCodecType(value: Any?, result: MutableSet<String>) {
+    when (value) {
+      is KSType -> {
+        val binary = (actual(value.declaration) as? KSClassDeclaration)?.let(::binaryName)
+        if (binary != null && binary !in CODEC_SENTINELS) result += binary
+      }
+      is Iterable<*> -> value.forEach { collectCodecType(it, result) }
+    }
+  }
+
+  private fun annotationSources(target: KSClassDeclaration): Sequence<KSAnnotated> = sequence {
+    yield(target)
+    target.getConstructors().forEach { constructor ->
+      yield(constructor)
+      constructor.parameters.forEach { yield(it) }
+    }
+    target.getAllProperties().forEach { property ->
+      yield(property)
+      property.getter?.let { yield(it) }
+      property.setter?.let { setter ->
+        yield(setter)
+        yield(setter.parameter)
+      }
+    }
+    effectiveFunctions(target).forEach { function ->
+      yield(function)
+      function.parameters.forEach { yield(it) }
+    }
+    target.declarations
+      .filterIsInstance<KSClassDeclaration>()
+      .filter { it.isCompanionObject }
+      .forEach { companion ->
+        yield(companion)
+        companion.declarations.filterIsInstance<KSFunctionDeclaration>().forEach { function ->
+          yield(function)
+          function.parameters.forEach { yield(it) }
+        }
+      }
   }
 
   private fun collectTypeValue(value: Any?, result: MutableSet<String>) {
@@ -1065,15 +942,17 @@ internal class KspModelBuilder(
   }
 
   private fun descriptor(declaration: KSDeclaration): String? {
-    val signature =
-      try {
-        resolver.mapToJvmSignature(declaration)
-      } catch (_: RuntimeException) {
-        null
-      } ?: return null
+    val signature = jvmSignature(declaration) ?: return null
     val start = signature.indexOf('(')
     return if (start < 0) null else signature.substring(start)
   }
+
+  private fun jvmSignature(declaration: KSDeclaration): String? =
+    try {
+      resolver.mapToJvmSignature(declaration)
+    } catch (_: RuntimeException) {
+      null
+    }
 
   private fun hasAnnotation(source: KSAnnotated, name: String): Boolean =
     source.annotations.any { annotationName(it) == name }
@@ -1098,6 +977,13 @@ internal class KspModelBuilder(
   private companion object {
     val SOURCE_ORIGINS = setOf(Origin.KOTLIN, Origin.JAVA)
     val JAVA_ORIGINS = setOf(Origin.JAVA, Origin.JAVA_LIB)
+    const val JVM_INLINE = "kotlin.jvm.JvmInline"
+    val CODEC_SLOTS = setOf("value", "elementCodec", "contentCodec", "keyCodec", "valueCodec")
+    val CODEC_SENTINELS =
+      setOf(
+        "org.apache.fory.json.annotation.JsonCodec\$NoJsonValueCodec",
+        "org.apache.fory.json.annotation.JsonCodec\$NoMapKeyCodec",
+      )
     val PRIMITIVES =
       mapOf(
         "kotlin.Boolean" to "Z",

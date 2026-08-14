@@ -133,11 +133,9 @@ public object PlatformCorpusChecks {
         KotlinJsonCorpus.nullableUnitType(),
       ) == null
     )
-    check(
-      json.fromJson(
-        KotlinJsonCorpus.caseJson("null"),
-        KotlinJsonCorpus.nullableNothingType(),
-      ) == null
+    json.fromJson(
+      KotlinJsonCorpus.caseJson("null"),
+      KotlinJsonCorpus.nullableNothingType(),
     )
     verifyMixinCases(json)
 
@@ -214,6 +212,7 @@ public object PlatformCorpusChecks {
     check(actual.propertyShape == expected.propertyShape)
     check(actual.wrappedShape == expected.wrappedShape)
     check(actual.annotated == expected.annotated)
+    check(actual.codecSlots == expected.codecSlots)
     check(actual.nulls == expected.nulls)
     check(actual.token == expected.token)
   }
@@ -245,7 +244,6 @@ public object PlatformCorpusChecks {
     check(actual.uuid == expected.uuid)
     check(actual.unit === Unit)
     check(actual.nullableUnit == null)
-    check(actual.nothing == null)
     check(actual.intRange == expected.intRange)
     check(actual.uintRange == expected.uintRange)
     check(actual.intProgression == expected.intProgression)
@@ -290,7 +288,6 @@ public object PlatformCorpusChecks {
       "wrapped-marker",
       "unit-root",
       "nothing-root",
-      "missing-companion",
       "unreached-generic",
       "nothing-non-null",
       "value-nullability",

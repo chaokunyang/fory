@@ -24,7 +24,9 @@ import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.writer.JsonWriter;
 
-/** Java source access to Kotlin-internal getters and inline carriers not expressible without boxing. */
+/**
+ * Java source access to Kotlin-internal getters and inline carriers not expressible without boxing.
+ */
 @Internal
 final class KotlinTemporalAccess {
   private KotlinTemporalAccess() {}

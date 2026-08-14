@@ -2680,6 +2680,11 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
     position = writePadded4Utf16(buffer, position, value);
   }
 
+  private static int writePadded4(byte[] bytes, int pos, int value) {
+    LittleEndian.putInt32(bytes, pos, DIGIT_QUADS[value]);
+    return pos + 4;
+  }
+
   private void writeIsoYear(int year) {
     if (year >= 0 && year <= 9999) {
       writePadded4(year);
@@ -2692,11 +2697,6 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
     } else {
       writeInt(year);
     }
-  }
-
-  private static int writePadded4(byte[] bytes, int pos, int value) {
-    LittleEndian.putInt32(bytes, pos, DIGIT_QUADS[value]);
-    return pos + 4;
   }
 
   private void writeTwoDigits(int value) {

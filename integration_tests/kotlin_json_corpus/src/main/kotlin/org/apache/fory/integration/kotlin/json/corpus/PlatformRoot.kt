@@ -19,6 +19,7 @@
 
 package org.apache.fory.integration.kotlin.json.corpus
 
+import java.util.Optional
 import org.apache.fory.json.annotation.JsonProperty
 import org.apache.fory.json.annotation.JsonType
 
@@ -43,6 +44,7 @@ public data class PlatformRoot(
   public val propertyShape: PlatformPropertyShape,
   public val wrappedShape: PlatformWrappedShape,
   public val annotated: PlatformAnnotated,
+  public val codecSlots: PlatformCodecSlots,
   public val nulls: PlatformNulls,
   public val token: PlatformToken,
 )
@@ -87,6 +89,13 @@ internal fun platformRootValue(): PlatformRoot {
     propertyShape = PlatformCircle(3),
     wrappedShape = PlatformWrappedNumber(9),
     annotated = PlatformAnnotated("field", "getter", "parameter", "setter", "bare"),
+    codecSlots =
+      PlatformCodecSlots(
+        scalar = "scalar",
+        elements = listOf("first", "second"),
+        content = Optional.of("optional"),
+        entries = linkedMapOf(7 to "seven"),
+      ),
     nulls = PlatformNulls("required", null, 1, null),
     token = PlatformToken("module-token"),
   )

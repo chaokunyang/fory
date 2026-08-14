@@ -33,8 +33,7 @@ import org.apache.fory.reflect.TypeRef;
 final class StringWriterCodegen extends JsonWriterCodegen {
   private static final int MIN_SPLIT_MEMBERS = 10;
 
-  StringWriterCodegen(
-      JsonCodegen codegen, JsonTypeResolver resolver, ObjectCodec<?> objectOwner) {
+  StringWriterCodegen(JsonCodegen codegen, JsonTypeResolver resolver, ObjectCodec<?> objectOwner) {
     super(codegen, resolver, objectOwner);
   }
 

@@ -27,176 +27,396 @@ import kotlin.test.assertNotEquals
 
 class R8RulesWriterTest {
   @Test
-  fun emitsExactOrdinaryRules() {
-    val creator =
-      JsonCreator(
-        parameterNames = listOf("id", "name"),
-        parameterTypes = listOf(JvmType("J"), JvmType("Ljava/lang/String;")),
-        optional = booleanArrayOf(false, true),
-        invocationOwner = "example.Profile",
-        invocationName = "<init>",
-        invocationDescriptor = "(JLjava/lang/String;)V",
-        defaultDescriptor = "(JLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V",
-      )
+  fun retainsObjectContract() {
     val model =
-      model(
+      jsonModel(
         members =
           listOf(
-            JvmMember(MemberKind.FIELD, "example.Profile", false, "id", "J", writable = true),
+            JvmMember(MemberKind.FIELD, "example.Profile", "id", "J"),
             JvmMember(
-              MemberKind.GETTER,
+              MemberKind.METHOD,
               "example.Profile",
-              false,
               "getName",
               "()Ljava/lang/String;",
             ),
+            JvmMember(
+              MemberKind.METHOD,
+              "example.Profile",
+              "putExtra",
+              "(Ljava/lang/String;Ljava/lang/Object;)V",
+            ),
+            JvmMember(MemberKind.METHOD, "example.Profile", "validate", "()V"),
+            JvmMember(MemberKind.METHOD, "example.Profile", "<init>", "(JLjava/lang/String;)V"),
+            JvmMember(
+              MemberKind.METHOD,
+              "example.Profile",
+              "<init>",
+              "(JLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V",
+            ),
+            JvmMember(
+              MemberKind.METHOD,
+              "example.Profile",
+              "<init>",
+              "(JLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V",
+            ),
           ),
-        anySetter =
-          JvmAnySetter(
-            "example.Profile",
-            false,
-            "putExtra",
-            "(Ljava/lang/String;Ljava/lang/Object;)V",
-          ),
-        validators = listOf(JvmValidator("example.Profile", false, "validate")),
-        creator = creator,
-        retainedAnnotations = setOf("kotlin.Metadata", "org.apache.fory.json.annotation.JsonType"),
+        retainedAnnotations = setOf("org.apache.fory.json.annotation.JsonType", "kotlin.Metadata"),
         retainedTypes = setOf("example.ProfileSubtype"),
       )
 
-    val rules = R8RulesWriter.write(model)
-
     assertEquals(
       "META-INF/proguard/fory-json-example.Profile.pro",
-      R8RulesWriter.resourcePath(model)
+      R8RulesWriter.resourcePath(model),
     )
-    assertContains(rules, "-keepattributes Signature,RuntimeVisibleAnnotations")
-    assertContains(rules, "-keep,allowoptimization class example.Profile")
-    assertContains(rules, "long id;")
-    assertContains(rules, "java.lang.String getName();")
-    assertContains(rules, "void putExtra(java.lang.String,java.lang.Object);")
-    assertContains(rules, "void validate();")
-    assertContains(rules, "<init>(long,java.lang.String);")
-    assertContains(
-      rules,
-      "<init>(long,java.lang.String,int,kotlin.jvm.internal.DefaultConstructorMarker);",
+    assertEquals(
+      """-keepattributes Signature,RuntimeVisibleAnnotations
+-keepattributes RuntimeVisibleParameterAnnotations
+-keepattributes AnnotationDefault,MethodParameters
+
+-keep,allowoptimization class example.Profile
+-keepclassmembers class example.Profile {
+  <init>(long,java.lang.String);
+  <init>(long,java.lang.String,int,kotlin.jvm.internal.DefaultConstructorMarker);
+  <init>(long,java.lang.String,kotlin.jvm.internal.DefaultConstructorMarker);
+  java.lang.String getName();
+  long id;
+  void putExtra(java.lang.String,java.lang.Object);
+  void validate();
+}
+
+-keep,allowoptimization,allowobfuscation @interface kotlin.Metadata
+-keep,allowoptimization,allowobfuscation @interface org.apache.fory.json.annotation.JsonType
+-keep,allowoptimization class example.ProfileSubtype
+""",
+      R8RulesWriter.write(model),
     )
-    assertContains(
-      rules,
-      "-keep,allowoptimization,allowobfuscation @interface kotlin.Metadata",
-    )
-    assertContains(rules, "-keep,allowoptimization class example.ProfileSubtype")
-    assertContains(
-      rules,
-      "public org.apache.fory.json.meta.JsonAnySetterAccessor anySetterAccessor();",
-    )
-    assertContains(rules, "public java.lang.reflect.Method[] validatorMethods();")
-    assertContains(rules, "public void invokeValidators(java.lang.Object);")
-    assertContains(
-      rules,
-      "public static void setAny(example.Profile,java.lang.String,java.lang.Object);",
-    )
-    assertContains(rules, "public static void validate_0(example.Profile);")
-    assertContains(rules, "public static example.Profile createDefault(long,java.lang.String,int);")
-    assertFalse(rules.contains('*'), rules)
-    assertFalse(rules.contains("example.**"), rules)
+
+    val factoryRules =
+      R8RulesWriter.write(
+        jsonModel(
+          members =
+            listOf(
+              JvmMember(
+                MemberKind.METHOD,
+                "example.Profile\$Companion",
+                "create",
+                "(J)Lexample/Profile;",
+              ),
+              JvmMember(
+                MemberKind.METHOD,
+                "example.Profile",
+                "create",
+                "(J)Lexample/Profile;",
+              ),
+            ),
+        )
+      )
+    assertContains(factoryRules, "class example.Profile\$Companion")
+    assertContains(factoryRules, "example.Profile create(long);")
   }
 
   @Test
-  fun emitsExactSealedRulesOnly() {
+  fun retainsSingletonContract() {
     val model =
-      model(
-        target = "example.Shape",
-        generateCompanion = false,
-        retainedAnnotations =
-          setOf("kotlin.Metadata", "org.apache.fory.json.annotation.JsonSubTypes"),
-        retainedTypes = setOf("example.Circle", "example.Square"),
+      jsonModel(
+        targetBinaryName = "example.Marker",
+        members =
+          listOf(
+            JvmMember(
+              MemberKind.FIELD,
+              "example.Marker",
+              "INSTANCE",
+              "Lexample/Marker;",
+            )
+          ),
+        retainedAnnotations = setOf("org.apache.fory.json.annotation.JsonType"),
       )
 
-    val rules = R8RulesWriter.write(model)
+    assertEquals(
+      """-keepattributes Signature,RuntimeVisibleAnnotations
+-keepattributes RuntimeVisibleParameterAnnotations
+-keepattributes AnnotationDefault,MethodParameters
 
-    assertContains(rules, "-keep,allowoptimization class example.Shape")
-    assertContains(rules, "-keep,allowoptimization class example.Circle")
-    assertContains(rules, "-keep,allowoptimization class example.Square")
-    assertFalse(rules.contains(model.companionBinaryName), rules)
-    assertFalse(rules.contains(model.operationBinaryName), rules)
-    assertFalse(rules.contains("-keepclassmembers"), rules)
-    assertFalse(rules.contains('*'), rules)
+-keep,allowoptimization class example.Marker
+-keepclassmembers class example.Marker {
+  example.Marker INSTANCE;
+}
+
+-keep,allowoptimization,allowobfuscation @interface org.apache.fory.json.annotation.JsonType
+""",
+      R8RulesWriter.write(model),
+    )
   }
 
   @Test
-  fun emitsExactValueOperations() {
+  fun retainsValueContract() {
     val model =
-      model(
-        target = "example.UserId",
-        valueClass =
-          ValueClassOperations(
-            layers =
-              listOf(
-                ValueClassLayer(
-                  ownerBinaryName = "example.UserId",
-                  carrierType = JvmType("J"),
-                )
-              ),
-            terminalType = JvmType("J"),
+      jsonModel(
+        targetBinaryName = "example.UserId",
+        members =
+          listOf(
+            JvmMember(MemberKind.FIELD, "example.UserId", "value", "Lexample/RawId;"),
+            JvmMember(MemberKind.METHOD, "example.UserId", "<init>", "(Lexample/RawId;)V"),
+            JvmMember(
+              MemberKind.METHOD,
+              "example.UserId",
+              "constructor-impl",
+              "(Lexample/RawId;)Lexample/RawId;",
+            ),
+            JvmMember(
+              MemberKind.METHOD,
+              "example.UserId",
+              "box-impl",
+              "(Lexample/RawId;)Lexample/UserId;",
+            ),
+            JvmMember(
+              MemberKind.METHOD,
+              "example.UserId",
+              "unbox-impl",
+              "()Lexample/RawId;",
+            ),
+            JvmMember(MemberKind.FIELD, "example.RawId", "raw", "J"),
+            JvmMember(MemberKind.METHOD, "example.RawId", "<init>", "(J)V"),
+            JvmMember(MemberKind.METHOD, "example.RawId", "constructor-impl", "(J)J"),
+            JvmMember(MemberKind.METHOD, "example.RawId", "box-impl", "(J)Lexample/RawId;"),
+            JvmMember(MemberKind.METHOD, "example.RawId", "unbox-impl", "()J"),
           ),
         retainedAnnotations = setOf("kotlin.Metadata"),
       )
 
-    val rules = R8RulesWriter.write(model)
+    assertEquals(
+      """-keepattributes Signature,RuntimeVisibleAnnotations
+-keepattributes RuntimeVisibleParameterAnnotations
+-keepattributes AnnotationDefault,MethodParameters
 
-    assertContains(rules, "long constructor-impl(long);")
-    assertContains(rules, "example.UserId box-impl(long);")
-    assertContains(rules, "long unbox-impl();")
-    assertContains(rules, "public static long valueConstruct_0(long);")
-    assertContains(rules, "public static example.UserId valueBox_0(long);")
-    assertContains(rules, "public static long valueUnbox_0(example.UserId);")
+-keep,allowoptimization class example.UserId
+-keepclassmembers class example.UserId {
+  <init>(example.RawId);
+  example.RawId constructor-impl(example.RawId);
+  example.RawId unbox-impl();
+  example.RawId value;
+  example.UserId box-impl(example.RawId);
+}
+
+-keep,allowoptimization,allowobfuscation class example.RawId
+-keepclassmembers class example.RawId {
+  <init>(long);
+  example.RawId box-impl(long);
+  long constructor-impl(long);
+  long raw;
+  long unbox-impl();
+}
+
+-keep,allowoptimization,allowobfuscation @interface kotlin.Metadata
+""",
+      R8RulesWriter.write(model),
+    )
+  }
+
+  @Test
+  fun retainsSealedContract() {
+    val model =
+      jsonModel(
+        targetBinaryName = "example.Shape",
+        retainedAnnotations =
+          setOf("org.apache.fory.json.annotation.JsonSubTypes", "kotlin.Metadata"),
+        retainedTypes = setOf("example.Square", "example.Circle"),
+      )
+
+    val rules = R8RulesWriter.write(model)
+    assertEquals(
+      """-keepattributes Signature,RuntimeVisibleAnnotations
+-keepattributes RuntimeVisibleParameterAnnotations
+-keepattributes AnnotationDefault,MethodParameters
+
+-keep,allowoptimization class example.Shape
+
+-keep,allowoptimization,allowobfuscation @interface kotlin.Metadata
+-keep,allowoptimization,allowobfuscation @interface org.apache.fory.json.annotation.JsonSubTypes
+-keep,allowoptimization class example.Circle
+-keep,allowoptimization class example.Square
+""",
+      rules,
+    )
     assertFalse(rules.contains('*'), rules)
   }
 
   @Test
-  fun mixinResourceOwnsPairIdentity() {
-    val direct = model()
+  fun retainsCodecConstructors() {
+    val codecTypes =
+      linkedSetOf(
+        "example.codec.MapValueCodec",
+        "example.codec.WholeValueCodec",
+        "example.codec.KeyCodec",
+        "example.codec.ContentCodec",
+        "example.codec.ElementCodec",
+      )
+    val direct = jsonModel(codecTypes = codecTypes)
     val mixin =
-      model(
-        companionSimpleName = "ProfileMixin_ForyJsonMixin_example_Profile_ForyJsonCodec",
-        mixinBinaryName = "example.ProfileMixin",
+      jsonModel(
+        targetBinaryName = "example.ExternalProfile",
+        mixinBinaryName = "mixins.ProfileMixin",
+        codecTypes = codecTypes,
       )
 
-    assertNotEquals(R8RulesWriter.resourcePath(direct), R8RulesWriter.resourcePath(mixin))
-    assertContains(R8RulesWriter.resourcePath(mixin), "ProfileMixin")
+    assertEquals(
+      """-keepattributes Signature,RuntimeVisibleAnnotations
+-keepattributes RuntimeVisibleParameterAnnotations
+-keepattributes AnnotationDefault,MethodParameters
+
+-keep,allowoptimization class example.Profile
+
+-keep,allowoptimization,allowobfuscation class example.codec.ContentCodec
+-keepclassmembers class example.codec.ContentCodec {
+  public <init>();
+}
+
+-keep,allowoptimization,allowobfuscation class example.codec.ElementCodec
+-keepclassmembers class example.codec.ElementCodec {
+  public <init>();
+}
+
+-keep,allowoptimization,allowobfuscation class example.codec.KeyCodec
+-keepclassmembers class example.codec.KeyCodec {
+  public <init>();
+}
+
+-keep,allowoptimization,allowobfuscation class example.codec.MapValueCodec
+-keepclassmembers class example.codec.MapValueCodec {
+  public <init>();
+}
+
+-keep,allowoptimization,allowobfuscation class example.codec.WholeValueCodec
+-keepclassmembers class example.codec.WholeValueCodec {
+  public <init>();
+}
+
+""",
+      R8RulesWriter.write(direct),
+    )
+    assertEquals(
+      """-keepattributes Signature,RuntimeVisibleAnnotations
+-keepattributes RuntimeVisibleParameterAnnotations
+-keepattributes AnnotationDefault,MethodParameters
+
+-keep,allowoptimization class example.ExternalProfile
+
+-keep,allowoptimization class mixins.ProfileMixin
+
+-keep,allowoptimization,allowobfuscation class example.codec.ContentCodec
+-keepclassmembers class example.codec.ContentCodec {
+  public <init>();
+}
+
+-keep,allowoptimization,allowobfuscation class example.codec.ElementCodec
+-keepclassmembers class example.codec.ElementCodec {
+  public <init>();
+}
+
+-keep,allowoptimization,allowobfuscation class example.codec.KeyCodec
+-keepclassmembers class example.codec.KeyCodec {
+  public <init>();
+}
+
+-keep,allowoptimization,allowobfuscation class example.codec.MapValueCodec
+-keepclassmembers class example.codec.MapValueCodec {
+  public <init>();
+}
+
+-keep,allowoptimization,allowobfuscation class example.codec.WholeValueCodec
+-keepclassmembers class example.codec.WholeValueCodec {
+  public <init>();
+}
+
+""",
+      R8RulesWriter.write(mixin),
+    )
+    listOf(direct, mixin).forEach { model ->
+      val rules = R8RulesWriter.write(model)
+      codecTypes.forEach { codecType ->
+        assertEquals(
+          1,
+          rules.lineSequence().count {
+            it == "-keep,allowoptimization,allowobfuscation class $codecType"
+          },
+        )
+        assertEquals(
+          1,
+          rules.lineSequence().count { it == "-keepclassmembers class $codecType {" },
+        )
+      }
+      assertEquals(codecTypes.size, rules.lineSequence().count { it == "  public <init>();" })
+      assertFalse(rules.contains('*'), rules)
+      CODEC_SENTINELS.forEach { assertFalse(rules.contains(it), rules) }
+    }
   }
 
-  private fun model(
-    target: String = "example.Profile",
-    companionSimpleName: String = "${target.substringAfterLast('.')}_ForyJsonCodec",
-    generateCompanion: Boolean = true,
-    members: List<JvmMember> = emptyList(),
-    anySetter: JvmAnySetter? = null,
-    validators: List<JvmValidator> = emptyList(),
-    creator: JsonCreator? = null,
-    valueClass: ValueClassOperations? = null,
-    mixinBinaryName: String? = null,
-    retainedAnnotations: Set<String> = emptySet(),
-    retainedTypes: Set<String> = emptySet(),
-  ): JsonModel =
-    JsonModel(
-      packageName = "example",
-      targetBinaryName = target,
-      targetSourceName = target.replace('$', '.'),
-      companionSimpleName = companionSimpleName,
-      operationSimpleName = companionSimpleName + "_Operations",
-      generateCompanion = generateCompanion,
-      members = members,
-      anySetter = anySetter,
-      validators = validators,
-      creator = creator,
-      singleton = false,
-      valueClass = valueClass,
-      mixinBinaryName = mixinBinaryName,
-      originatingFiles = emptyList(),
-      retainedAnnotations = retainedAnnotations,
-      retainedTypes = retainedTypes,
-      mixinMembers = emptyList(),
+  @Test
+  fun retainsNestedCodecMetadata() {
+    val rules = R8RulesWriter.write(jsonModel(codecTypes = setOf("example.Codecs\$NestedCodec")))
+
+    assertContains(rules, "-keepattributes InnerClasses,EnclosingMethod")
+    assertContains(
+      rules,
+      "-keepclassmembers class example.Codecs\$NestedCodec {\n" + "  public <init>();\n" + "}",
     )
+  }
+
+  @Test
+  fun identifiesMixinRequest() {
+    val direct = jsonModel(targetBinaryName = "example.Profile")
+    val mixin =
+      jsonModel(
+        targetBinaryName = "example.Profile",
+        mixinBinaryName = "mixins.ProfileMixin",
+        members =
+          listOf(
+            JvmMember(MemberKind.METHOD, "example.Profile", "getName", "()Ljava/lang/String;"),
+            JvmMember(
+              MemberKind.FIELD,
+              "mixins.ProfileMixin",
+              "renamed",
+              "Ljava/lang/String;",
+            ),
+          ),
+      )
+    val second = mixin.copy(mixinBinaryName = "mixins.SecondProfileMixin")
+
+    assertEquals(
+      "META-INF/proguard/fory-json-mixin-mixins.ProfileMixin.pro",
+      R8RulesWriter.resourcePath(mixin),
+    )
+    assertEquals(
+      "META-INF/proguard/fory-json-mixin-mixins.SecondProfileMixin.pro",
+      R8RulesWriter.resourcePath(second),
+    )
+    assertNotEquals(R8RulesWriter.resourcePath(direct), R8RulesWriter.resourcePath(mixin))
+    assertNotEquals(R8RulesWriter.resourcePath(mixin), R8RulesWriter.resourcePath(second))
+    assertEquals(
+      """-keepattributes Signature,RuntimeVisibleAnnotations
+-keepattributes RuntimeVisibleParameterAnnotations
+-keepattributes AnnotationDefault,MethodParameters
+
+-keep,allowoptimization class example.Profile
+-keepclassmembers class example.Profile {
+  java.lang.String getName();
+}
+
+-keep,allowoptimization class mixins.ProfileMixin
+-keepclassmembers class mixins.ProfileMixin {
+  java.lang.String renamed;
+}
+
+""",
+      R8RulesWriter.write(mixin),
+    )
+  }
+
+  private companion object {
+    val CODEC_SENTINELS =
+      setOf(
+        "org.apache.fory.json.annotation.JsonCodec\$NoJsonValueCodec",
+        "org.apache.fory.json.annotation.JsonCodec\$NoMapKeyCodec",
+      )
+  }
 }

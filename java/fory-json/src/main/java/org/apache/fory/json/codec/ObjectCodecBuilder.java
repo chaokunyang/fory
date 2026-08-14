@@ -1804,26 +1804,30 @@ final class ObjectCodecBuilder {
     TypeRef<?> resolvedParameterRef = ownerType.resolveType(parameterType);
     Type resolvedParameter = resolvedParameterRef.getType();
     Type propertyType = builder.logicalType(ownerType);
-    if (!resolvedParameter.equals(propertyType)
-        && (builder.objectModelType == null
-            || !JsonObjectModel.compatibleType(resolvedParameterRef, builder.objectModelType))) {
-      if (builder.objectModelType != null
-          && UnboxedValueCodec.requiresCarrier(
-              creator.getParameterTypes()[parameterIndex], builder.objectModelType)) {
-        builder.creatorUnboxedRequired = true;
-      } else {
-        throw new ForyJsonException(
-            "@JsonCreator parameter type "
-                + resolvedParameter
-                + " does not match property "
-                + builder.name
-                + " type "
-                + propertyType
-                + " on "
-                + creator
-                + " parameter "
-                + parameterIndex);
-      }
+    Class<?> parameterCarrier = creator.getParameterTypes()[parameterIndex];
+    boolean compatible =
+        resolvedParameter.equals(propertyType)
+            || builder.objectModelType != null
+                && JsonObjectModel.compatibleType(resolvedParameterRef, builder.objectModelType);
+    boolean requiresCarrier =
+        builder.objectModelType != null
+            && (parameterCarrier == builder.objectModelType.getRawType() || !compatible)
+            && UnboxedValueCodec.requiresCarrier(parameterCarrier, builder.objectModelType);
+    if (requiresCarrier) {
+      builder.creatorUnboxedRequired = true;
+    }
+    if (!compatible && !requiresCarrier) {
+      throw new ForyJsonException(
+          "@JsonCreator parameter type "
+              + resolvedParameter
+              + " does not match property "
+              + builder.name
+              + " type "
+              + propertyType
+              + " on "
+              + creator
+              + " parameter "
+              + parameterIndex);
     }
     builder.creatorArgumentIndex = parameterIndex;
   }
@@ -2230,9 +2234,9 @@ final class ObjectCodecBuilder {
     }
     if (!propertyDiscoveryEnabled
         || !isEligibleAccessor(method)
-        || getterPropertyName(method) == null && setterPropertyName(method) == null) {
+        || getterPropertyName(method) == null) {
       throw new ForyJsonException(
-          "@JsonCodec requires an effective ordinary JSON getter or setter: " + method);
+          "@JsonCodec requires an effective ordinary JSON getter: " + method);
     }
   }
 

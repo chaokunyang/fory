@@ -53,7 +53,6 @@ def load_versions() -> dict[str, str]:
         "foryVersion",
         "kotlinVersion",
         "kspVersion",
-        "kspApiVersion",
         "kotlinxSerializationVersion",
         "moshiVersion",
         "jacksonVersion",
@@ -101,7 +100,6 @@ SAMPLE_FIELDS = (
     "moshi_version",
     "jackson_version",
     "ksp_version",
-    "ksp_api_version",
     "jmh_plugin_version",
     "run_id",
     "variant",
@@ -700,7 +698,6 @@ def main() -> None:
         "moshi_version": VERSIONS["moshiVersion"],
         "jackson_version": VERSIONS["jacksonVersion"],
         "ksp_version": VERSIONS["kspVersion"],
-        "ksp_api_version": VERSIONS["kspApiVersion"],
         "jmh_plugin_version": VERSIONS["jmhPluginVersion"],
     }
     exclusions = load_exclusions(Path(args.exclusions) if args.exclusions else None)

@@ -19,7 +19,6 @@
 
 package org.apache.fory.json.kotlin
 
-import kotlin.properties.Delegates
 import kotlin.ExperimentalContextParameters
 import kotlin.jvm.JvmInline
 import kotlin.metadata.ExperimentalContextReceivers
@@ -31,6 +30,7 @@ import kotlin.metadata.KmType
 import kotlin.metadata.KmValueParameter
 import kotlin.metadata.jvm.JvmMetadataVersion
 import kotlin.metadata.jvm.KotlinClassMetadata
+import kotlin.properties.Delegates
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -83,6 +83,7 @@ class KotlinMetadataModelsTest {
     lateinit var required: String
     var privateSink: String = "initial"
       private set
+
     @JvmField var direct: String = "initial"
     val immutable: String = "constant"
     var delegated: String by Delegates.observable("initial") { _, _, _ -> }
@@ -189,7 +190,6 @@ class KotlinMetadataModelsTest {
     val stateful = KotlinMetadataModels.objectModel(jsonTypeRef<StatefulCandidate>())
     assertSame(StatefulCandidate, stateful.fixedInstance())
     assertEquals(listOf("state"), stateful.propertyNames().toList())
-    assertTrue(stateful.requiresGeneratedCapability())
 
     val stateless = KotlinMetadataModels.objectModel(jsonTypeRef<Stateless>())
     assertSame(Stateless, stateless.fixedInstance())
@@ -260,29 +260,30 @@ class KotlinMetadataModelsTest {
   @Suppress("DEPRECATION")
   @Test
   fun legacyContextMetadata() {
-    fun stringType(): KmType = KmType().apply {
-      classifier = KmClassifier.Class("kotlin/String")
-    }
+    fun stringType(): KmType = KmType().apply { classifier = KmClassifier.Class("kotlin/String") }
 
-    val function = KmFunction("contextFunction").apply {
-      returnType = stringType()
-      contextParameters += KmValueParameter("scope").apply { type = stringType() }
-    }
-    val property = KmProperty("contextProperty").apply {
-      returnType = stringType()
-      contextParameters += KmValueParameter("scope").apply { type = stringType() }
-    }
+    val function =
+      KmFunction("contextFunction").apply {
+        returnType = stringType()
+        contextParameters += KmValueParameter("scope").apply { type = stringType() }
+      }
+    val property =
+      KmProperty("contextProperty").apply {
+        returnType = stringType()
+        contextParameters += KmValueParameter("scope").apply { type = stringType() }
+      }
     val encoded =
       KotlinClassMetadata.Class(
-        KmClass().apply {
-          name = "org/apache/fory/json/kotlin/LegacyContextModel"
-          contextReceiverTypes += stringType()
-          functions += function
-          properties += property
-        },
-        JvmMetadataVersion(2, 3, 0),
-        0,
-      ).write()
+          KmClass().apply {
+            name = "org/apache/fory/json/kotlin/LegacyContextModel"
+            contextReceiverTypes += stringType()
+            functions += function
+            properties += property
+          },
+          JvmMetadataVersion(2, 3, 0),
+          0,
+        )
+        .write()
     val decoded = KotlinClassMetadata.readStrict(encoded) as KotlinClassMetadata.Class
     assertTrue(KotlinMetadataModels.hasImplicitContext(decoded.kmClass))
     assertTrue(KotlinMetadataModels.hasImplicitContext(decoded.kmClass.functions.single()))

@@ -347,7 +347,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Run Android instrumented tests
-        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d  # v2.38.0
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: ${{ matrix.api-level }}
           arch: x86_64
@@ -355,6 +355,7 @@ jobs:
           working-directory: integration_tests/android_tests
           script: |
             yes | sdkmanager "platforms;android-${{ matrix.api-level }}" "build-tools;35.0.0"
+            gradle --no-daemon --stacktrace verifyKotlinJsonRules
             if [ "${{ matrix.api-level }}" = "26" ]; then gradle --no-daemon --stacktrace -PforyTestBuildType=debug connectedCheck; fi
             gradle --no-daemon --stacktrace -PforyTestBuildType=release connectedCheck
       - name: Upload Android Test Report
@@ -735,7 +736,7 @@ jobs:
           gradle-version: "9.3.0"
       - name: Install Fory Java and Kotlin JSON artifacts
         run: python ./ci/run_ci.py kotlin --task install
-      - name: Verify benchmark correctness and generated sources
+      - name: Verify benchmark correctness and Moshi adapters
         run: gradle --no-daemon -p benchmarks/kotlin test verifyGeneratedJsonArtifacts jmhClasses
       - name: Install benchmark report dependencies
         run: python -m pip install -r benchmarks/kotlin/requirements.txt

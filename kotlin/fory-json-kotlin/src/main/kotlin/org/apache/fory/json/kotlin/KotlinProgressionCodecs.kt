@@ -37,7 +37,9 @@ import org.apache.fory.json.writer.Utf8JsonWriter
 import org.apache.fory.reflect.TypeRef
 import org.apache.fory.serializer.GraphMemoryEstimates
 
-/** Primitive progression codecs which validate the canonical stored last element before allocation. */
+/**
+ * Primitive progression codecs which validate the canonical stored last element before allocation.
+ */
 @OptIn(ExperimentalUnsignedTypes::class)
 internal object KotlinProgressionCodecs {
   private const val FIRST = 0
@@ -61,7 +63,8 @@ internal object KotlinProgressionCodecs {
   private object CharProgressionCodec : JsonValueCodec<CharProgression> {
     private val ownerBytes = GraphMemoryEstimates.shallowObjectBytes(CharProgression::class.java)
 
-    override fun writeString(writer: StringJsonWriter, value: CharProgression?) = write(writer, value)
+    override fun writeString(writer: StringJsonWriter, value: CharProgression?) =
+      write(writer, value)
 
     override fun writeUtf8(writer: Utf8JsonWriter, value: CharProgression?) = write(writer, value)
 
@@ -120,7 +123,8 @@ internal object KotlinProgressionCodecs {
   private object IntProgressionCodec : JsonValueCodec<IntProgression> {
     private val ownerBytes = GraphMemoryEstimates.shallowObjectBytes(IntProgression::class.java)
 
-    override fun writeString(writer: StringJsonWriter, value: IntProgression?) = write(writer, value)
+    override fun writeString(writer: StringJsonWriter, value: IntProgression?) =
+      write(writer, value)
 
     override fun writeUtf8(writer: Utf8JsonWriter, value: IntProgression?) = write(writer, value)
 
@@ -176,7 +180,8 @@ internal object KotlinProgressionCodecs {
   private object LongProgressionCodec : JsonValueCodec<LongProgression> {
     private val ownerBytes = GraphMemoryEstimates.shallowObjectBytes(LongProgression::class.java)
 
-    override fun writeString(writer: StringJsonWriter, value: LongProgression?) = write(writer, value)
+    override fun writeString(writer: StringJsonWriter, value: LongProgression?) =
+      write(writer, value)
 
     override fun writeUtf8(writer: Utf8JsonWriter, value: LongProgression?) = write(writer, value)
 
@@ -232,7 +237,8 @@ internal object KotlinProgressionCodecs {
   private object UIntProgressionCodec : JsonValueCodec<UIntProgression> {
     private val ownerBytes = GraphMemoryEstimates.shallowObjectBytes(UIntProgression::class.java)
 
-    override fun writeString(writer: StringJsonWriter, value: UIntProgression?) = write(writer, value)
+    override fun writeString(writer: StringJsonWriter, value: UIntProgression?) =
+      write(writer, value)
 
     override fun writeUtf8(writer: Utf8JsonWriter, value: UIntProgression?) = write(writer, value)
 
@@ -288,7 +294,8 @@ internal object KotlinProgressionCodecs {
   private object ULongProgressionCodec : JsonValueCodec<ULongProgression> {
     private val ownerBytes = GraphMemoryEstimates.shallowObjectBytes(ULongProgression::class.java)
 
-    override fun writeString(writer: StringJsonWriter, value: ULongProgression?) = write(writer, value)
+    override fun writeString(writer: StringJsonWriter, value: ULongProgression?) =
+      write(writer, value)
 
     override fun writeUtf8(writer: Utf8JsonWriter, value: ULongProgression?) = write(writer, value)
 
@@ -383,12 +390,10 @@ internal object KotlinProgressionCodecs {
   }
 
   private fun normalizedLast(first: Int, last: Int, step: Int): Int =
-    if (step > 0) last - difference(last, first, step)
-    else last + difference(first, last, -step)
+    if (step > 0) last - difference(last, first, step) else last + difference(first, last, -step)
 
   private fun normalizedLast(first: Long, last: Long, step: Long): Long =
-    if (step > 0) last - difference(last, first, step)
-    else last + difference(first, last, -step)
+    if (step > 0) last - difference(last, first, step) else last + difference(first, last, -step)
 
   private fun normalizedLast(first: UInt, last: UInt, step: Int): UInt =
     if (step > 0) last - difference(last, first, step.toUInt())

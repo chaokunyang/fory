@@ -53,8 +53,7 @@ final class KotlinTimedValueCodec implements CompositeJsonCodec<TimedValue<?>> {
   private static final byte REJECT_NULL = 2;
   private static final long VALUE_HASH = JsonFieldNameHash.hash("value");
   private static final long DURATION_HASH = JsonFieldNameHash.hash("duration");
-  private static final int OWNER_BYTES =
-      GraphMemoryEstimates.shallowObjectBytes(TimedValue.class);
+  private static final int OWNER_BYTES = GraphMemoryEstimates.shallowObjectBytes(TimedValue.class);
 
   // JsonTypeResolver publishes this codec shell before binding the recursive child. The same
   // resolver transaction writes these ordinary slots exactly once or rolls the whole graph back.

@@ -360,10 +360,9 @@ final class ForyJsonGraalVMFeature implements Feature {
         ArrayList<Class<?>> models = new ArrayList<>(selectedModels);
         models.sort(Comparator.comparing(Class::getName));
         for (Class<?> model : models) {
-          // A raw generic Class is not a schema. Its source companion and generated capabilities
-          // are published only when a concrete TypeRef occurrence is reached from a selected
-          // non-generic root; eagerly resolving the raw class would also make unreached bindings
-          // available in the image.
+          // A raw generic Class is not a schema. Hosted capabilities are generated only when a
+          // concrete TypeRef occurrence is reached from a selected non-generic root; eagerly
+          // resolving the raw class would also make unreached bindings available in the image.
           if (model.getTypeParameters().length != 0) {
             continue;
           }

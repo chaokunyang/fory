@@ -132,7 +132,6 @@ final class DirectMethodCodegen {
   static DirectInvocation getterInvocation(Method getter) {
     return DirectInvocation.method(
         getterName(getter),
-        false,
         getter.getReturnType(),
         new Class<?>[] {getter.getDeclaringClass()},
         getter,
@@ -142,7 +141,6 @@ final class DirectMethodCodegen {
   static DirectInvocation setterInvocation(Method setter) {
     return DirectInvocation.method(
         setterName(setter),
-        false,
         void.class,
         new Class<?>[] {setter.getDeclaringClass(), setter.getParameterTypes()[0]},
         setter,
@@ -159,7 +157,6 @@ final class DirectMethodCodegen {
       }
       return DirectInvocation.method(
           valueOperationName(method),
-          false,
           method.getReturnType(),
           targetParameters,
           method,
@@ -174,19 +171,12 @@ final class DirectMethodCodegen {
       arguments[i] = i + 1;
     }
     return DirectInvocation.method(
-        valueOperationName(method),
-        false,
-        method.getReturnType(),
-        bridgeParameters,
-        method,
-        0,
-        arguments);
+        valueOperationName(method), method.getReturnType(), bridgeParameters, method, 0, arguments);
   }
 
   static DirectInvocation constructorInvocation(
       String name, Class<?>[] bridgeParameters, Constructor<?> constructor, int[] targetArguments) {
-    return DirectInvocation.constructor(
-        name, false, bridgeParameters, constructor, targetArguments);
+    return DirectInvocation.constructor(name, bridgeParameters, constructor, targetArguments);
   }
 
   static boolean requiresFullCreatorBridge(JsonCreatorInfo creator) {
@@ -209,7 +199,7 @@ final class DirectMethodCodegen {
     }
     Method method = (Method) target;
     return DirectInvocation.method(
-        fullCreatorName(target), true, method.getReturnType(), parameters, method, -1, arguments);
+        fullCreatorName(target), method.getReturnType(), parameters, method, -1, arguments);
   }
 
   static DirectInvocation defaultCreatorInvocation(JsonCreatorInfo creator) {

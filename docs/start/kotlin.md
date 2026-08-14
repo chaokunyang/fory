@@ -96,8 +96,10 @@ val text = json.toJson(User(1, "Alice"), userType)
 val decoded = json.fromJson(text, userType)
 ```
 
-Use `fory-json-kotlin-ksp` for `@JsonType`/Mixin generation and for Android or Native Image Kotlin
-models. Continue with [Kotlin JSON](../json/kotlin.md).
+The runtime reads Kotlin/JVM metadata directly. Add `fory-json-kotlin-ksp` only to Android builds
+that use R8 or ProGuard; it emits exact retention rules for Kotlin `@JsonType` models and
+source-owned exact Mixins. Native Image uses the normal `@ForyJsonProvider` workflow. Continue with
+[Kotlin JSON](../json/kotlin.md).
 
 ## Other Capabilities
 

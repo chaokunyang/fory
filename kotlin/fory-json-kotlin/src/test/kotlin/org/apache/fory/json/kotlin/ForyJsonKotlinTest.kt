@@ -55,23 +55,32 @@ class ForyJsonKotlinTest {
     val account = Account(7, "Ada", "owner")
     val json = fory.toJson(account, jsonTypeRef<Account>())
     assertEquals(account, fory.fromJson(json, jsonTypeRef<Account>()))
-    assertEquals(account, fory.fromJson(fory.toJsonBytes(account, jsonTypeRef<Account>()), jsonTypeRef<Account>()))
+    assertEquals(
+      account,
+      fory.fromJson(fory.toJsonBytes(account, jsonTypeRef<Account>()), jsonTypeRef<Account>())
+    )
   }
 
   @Test
   fun defaultArgument() {
     val fory = ForyJsonKotlin.builder().withAsyncCompilation(false).build()
-    assertEquals(Account(9, "default"), fory.fromJson("{\"id\":9,\"name\":\"default\"}", jsonTypeRef<Account>()))
-    assertEquals(Account(9, "explicit", null), fory.fromJson("{\"id\":9,\"name\":\"explicit\",\"label\":null}", jsonTypeRef<Account>()))
-    assertTrue(fory.toJson(Account(9, "default"), jsonTypeRef<Account>()).contains("\"label\":null"))
+    assertEquals(
+      Account(9, "default"),
+      fory.fromJson("{\"id\":9,\"name\":\"default\"}", jsonTypeRef<Account>())
+    )
+    assertEquals(
+      Account(9, "explicit", null),
+      fory.fromJson("{\"id\":9,\"name\":\"explicit\",\"label\":null}", jsonTypeRef<Account>())
+    )
+    assertTrue(
+      fory.toJson(Account(9, "default"), jsonTypeRef<Account>()).contains("\"label\":null")
+    )
   }
 
   @Test
   fun requiredArguments() {
     val fory = ForyJsonKotlin.builder().withAsyncCompilation(false).build()
-    assertFailsWith<ForyJsonException> {
-      fory.fromJson("{\"id\":9}", jsonTypeRef<Required>())
-    }
+    assertFailsWith<ForyJsonException> { fory.fromJson("{\"id\":9}", jsonTypeRef<Required>()) }
     assertFailsWith<ForyJsonException> {
       fory.fromJson("{\"id\":9,\"name\":null}", jsonTypeRef<Required>())
     }

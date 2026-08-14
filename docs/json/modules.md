@@ -87,7 +87,7 @@ val json = ForyJsonKotlin.builder().build()
 
 This is equivalent to `ForyJson.builder().withModule(ForyJsonKotlin)`. It does not scan the
 classpath or register application models. Exact application codec registrations retain normal
-precedence. See [Kotlin](kotlin.md) for type tokens and KSP setup.
+precedence. See [Kotlin](kotlin.md) for type tokens and optional Android minification setup.
 
 ## Module Identity
 

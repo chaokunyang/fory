@@ -23,22 +23,26 @@ Fory JSON provides these mapping and validation annotations in
 `org.apache.fory.json.annotation`:
 `JsonAnyGetter`, `JsonAnyProperty`, `JsonAnySetter`, `JsonBase64`, `JsonCodec`, `JsonCreator`, `JsonFormat`,
 `JsonIgnore`, `JsonProperty`, `JsonPropertyOrder`, `JsonRawValue`, `JsonSubTypes`, `JsonUnwrapped`,
-`JsonValidator`, and `JsonValue`. `JsonType` is a separate build-time generation marker. They are
+`JsonValidator`, and `JsonValue`. `JsonType` is a separate build-time model marker. They are
 Fory JSON APIs, not Jackson, Gson, or Fory binary-protocol compatibility annotations.
 
-`JsonType` asks the Java annotation processor or Kotlin KSP processor to generate direct property
-and creator operations plus exact retention rules on the JVM and Android. It is not inherited, so
-annotate each eligible concrete model that needs a generated companion on those platforms. A directly annotated
-`JsonValue` Record also receives a companion for its value accessor and canonical constructor.
+`JsonType` is not inherited, so mark each eligible concrete model that must participate in a
+platform build workflow. For Java source, the Fory annotation processor generates direct property
+and creator operations plus exact retention rules on the JVM and Android. A directly annotated
+`JsonValue` Record also receives generated value-access and canonical-constructor operations.
 Ordinary unannotated Java classes may still use reflection; on Android they need
-application-authored exact R8 rules. Kotlin construction, value-class, and singleton models require
-KSP-generated operations on Android. Android-desugared Records require processor-generated
+application-authored exact R8 rules. Android-desugared Records require processor-generated
 operations from either a direct `JsonType` declaration or a compiled exact `JsonMixin` pair.
-Outside Native Image, a directly annotated model that uses the default object codec fails during
-codec creation if its generated companion is missing. GraalVM Native Image discovers Java
-`JsonType` declarations directly; Kotlin models use their KSP-generated exact operations.
-See the [GraalVM guide](graalvm.md) and
-[Android guide](android.md) for the platform workflows.
+Outside Native Image, a directly annotated Java model that uses the default object codec fails
+during codec creation if its generated Java operations are missing.
+
+Kotlin/JVM models are mapped from validated Kotlin metadata and do not require generated
+construction operations. In Android builds that use R8 or ProGuard, Kotlin KSP emits exact
+retention rules for Kotlin `@JsonType` models and source-owned Kotlin Mixins; it does not generate
+codecs or construction operations. GraalVM Native Image discovers reachable Java and Kotlin
+`JsonType` declarations directly, and provider-selected configurations generate codecs while the
+image is built. See the [GraalVM guide](graalvm.md) and [Android guide](android.md) for the platform
+workflows.
 
 ## Kotlin use-site targets
 
@@ -122,9 +126,9 @@ A `JsonCodec` supplied by a Mixin is the target's effective annotation. An exact
 `registerCodec` registration still wins, while the effective type annotation wins over a built-in
 mapping.
 
-On Android, compile non-empty Java Mixins with the Fory annotation processor and Kotlin Mixins with
-KSP so required generated operations and platform configuration are available. A Java Mixin that
-targets Kotlin must also be processed by KSP. GraalVM Native Image discovers reachable Mixins
+On Android, compile a Java-source Mixin for a Java target with the Fory annotation processor. If
+either the Mixin source or its exact target is Kotlin, apply the Kotlin KSP processor instead so the
+pair's exact retention rules are packaged. GraalVM Native Image discovers reachable Mixins
 directly. See the platform guides linked above.
 
 ## `JsonProperty`

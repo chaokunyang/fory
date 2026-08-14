@@ -26,7 +26,6 @@ import java.util.Map;
 import java.util.Set;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
-import org.apache.fory.json.codec.GeneratedJsonCodec.GeneratedMapKey;
 import org.apache.fory.json.codegen.JsonCodegenKey;
 import org.apache.fory.json.resolver.JsonSharedRegistry.GeneratedClasses;
 import org.apache.fory.reflect.TypeRef;
@@ -106,36 +105,6 @@ public final class JsonGeneratedClassRegistry {
     }
   }
 
-  static void mergeSourceMapKeys(
-      Map<TypeRef<?>, GeneratedMapKey> source, Map<TypeRef<?>, GeneratedMapKey> target) {
-    for (Map.Entry<TypeRef<?>, GeneratedMapKey> entry : source.entrySet()) {
-      TypeRef<?> type = entry.getKey();
-      GeneratedMapKey key = entry.getValue();
-      GeneratedMapKey previous = target.putIfAbsent(type, key);
-      if (previous != null && !sameMapKey(previous, key)) {
-        throw new IllegalStateException(
-            "Conflicting source-generated Fory JSON map keys for " + type);
-      }
-    }
-  }
-
-  private static boolean sameMapKey(GeneratedMapKey left, GeneratedMapKey right) {
-    if (left.codec().getClass() != right.codec().getClass()) {
-      return false;
-    }
-    Class<?>[] leftTypes = left.secureTypes();
-    Class<?>[] rightTypes = right.secureTypes();
-    if (leftTypes.length != rightTypes.length) {
-      return false;
-    }
-    for (int i = 0; i < leftTypes.length; i++) {
-      if (leftTypes[i] != rightTypes[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   static final class Configuration {
     private final Map<TypeRef<?>, Class<?>> stringWriters;
     private final Map<TypeRef<?>, Class<?>> utf8Writers;
@@ -145,7 +114,6 @@ public final class JsonGeneratedClassRegistry {
     private final Map<TypeRef<?>, Class<?>> utf8CollectionWriters;
     private final Map<TypeRef<?>, Class<?>> utf8CollectionReaders;
     private final Map<TypeRef<?>, GeneratedJsonCodec<?>> sourceCodecs;
-    private final Map<TypeRef<?>, GeneratedMapKey> sourceMapKeys;
     private final Map<String, String> signatures;
 
     private Configuration(MutableConfiguration source) {
@@ -157,7 +125,6 @@ public final class JsonGeneratedClassRegistry {
       utf8CollectionWriters = immutableValues(source.utf8CollectionWriters);
       utf8CollectionReaders = immutableValues(source.utf8CollectionReaders);
       sourceCodecs = immutableValues(source.sourceCodecs);
-      sourceMapKeys = immutableValues(source.sourceMapKeys);
       signatures = Collections.unmodifiableMap(new HashMap<>(source.signatures));
     }
 
@@ -193,10 +160,6 @@ public final class JsonGeneratedClassRegistry {
       return sourceCodecs.get(type);
     }
 
-    GeneratedMapKey sourceMapKey(TypeRef<?> type) {
-      return sourceMapKeys.get(type);
-    }
-
     private Class<?> generatedClass(Map<TypeRef<?>, Class<?>> classes, TypeRef<?> type) {
       Class<?> generatedClass = classes.get(type);
       if (generatedClass != null && !signatures.containsKey(generatedClass.getName())) {
@@ -223,8 +186,6 @@ public final class JsonGeneratedClassRegistry {
     private final Map<TypeRef<?>, Class<?>> utf8CollectionWriters = new HashMap<>();
     private final Map<TypeRef<?>, Class<?>> utf8CollectionReaders = new HashMap<>();
     private final Map<TypeRef<?>, GeneratedJsonCodec<?>> sourceCodecs = new HashMap<>();
-    private final Map<TypeRef<?>, GeneratedMapKey> sourceMapKeys = new HashMap<>();
-    private final Set<Class<?>> sourceCapabilityClasses = new LinkedHashSet<>();
     private final Map<String, String> signatures = new HashMap<>();
 
     private void merge(GeneratedClasses source, Set<Class<?>> added) {
@@ -237,12 +198,6 @@ public final class JsonGeneratedClassRegistry {
       merge(source.utf8CollectionWriters(), utf8CollectionWriters, added);
       merge(source.utf8CollectionReaders(), utf8CollectionReaders, added);
       JsonGeneratedClassRegistry.mergeSourceCodecs(source.sourceCodecs(), sourceCodecs, added);
-      JsonGeneratedClassRegistry.mergeSourceMapKeys(source.sourceMapKeys(), sourceMapKeys);
-      for (Class<?> capabilityClass : source.sourceCapabilityClasses()) {
-        if (sourceCapabilityClasses.add(capabilityClass)) {
-          added.add(capabilityClass);
-        }
-      }
     }
 
     private static <K> void merge(

@@ -51,7 +51,6 @@ public final class JsonObjectModel {
   private final TypeRef<?>[] propertyTypes;
   private final boolean[] propertyReconstructible;
   private final boolean[] propertyRequired;
-  private final boolean requiresGeneratedCapability;
   private final Object fixedInstance;
   private final Field[] nonPropertyFields;
 
@@ -72,39 +71,6 @@ public final class JsonObjectModel {
     this(
         (Executable) constructor,
         constructor,
-        defaultConstructor,
-        parameterNames,
-        accessors,
-        defaultMethods,
-        defaultMaskBits,
-        parameterNullable,
-        parameterTypes,
-        propertyNames,
-        propertyGetters,
-        propertySetters,
-        propertyTypes,
-        allProperties(propertyNames.length),
-        new boolean[propertyNames.length]);
-  }
-
-  /** Creates a model whose exact invocation target differs from its logical constructor. */
-  public JsonObjectModel(
-      Constructor<?> constructor,
-      Constructor<?> invocationConstructor,
-      Constructor<?> defaultConstructor,
-      String[] parameterNames,
-      Method[] accessors,
-      Method[] defaultMethods,
-      int[] defaultMaskBits,
-      boolean[] parameterNullable,
-      TypeRef<?>[] parameterTypes,
-      String[] propertyNames,
-      Method[] propertyGetters,
-      Method[] propertySetters,
-      TypeRef<?>[] propertyTypes) {
-    this(
-        (Executable) constructor,
-        invocationConstructor,
         defaultConstructor,
         parameterNames,
         accessors,
@@ -153,42 +119,7 @@ public final class JsonObjectModel {
         new boolean[propertyNames.length]);
   }
 
-  /** Creates a model with language-required deferred properties. */
-  public JsonObjectModel(
-      Executable creator,
-      Executable invocationCreator,
-      Constructor<?> defaultConstructor,
-      String[] parameterNames,
-      Method[] accessors,
-      Method[] defaultMethods,
-      int[] defaultMaskBits,
-      boolean[] parameterNullable,
-      TypeRef<?>[] parameterTypes,
-      String[] propertyNames,
-      Method[] propertyGetters,
-      Method[] propertySetters,
-      TypeRef<?>[] propertyTypes,
-      boolean[] propertyRequired) {
-    this(
-        creator,
-        invocationCreator,
-        defaultConstructor,
-        parameterNames,
-        accessors,
-        defaultMethods,
-        defaultMaskBits,
-        parameterNullable,
-        parameterTypes,
-        propertyNames,
-        propertyGetters,
-        propertySetters,
-        propertyTypes,
-        allProperties(propertyNames.length),
-        propertyRequired,
-        false);
-  }
-
-  /** Creates a model with exact property reconstructibility and deferred-required facts. */
+  /** Creates a model with exact reconstructibility and deferred-required facts. */
   public JsonObjectModel(
       Executable creator,
       Executable invocationCreator,
@@ -205,43 +136,6 @@ public final class JsonObjectModel {
       TypeRef<?>[] propertyTypes,
       boolean[] propertyReconstructible,
       boolean[] propertyRequired) {
-    this(
-        creator,
-        invocationCreator,
-        defaultConstructor,
-        parameterNames,
-        accessors,
-        defaultMethods,
-        defaultMaskBits,
-        parameterNullable,
-        parameterTypes,
-        propertyNames,
-        propertyGetters,
-        propertySetters,
-        propertyTypes,
-        propertyReconstructible,
-        propertyRequired,
-        false);
-  }
-
-  /** Creates a model with an exact generated-capability platform requirement. */
-  public JsonObjectModel(
-      Executable creator,
-      Executable invocationCreator,
-      Constructor<?> defaultConstructor,
-      String[] parameterNames,
-      Method[] accessors,
-      Method[] defaultMethods,
-      int[] defaultMaskBits,
-      boolean[] parameterNullable,
-      TypeRef<?>[] parameterTypes,
-      String[] propertyNames,
-      Method[] propertyGetters,
-      Method[] propertySetters,
-      TypeRef<?>[] propertyTypes,
-      boolean[] propertyReconstructible,
-      boolean[] propertyRequired,
-      boolean requiresGeneratedCapability) {
     this.creator = Objects.requireNonNull(creator, "creator");
     this.invocationCreator = Objects.requireNonNull(invocationCreator, "invocationCreator");
     this.defaultConstructor = defaultConstructor;
@@ -257,7 +151,6 @@ public final class JsonObjectModel {
     this.propertyTypes = propertyTypes.clone();
     this.propertyReconstructible = propertyReconstructible.clone();
     this.propertyRequired = propertyRequired.clone();
-    this.requiresGeneratedCapability = requiresGeneratedCapability;
     this.fixedInstance = null;
     nonPropertyFields = new Field[0];
     validate();
@@ -269,8 +162,7 @@ public final class JsonObjectModel {
       Method[] propertyGetters,
       Method[] propertySetters,
       TypeRef<?>[] propertyTypes,
-      Field[] nonPropertyFields,
-      boolean requiresGeneratedCapability) {
+      Field[] nonPropertyFields) {
     creator = null;
     invocationCreator = null;
     defaultConstructor = null;
@@ -299,7 +191,6 @@ public final class JsonObjectModel {
     this.propertyTypes = propertyTypes.clone();
     propertyReconstructible = new boolean[propertyNames.length];
     propertyRequired = new boolean[propertyNames.length];
-    this.requiresGeneratedCapability = requiresGeneratedCapability;
     this.fixedInstance = Objects.requireNonNull(fixedInstance, "fixedInstance");
     HashSet<Field> fields = new HashSet<>();
     Class<?> instanceType = fixedInstance.getClass();
@@ -321,31 +212,18 @@ public final class JsonObjectModel {
    */
   public static JsonObjectModel fixedInstance(Object instance) {
     return new JsonObjectModel(
-        instance,
-        new String[0],
-        new Method[0],
-        new Method[0],
-        new TypeRef<?>[0],
-        new Field[0],
-        false);
+        instance, new String[0], new Method[0], new Method[0], new TypeRef<?>[0], new Field[0]);
   }
 
-  /** Creates a generated-capability singleton candidate with effective-property validation. */
+  /** Creates a singleton candidate with effective-property validation. */
   public static JsonObjectModel fixedInstance(
       Object instance,
       String[] propertyNames,
       Method[] propertyGetters,
       Method[] propertySetters,
-      TypeRef<?>[] propertyTypes,
-      boolean requiresGeneratedCapability) {
+      TypeRef<?>[] propertyTypes) {
     return new JsonObjectModel(
-        instance,
-        propertyNames,
-        propertyGetters,
-        propertySetters,
-        propertyTypes,
-        new Field[0],
-        requiresGeneratedCapability);
+        instance, propertyNames, propertyGetters, propertySetters, propertyTypes, new Field[0]);
   }
 
   /** Creates a fixed model with exact compiler storage excluded from logical JSON state. */
@@ -355,16 +233,14 @@ public final class JsonObjectModel {
       Method[] propertyGetters,
       Method[] propertySetters,
       TypeRef<?>[] propertyTypes,
-      Field[] nonPropertyFields,
-      boolean requiresGeneratedCapability) {
+      Field[] nonPropertyFields) {
     return new JsonObjectModel(
         instance,
         propertyNames,
         propertyGetters,
         propertySetters,
         propertyTypes,
-        nonPropertyFields,
-        requiresGeneratedCapability);
+        nonPropertyFields);
   }
 
   public Object fixedInstance() {
@@ -550,11 +426,6 @@ public final class JsonObjectModel {
   /** Returns required-deferred flags aligned with {@link #propertyNames()}. */
   public boolean[] propertyRequired() {
     return propertyRequired.clone();
-  }
-
-  /** Returns whether constrained platforms require a generated capability for this model. */
-  public boolean requiresGeneratedCapability() {
-    return requiresGeneratedCapability;
   }
 
   /** Returns exact compiler storage which is not part of fixed-instance JSON state. */

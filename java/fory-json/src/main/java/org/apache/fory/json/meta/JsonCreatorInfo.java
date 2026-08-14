@@ -96,29 +96,6 @@ public final class JsonCreatorInfo {
         null);
   }
 
-  public JsonCreatorInfo(
-      Class<?> ownerType,
-      Executable executable,
-      JsonCreatorFieldInfo[] fields,
-      Object[] defaults,
-      GeneratedJsonCodec<?> generatedCodec,
-      Method[] defaultMethods,
-      String[] parameterNames) {
-    this(
-        ownerType,
-        executable,
-        executable,
-        fields,
-        defaults,
-        generatedCodec,
-        defaultMethods,
-        parameterNames,
-        null,
-        null,
-        null,
-        null);
-  }
-
   /** Creates creator metadata with compiler-mask defaults supplied by a language object model. */
   public JsonCreatorInfo(
       Class<?> ownerType,
@@ -204,10 +181,13 @@ public final class JsonCreatorInfo {
     defaultConstructorInvoker =
         defaultConstructor == null
             ? null
-            : buildInvoker(defaultConstructor, defaultConstructor.getParameterCount());
+            : buildInvoker(
+                defaultConstructor,
+                defaultConstructor.getParameterCount(),
+                defaultConstructor.getParameterCount());
     invoker =
         generatedCodec == null && invocationExecutable != null
-            ? buildInvoker(invocationExecutable, defaults.length + this.deferredFields.length)
+            ? buildInvoker(invocationExecutable, defaults.length, defaults.length)
             : null;
     hashes = new long[this.fields.length];
     for (int i = 0; i < this.fields.length; i++) {
@@ -247,22 +227,13 @@ public final class JsonCreatorInfo {
     }
     invoker =
         generatedCodec == null
-            ? buildInvoker(invocationExecutable, defaults.length + deferredFields.length)
+            ? buildInvoker(
+                invocationExecutable, defaults.length, defaults.length + deferredFields.length)
             : null;
     hashes = new long[fields.length];
     for (int i = 0; i < fields.length; i++) {
       hashes[i] = fields[i].nameHash();
     }
-  }
-
-  /** Returns immutable construction metadata extended with post-constructor mutable properties. */
-  public JsonCreatorInfo withDeferredFields(JsonFieldInfo[] fields) {
-    return withDeferredFields(fields, fields, new boolean[fields.length]);
-  }
-
-  /** Extends construction with all deferred properties and their directly named JSON subset. */
-  public JsonCreatorInfo withDeferredFields(JsonFieldInfo[] fields, JsonFieldInfo[] directFields) {
-    return withDeferredFields(fields, directFields, new boolean[fields.length]);
   }
 
   /** Extends construction with deferred properties and required-presence flags. */
@@ -399,27 +370,14 @@ public final class JsonCreatorInfo {
         }
         throw new ForyJsonException("JSON creator failed for " + ownerType.getName(), cause);
       }
-    } else if (defaultConstructorInvoker != null) {
+    } else if (defaultConstructor != null) {
       value = invokeDefaultConstructor(arguments);
     } else if (invoker != null) {
       prepareArguments(arguments);
       value = invoke(arguments);
     } else {
-      try {
-        value =
-            invocationExecutable instanceof Constructor
-                ? ((Constructor<?>) invocationExecutable).newInstance(arguments)
-                : ((Method) invocationExecutable).invoke(null, arguments);
-        value = requireResult(value);
-      } catch (InstantiationException | IllegalAccessException e) {
-        throw new ForyJsonException("Failed to invoke JSON creator for " + ownerType.getName(), e);
-      } catch (InvocationTargetException e) {
-        Throwable cause = e.getCause();
-        if (cause instanceof Error) {
-          throw (Error) cause;
-        }
-        throw new ForyJsonException("JSON creator failed for " + ownerType.getName(), cause);
-      }
+      prepareArguments(arguments);
+      value = invokeReflectiveCreator(arguments);
     }
     applyDeferred(value, arguments);
     return value;
@@ -550,7 +508,7 @@ public final class JsonCreatorInfo {
       }
     }
     if (!useDefault) {
-      return invoke(arguments);
+      return invoker == null ? invokeReflectiveCreator(arguments) : invoke(arguments);
     }
     int[] masks = new int[maskCount];
     Object[] invocation = new Object[defaultConstructor.getParameterCount()];
@@ -580,8 +538,29 @@ public final class JsonCreatorInfo {
         throw new ForyJsonException("JSON creator failed for " + ownerType.getName(), cause);
       }
     }
+    return invokeReflectiveTarget(defaultConstructor, arguments);
+  }
+
+  private Object invokeReflectiveCreator(Object[] workspace) {
+    int logicalCount = defaults.length;
+    int invocationCount = invocationExecutable.getParameterCount();
+    Object[] arguments = workspace;
+    if (workspace.length != invocationCount || invocationCount != logicalCount) {
+      // The workspace may append deferred properties, while an accessibility constructor may
+      // append its language marker. Only logical creator arguments belong to the invocation.
+      arguments = new Object[invocationCount];
+      System.arraycopy(workspace, 0, arguments, 0, logicalCount);
+    }
+    return invokeReflectiveTarget(invocationExecutable, arguments);
+  }
+
+  private Object invokeReflectiveTarget(Executable target, Object[] arguments) {
     try {
-      return requireResult(defaultConstructor.newInstance(arguments));
+      Object value =
+          target instanceof Constructor
+              ? ((Constructor<?>) target).newInstance(arguments)
+              : ((Method) target).invoke(null, arguments);
+      return requireResult(value);
     } catch (InstantiationException | IllegalAccessException e) {
       throw new ForyJsonException("Failed to invoke JSON creator for " + ownerType.getName(), e);
     } catch (InvocationTargetException e) {
@@ -698,7 +677,8 @@ public final class JsonCreatorInfo {
     return value;
   }
 
-  private static MethodHandle buildInvoker(Executable executable, int workspaceSize) {
+  private static MethodHandle buildInvoker(
+      Executable executable, int logicalCount, int workspaceSize) {
     if (AndroidSupport.IS_ANDROID) {
       // Android has no supported trusted MethodHandle lookup. Creator shape validation guarantees
       // a public executable; accessibility is needed only when its declaring class is non-public.
@@ -710,7 +690,6 @@ public final class JsonCreatorInfo {
             ? nativeCreatorHandles(executable).target
             : creatorTarget(executable);
     Class<?>[] parameterTypes = executable.getParameterTypes();
-    int logicalCount = Math.min(workspaceSize, parameterTypes.length);
     if (parameterTypes.length == logicalCount + 1 && !parameterTypes[logicalCount].isPrimitive()) {
       target = MethodHandles.insertArguments(target, logicalCount, new Object[] {null});
       parameterTypes = Arrays.copyOf(parameterTypes, logicalCount);

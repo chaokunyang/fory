@@ -79,8 +79,7 @@ internal object KotlinTypeRefs {
 
   private fun projection(projection: KTypeProjection): TypeRef<*> {
     val type =
-      projection.type
-        ?: throw ForyJsonException("Star-projected Kotlin JSON types are unsupported")
+      projection.type ?: throw ForyJsonException("Star-projected Kotlin JSON types are unsupported")
     if (projection.variance == KVariance.IN) {
       throw ForyJsonException("Contravariant Kotlin JSON types are unsupported: $projection")
     }

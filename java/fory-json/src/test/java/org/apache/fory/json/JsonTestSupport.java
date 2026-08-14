@@ -204,8 +204,7 @@ final class JsonTestSupport {
     if (suffixStart < 0) {
       throw new AssertionError("Unexpected generated class " + generatedClass.getName());
     }
-    String identity =
-        simpleName.substring(suffixStart + GENERATED_CODEC_SUFFIX.length() + 1);
+    String identity = simpleName.substring(suffixStart + GENERATED_CODEC_SUFFIX.length() + 1);
     if (!identity.matches("[0-9a-f]{64}")) {
       throw new AssertionError("Unexpected generated class " + generatedClass.getName());
     }

@@ -75,10 +75,7 @@ class KotlinUnsupportedRuntimeTest {
   }
 
   private inline fun <reified T> assertRejected(json: ForyJson) {
-    val failure =
-      assertFailsWith<ForyJsonException> {
-        json.fromJson("{}", jsonTypeRef<T>())
-      }
+    val failure = assertFailsWith<ForyJsonException> { json.fromJson("{}", jsonTypeRef<T>()) }
     assertTrue(
       failure.message?.contains("Unsupported Kotlin JSON type") == true,
       failure.message,
@@ -87,10 +84,7 @@ class KotlinUnsupportedRuntimeTest {
 
   @Suppress("UNCHECKED_CAST")
   private fun assertRejectedClass(json: ForyJson, type: Class<*>) {
-    val failure =
-      assertFailsWith<ForyJsonException> {
-        json.fromJson("{}", type as Class<Any>)
-      }
+    val failure = assertFailsWith<ForyJsonException> { json.fromJson("{}", type as Class<Any>) }
     assertTrue(
       failure.message?.contains("Unsupported Kotlin JSON type") == true,
       failure.message,

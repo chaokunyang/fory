@@ -26,10 +26,10 @@ declared target types, and custom codecs still define an application-controlled
 object surface.
 
 Kotlin type tokens and metadata are trusted schema declarations, not input authority. The Kotlin
-module validates the logical type, physical JVM carrier, constructor/default operations, and
-generated companion before parsing. JSON input cannot select a class, constructor, compiler
-default target, object, companion, module, codec, generated class, or callable. A closed
-`JsonSubTypes` value selects only a logical name from the application-declared finite table.
+module validates the logical type, physical JVM carrier, and constructor/default operations before
+parsing. JSON input cannot select a class, constructor, compiler default target, object, companion,
+module, codec, or callable. A closed `JsonSubTypes` value selects only a logical name from the
+application-declared finite table.
 
 ## Type Policy And Class Loading
 

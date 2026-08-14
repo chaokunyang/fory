@@ -7,11 +7,9 @@ coverage verifies static serializers, processor-generated Fory JSON execution
 for mutable Java classes, `JsonCreator` classes, object-mapped and `JsonValue`
 desugared Records, Kotlin immutable/default/value/object/sealed models, generated
 retention rules, generated validator invocation and failure propagation, and
-generated operations for exact target-Mixin pairs. It also verifies that a
-Kotlin model without its required generated companion fails and that the next
-root operation succeeds. Mixin coverage registers the source at runtime after
-R8 minification so broad application keep rules cannot hide missing processor
-output.
+exact target-Mixin behavior. Mixin coverage registers the source at runtime
+after R8 minification so broad application keep rules cannot hide missing
+processor output.
 
 The tests consume `org.apache.fory:fory-core:1.7.0-SNAPSHOT`,
 `org.apache.fory:fory-json:1.7.0-SNAPSHOT`,
@@ -20,11 +18,15 @@ The tests consume `org.apache.fory:fory-core:1.7.0-SNAPSHOT`,
 `org.apache.fory:fory-json-kotlin-ksp:1.7.0-SNAPSHOT`, and the shared Kotlin JSON
 corpus from the local Maven repository. From the repository root, install the
 Java, Kotlin, KSP, and corpus artifacts through the single Kotlin CI owner before
-running Gradle:
+running Gradle. The fixture uses Gradle 8.13, Android Gradle Plugin 8.13.2,
+Android Build Tools 35.0.0, Kotlin Android plugin 2.3.20, and KSP 2.3.8. KSP
+packages exact consumer rules through its standard resource output; the fixture
+adds no application-specific transform or processor option.
 
 ```bash
 python ./ci/run_ci.py kotlin --task install
 cd integration_tests/android_tests
+gradle --no-daemon verifyKotlinJsonRules
 gradle --no-daemon -PforyTestBuildType=debug connectedCheck
 gradle --no-daemon -PforyTestBuildType=release connectedCheck
 ```

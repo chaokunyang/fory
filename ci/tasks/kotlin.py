@@ -30,7 +30,7 @@ PRODUCTION_MODULES = "fory-kotlin,fory-kotlin-ksp,fory-json-kotlin,fory-json-kot
 LOW_JDK_MODULES = "fory-kotlin,fory-kotlin-ksp,fory-json-kotlin"
 CORPUS_MODULE_NAME = "org.apache.fory.integration.kotlin.json.corpus"
 CORPUS_PACKAGE = "org.apache.fory.integration.kotlin.json.corpus"
-CORPUS_GENERATED_MODELS = (
+CORPUS_RULE_MODELS = (
     "PlatformAccount",
     "PlatformAnnotated",
     "PlatformBox",
@@ -38,13 +38,13 @@ CORPUS_GENERATED_MODELS = (
     "PlatformCase",
     "PlatformCaseManifest",
     "PlatformCircle",
+    "PlatformCodecSlots",
     "PlatformEnvelope",
     "PlatformGenericKey",
     "PlatformKotlinProfile",
     "PlatformMarker",
     "PlatformNode",
     "PlatformNullableText",
-    "PlatformNullOnly",
     "PlatformNulls",
     "PlatformOrdinary",
     "PlatformPositiveId",
@@ -57,23 +57,29 @@ CORPUS_GENERATED_MODELS = (
     "PlatformWrappedData",
     "PlatformWrappedMarker",
     "PlatformWrappedNumber",
-)
-CORPUS_RULE_MODELS = CORPUS_GENERATED_MODELS + (
     "PlatformInvalidPropertyShape",
     "PlatformPropertyShape",
     "PlatformWrappedShape",
 )
-CORPUS_MIXIN_COMPANIONS = (
-    "PlatformJavaProfileMixin_ForyJsonMixin_"
-    "org_x2e_apache_x2e_fory_x2e_integration_x2e_kotlin_x2e_json_x2e_corpus_x2e_"
-    "PlatformJavaProfile_ForyJsonCodec",
-    "PlatformKotlinProfileMixin_ForyJsonMixin_"
-    "org_x2e_apache_x2e_fory_x2e_integration_x2e_kotlin_x2e_json_x2e_corpus_x2e_"
-    "PlatformKotlinProfile_ForyJsonCodec",
+CORPUS_MIXIN_TARGETS = {
+    "PlatformCodecSlotsMixin": "PlatformCodecSlots",
+    "PlatformJavaProfileMixin": "PlatformJavaProfile",
+    "PlatformKotlinProfileMixin": "PlatformKotlinProfile",
+}
+CORPUS_CODEC_TYPES = (
+    "PlatformContentStringCodec",
+    "PlatformElementStringCodec",
+    "PlatformIntKeyCodec",
+    "PlatformMapValueStringCodec",
+    "PlatformWholeStringCodec",
 )
-CORPUS_MIXIN_MODELS = (
-    "PlatformJavaProfileMixin",
-    "PlatformKotlinProfileMixin",
+PLATFORM_BUILTINS_PARAMETERS = (
+    "kotlin.Pair,kotlin.Triple,byte,short,int,long,byte[],short[],int[],long[],"
+    "java.util.Map,java.util.Map,java.util.Map,java.util.Map,long,long,long,long,long,"
+    "kotlin.time.Instant,kotlin.time.Instant,kotlin.time.Instant,kotlin.time.Instant,"
+    "kotlin.uuid.Uuid,kotlin.Unit,kotlin.Unit,java.lang.Void,kotlin.ranges.IntRange,"
+    "kotlin.ranges.UIntRange,kotlin.ranges.IntProgression,kotlin.ranges.ULongProgression,"
+    "kotlin.time.TimedValue"
 )
 
 
@@ -128,7 +134,7 @@ def install_artifacts(include_corpus=True, modules=PRODUCTION_MODULES):
 
 
 def verify_corpus_artifact():
-    """Verify KSP class/resource packaging in the shared platform corpus JAR."""
+    """Verify exact KSP consumer-rule packaging in the shared platform corpus JAR."""
     module_dir = Path(
         common.PROJECT_ROOT_DIR, "integration_tests", "kotlin_json_corpus"
     )
@@ -137,32 +143,13 @@ def verify_corpus_artifact():
     if not jar_path.is_file():
         raise FileNotFoundError(f"Missing Kotlin JSON corpus artifact: {jar_path}")
 
-    expected_companions = {
-        f"{CORPUS_PACKAGE.replace('.', '/')}/{model}_ForyJsonCodec.class"
-        for model in CORPUS_GENERATED_MODELS
-    }
-    expected_companions.update(
-        f"{CORPUS_PACKAGE.replace('.', '/')}/{name}.class"
-        for name in CORPUS_MIXIN_COMPANIONS
-    )
-    expected_operations = {
-        name[:-6] + "_Operations.class" for name in expected_companions
-    }
-    expected_sources = {
-        f"{CORPUS_PACKAGE.replace('.', '/')}/{model}_ForyJsonCodec.java"
-        for model in CORPUS_GENERATED_MODELS
-    }
-    expected_sources.update(
-        f"{CORPUS_PACKAGE.replace('.', '/')}/{name}.java"
-        for name in CORPUS_MIXIN_COMPANIONS
-    )
     expected_rules = {
         f"META-INF/proguard/fory-json-{CORPUS_PACKAGE}.{model}.pro"
         for model in CORPUS_RULE_MODELS
     }
     expected_rules.update(
         f"META-INF/proguard/fory-json-mixin-{CORPUS_PACKAGE}.{model}.pro"
-        for model in CORPUS_MIXIN_MODELS
+        for model in CORPUS_MIXIN_TARGETS
     )
     with zipfile.ZipFile(jar_path) as jar:
         names = set(jar.namelist())
@@ -173,64 +160,74 @@ def verify_corpus_artifact():
         case_manifest = f"{CORPUS_PACKAGE.replace('.', '/')}/cases.json"
         if case_manifest not in names:
             raise RuntimeError(f"{jar_path} is missing {case_manifest}")
-        for label, expected in (
-            ("generated companions", expected_companions),
-            ("generated operations", expected_operations),
-            ("consumer rules", expected_rules),
-        ):
-            missing = sorted(expected - names)
-            if missing:
-                raise RuntimeError(f"{jar_path} is missing {label}: {missing}")
-        actual_companions = {
-            name
-            for name in names
-            if name.startswith(CORPUS_PACKAGE.replace(".", "/") + "/")
-            and name.endswith("_ForyJsonCodec.class")
-        }
+        missing = sorted(expected_rules - names)
+        if missing:
+            raise RuntimeError(f"{jar_path} is missing consumer rules: {missing}")
         actual_rules = {
             name
             for name in names
             if name.startswith("META-INF/proguard/fory-json-") and name.endswith(".pro")
         }
-        actual_operations = {
-            name
-            for name in names
-            if name.startswith(CORPUS_PACKAGE.replace(".", "/") + "/")
-            and name.endswith("_ForyJsonCodec_Operations.class")
-        }
-        if actual_companions != expected_companions:
-            raise RuntimeError(
-                f"{jar_path} has unexpected generated companions: "
-                f"{sorted(actual_companions ^ expected_companions)}"
-            )
         if actual_rules != expected_rules:
             raise RuntimeError(
                 f"{jar_path} has unexpected consumer rules: "
                 f"{sorted(actual_rules ^ expected_rules)}"
             )
-        if actual_operations != expected_operations:
-            raise RuntimeError(
-                f"{jar_path} has unexpected generated operations: "
-                f"{sorted(actual_operations ^ expected_operations)}"
-            )
-        for name in expected_companions | expected_operations:
-            class_bytes = jar.read(name)
-            if class_bytes[:4] != b"\xca\xfe\xba\xbe":
-                raise RuntimeError(f"{jar_path}!/{name} is not a JVM class")
-            major = int.from_bytes(class_bytes[6:8], "big")
-            if major != 52:
-                raise RuntimeError(
-                    f"{jar_path}!/{name} is JVM class version {major}, expected 52"
-                )
-    generated_source_dir = module_dir / "target" / "generated-sources" / "ksp"
-    actual_sources = {
-        path.relative_to(generated_source_dir).as_posix()
-        for path in generated_source_dir.rglob("*_ForyJsonCodec.java")
-    }
-    if actual_sources != expected_sources:
+        for model in CORPUS_RULE_MODELS:
+            name = f"META-INF/proguard/fory-json-{CORPUS_PACKAGE}.{model}.pro"
+            _verify_rule(jar, name, model)
+        _verify_builtin_creator_rule(jar)
+        for mixin, target in CORPUS_MIXIN_TARGETS.items():
+            name = f"META-INF/proguard/fory-json-mixin-{CORPUS_PACKAGE}.{mixin}.pro"
+            _verify_rule(jar, name, mixin)
+            _verify_rule(jar, name, target)
+        for name in (
+            f"META-INF/proguard/fory-json-{CORPUS_PACKAGE}.PlatformCodecSlots.pro",
+            f"META-INF/proguard/fory-json-mixin-{CORPUS_PACKAGE}.PlatformCodecSlotsMixin.pro",
+        ):
+            for codec in CORPUS_CODEC_TYPES:
+                _verify_codec_rule(jar, name, codec)
+
+
+def _verify_rule(jar, name, model):
+    lines = jar.read(name).decode("utf-8").splitlines()
+    exact_keep = f"-keep,allowoptimization class {CORPUS_PACKAGE}.{model}"
+    if exact_keep not in lines:
         raise RuntimeError(
-            f"{generated_source_dir} has unexpected generated companions: "
-            f"{sorted(actual_sources ^ expected_sources)}"
+            f"{jar.filename}!/{name} does not retain exact model {model}"
+        )
+
+
+def _verify_codec_rule(jar, name, codec):
+    text = jar.read(name).decode("utf-8")
+    lines = text.splitlines()
+    codec_type = f"{CORPUS_PACKAGE}.{codec}"
+    class_rule = f"-keep,allowoptimization,allowobfuscation class {codec_type}"
+    member_rule = f"-keepclassmembers class {codec_type} {{\n  public <init>();\n}}"
+    if class_rule not in lines or member_rule not in text:
+        raise RuntimeError(
+            f"{jar.filename}!/{name} does not retain the public constructor of {codec}"
+        )
+
+
+def _verify_builtin_creator_rule(jar):
+    name = f"META-INF/proguard/fory-json-{CORPUS_PACKAGE}.PlatformBuiltins.pro"
+    text = jar.read(name).decode("utf-8")
+    owner = f"{CORPUS_PACKAGE}.PlatformBuiltins"
+    header = f"-keepclassmembers class {owner} {{\n"
+    if text.count(header) != 1:
+        raise RuntimeError(f"{jar.filename}!/{name} must have one exact member block")
+    start = text.index(header) + len(header)
+    end = text.index("}\n", start)
+    block = text[start:end]
+    constructors = (
+        f"  <init>({PLATFORM_BUILTINS_PARAMETERS});",
+        "  <init>("
+        f"{PLATFORM_BUILTINS_PARAMETERS},kotlin.jvm.internal.DefaultConstructorMarker);",
+    )
+    if any(block.count(constructor) != 1 for constructor in constructors):
+        raise RuntimeError(
+            f"{jar.filename}!/{name} does not retain both exact Kotlin constructors"
         )
 
 
@@ -302,7 +299,7 @@ def run_native_json():
     )
     expect_native_failure(
         "org.apache.fory.graalvm.kotlin.InvalidPropertyMain",
-        "PROPERTY",
+        "Inline JSON subtype requires the default object representation",
     )
 
 

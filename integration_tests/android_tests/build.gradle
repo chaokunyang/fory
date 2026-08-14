@@ -114,3 +114,37 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test:runner:1.6.2'
 }
+
+def kotlinJsonRuleModels = [
+        'org.apache.fory.android.AndroidKotlinAccount',
+        'org.apache.fory.android.AndroidKotlinDefaults',
+        'org.apache.fory.android.AndroidKotlinMarker',
+]
+
+tasks.register('verifyKotlinJsonRules') {
+    dependsOn 'kspDebugKotlin', 'kspReleaseKotlin'
+    doLast {
+        ['debug', 'release'].each { variant ->
+            def ruleDir = layout.buildDirectory
+                    .dir("generated/ksp/${variant}/resources/META-INF/proguard")
+                    .get().asFile
+            def expected = kotlinJsonRuleModels.collectEntries { model ->
+                [("fory-json-${model}.pro"): model]
+            }
+            def actual = fileTree(ruleDir).matching { include 'fory-json-*.pro' }.files
+                    .collectEntries { rule -> [(rule.name): rule] }
+            if (actual.keySet() != expected.keySet()) {
+                throw new GradleException(
+                        "Unexpected Kotlin JSON rules for ${variant}: " +
+                                (actual.keySet() - expected.keySet()) +
+                                "; missing: " + (expected.keySet() - actual.keySet()))
+            }
+            expected.each { name, model ->
+                def exactKeep = "-keep,allowoptimization class ${model}".toString()
+                if (!actual[name].readLines('UTF-8').contains(exactKeep)) {
+                    throw new GradleException("${actual[name]} does not retain exact model ${model}")
+                }
+            }
+        }
+    }
+}

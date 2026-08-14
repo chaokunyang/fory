@@ -63,13 +63,9 @@ public data class PlatformUnitHolder(
   public val nothing: Nothing?,
 )
 
-@JsonType public data class PlatformNullOnly(public val value: Nothing?)
-
 @JsonType public object PlatformMarker
 
 @JsonType public data class PlatformKotlinProfile(public val label: String)
-
-public data class MissingPlatformCompanion(public val value: String)
 
 public object PlatformStatefulMarker {
   public var state: Int = 1

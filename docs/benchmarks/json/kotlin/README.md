@@ -21,7 +21,8 @@ It compares Fory JSON Kotlin, kotlinx.serialization, Moshi, and Jackson Kotlin w
   deviation.
 
 The eventual measured report will record the source and Fory artifact commits, artifact,
-dependency-set, and executed JMH JAR hashes, date, hardware, operating system, JDK, Kotlin, JMH and
-library versions, fork/thread/warmup/measurement settings, byte materialization costs, exclusions,
-per-launch raw samples, paired aggregates, and four operation-specific charts. Excluded or failed
-launches remain in the raw data with their reason and return code.
+dependency-set, and executed JMH JAR hashes, date, hardware, operating system, JDK, Kotlin, JMH,
+Moshi codegen KSP plugin, and library versions, fork/thread/warmup/measurement settings, byte
+materialization costs, exclusions, per-launch raw samples, paired aggregates, and four
+operation-specific charts. Excluded or failed launches remain in the raw data with their reason and
+return code.

@@ -46,9 +46,7 @@ internal object KotlinMapKeyCodecs {
     return MapCodec.create(type.rawType, keyClass(typeId), valueTypeInfo, keyCodec)
   }
 
-  /**
-   * Returns the terminal member-name codec for an exact boxed U* or primitive physical carrier.
-   */
+  /** Returns the terminal member-name codec for an exact boxed U* or primitive physical carrier. */
   fun keyCodec(type: TypeRef<*>): MapKeyCodec? {
     val typeId = type.typeExtMeta?.typeId() ?: return null
     val rawType = type.rawType

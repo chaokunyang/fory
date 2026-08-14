@@ -21,11 +21,11 @@ package org.apache.fory.android
 
 import org.apache.fory.integration.kotlin.json.corpus.KotlinJsonCorpus
 import org.apache.fory.integration.kotlin.json.corpus.PlatformAccount
+import org.apache.fory.integration.kotlin.json.corpus.PlatformCodecSlotsMixin
 import org.apache.fory.integration.kotlin.json.corpus.PlatformCorpusChecks
-import org.apache.fory.integration.kotlin.json.corpus.PlatformJsonModule
 import org.apache.fory.integration.kotlin.json.corpus.PlatformJavaProfileMixin
+import org.apache.fory.integration.kotlin.json.corpus.PlatformJsonModule
 import org.apache.fory.integration.kotlin.json.corpus.PlatformKotlinProfileMixin
-import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.annotation.JsonType
 import org.apache.fory.json.kotlin.ForyJsonKotlin
 import org.apache.fory.json.kotlin.jsonTypeRef
@@ -77,8 +77,6 @@ internal data class AndroidKotlinDefaults(
     val v32: Int = 32,
 )
 
-internal data class AndroidKotlinMissingCompanion(val value: String)
-
 internal object AndroidKotlinJsonScenarios {
     @JvmStatic
     fun generatedModels() {
@@ -87,6 +85,7 @@ internal object AndroidKotlinJsonScenarios {
                 .withModule(PlatformJsonModule)
                 .registerMixin(PlatformJavaProfileMixin::class.java)
                 .registerMixin(PlatformKotlinProfileMixin::class.java)
+                .registerMixin(PlatformCodecSlotsMixin::class.java)
                 .withAsyncCompilation(false)
                 .build()
         val accountType = jsonTypeRef<AndroidKotlinAccount>()
@@ -114,27 +113,4 @@ internal object AndroidKotlinJsonScenarios {
         PlatformCorpusChecks.verifyPropertyFailure(json)
     }
 
-    @JvmStatic
-    fun missingCompanionAndCleanup() {
-        val json =
-            ForyJsonKotlin.builder()
-                .withModule(PlatformJsonModule)
-                .withAsyncCompilation(false)
-                .build()
-        try {
-            json.fromJson(
-                "{\"value\":\"not-authorized\"}",
-                jsonTypeRef<AndroidKotlinMissingCompanion>(),
-            )
-            error("Android Kotlin model without a generated companion must fail")
-        } catch (_: ForyJsonException) {
-            // The next root proves resolver/read-state rollback after the cold capability failure.
-        }
-        check(
-            json.fromJson(
-                "{\"id\":29,\"name\":\"after-failure\"}",
-                jsonTypeRef<AndroidKotlinAccount>(),
-            ) == AndroidKotlinAccount(29, "after-failure")
-        )
-    }
 }

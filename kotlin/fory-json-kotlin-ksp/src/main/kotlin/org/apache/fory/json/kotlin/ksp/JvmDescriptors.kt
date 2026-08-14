@@ -27,44 +27,8 @@ internal data class JvmType(val descriptor: String) {
     require(descriptor != "V") { "void is not a value type" }
   }
 
-  val primitive: Boolean
-    get() = descriptor.length == 1
-
-  val slots: Int
-    get() = if (descriptor == "J" || descriptor == "D") 2 else 1
-
   val sourceName: String
     get() = sourceName(descriptor)
-
-  val classLiteral: String
-    get() = "$sourceName.class"
-
-  val defaultExpression: String
-    get() =
-      when (descriptor) {
-        "Z" -> "false"
-        "B",
-        "S",
-        "I" -> "0"
-        "J" -> "0L"
-        "F" -> "0.0f"
-        "D" -> "0.0d"
-        "C" -> "'\\u0000'"
-        else -> "null"
-      }
-
-  fun argumentExpression(source: String): String =
-    when (descriptor) {
-      "Z" -> "((Boolean) $source).booleanValue()"
-      "B" -> "((Byte) $source).byteValue()"
-      "S" -> "((Short) $source).shortValue()"
-      "I" -> "((Integer) $source).intValue()"
-      "J" -> "((Long) $source).longValue()"
-      "F" -> "((Float) $source).floatValue()"
-      "D" -> "((Double) $source).doubleValue()"
-      "C" -> "((Character) $source).charValue()"
-      else -> "($sourceName) $source"
-    }
 }
 
 internal data class JvmMethodDescriptor(val parameters: List<JvmType>, val result: String)

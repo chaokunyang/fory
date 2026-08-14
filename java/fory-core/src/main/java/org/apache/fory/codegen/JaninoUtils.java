@@ -20,8 +20,8 @@
 package org.apache.fory.codegen;
 
 import java.io.BufferedInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
@@ -40,8 +40,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
-import org.apache.fory.collection.Tuple2;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.collection.Tuple2;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.platform.AndroidSupport;
@@ -64,13 +64,13 @@ public class JaninoUtils {
    * One verified direct JVM invocation used to replace a source placeholder after Janino has
    * compiled the containing class.
    *
-   * <p>The bridge signature is source-nameable; the target member need not be. Parameter index
-   * {@code -1} supplies a JVM null constant. All other indexes select one bridge parameter.
+   * <p>The generated-codec bridge is an instance method with a source-nameable signature; the
+   * target member need not be source-nameable. Parameter index {@code -1} supplies a JVM null
+   * constant. All other indexes select one bridge parameter.
    */
   @Internal
   public static final class DirectInvocation {
     private final String bridgeName;
-    private final boolean staticBridge;
     private final Class<?> returnType;
     private final Class<?>[] parameterTypes;
     private final Executable target;
@@ -79,14 +79,12 @@ public class JaninoUtils {
 
     private DirectInvocation(
         String bridgeName,
-        boolean staticBridge,
         Class<?> returnType,
         Class<?>[] parameterTypes,
         Executable target,
         int receiverIndex,
         int[] argumentIndexes) {
       this.bridgeName = bridgeName;
-      this.staticBridge = staticBridge;
       this.returnType = returnType;
       this.parameterTypes = parameterTypes.clone();
       this.target = target;
@@ -98,37 +96,23 @@ public class JaninoUtils {
     /** Creates a bridge which invokes one exact constructor. */
     public static DirectInvocation constructor(
         String bridgeName,
-        boolean staticBridge,
         Class<?>[] parameterTypes,
         Constructor<?> target,
         int... argumentIndexes) {
       return new DirectInvocation(
-          bridgeName,
-          staticBridge,
-          target.getDeclaringClass(),
-          parameterTypes,
-          target,
-          -1,
-          argumentIndexes);
+          bridgeName, target.getDeclaringClass(), parameterTypes, target, -1, argumentIndexes);
     }
 
     /** Creates a bridge which invokes one exact method. */
     public static DirectInvocation method(
         String bridgeName,
-        boolean staticBridge,
         Class<?> returnType,
         Class<?>[] parameterTypes,
         Method target,
         int receiverIndex,
         int... argumentIndexes) {
       return new DirectInvocation(
-          bridgeName,
-          staticBridge,
-          returnType,
-          parameterTypes,
-          target,
-          receiverIndex,
-          argumentIndexes);
+          bridgeName, returnType, parameterTypes, target, receiverIndex, argumentIndexes);
     }
 
     public String bridgeName() {
@@ -142,7 +126,6 @@ public class JaninoUtils {
     /** Returns whether two bridge declarations invoke the same exact verified target shape. */
     public boolean sameTarget(DirectInvocation other) {
       return other != null
-          && staticBridge == other.staticBridge
           && returnType == other.returnType
           && target.equals(other.target)
           && receiverIndex == other.receiverIndex
@@ -263,8 +246,7 @@ public class JaninoUtils {
     }
   }
 
-  private static void installDirectInvocation(
-      ClassFile classFile, DirectInvocation invocation) {
+  private static void installDirectInvocation(ClassFile classFile, DirectInvocation invocation) {
     String descriptor = invocation.descriptor();
     ClassFile.MethodInfo sourceMethod = null;
     for (ClassFile.MethodInfo method : classFile.methodInfos) {
@@ -285,12 +267,20 @@ public class JaninoUtils {
               + " in "
               + classFile.getThisClassName());
     }
+    if (Modifier.isStatic(sourceMethod.getAccessFlags())) {
+      throw new CodegenException(
+          "Generated direct invocation bridge must be an instance method "
+              + invocation.bridgeName()
+              + descriptor);
+    }
     classFile.methodInfos.remove(sourceMethod);
     ClassFile.MethodInfo method =
         classFile.addMethodInfo(
-            sourceMethod.getAccessFlags(), invocation.bridgeName(), new MethodDescriptor(descriptor));
+            sourceMethod.getAccessFlags(),
+            invocation.bridgeName(),
+            new MethodDescriptor(descriptor));
     byte[] code = directInvocationCode(classFile, invocation);
-    int maxLocals = parameterSlots(invocation.parameterTypes) + (invocation.staticBridge ? 0 : 1);
+    int maxLocals = parameterSlots(invocation.parameterTypes) + 1;
     int targetSlots = parameterSlots(invocation.target.getParameterTypes());
     int invocationStack =
         invocation.target instanceof Constructor
@@ -308,8 +298,7 @@ public class JaninoUtils {
             new ClassFile.AttributeInfo[0]));
   }
 
-  private static byte[] directInvocationCode(
-      ClassFile classFile, DirectInvocation invocation) {
+  private static byte[] directInvocationCode(ClassFile classFile, DirectInvocation invocation) {
     ByteArrayOutputStream code = new ByteArrayOutputStream();
     Executable target = invocation.target;
     if (target instanceof Constructor) {
@@ -328,10 +317,7 @@ public class JaninoUtils {
       if (source < 0) {
         code.write(0x01); // aconst_null
       } else {
-        writeLoad(
-            code,
-            invocation.parameterTypes[source],
-            localIndex(invocation, source));
+        writeLoad(code, invocation.parameterTypes[source], localIndex(invocation, source));
       }
     }
     Class<?> ownerType = target.getDeclaringClass();
@@ -344,8 +330,7 @@ public class JaninoUtils {
     short reference;
     int opcode;
     if (target instanceof Constructor) {
-      reference =
-          classFile.addConstantMethodrefInfo(ownerDescriptor, targetName, targetDescriptor);
+      reference = classFile.addConstantMethodrefInfo(ownerDescriptor, targetName, targetDescriptor);
       opcode = 0xb7; // invokespecial
     } else if (Modifier.isStatic(target.getModifiers())) {
       reference =
@@ -356,11 +341,11 @@ public class JaninoUtils {
       opcode = 0xb8; // invokestatic
     } else if (ownerType.isInterface()) {
       reference =
-          classFile.addConstantInterfaceMethodrefInfo(ownerDescriptor, targetName, targetDescriptor);
+          classFile.addConstantInterfaceMethodrefInfo(
+              ownerDescriptor, targetName, targetDescriptor);
       opcode = 0xb9; // invokeinterface
     } else {
-      reference =
-          classFile.addConstantMethodrefInfo(ownerDescriptor, targetName, targetDescriptor);
+      reference = classFile.addConstantMethodrefInfo(ownerDescriptor, targetName, targetDescriptor);
       opcode = 0xb6; // invokevirtual
     }
     writeOpcodeIndex(code, opcode, reference);
@@ -388,7 +373,8 @@ public class JaninoUtils {
     } else {
       Method method = (Method) invocation.target;
       if (invocation.returnType != method.getReturnType()) {
-        throw new IllegalArgumentException("Direct method bridge return type does not match target");
+        throw new IllegalArgumentException(
+            "Direct method bridge return type does not match target");
       }
       if (Modifier.isStatic(method.getModifiers())) {
         if (invocation.receiverIndex != -1) {
@@ -416,7 +402,9 @@ public class JaninoUtils {
   }
 
   private static int localIndex(DirectInvocation invocation, int parameterIndex) {
-    int index = invocation.staticBridge ? 0 : 1;
+    // Direct placeholders are generated-codec instance methods. Target staticness affects only the
+    // invocation opcode; local slot zero always remains the generated-codec receiver.
+    int index = 1;
     for (int i = 0; i < parameterIndex; i++) {
       index += slots(invocation.parameterTypes[i]);
     }

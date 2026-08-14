@@ -96,7 +96,9 @@ internal object KotlinProductCodecs {
   private fun requireArguments(type: TypeRef<*>, count: Int): Array<TypeRef<*>> {
     val arguments = type.typeArguments
     if (arguments.size != count) {
-      throw ForyJsonException("Kotlin JSON product ${type.type} requires $count exact type arguments")
+      throw ForyJsonException(
+        "Kotlin JSON product ${type.type} requires $count exact type arguments"
+      )
     }
     return arguments.toTypedArray()
   }

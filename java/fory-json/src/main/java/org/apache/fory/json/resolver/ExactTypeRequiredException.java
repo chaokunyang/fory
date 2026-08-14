@@ -17,28 +17,15 @@
  * under the License.
  */
 
-package org.apache.fory.json.kotlin.ksp
+package org.apache.fory.json.resolver;
 
-import com.google.devtools.ksp.symbol.KSFile
+import org.apache.fory.annotation.Internal;
+import org.apache.fory.json.ForyJsonException;
 
-internal enum class MemberKind {
-  FIELD,
-  METHOD,
+/** A recognized semantic type whose raw class is not a complete declared occurrence. */
+@Internal
+public final class ExactTypeRequiredException extends ForyJsonException {
+  public ExactTypeRequiredException(String message) {
+    super(message);
+  }
 }
-
-internal data class JvmMember(
-  val kind: MemberKind,
-  val ownerBinaryName: String,
-  val name: String,
-  val descriptor: String,
-)
-
-internal data class JsonModel(
-  val targetBinaryName: String,
-  val members: List<JvmMember>,
-  val mixinBinaryName: String?,
-  val originatingFiles: List<KSFile>,
-  val retainedAnnotations: Set<String>,
-  val retainedTypes: Set<String>,
-  val codecTypes: Set<String>,
-)

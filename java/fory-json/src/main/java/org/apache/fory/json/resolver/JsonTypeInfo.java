@@ -81,10 +81,7 @@ public final class JsonTypeInfo {
     nullable = metadata != null && metadata.nullable() && !metadata.nullableWrapper();
     transparentNull = codec instanceof TransparentNullCodec;
     rejectsNull =
-        metadata != null
-            && !metadata.nullable()
-            && !metadata.nullableWrapper()
-            && !JsonTypeResolver.codecOwnsNull(codec);
+        metadata != null && !metadata.nullable() && !metadata.nullableWrapper() && !transparentNull;
     unboxedValueCodec = codec instanceof UnboxedValueCodec ? (UnboxedValueCodec) codec : null;
     this.annotationCodec = annotationCodec;
     stringWriter = codec;

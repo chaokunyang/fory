@@ -479,15 +479,15 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     writeByteRaw((byte) '"');
     writeIsoYear((int) (date >> 32));
     writeByteRaw((byte) '-');
-    writeTwoDigits((int) ((date >>> 16) & 0xffff));
+    writeTwoDigitsValue((int) ((date >>> 16) & 0xffff));
     writeByteRaw((byte) '-');
-    writeTwoDigits((int) date & 0xffff);
+    writeTwoDigitsValue((int) date & 0xffff);
     writeByteRaw((byte) 'T');
-    writeTwoDigits(hour);
+    writeTwoDigitsValue(hour);
     writeByteRaw((byte) ':');
-    writeTwoDigits(minute);
+    writeTwoDigitsValue(minute);
     writeByteRaw((byte) ':');
-    writeTwoDigits(second);
+    writeTwoDigitsValue(second);
     if (nano != 0) {
       writeByteRaw((byte) '.');
       writeNano(nano);
@@ -1712,7 +1712,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     position = writePadded4(buffer, position, value);
   }
 
-  private void writeTwoDigits(int value) {
+  private void writeTwoDigitsValue(int value) {
     int high = value / 10;
     writeByteRaw((byte) ('0' + high));
     writeByteRaw((byte) ('0' + value - high * 10));

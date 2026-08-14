@@ -54,7 +54,7 @@ final class KotlinExactValueClassOperations {
     return new ReferenceOperations(owner, construct, constructUncharged, unbox, unboxedOperations);
   }
 
-  private abstract static class Operations implements KotlinValueClassOperationsOwner {
+  private abstract static class Operations implements KotlinValueClassOperations {
     final Class<?> owner;
     final MethodHandle construct;
     final MethodHandle constructUncharged;
@@ -93,7 +93,12 @@ final class KotlinExactValueClassOperations {
 
   private static final class BooleanOperations extends Operations
       implements KotlinBooleanValueClassOperations<Object> {
-    BooleanOperations(Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox, KotlinUnboxedValueClassOperations unboxedOperations) {
+    BooleanOperations(
+        Class<?> owner,
+        MethodHandle construct,
+        MethodHandle uncharged,
+        MethodHandle unbox,
+        KotlinUnboxedValueClassOperations unboxedOperations) {
       super(owner, construct, uncharged, unbox, unboxedOperations);
     }
 
@@ -127,7 +132,12 @@ final class KotlinExactValueClassOperations {
 
   private static final class ByteOperations extends Operations
       implements KotlinByteValueClassOperations<Object> {
-    ByteOperations(Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox, KotlinUnboxedValueClassOperations unboxedOperations) {
+    ByteOperations(
+        Class<?> owner,
+        MethodHandle construct,
+        MethodHandle uncharged,
+        MethodHandle unbox,
+        KotlinUnboxedValueClassOperations unboxedOperations) {
       super(owner, construct, uncharged, unbox, unboxedOperations);
     }
 
@@ -161,7 +171,12 @@ final class KotlinExactValueClassOperations {
 
   private static final class ShortOperations extends Operations
       implements KotlinShortValueClassOperations<Object> {
-    ShortOperations(Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox, KotlinUnboxedValueClassOperations unboxedOperations) {
+    ShortOperations(
+        Class<?> owner,
+        MethodHandle construct,
+        MethodHandle uncharged,
+        MethodHandle unbox,
+        KotlinUnboxedValueClassOperations unboxedOperations) {
       super(owner, construct, uncharged, unbox, unboxedOperations);
     }
 
@@ -195,7 +210,12 @@ final class KotlinExactValueClassOperations {
 
   private static final class IntOperations extends Operations
       implements KotlinIntValueClassOperations<Object> {
-    IntOperations(Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox, KotlinUnboxedValueClassOperations unboxedOperations) {
+    IntOperations(
+        Class<?> owner,
+        MethodHandle construct,
+        MethodHandle uncharged,
+        MethodHandle unbox,
+        KotlinUnboxedValueClassOperations unboxedOperations) {
       super(owner, construct, uncharged, unbox, unboxedOperations);
     }
 
@@ -229,7 +249,12 @@ final class KotlinExactValueClassOperations {
 
   private static final class LongOperations extends Operations
       implements KotlinLongValueClassOperations<Object> {
-    LongOperations(Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox, KotlinUnboxedValueClassOperations unboxedOperations) {
+    LongOperations(
+        Class<?> owner,
+        MethodHandle construct,
+        MethodHandle uncharged,
+        MethodHandle unbox,
+        KotlinUnboxedValueClassOperations unboxedOperations) {
       super(owner, construct, uncharged, unbox, unboxedOperations);
     }
 
@@ -263,7 +288,12 @@ final class KotlinExactValueClassOperations {
 
   private static final class FloatOperations extends Operations
       implements KotlinFloatValueClassOperations<Object> {
-    FloatOperations(Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox, KotlinUnboxedValueClassOperations unboxedOperations) {
+    FloatOperations(
+        Class<?> owner,
+        MethodHandle construct,
+        MethodHandle uncharged,
+        MethodHandle unbox,
+        KotlinUnboxedValueClassOperations unboxedOperations) {
       super(owner, construct, uncharged, unbox, unboxedOperations);
     }
 
@@ -297,7 +327,12 @@ final class KotlinExactValueClassOperations {
 
   private static final class DoubleOperations extends Operations
       implements KotlinDoubleValueClassOperations<Object> {
-    DoubleOperations(Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox, KotlinUnboxedValueClassOperations unboxedOperations) {
+    DoubleOperations(
+        Class<?> owner,
+        MethodHandle construct,
+        MethodHandle uncharged,
+        MethodHandle unbox,
+        KotlinUnboxedValueClassOperations unboxedOperations) {
       super(owner, construct, uncharged, unbox, unboxedOperations);
     }
 
@@ -331,7 +366,12 @@ final class KotlinExactValueClassOperations {
 
   private static final class CharOperations extends Operations
       implements KotlinCharValueClassOperations<Object> {
-    CharOperations(Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox, KotlinUnboxedValueClassOperations unboxedOperations) {
+    CharOperations(
+        Class<?> owner,
+        MethodHandle construct,
+        MethodHandle uncharged,
+        MethodHandle unbox,
+        KotlinUnboxedValueClassOperations unboxedOperations) {
       super(owner, construct, uncharged, unbox, unboxedOperations);
     }
 
@@ -365,7 +405,12 @@ final class KotlinExactValueClassOperations {
 
   private static final class ReferenceOperations extends Operations
       implements KotlinReferenceValueClassOperations<Object> {
-    ReferenceOperations(Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox, KotlinUnboxedValueClassOperations unboxedOperations) {
+    ReferenceOperations(
+        Class<?> owner,
+        MethodHandle construct,
+        MethodHandle uncharged,
+        MethodHandle unbox,
+        KotlinUnboxedValueClassOperations unboxedOperations) {
       super(owner, construct, uncharged, unbox, unboxedOperations);
     }
 

@@ -72,7 +72,8 @@ class KotlinObjectRuntimeMatrixTest {
   }
 
   class IgnoredComputed(val id: Int) {
-    @get:JsonIgnore val computed: Int
+    @get:JsonIgnore
+    val computed: Int
       get() = id * 2
 
     override fun equals(other: Any?): Boolean = other is IgnoredComputed && id == other.id
@@ -197,18 +198,15 @@ class KotlinObjectRuntimeMatrixTest {
   @Test
   fun unstableClassShapesAreRejected() {
     val json = newKotlinJson(KotlinJsonTestMode.INTERPRETED)
-    assertFailsWith<ForyJsonException> {
-      json.fromJson("{\"id\":1}", jsonTypeRef<InnerModel>())
-    }
+    assertFailsWith<ForyJsonException> { json.fromJson("{\"id\":1}", jsonTypeRef<InnerModel>()) }
 
     class LocalModel(val id: Int)
-    assertFailsWith<ForyJsonException> {
-      json.fromJson("{\"id\":1}", jsonTypeRef<LocalModel>())
-    }
+    assertFailsWith<ForyJsonException> { json.fromJson("{\"id\":1}", jsonTypeRef<LocalModel>()) }
 
-    val anonymous = object {
-      val id: Int = 1
-    }
+    val anonymous =
+      object {
+        val id: Int = 1
+      }
     assertFailsWith<ForyJsonException> { json.fromJson("{\"id\":1}", anonymous.javaClass) }
   }
 
@@ -219,11 +217,7 @@ class KotlinObjectRuntimeMatrixTest {
       assertSingleton(json, DataMarker, jsonTypeRef<DataMarker>())
     }
 
-    val budgeted =
-      ForyJsonKotlin.builder()
-        .withCodegen(false)
-        .withMaxGraphMemoryBytes(1)
-        .build()
+    val budgeted = ForyJsonKotlin.builder().withCodegen(false).withMaxGraphMemoryBytes(1).build()
     assertSame(Marker, budgeted.fromJson("{}", jsonTypeRef<Marker>()))
     assertSame(DataMarker, budgeted.fromJson("{}", jsonTypeRef<DataMarker>()))
   }
@@ -231,9 +225,7 @@ class KotlinObjectRuntimeMatrixTest {
   @Test
   fun statefulAndCompanionObjectsAreRejected() {
     val json = newKotlinJson(KotlinJsonTestMode.INTERPRETED)
-    assertFailsWith<ForyJsonException> {
-      json.fromJson("{}", jsonTypeRef<StatefulMarker>())
-    }
+    assertFailsWith<ForyJsonException> { json.fromJson("{}", jsonTypeRef<StatefulMarker>()) }
     assertFailsWith<ForyJsonException> {
       json.fromJson("{}", jsonTypeRef<CompanionOwner.Companion>())
     }
@@ -257,5 +249,4 @@ class KotlinObjectRuntimeMatrixTest {
       if (utf16Json != null) assertEquals(value, json.fromJson(utf16Json, type))
     }
   }
-
 }

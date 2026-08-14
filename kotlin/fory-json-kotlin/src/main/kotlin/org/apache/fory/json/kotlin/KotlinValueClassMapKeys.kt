@@ -20,7 +20,6 @@
 package org.apache.fory.json.kotlin
 
 import org.apache.fory.json.ForyJsonException
-import org.apache.fory.json.codec.MapCodec
 import org.apache.fory.json.codec.MapKeyCodec
 import org.apache.fory.json.meta.JsonCreatorFieldInfo
 import org.apache.fory.json.reader.JsonReader
@@ -37,54 +36,58 @@ internal object KotlinValueClassMapKeys {
     val type = shape.terminalType
     val typeId = type.typeExtMeta?.typeId() ?: Types.UNKNOWN
     val rawType = type.rawType
-    val default = KotlinMapKeyCodecs.keyCodec(type)
-      ?: if (rawType == String::class.java || rawType.isEnum || signed(rawType)) {
-        MapCodec.keyCodec(rawType)
-      } else {
-        null
-      }
     // A generic value-class layer has an Object carrier even when its substituted terminal is a
     // primitive logical type. That JVM ABI must use the reference operation path; selecting a
     // primitive operation from the substituted TypeRef would invent a carrier the class does not
     // have.
-    if (terminal === default && shape.layers.last().carrierClass != Any::class.java) {
+    if (shape.layers.last().carrierClass != Any::class.java) {
       when (typeId) {
-        Types.UINT8 -> return UByteKey(operations.require(shape))
-        Types.UINT16 -> return UShortKey(operations.require(shape))
-        Types.UINT32 -> return UIntKey(operations.require(shape))
-        Types.UINT64 -> return ULongKey(operations.require(shape))
+        Types.UINT8 ->
+          operations.typed<KotlinByteValueClassOperations<Any>>()?.let {
+            return UByteKey(it)
+          }
+        Types.UINT16 ->
+          operations.typed<KotlinShortValueClassOperations<Any>>()?.let {
+            return UShortKey(it)
+          }
+        Types.UINT32 ->
+          operations.typed<KotlinIntValueClassOperations<Any>>()?.let {
+            return UIntKey(it)
+          }
+        Types.UINT64 ->
+          operations.typed<KotlinLongValueClassOperations<Any>>()?.let {
+            return ULongKey(it)
+          }
       }
       when (rawType) {
         Byte::class.javaPrimitiveType,
-        Byte::class.javaObjectType -> return ByteKey(operations.require(shape))
+        Byte::class.javaObjectType ->
+          operations.typed<KotlinByteValueClassOperations<Any>>()?.let {
+            return ByteKey(it)
+          }
         Short::class.javaPrimitiveType,
-        Short::class.javaObjectType -> return ShortKey(operations.require(shape))
+        Short::class.javaObjectType ->
+          operations.typed<KotlinShortValueClassOperations<Any>>()?.let {
+            return ShortKey(it)
+          }
         Int::class.javaPrimitiveType,
-        Int::class.javaObjectType -> return IntKey(operations.require(shape))
+        Int::class.javaObjectType ->
+          operations.typed<KotlinIntValueClassOperations<Any>>()?.let {
+            return IntKey(it)
+          }
         Long::class.javaPrimitiveType,
-        Long::class.javaObjectType -> return LongKey(operations.require(shape))
+        Long::class.javaObjectType ->
+          operations.typed<KotlinLongValueClassOperations<Any>>()?.let {
+            return LongKey(it)
+          }
       }
     }
     return ReferenceKey(boxedOperations(operations), terminal)
   }
 
-  private fun signed(type: Class<*>): Boolean =
-    type == Byte::class.javaPrimitiveType ||
-      type == Byte::class.javaObjectType ||
-      type == Short::class.javaPrimitiveType ||
-      type == Short::class.javaObjectType ||
-      type == Int::class.javaPrimitiveType ||
-      type == Int::class.javaObjectType ||
-      type == Long::class.javaPrimitiveType ||
-      type == Long::class.javaObjectType
-
   @Suppress("UNCHECKED_CAST")
-  private inline fun <reified T : KotlinValueClassOperations> KotlinValueClassOperations.require(
-    shape: KotlinValueClassShape,
-  ): T = this as? T ?: throw ForyJsonException(
-    "Value-class map-key operations for ${shape.ownerClass.name} do not match " +
-      "terminal carrier ${shape.layers.last().carrierClass.name}",
-  )
+  private inline fun <reified T : KotlinValueClassOperations> KotlinValueClassOperations.typed():
+    T? = this as? T
 }
 
 private class ReferenceKey(
@@ -95,9 +98,11 @@ private class ReferenceKey(
 
   override fun fromName(name: String): Any = operations.constructUncharged(terminal.fromName(name))
 
-  override fun writeName(writer: JsonWriter, key: Any) = terminal.writeName(writer, operations.unbox(key))
+  override fun writeName(writer: JsonWriter, key: Any) =
+    terminal.writeName(writer, operations.unbox(key))
 
-  override fun readName(reader: JsonReader): Any = operations.construct(reader, terminal.readName(reader))
+  override fun readName(reader: JsonReader): Any =
+    operations.construct(reader, terminal.readName(reader))
 }
 
 private class ByteKey(
@@ -137,9 +142,11 @@ private class IntKey(
 
   override fun fromName(name: String): Any = operations.constructIntUncharged(name.toInt())
 
-  override fun writeName(writer: JsonWriter, key: Any) = writer.writeIntFieldName(operations.unboxInt(key))
+  override fun writeName(writer: JsonWriter, key: Any) =
+    writer.writeIntFieldName(operations.unboxInt(key))
 
-  override fun readName(reader: JsonReader): Any = operations.constructInt(reader, reader.readFieldNameInt())
+  override fun readName(reader: JsonReader): Any =
+    operations.constructInt(reader, reader.readFieldNameInt())
 }
 
 private class LongKey(
@@ -149,9 +156,11 @@ private class LongKey(
 
   override fun fromName(name: String): Any = operations.constructLongUncharged(name.toLong())
 
-  override fun writeName(writer: JsonWriter, key: Any) = writer.writeLongFieldName(operations.unboxLong(key))
+  override fun writeName(writer: JsonWriter, key: Any) =
+    writer.writeLongFieldName(operations.unboxLong(key))
 
-  override fun readName(reader: JsonReader): Any = operations.constructLong(reader, reader.readFieldNameLong())
+  override fun readName(reader: JsonReader): Any =
+    operations.constructLong(reader, reader.readFieldNameLong())
 }
 
 private class UByteKey(
@@ -159,12 +168,14 @@ private class UByteKey(
 ) : MapKeyCodec {
   override fun toName(key: Any): String = (operations.unboxByte(key).toInt() and 0xff).toString()
 
-  override fun fromName(name: String): Any = operations.constructByteUncharged(checked(name.toUInt().toInt()))
+  override fun fromName(name: String): Any =
+    operations.constructByteUncharged(checked(name.toUInt().toInt()))
 
   override fun writeName(writer: JsonWriter, key: Any) =
     writer.writeUnsignedIntFieldName(operations.unboxByte(key).toInt() and 0xff)
 
-  override fun readName(reader: JsonReader): Any = operations.constructByte(reader, checked(reader.readFieldNameUnsignedInt()))
+  override fun readName(reader: JsonReader): Any =
+    operations.constructByte(reader, checked(reader.readFieldNameUnsignedInt()))
 
   private fun checked(value: Int): Byte {
     if (Integer.compareUnsigned(value, UByte.MAX_VALUE.toInt()) > 0) {
@@ -179,12 +190,14 @@ private class UShortKey(
 ) : MapKeyCodec {
   override fun toName(key: Any): String = (operations.unboxShort(key).toInt() and 0xffff).toString()
 
-  override fun fromName(name: String): Any = operations.constructShortUncharged(checked(name.toUInt().toInt()))
+  override fun fromName(name: String): Any =
+    operations.constructShortUncharged(checked(name.toUInt().toInt()))
 
   override fun writeName(writer: JsonWriter, key: Any) =
     writer.writeUnsignedIntFieldName(operations.unboxShort(key).toInt() and 0xffff)
 
-  override fun readName(reader: JsonReader): Any = operations.constructShort(reader, checked(reader.readFieldNameUnsignedInt()))
+  override fun readName(reader: JsonReader): Any =
+    operations.constructShort(reader, checked(reader.readFieldNameUnsignedInt()))
 
   private fun checked(value: Int): Short {
     if (Integer.compareUnsigned(value, UShort.MAX_VALUE.toInt()) > 0) {
@@ -199,12 +212,14 @@ private class UIntKey(
 ) : MapKeyCodec {
   override fun toName(key: Any): String = Integer.toUnsignedString(operations.unboxInt(key))
 
-  override fun fromName(name: String): Any = operations.constructIntUncharged(Integer.parseUnsignedInt(name))
+  override fun fromName(name: String): Any =
+    operations.constructIntUncharged(Integer.parseUnsignedInt(name))
 
   override fun writeName(writer: JsonWriter, key: Any) =
     writer.writeUnsignedIntFieldName(operations.unboxInt(key))
 
-  override fun readName(reader: JsonReader): Any = operations.constructInt(reader, reader.readFieldNameUnsignedInt())
+  override fun readName(reader: JsonReader): Any =
+    operations.constructInt(reader, reader.readFieldNameUnsignedInt())
 }
 
 private class ULongKey(

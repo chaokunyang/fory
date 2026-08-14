@@ -58,6 +58,12 @@
     "setter_name": "setter",
     "bare_name": "bare"
   },
+  "codecSlots": {
+    "scalar": "whole:scalar",
+    "elements": ["element:first", "element:second"],
+    "content": "content:optional",
+    "entries": { "key:7": "value:seven" }
+  },
   "nulls": {
     "required": "required",
     "nullable": null,

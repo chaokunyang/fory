@@ -139,11 +139,11 @@ class KotlinTypeRefRuntimeTest {
   fun removedProjectedSubtype() {
     val directType = jsonTypeRef<DirectProjectionHolder>()
     KotlinJsonTestMode.entries.forEach { mode ->
-      val removed =
-        newKotlinJson(mode) { registerMixin(ProjectionRemovalMixin::class.java) }
-      val error = assertFailsWith<ForyJsonException> {
-        removed.fromJson("{\"value\":{\"kind\":\"circle\",\"radius\":3}}", directType)
-      }
+      val removed = newKotlinJson(mode) { registerMixin(ProjectionRemovalMixin::class.java) }
+      val error =
+        assertFailsWith<ForyJsonException> {
+          removed.fromJson("{\"value\":{\"kind\":\"circle\",\"radius\":3}}", directType)
+        }
       assertContains(
         error.message.orEmpty(),
         "Covariant JSON type must be final or declare effective @JsonSubTypes",
@@ -161,11 +161,17 @@ class KotlinTypeRefRuntimeTest {
         newKotlinJson(mode) { registerMixin(ProjectionContributionMixin::class.java) }
       assertEquals(
         contributedValue,
-        contributed.fromJson(contributed.toJson(contributedValue, contributedType), contributedType),
+        contributed.fromJson(
+          contributed.toJson(contributedValue, contributedType),
+          contributedType
+        ),
       )
       assertEquals(
         contributedValue,
-        contributed.fromJson(contributed.toJsonBytes(contributedValue, contributedType), contributedType),
+        contributed.fromJson(
+          contributed.toJsonBytes(contributedValue, contributedType),
+          contributedType
+        ),
       )
     }
   }

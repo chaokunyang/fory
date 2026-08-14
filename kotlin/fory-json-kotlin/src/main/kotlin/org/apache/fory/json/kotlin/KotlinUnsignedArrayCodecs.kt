@@ -51,11 +51,12 @@ internal object KotlinUnsignedArrayCodecs {
         type.rawType == ULongArray::class.java && typeId == Types.UINT64_ARRAY -> ULongArrayCodec
         else -> null
       }
-    if (codec == null &&
-      (type.rawType == UByteArray::class.java ||
-        type.rawType == UShortArray::class.java ||
-        type.rawType == UIntArray::class.java ||
-        type.rawType == ULongArray::class.java)
+    if (
+      codec == null &&
+        (type.rawType == UByteArray::class.java ||
+          type.rawType == UShortArray::class.java ||
+          type.rawType == UIntArray::class.java ||
+          type.rawType == ULongArray::class.java)
     ) {
       throw ForyJsonException(
         "Kotlin unsigned-array carrier ${type.rawType.name} does not match semantic type id $typeId",
@@ -84,7 +85,10 @@ internal object KotlinUnsignedArrayCodecs {
     override fun readUtf8(reader: Utf8JsonReader): UByteArray? =
       wrap(reader, delegate.readUtf8(reader))
 
-    private fun wrap(reader: org.apache.fory.json.reader.JsonReader, value: ByteArray?): UByteArray? {
+    private fun wrap(
+      reader: org.apache.fory.json.reader.JsonReader,
+      value: ByteArray?
+    ): UByteArray? {
       if (value == null) return null
       reader.reserveGraphMemory(wrapperBytes)
       return value.asUByteArray()
@@ -168,7 +172,10 @@ internal object KotlinUnsignedArrayCodecs {
     override fun readUtf8(reader: Utf8JsonReader): ULongArray? =
       wrap(reader, delegate.readUtf8(reader))
 
-    private fun wrap(reader: org.apache.fory.json.reader.JsonReader, value: LongArray?): ULongArray? {
+    private fun wrap(
+      reader: org.apache.fory.json.reader.JsonReader,
+      value: LongArray?
+    ): ULongArray? {
       if (value == null) return null
       reader.reserveGraphMemory(wrapperBytes)
       return value.asULongArray()

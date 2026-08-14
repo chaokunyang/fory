@@ -20,24 +20,35 @@
 package org.apache.fory.json;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertThrows;
 
+import java.lang.reflect.Constructor;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.codec.AbstractJsonValueCodec;
 import org.apache.fory.json.codec.CompositeJsonCodec;
+import org.apache.fory.json.codec.JsonObjectModel;
 import org.apache.fory.json.codec.JsonValueCodec;
+import org.apache.fory.json.codec.ScalarCodecs;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Utf16JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
+import org.apache.fory.json.resolver.ExactTypeRequiredException;
+import org.apache.fory.json.resolver.JsonSharedRegistry;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.resolver.UnsupportedJsonTypeException;
 import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.type.Types;
 import org.testng.annotations.Test;
 
 public class JsonModuleTest {
@@ -84,6 +95,87 @@ public class JsonModuleTest {
             .registerCodec(Text.class, new TextCodec("application:"))
             .build();
     assertEquals(json.toJson(new Text("value")), "\"application:value\"");
+  }
+
+  @Test
+  public void semanticPrimitiveUsesModuleCodec() {
+    JsonCodecFactory factory =
+        (type, resolver) ->
+            type.getRawType() == int.class
+                    && type.getTypeExtMeta() != null
+                    && type.getTypeExtMeta().typeId() == Types.UINT32
+                ? UnsignedIntCodec.INSTANCE
+                : null;
+    ForyJson json =
+        ForyJson.builder().withModule(context -> context.registerCodecFactory(factory)).build();
+    TypeRef<Integer> unsignedInt =
+        TypeRef.of(int.class, TypeExtMeta.of(Types.UINT32, false, false));
+
+    assertEquals(json.toJson(-1, unsignedInt), "4294967295");
+    assertEquals(json.toJsonBytes(-1, unsignedInt), "4294967295".getBytes(StandardCharsets.UTF_8));
+    assertEquals(json.fromJson("4294967295", unsignedInt), Integer.valueOf(-1));
+    assertEquals(
+        json.fromJson("4294967295".getBytes(StandardCharsets.UTF_8), unsignedInt),
+        Integer.valueOf(-1));
+
+    ForyJson application =
+        ForyJson.builder()
+            .withModule(context -> context.registerCodecFactory(factory))
+            .registerCodec(int.class, ScalarCodecs.IntCodec.PRIMITIVE)
+            .build();
+    assertEquals(application.toJson(-1, unsignedInt), "-1");
+  }
+
+  @Test
+  public void languageModelOwnsAnnotatedType() {
+    JsonCodecFactory factory =
+        (type, resolver) ->
+            type.getRawType() == ModuleObject.class
+                ? resolver.createObjectCodec(
+                    type, JsonObjectModel.fixedInstance(ModuleObject.INSTANCE))
+                : null;
+    ForyJson json =
+        ForyJson.builder().withModule(context -> context.registerCodecFactory(factory)).build();
+
+    assertEquals(json.toJson(ModuleObject.INSTANCE, ModuleObject.class), "{}");
+    assertSame(json.fromJson("{}", ModuleObject.class), ModuleObject.INSTANCE);
+    assertThrows(
+        ForyJsonException.class,
+        () -> ForyJson.builder().build().toJson(ModuleObject.INSTANCE, ModuleObject.class));
+  }
+
+  @Test
+  public void hostedFactoryDefersRawSemanticType() throws Exception {
+    AtomicInteger rawAttempts = new AtomicInteger();
+    JsonCodecFactory factory =
+        (type, resolver) -> {
+          if (type.getRawType() != SemanticLeaf.class) {
+            return null;
+          }
+          if (!type.hasTypeExtMeta()) {
+            rawAttempts.incrementAndGet();
+            throw new ExactTypeRequiredException("SemanticLeaf requires an exact occurrence");
+          }
+          return ScalarCodecs.StringCodec.INSTANCE;
+        };
+    ForyJson configured =
+        ForyJson.builder().withModule(context -> context.registerCodecFactory(factory)).build();
+    Constructor<JsonSharedRegistry> constructor =
+        JsonSharedRegistry.class.getDeclaredConstructor(
+            JsonConfig.class, ExecutorService.class, boolean.class);
+    constructor.setAccessible(true);
+    JsonTypeResolver resolver =
+        new JsonTypeResolver(constructor.newInstance(configured.config(), null, true));
+
+    assertEquals(resolver.generateHostedCodecs(SemanticLeaf.class).size(), 0);
+    assertEquals(rawAttempts.get(), 1);
+    assertEquals(resolver.generateHostedCodecs(SemanticLeaf.class).size(), 0);
+    assertEquals(rawAttempts.get(), 2);
+
+    TypeRef<SemanticLeaf> exactType =
+        TypeRef.of(SemanticLeaf.class, TypeExtMeta.of(Types.UNKNOWN, false, false));
+    JsonTypeInfo exactInfo = resolver.getTypeInfo(exactType);
+    assertSame(exactInfo.stringWriter(), ScalarCodecs.StringCodec.INSTANCE);
   }
 
   @Test
@@ -231,6 +323,20 @@ public class JsonModuleTest {
     }
   }
 
+  private static final class UnsignedIntCodec extends AbstractJsonValueCodec<Integer> {
+    private static final UnsignedIntCodec INSTANCE = new UnsignedIntCodec();
+
+    @Override
+    public void write(JsonWriter writer, Integer value) {
+      writer.writeUnsignedInt(value.intValue());
+    }
+
+    @Override
+    public Integer read(JsonReader reader) {
+      return reader.readUnsignedInt();
+    }
+  }
+
   private static final class RecursiveCodec implements CompositeJsonCodec<RecursiveValue> {
     private final AtomicBoolean fail;
     private JsonTypeInfo self;
@@ -354,5 +460,14 @@ public class JsonModuleTest {
     private RecursiveValue(RecursiveValue next) {
       this.next = next;
     }
+  }
+
+  private static final class SemanticLeaf {}
+
+  @JsonType
+  private static final class ModuleObject {
+    private static final ModuleObject INSTANCE = new ModuleObject();
+
+    private ModuleObject() {}
   }
 }

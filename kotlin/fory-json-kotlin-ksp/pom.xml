@@ -29,7 +29,7 @@
     <modelVersion>4.0.0</modelVersion>
     <artifactId>fory-json-kotlin-ksp</artifactId>
     <name>Fory JSON Kotlin KSP</name>
-    <description>Build-time JSON operations for Kotlin models used by Apache Fory.</description>
+    <description>Build-time JSON metadata retention rules for Kotlin models used by Apache Fory.</description>
 
     <build>
         <resources>
@@ -90,19 +90,9 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.apache.fory</groupId>
-            <artifactId>fory-json-kotlin</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
             <groupId>com.google.devtools.ksp</groupId>
             <artifactId>symbol-processing-api</artifactId>
             <version>${ksp.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.codehaus.janino</groupId>
-            <artifactId>janino</artifactId>
-            <version>3.1.12</version>
         </dependency>
         <dependency>
             <groupId>org.jetbrains.kotlin</groupId>

@@ -19,8 +19,9 @@
 
 package org.apache.fory.graalvm.kotlin;
 
-import org.apache.fory.integration.kotlin.json.corpus.PlatformJsonModule;
+import org.apache.fory.integration.kotlin.json.corpus.PlatformCodecSlotsMixin;
 import org.apache.fory.integration.kotlin.json.corpus.PlatformJavaProfileMixin;
+import org.apache.fory.integration.kotlin.json.corpus.PlatformJsonModule;
 import org.apache.fory.integration.kotlin.json.corpus.PlatformKotlinProfileMixin;
 import org.apache.fory.json.ForyJson;
 import org.apache.fory.json.annotation.ForyJsonProvider;
@@ -34,6 +35,7 @@ public final class KotlinJsonProvider {
   public ForyJson generatedConfiguration() {
     return ForyJsonKotlin.builder()
         .withModule(PlatformJsonModule.INSTANCE)
+        .registerMixin(PlatformCodecSlotsMixin.class)
         .registerMixin(PlatformJavaProfileMixin.class)
         .registerMixin(PlatformKotlinProfileMixin.class)
         .withAsyncCompilation(false)

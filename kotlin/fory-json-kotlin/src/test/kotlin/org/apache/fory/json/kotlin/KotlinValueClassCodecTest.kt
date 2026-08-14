@@ -23,6 +23,7 @@ import kotlin.jvm.JvmInline
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.apache.fory.json.ForyJson
 import org.apache.fory.json.ForyJsonException
@@ -52,24 +53,49 @@ internal data class ValueClassHolder(
 
 internal data class NullableValueClassHolder(internal val text: NullableText)
 
+internal data class PrimitiveValueHolder(internal val id: PositiveId)
+
+@JvmInline internal value class UnsignedId(internal val value: UInt)
+
+internal data class UnsignedValueHolder(internal val id: UnsignedId)
+
+@JvmInline internal value class RecursiveValueId(internal val value: Long)
+
+internal data class SelfValueHolder(
+  internal val id: RecursiveValueId,
+  internal val next: SelfValueHolder?,
+)
+
+internal data class MutualValueLeftHolder(
+  internal val id: RecursiveValueId,
+  internal val right: MutualValueRightHolder?,
+)
+
+internal data class MutualValueRightHolder(
+  internal val id: RecursiveValueId,
+  internal val left: MutualValueLeftHolder?,
+)
+
 class KotlinValueClassCodecTest {
   private fun fory(maxGraphMemoryBytes: Long = ForyJson.DEFAULT_MAX_GRAPH_MEMORY_BYTES): ForyJson =
-    ForyJsonKotlin.builder()
-      .withCodegen(false)
-      .withMaxGraphMemoryBytes(maxGraphMemoryBytes)
-      .build()
+    ForyJsonKotlin.builder().withCodegen(false).withMaxGraphMemoryBytes(maxGraphMemoryBytes).build()
 
   @Test
   fun exactMetadata() {
-    val shape = KotlinValueClassMetadata.inspect(jsonTypeRef<PositiveId>())
+    val model = KotlinValueClassMetadata.inspect(jsonTypeRef<PositiveId>())
+    val shape = model.shape
     assertEquals(PositiveId::class.java, shape.ownerClass)
     assertEquals(Long::class.javaPrimitiveType, shape.terminalType.rawType)
-    assertEquals(listOf("(J)J"), shape.layers.map { it.constructorDescriptor })
+    assertEquals(listOf("constructor-impl"), model.constructors.map { it.name })
     assertEquals(
-      listOf("(J)Lorg/apache/fory/json/kotlin/PositiveId;"),
-      shape.layers.map { it.boxDescriptor },
+      listOf(listOf(Long::class.javaPrimitiveType)),
+      model.constructors.map { it.parameterTypes.toList() },
     )
-    assertEquals(listOf("()J"), shape.layers.map { it.unboxDescriptor })
+    assertEquals(listOf(Long::class.javaPrimitiveType), model.constructors.map { it.returnType })
+    assertEquals(listOf("box-impl"), model.boxes.map { it.name })
+    assertEquals(listOf(PositiveId::class.java), model.boxes.map { it.returnType })
+    assertEquals(listOf("unbox-impl"), model.unboxes.map { it.name })
+    assertEquals(listOf(Long::class.javaPrimitiveType), model.unboxes.map { it.returnType })
   }
 
   @Test
@@ -86,12 +112,11 @@ class KotlinValueClassCodecTest {
   fun constructorInvariant() {
     val json = fory()
     val failure =
-      assertFailsWith<ForyJsonException> {
-        json.fromJson("-1", jsonTypeRef<PositiveId>())
-      }
-    assertTrue(generateSequence(failure as Throwable?) { it.cause }.any {
-      it is IllegalArgumentException && it.message == "id must be non-negative"
-    })
+      assertFailsWith<ForyJsonException> { json.fromJson("-1", jsonTypeRef<PositiveId>()) }
+    assertTrue(
+      generateSequence(failure as Throwable?) { it.cause }
+        .any { it is IllegalArgumentException && it.message == "id must be non-negative" }
+    )
     assertEquals(PositiveId(1), json.fromJson("1", jsonTypeRef<PositiveId>()))
   }
 
@@ -122,10 +147,10 @@ class KotlinValueClassCodecTest {
 
   @Test
   fun genericSubstitution() {
-    val nonNull = KotlinValueClassMetadata.inspect(jsonTypeRef<GenericValue<String>>())
+    val nonNull = KotlinValueClassMetadata.inspect(jsonTypeRef<GenericValue<String>>()).shape
     assertEquals(String::class.java, nonNull.terminalType.rawType)
     assertEquals(false, nonNull.terminalType.typeExtMeta.nullable())
-    val nullable = KotlinValueClassMetadata.inspect(jsonTypeRef<GenericValue<String?>>())
+    val nullable = KotlinValueClassMetadata.inspect(jsonTypeRef<GenericValue<String?>>()).shape
     assertEquals(String::class.java, nullable.terminalType.rawType)
     assertEquals(true, nullable.terminalType.typeExtMeta.nullable())
 
@@ -137,7 +162,7 @@ class KotlinValueClassCodecTest {
 
   @Test
   fun nestedValueClass() {
-    val shape = KotlinValueClassMetadata.inspect(jsonTypeRef<NestedId>())
+    val shape = KotlinValueClassMetadata.inspect(jsonTypeRef<NestedId>()).shape
     assertEquals(
       listOf(NestedId::class.java, PositiveId::class.java),
       shape.layers.map { it.ownerClass },
@@ -171,6 +196,33 @@ class KotlinValueClassCodecTest {
           type,
         ),
       )
+    }
+  }
+
+  @Test
+  fun selfRecursiveOccurrence() {
+    val type = jsonTypeRef<SelfValueHolder>()
+    val value = SelfValueHolder(RecursiveValueId(1), SelfValueHolder(RecursiveValueId(2), null))
+    forEachJsonMode { json ->
+      assertEquals(value, json.fromJson(json.toJson(value, type), type))
+      assertEquals(value, json.fromJson(json.toJsonBytes(value, type), type))
+    }
+  }
+
+  @Test
+  fun mutualRecursiveOccurrence() {
+    val type = jsonTypeRef<MutualValueLeftHolder>()
+    val value =
+      MutualValueLeftHolder(
+        RecursiveValueId(1),
+        MutualValueRightHolder(
+          RecursiveValueId(2),
+          MutualValueLeftHolder(RecursiveValueId(3), null),
+        ),
+      )
+    forEachJsonMode { json ->
+      assertEquals(value, json.fromJson(json.toJson(value, type), type))
+      assertEquals(value, json.fromJson(json.toJsonBytes(value, type), type))
     }
   }
 
@@ -218,8 +270,73 @@ class KotlinValueClassCodecTest {
   fun boxedRootIsCharged() {
     val wrapperBytes = GraphMemoryEstimates.shallowObjectBytes(PositiveId::class.java)
     val json = fory((wrapperBytes - 1).toLong())
-    assertFailsWith<ForyJsonException> {
-      json.fromJson("1", jsonTypeRef<PositiveId>())
+    assertFailsWith<ForyJsonException> { json.fromJson("1", jsonTypeRef<PositiveId>()) }
+  }
+
+  @Test
+  fun generatedPrimitiveCarrier() {
+    val json = newKotlinJson(KotlinJsonTestMode.SYNCHRONOUS)
+    val type = jsonTypeRef<PrimitiveValueHolder>()
+    val value = PrimitiveValueHolder(PositiveId(37))
+    assertEquals(value, json.fromJson(json.toJson(value, type), type))
+    assertEquals(value, json.fromJson(json.toJsonBytes(value, type), type))
+    assertEquals(value, json.fromJson("""{"雪":0,"id":37}""", type))
+
+    val generated = generatedClassBytes(json, "PrimitiveValueHolder")
+    val readers = generated.filterKeys { it.contains("ReaderForyJsonCodec") }
+    val writers = generated.filterKeys { it.contains("WriterForyJsonCodec") }
+    assertEquals(3, readers.size, readers.keys.toString())
+    assertEquals(2, writers.size, writers.keys.toString())
+
+    val valueOwner = PositiveId::class.java.name.replace('.', '/')
+    readers.forEach { (name, bytes) ->
+      val refs = generatedMethodRefs(bytes)
+      assertTrue(
+        refs.any {
+          it.owner == valueOwner && it.name == "constructor-impl" && it.descriptor == "(J)J"
+        },
+        "$name does not invoke the exact primitive constructor-impl",
+      )
+      assertNoValueBoxing(name, refs, valueOwner)
     }
+    writers.forEach { (name, bytes) ->
+      val refs = generatedMethodRefs(bytes)
+      assertTrue(
+        refs.any {
+          it.owner == PrimitiveValueHolder::class.java.name.replace('.', '/') &&
+            it.name.startsWith("getId-") &&
+            it.descriptor == "()J"
+        },
+        "$name does not read the physical long getter",
+      )
+      assertNoValueBoxing(name, refs, valueOwner)
+    }
+  }
+
+  @Test
+  fun semanticTerminal() {
+    val type = jsonTypeRef<UnsignedValueHolder>()
+    val value = UnsignedValueHolder(UnsignedId(UInt.MAX_VALUE))
+    forEachJsonMode { json ->
+      val text = json.toJson(value, type)
+      assertEquals("""{"id":4294967295}""", text)
+      assertEquals(value, json.fromJson(text, type))
+      assertEquals(value, json.fromJson(json.toJsonBytes(value, type), type))
+    }
+  }
+
+  private fun assertNoValueBoxing(
+    name: String,
+    refs: List<GeneratedMethodRef>,
+    valueOwner: String,
+  ) {
+    assertFalse(
+      refs.any { it.owner == "java/lang/Long" && it.name == "valueOf" },
+      "$name boxes the primitive long carrier: $refs",
+    )
+    assertFalse(
+      refs.any { it.owner == valueOwner && (it.name == "box-impl" || it.name == "unbox-impl") },
+      "$name materializes the outer value-class wrapper: $refs",
+    )
   }
 }

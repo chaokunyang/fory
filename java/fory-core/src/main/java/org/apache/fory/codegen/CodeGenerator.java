@@ -116,8 +116,7 @@ public class CodeGenerator {
    * @param units compile units
    */
   public ClassLoader compile(CompileUnit... units) {
-    return compile(
-        Arrays.asList(units), compileState -> compileState.lock.lock(), null, null);
+    return compile(Arrays.asList(units), compileState -> compileState.lock.lock(), null, null);
   }
 
   public ClassLoader compile(List<CompileUnit> units, CompileCallback callback) {
@@ -126,13 +125,9 @@ public class CodeGenerator {
 
   /** Compiles one unit and installs its verified direct invocation bridges before publication. */
   @Internal
-  public ClassLoader compileDirect(
-      CompileUnit unit, JaninoUtils.DirectInvocation... invocations) {
+  public ClassLoader compileDirect(CompileUnit unit, JaninoUtils.DirectInvocation... invocations) {
     return compile(
-        Arrays.asList(unit),
-        compileState -> compileState.lock.lock(),
-        unit,
-        invocations);
+        Arrays.asList(unit), compileState -> compileState.lock.lock(), unit, invocations);
   }
 
   private ClassLoader compile(
@@ -167,8 +162,7 @@ public class CodeGenerator {
         classes =
             JaninoUtils.toBytecode(parentClassLoader, compileUnits.toArray(new CompileUnit[0]));
         if (directUnit != null && invocations.length != 0) {
-          String classFile =
-              directUnit.getQualifiedClassName().replace('.', '/') + ".class";
+          String classFile = directUnit.getQualifiedClassName().replace('.', '/') + ".class";
           byte[] bytecode = classes.get(classFile);
           if (bytecode == null) {
             throw new CodegenException("Missing generated direct invocation class " + classFile);

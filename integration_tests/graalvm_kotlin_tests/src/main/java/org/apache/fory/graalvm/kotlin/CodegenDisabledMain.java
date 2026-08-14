@@ -19,15 +19,16 @@
 
 package org.apache.fory.graalvm.kotlin;
 
-import org.apache.fory.json.annotation.ForyJsonProvider;
+import org.apache.fory.json.ForyJson;
 
 /** Makes the invalid provider reachable so Native Image analysis must reject it. */
 public final class CodegenDisabledMain {
   private CodegenDisabledMain() {}
 
   public static void main(String[] args) {
-    if (!CodegenDisabledProvider.class.isAnnotationPresent(ForyJsonProvider.class)) {
-      throw new AssertionError("Codegen-disabled provider is not reachable");
+    ForyJson json = new CodegenDisabledProvider().invalidConfiguration();
+    if (json == null) {
+      throw new AssertionError("Codegen-disabled provider returned null");
     }
   }
 }

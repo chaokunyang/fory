@@ -73,29 +73,6 @@ internal class ForyJsonKotlinSymbolProcessor(environment: SymbolProcessorEnviron
   private fun write(model: JsonModel) {
     val dependencies =
       Dependencies(aggregating = false, sources = model.originatingFiles.toTypedArray())
-    writeResource(dependencies, model)
-    if (!model.generateCompanion) return
-    codeGenerator
-      .createNewFile(
-        dependencies,
-        model.packageName,
-        model.companionSimpleName,
-        "java",
-      )
-      .use { output ->
-        output.write(CompanionSourceWriter.write(model).toByteArray(StandardCharsets.UTF_8))
-      }
-    codeGenerator
-      .createNewFile(
-        dependencies,
-        model.packageName,
-        model.operationSimpleName,
-        "class",
-      )
-      .use { output -> output.write(OperationClassWriter.write(model)) }
-  }
-
-  private fun writeResource(dependencies: Dependencies, model: JsonModel) {
     codeGenerator.createNewFileByPath(dependencies, R8RulesWriter.resourcePath(model), "").use {
       output ->
       output.write(R8RulesWriter.write(model).toByteArray(StandardCharsets.UTF_8))

@@ -41,7 +41,6 @@ dependencies {
   implementation("com.squareup.moshi:moshi:$moshiVersion")
   implementation("com.fasterxml.jackson.module:jackson-module-kotlin:$jacksonVersion")
 
-  ksp("org.apache.fory:fory-json-kotlin-ksp:$foryVersion")
   ksp("com.squareup.moshi:moshi-kotlin-codegen:$moshiVersion")
 
   testImplementation("org.junit.jupiter:junit-jupiter:5.14.1")
@@ -82,9 +81,6 @@ val verifyGeneratedJsonArtifacts = tasks.register("verifyGeneratedJsonArtifacts"
   doLast {
     val runtimeFiles = sourceSets.main.get().runtimeClasspath.files
     URLClassLoader(runtimeFiles.map { it.toURI().toURL() }.toTypedArray(), null).use { loader ->
-      val generatedNames = loader.loadClass("org.apache.fory.codegen.GeneratedClassNames")
-      val withSuffix =
-        generatedNames.getMethod("withSuffix", String::class.java, String::class.java)
       val modelNames =
         listOf(
           "org.apache.fory.benchmark.json.MediaContent",
@@ -92,12 +88,6 @@ val verifyGeneratedJsonArtifacts = tasks.register("verifyGeneratedJsonArtifacts"
           "org.apache.fory.benchmark.json.Image",
         )
       for (modelName in modelNames) {
-        val model = loader.loadClass(modelName)
-        val foryCompanion = withSuffix.invoke(null, model.name, "_ForyJsonCodec") as String
-        loader.loadClass(foryCompanion)
-        loader.loadClass(foryCompanion + "_Operations")
-        val consumerRules = "META-INF/proguard/fory-json-${model.name}.pro"
-        checkNotNull(loader.getResource(consumerRules)) { "Missing generated $consumerRules" }
         loader.loadClass(modelName + "JsonAdapter")
       }
     }

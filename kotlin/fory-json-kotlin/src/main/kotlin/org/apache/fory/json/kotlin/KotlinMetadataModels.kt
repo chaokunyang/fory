@@ -50,13 +50,13 @@ import kotlin.metadata.isSecondary
 import kotlin.metadata.isSuspend
 import kotlin.metadata.isValue
 import kotlin.metadata.isVar
-import kotlin.metadata.kind
-import kotlin.metadata.visibility
 import kotlin.metadata.jvm.KotlinClassMetadata
 import kotlin.metadata.jvm.fieldSignature
 import kotlin.metadata.jvm.getterSignature
 import kotlin.metadata.jvm.setterSignature
 import kotlin.metadata.jvm.signature
+import kotlin.metadata.kind
+import kotlin.metadata.visibility
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.codec.JsonObjectModel
 import org.apache.fory.json.meta.JsonCreatorDeclaration
@@ -87,7 +87,8 @@ internal object KotlinMetadataModels {
     return when (model.kind) {
       ClassKind.OBJECT -> singletonModel(ownerType, rawType, model, creatorDeclarations)
       ClassKind.COMPANION_OBJECT -> unsupported(rawType, "companion objects have no value schema")
-      ClassKind.INTERFACE -> unsupported(rawType, "interfaces require @JsonSubTypes or a custom codec")
+      ClassKind.INTERFACE ->
+        unsupported(rawType, "interfaces require @JsonSubTypes or a custom codec")
       ClassKind.ANNOTATION_CLASS -> unsupported(rawType, "annotation classes have no value schema")
       ClassKind.ENUM_CLASS,
       ClassKind.ENUM_ENTRY -> unsupported(rawType, "enum classes use the core enum codec")
@@ -107,14 +108,18 @@ internal object KotlinMetadataModels {
       try {
         rawType.getField("INSTANCE")
       } catch (cause: ReflectiveOperationException) {
-        throw ForyJsonException("Unsupported Kotlin singleton ${rawType.name}: missing INSTANCE", cause)
-    }
-    if (!Modifier.isPublic(instanceField.modifiers) ||
-      !Modifier.isStatic(instanceField.modifiers) ||
-      !Modifier.isFinal(instanceField.modifiers) ||
-      instanceField.declaringClass != rawType ||
-      instanceField.isSynthetic ||
-      instanceField.type != rawType
+        throw ForyJsonException(
+          "Unsupported Kotlin singleton ${rawType.name}: missing INSTANCE",
+          cause
+        )
+      }
+    if (
+      !Modifier.isPublic(instanceField.modifiers) ||
+        !Modifier.isStatic(instanceField.modifiers) ||
+        !Modifier.isFinal(instanceField.modifiers) ||
+        instanceField.declaringClass != rawType ||
+        instanceField.isSynthetic ||
+        instanceField.type != rawType
     ) {
       unsupported(rawType, "missing exact singleton INSTANCE field")
     }
@@ -122,7 +127,10 @@ internal object KotlinMetadataModels {
       try {
         instanceField.get(null)
       } catch (cause: ReflectiveOperationException) {
-        throw ForyJsonException("Unsupported Kotlin singleton ${rawType.name}: inaccessible INSTANCE", cause)
+        throw ForyJsonException(
+          "Unsupported Kotlin singleton ${rawType.name}: inaccessible INSTANCE",
+          cause
+        )
       }
     return JsonObjectModel.fixedInstance(
       instance,
@@ -130,7 +138,6 @@ internal object KotlinMetadataModels {
       properties.map { it.getter }.toTypedArray(),
       properties.map { it.setter }.toTypedArray(),
       properties.map { it.type }.toTypedArray(),
-      true,
     )
   }
 
@@ -145,13 +152,15 @@ internal object KotlinMetadataModels {
     }
     val creator = selectCreator(ownerType, rawType, model, creators)
     val properties = properties(ownerType, model)
-    val declaredProperties = properties.filter { it.declaringType == rawType }.associateBy { it.name }
+    val declaredProperties =
+      properties.filter { it.declaringType == rawType }.associateBy { it.name }
     val substitutions = KotlinMetadataTypes.substitutions(ownerType, model)
     val parameters = creator.parameters
     val names = Array(parameters.size) { parameters[it].name }
-    val parameterTypes = Array<TypeRef<*>>(parameters.size) {
-      KotlinMetadataTypes.resolve(parameters[it].type, rawType.classLoader, substitutions, false)
-    }
+    val parameterTypes =
+      Array<TypeRef<*>>(parameters.size) {
+        KotlinMetadataTypes.resolve(parameters[it].type, rawType.classLoader, substitutions, false)
+      }
     val parameterNullable = BooleanArray(parameters.size) { nullable(parameterTypes[it]) }
     val defaultMaskBits =
       IntArray(parameters.size) { if (parameters[it].declaresDefaultValue) it else -1 }
@@ -185,7 +194,6 @@ internal object KotlinMetadataModels {
       properties.map { it.type }.toTypedArray(),
       BooleanArray(properties.size) { properties[it].reconstructible },
       BooleanArray(properties.size) { properties[it].required },
-      true,
     )
   }
 
@@ -196,8 +204,9 @@ internal object KotlinMetadataModels {
     declarations: List<JsonCreatorDeclaration>,
   ): CreatorMetadata {
     if (declarations.isEmpty()) {
-      val primary = model.constructors.singleOrNull { !it.isSecondary }
-        ?: unsupported(rawType, "missing unique primary constructor")
+      val primary =
+        model.constructors.singleOrNull { !it.isSecondary }
+          ?: unsupported(rawType, "missing unique primary constructor")
       return constructorMetadata(rawType, primary, true, null)
     }
     val exact = ArrayList<CreatorMetadata>(1)
@@ -218,7 +227,10 @@ internal object KotlinMetadataModels {
       }
     }
     return exact.singleOrNull()
-      ?: unsupported(rawType, "effective @JsonCreator does not select one logical Kotlin declaration")
+      ?: unsupported(
+        rawType,
+        "effective @JsonCreator does not select one logical Kotlin declaration"
+      )
   }
 
   private fun constructorMetadata(
@@ -227,8 +239,8 @@ internal object KotlinMetadataModels {
     primary: Boolean,
     selected: Constructor<*>?,
   ): CreatorMetadata {
-    val signature = source.signature
-      ?: unsupported(rawType, "selected constructor has no JVM signature")
+    val signature =
+      source.signature ?: unsupported(rawType, "selected constructor has no JVM signature")
     val selectedConstructor = findConstructor(rawType, signature.descriptor)
     val constructor = logicalConstructor(rawType, selectedConstructor, source.valueParameters.size)
     val sourceAccessible =
@@ -242,7 +254,9 @@ internal object KotlinMetadataModels {
     if (selected != null && selected != selectedConstructor) {
       unsupported(rawType, "selected constructor is a compiler-derived overload")
     }
-    if (constructor.isSynthetic || constructor.isVarArgs || constructor.typeParameters.isNotEmpty()) {
+    if (
+      constructor.isSynthetic || constructor.isVarArgs || constructor.typeParameters.isNotEmpty()
+    ) {
       unsupported(rawType, "selected constructor is not an exact JVM declaration")
     }
     val invocation =
@@ -280,9 +294,10 @@ internal object KotlinMetadataModels {
       }
     val companion = readClass(companionType)
     val descriptor = methodDescriptor(factory)
-    val source = companion.functions.singleOrNull {
-      it.signature?.name == factory.name && it.signature?.descriptor == descriptor
-    } ?: return null
+    val source =
+      companion.functions.singleOrNull {
+        it.signature?.name == factory.name && it.signature?.descriptor == descriptor
+      } ?: return null
     validateFactory(rawType, factory, source)
     if (source.valueParameters.any { it.declaresDefaultValue }) {
       unsupported(rawType, "a selected static factory cannot declare compiler defaults")
@@ -305,17 +320,18 @@ internal object KotlinMetadataModels {
 
   private fun validateFactory(rawType: Class<*>, factory: Method, source: KmFunction) {
     val modifiers = factory.modifiers
-    if (!Modifier.isPublic(modifiers) ||
-      !Modifier.isStatic(modifiers) ||
-      factory.isSynthetic ||
-      factory.isBridge ||
-      factory.isVarArgs ||
-      factory.typeParameters.isNotEmpty() ||
-      source.visibility != Visibility.PUBLIC && source.visibility != Visibility.INTERNAL ||
-      source.receiverParameterType != null ||
-      hasImplicitContext(source) ||
-      source.isSuspend ||
-      source.typeParameters.isNotEmpty()
+    if (
+      !Modifier.isPublic(modifiers) ||
+        !Modifier.isStatic(modifiers) ||
+        factory.isSynthetic ||
+        factory.isBridge ||
+        factory.isVarArgs ||
+        factory.typeParameters.isNotEmpty() ||
+        source.visibility != Visibility.PUBLIC && source.visibility != Visibility.INTERNAL ||
+        source.receiverParameterType != null ||
+        hasImplicitContext(source) ||
+        source.isSuspend ||
+        source.typeParameters.isNotEmpty()
     ) {
       unsupported(rawType, "selected factory is not an exact public @JvmStatic declaration")
     }
@@ -336,11 +352,12 @@ internal object KotlinMetadataModels {
     return candidates.map { (name, declarations) ->
       declarations.singleOrNull { candidate ->
         declarations.all { it == candidate || overrides(it, candidate) }
-      } ?: unsupported(
-        ownerType.rawType,
-        "ambiguous inherited property $name from " +
-          declarations.joinToString { it.declaringType.name },
-      )
+      }
+        ?: unsupported(
+          ownerType.rawType,
+          "ambiguous inherited property $name from " +
+            declarations.joinToString { it.declaringType.name },
+        )
     }
   }
 
@@ -394,7 +411,12 @@ internal object KotlinMetadataModels {
     substitutions: Map<Int, TypeRef<*>>,
   ): PropertyMetadata {
     val type =
-      KotlinMetadataTypes.resolve(property.returnType, declaringType.classLoader, substitutions, false)
+      KotlinMetadataTypes.resolve(
+        property.returnType,
+        declaringType.classLoader,
+        substitutions,
+        false
+      )
     val instance = property.receiverParameterType == null && !hasImplicitContext(property)
     val getter = if (instance) propertyMethod(declaringType, property.getterSignature) else null
     val setter =
@@ -411,7 +433,8 @@ internal object KotlinMetadataModels {
       }
     val reconstructible =
       property.fieldSignature != null &&
-        (getter != null && setter != null || property.isVar && field != null && !Modifier.isFinal(field.modifiers))
+        (getter != null && setter != null ||
+          property.isVar && field != null && !Modifier.isFinal(field.modifiers))
     val required = property.isLateinit
     if (required && (!reconstructible || nullable(type))) {
       unsupported(declaringType, "lateinit property ${property.name} is not an exact non-null var")
@@ -433,15 +456,19 @@ internal object KotlinMetadataModels {
     signature: kotlin.metadata.jvm.JvmMethodSignature?,
   ): Method? {
     if (signature == null) return null
-    val method = declaringType.declaredMethods.singleOrNull {
-      it.name == signature.name && methodDescriptor(it) == signature.descriptor
-    } ?: unsupported(declaringType, "method $signature was not found exactly")
+    val method =
+      declaringType.declaredMethods.singleOrNull {
+        it.name == signature.name && methodDescriptor(it) == signature.descriptor
+      } ?: unsupported(declaringType, "method $signature was not found exactly")
     val modifiers = method.modifiers
-    return if (Modifier.isPublic(modifiers) &&
-      !Modifier.isStatic(modifiers) &&
-      !method.isBridge &&
-      !method.isSynthetic
-    ) method else null
+    return if (
+      Modifier.isPublic(modifiers) &&
+        !Modifier.isStatic(modifiers) &&
+        !method.isBridge &&
+        !method.isSynthetic
+    )
+      method
+    else null
   }
 
   private fun publicField(
@@ -450,14 +477,14 @@ internal object KotlinMetadataModels {
   ): Field? {
     val signature = property.fieldSignature ?: return null
     if (signature.name != property.name) return null
-    val field = declaringType.declaredFields.singleOrNull {
-      it.name == signature.name && descriptor(it.type) == signature.descriptor
-    } ?: unsupported(declaringType, "field $signature was not found exactly")
+    val field =
+      declaringType.declaredFields.singleOrNull {
+        it.name == signature.name && descriptor(it.type) == signature.descriptor
+      } ?: unsupported(declaringType, "field $signature was not found exactly")
     val modifiers = field.modifiers
-    return if (Modifier.isPublic(modifiers) &&
-      !Modifier.isStatic(modifiers) &&
-      !field.isSynthetic
-    ) field else null
+    return if (Modifier.isPublic(modifiers) && !Modifier.isStatic(modifiers) && !field.isSynthetic)
+      field
+    else null
   }
 
   private fun overrides(prior: PropertyMetadata, current: PropertyMetadata): Boolean {
@@ -516,10 +543,11 @@ internal object KotlinMetadataModels {
   ): Constructor<*> {
     if (selected.parameterCount == logicalCount) return selected
     val selectedTypes = selected.parameterTypes
-    if (!Modifier.isPublic(selected.modifiers) ||
-      !selected.isSynthetic ||
-      selectedTypes.size != logicalCount + 1 ||
-      selectedTypes.last().name != "kotlin.jvm.internal.DefaultConstructorMarker"
+    if (
+      !Modifier.isPublic(selected.modifiers) ||
+        !selected.isSynthetic ||
+        selectedTypes.size != logicalCount + 1 ||
+        selectedTypes.last().name != "kotlin.jvm.internal.DefaultConstructorMarker"
     ) {
       unsupported(rawType, "selected JVM constructor has an invalid accessibility shape")
     }
@@ -544,7 +572,10 @@ internal object KotlinMetadataModels {
       } &&
       selected.parameterTypes.last().name == "kotlin.jvm.internal.DefaultConstructorMarker"
 
-  private fun findDefaultConstructor(rawType: Class<*>, constructor: Constructor<*>): Constructor<*> {
+  private fun findDefaultConstructor(
+    rawType: Class<*>,
+    constructor: Constructor<*>
+  ): Constructor<*> {
     val parameters = constructor.parameterTypes
     val maskCount = (parameters.size + 31) ushr 5
     return rawType.declaredConstructors.singleOrNull { candidate ->
@@ -642,7 +673,9 @@ internal object KotlinMetadataTypes {
     val arguments = ownerType.typeArguments
     if (arguments.isEmpty()) return emptyMap()
     if (arguments.size != model.typeParameters.size) {
-      throw ForyJsonException("Kotlin generic model ${ownerType.type} requires exact type arguments")
+      throw ForyJsonException(
+        "Kotlin generic model ${ownerType.type} requires exact type arguments"
+      )
     }
     return model.typeParameters.indices.associate { model.typeParameters[it].id to arguments[it] }
   }
@@ -697,11 +730,11 @@ internal object KotlinMetadataTypes {
     }
     val classifier = type.classifier
     if (classifier is KmClassifier.TypeParameter) {
-      val substituted = substitutions[classifier.id]
-        ?: throw ForyJsonException("Unresolved Kotlin JSON type parameter ${classifier.id}")
+      val substituted =
+        substitutions[classifier.id]
+          ?: throw ForyJsonException("Unresolved Kotlin JSON type parameter ${classifier.id}")
       val nullable =
-        if (type.isDefinitelyNonNull) false
-        else type.isNullable || occurrenceNullable(substituted)
+        if (type.isDefinitelyNonNull) false else type.isNullable || occurrenceNullable(substituted)
       return withNullability(substituted, nullable)
     }
     if (classifier !is KmClassifier.Class) {
@@ -736,8 +769,8 @@ internal object KotlinMetadataTypes {
     loader: ClassLoader?,
     substitutions: Map<Int, TypeRef<*>>,
   ): TypeRef<*> {
-    val type = projection.type
-      ?: throw ForyJsonException("Star-projected Kotlin JSON types are unsupported")
+    val type =
+      projection.type ?: throw ForyJsonException("Star-projected Kotlin JSON types are unsupported")
     if (projection.variance == KmVariance.IN) {
       throw ForyJsonException("Contravariant Kotlin JSON types are unsupported")
     }
@@ -757,20 +790,23 @@ internal object KotlinMetadataTypes {
   }
 
   private fun withNullability(type: TypeRef<*>, nullable: Boolean): TypeRef<*> {
-    val current = type.typeExtMeta
-      ?: throw ForyJsonException("Platform-typed Kotlin JSON occurrence $type is unsupported")
+    val current =
+      type.typeExtMeta
+        ?: throw ForyJsonException("Platform-typed Kotlin JSON occurrence $type is unsupported")
     return withOccurrence(type, nullable, current.covariant())
   }
 
   private fun withCovariance(type: TypeRef<*>): TypeRef<*> {
-    val current = type.typeExtMeta
-      ?: throw ForyJsonException("Platform-typed Kotlin JSON occurrence $type is unsupported")
+    val current =
+      type.typeExtMeta
+        ?: throw ForyJsonException("Platform-typed Kotlin JSON occurrence $type is unsupported")
     return withOccurrence(type, current.nullable(), true)
   }
 
   fun withOccurrence(type: TypeRef<*>, nullable: Boolean, covariant: Boolean): TypeRef<*> {
-    val current = type.typeExtMeta
-      ?: throw ForyJsonException("Platform-typed Kotlin JSON occurrence $type is unsupported")
+    val current =
+      type.typeExtMeta
+        ?: throw ForyJsonException("Platform-typed Kotlin JSON occurrence $type is unsupported")
     if (current.nullable() == nullable && current.covariant() == covariant) return type
     val metadata =
       TypeExtMeta.of(
@@ -795,48 +831,48 @@ internal object KotlinMetadataTypes {
   private fun classFor(name: String, loader: ClassLoader?): Class<*> =
     try {
       when (name) {
-      "kotlin/Boolean" -> java.lang.Boolean.TYPE
-      "kotlin/Byte" -> java.lang.Byte.TYPE
-      "kotlin/Short" -> java.lang.Short.TYPE
-      "kotlin/Int" -> java.lang.Integer.TYPE
-      "kotlin/Long" -> java.lang.Long.TYPE
-      "kotlin/Float" -> java.lang.Float.TYPE
-      "kotlin/Double" -> java.lang.Double.TYPE
-      "kotlin/Char" -> java.lang.Character.TYPE
-      "kotlin/BooleanArray" -> BooleanArray::class.java
-      "kotlin/ByteArray" -> ByteArray::class.java
-      "kotlin/ShortArray" -> ShortArray::class.java
-      "kotlin/IntArray" -> IntArray::class.java
-      "kotlin/LongArray" -> LongArray::class.java
-      "kotlin/FloatArray" -> FloatArray::class.java
-      "kotlin/DoubleArray" -> DoubleArray::class.java
-      "kotlin/CharArray" -> CharArray::class.java
-      "kotlin/String" -> String::class.java
-      "kotlin/Any" -> Any::class.java
-      "kotlin/Unit" -> Unit::class.java
-      "kotlin/Nothing" -> Void::class.java
-      "kotlin/Number" -> Number::class.java
-      "kotlin/CharSequence" -> CharSequence::class.java
-      "kotlin/Comparable" -> Comparable::class.java
-      "kotlin/Throwable" -> Throwable::class.java
-      "kotlin/Enum" -> Enum::class.java
-      "kotlin/collections/Iterable",
-      "kotlin/collections/MutableIterable" -> Iterable::class.java
-      "kotlin/collections/Collection",
-      "kotlin/collections/MutableCollection" -> Collection::class.java
-      "kotlin/collections/List",
-      "kotlin/collections/MutableList" -> List::class.java
-      "kotlin/collections/Set",
-      "kotlin/collections/MutableSet" -> Set::class.java
-      "kotlin/collections/Map",
-      "kotlin/collections/MutableMap" -> Map::class.java
-      "kotlin/collections/Iterator",
-      "kotlin/collections/MutableIterator" -> Iterator::class.java
-      "kotlin/collections/ListIterator",
-      "kotlin/collections/MutableListIterator" -> ListIterator::class.java
-      "kotlin/collections/Map.Entry",
-      "kotlin/collections/MutableMap.MutableEntry" -> Map.Entry::class.java
-      "kotlin/Array" -> Array<Any>::class.java
+        "kotlin/Boolean" -> java.lang.Boolean.TYPE
+        "kotlin/Byte" -> java.lang.Byte.TYPE
+        "kotlin/Short" -> java.lang.Short.TYPE
+        "kotlin/Int" -> java.lang.Integer.TYPE
+        "kotlin/Long" -> java.lang.Long.TYPE
+        "kotlin/Float" -> java.lang.Float.TYPE
+        "kotlin/Double" -> java.lang.Double.TYPE
+        "kotlin/Char" -> java.lang.Character.TYPE
+        "kotlin/BooleanArray" -> BooleanArray::class.java
+        "kotlin/ByteArray" -> ByteArray::class.java
+        "kotlin/ShortArray" -> ShortArray::class.java
+        "kotlin/IntArray" -> IntArray::class.java
+        "kotlin/LongArray" -> LongArray::class.java
+        "kotlin/FloatArray" -> FloatArray::class.java
+        "kotlin/DoubleArray" -> DoubleArray::class.java
+        "kotlin/CharArray" -> CharArray::class.java
+        "kotlin/String" -> String::class.java
+        "kotlin/Any" -> Any::class.java
+        "kotlin/Unit" -> Unit::class.java
+        "kotlin/Nothing" -> Void::class.java
+        "kotlin/Number" -> Number::class.java
+        "kotlin/CharSequence" -> CharSequence::class.java
+        "kotlin/Comparable" -> Comparable::class.java
+        "kotlin/Throwable" -> Throwable::class.java
+        "kotlin/Enum" -> Enum::class.java
+        "kotlin/collections/Iterable",
+        "kotlin/collections/MutableIterable" -> Iterable::class.java
+        "kotlin/collections/Collection",
+        "kotlin/collections/MutableCollection" -> Collection::class.java
+        "kotlin/collections/List",
+        "kotlin/collections/MutableList" -> List::class.java
+        "kotlin/collections/Set",
+        "kotlin/collections/MutableSet" -> Set::class.java
+        "kotlin/collections/Map",
+        "kotlin/collections/MutableMap" -> Map::class.java
+        "kotlin/collections/Iterator",
+        "kotlin/collections/MutableIterator" -> Iterator::class.java
+        "kotlin/collections/ListIterator",
+        "kotlin/collections/MutableListIterator" -> ListIterator::class.java
+        "kotlin/collections/Map.Entry",
+        "kotlin/collections/MutableMap.MutableEntry" -> Map.Entry::class.java
+        "kotlin/Array" -> Array<Any>::class.java
         else -> Class.forName(binaryName(name), false, loader)
       }
     } catch (cause: ClassNotFoundException) {
@@ -846,8 +882,7 @@ internal object KotlinMetadataTypes {
   private fun binaryName(metadataName: String): String {
     val packageEnd = metadataName.lastIndexOf('/')
     val packageName =
-      if (packageEnd < 0) ""
-      else metadataName.substring(0, packageEnd).replace('/', '.') + "."
+      if (packageEnd < 0) "" else metadataName.substring(0, packageEnd).replace('/', '.') + "."
     return packageName + metadataName.substring(packageEnd + 1).replace('.', '$')
   }
 

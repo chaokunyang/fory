@@ -31,18 +31,31 @@ version for every module:
 ```kotlin title="build.gradle.kts"
 plugins {
   kotlin("jvm") version "2.3.20"
-  id("com.google.devtools.ksp") version "2.3.8"
 }
 
 dependencies {
   implementation("org.apache.fory:fory-json-kotlin:1.7.0-SNAPSHOT")
+}
+```
+
+The runtime reads Kotlin/JVM metadata directly; do not add `kotlin-reflect`. KSP is not required for
+JVM applications or unminified Android builds. Android applications that use R8 or ProGuard should
+also apply KSP and add the retention-rule processor:
+
+```kotlin title="build.gradle.kts"
+plugins {
+  id("com.google.devtools.ksp") version "2.3.8"
+}
+
+dependencies {
   ksp("org.apache.fory:fory-json-kotlin-ksp:1.7.0-SNAPSHOT")
 }
 ```
 
-The KSP dependency is required for `@JsonType` and Kotlin `@JsonMixin` declarations. It is also
-required for Kotlin construction, singleton, and value-class models on Android and GraalVM Native
-Image. Do not add `kotlin-reflect`; the runtime reads Kotlin/JVM metadata directly.
+Annotate every Kotlin model that needs exact minification retention with `@JsonType`. For a
+third-party target, annotate a source-owned exact `@JsonMixin` instead. The processor emits only
+the exact R8 and ProGuard rules for those declarations; it does not generate codecs or change the
+JSON mapping.
 
 ## Quick start
 
@@ -117,7 +130,7 @@ properties must be reconstructible in both read and write directions.
 A body `val`, computed or delegated property, getter-only property, or delegated `var` must be
 ignored or handled by an exact custom codec. Present deferred setters run in fixed property order
 after construction, followed by validators; input member order does not choose application call
-order. Kotlin objects are always constructed normally, so primary-constructor initialization and
+order. Kotlin class instances are always constructed normally, so primary-constructor initialization and
 validation are not bypassed.
 
 Fory must be able to read its own output under the same configuration. Consequently, nullable
@@ -300,7 +313,7 @@ Kotlin-specific behavior is:
 | recursive generic                                                                          | same exact recursive binding only; active expansion to another binding is rejected |
 | typealias                                                                                  | its fully expanded type                                                            |
 | function/suspend function, reflection types, coroutine/flow/channel state                  | rejected                                                                           |
-| eligible third-party immutable Kotlin model                                                | automatic on HotSpot; generated exact Mixin required on Native Image and Android   |
+| eligible third-party immutable Kotlin model                                                | automatic on the JVM; register an exact Mixin when applying annotation overlays    |
 
 Kotlin experimental opt-in requirements for time and UUID APIs still apply to application source.
 The Fory artifact's supported compiler and metadata boundary does not turn an experimental Kotlin
@@ -310,8 +323,8 @@ API into a cross-version Kotlin guarantee.
 
 `jsonTypeRef<T>()`, annotations, Mixins, and codec registrations are application-declared schema.
 JSON input cannot select an arbitrary class, constructor, compiler default, object, companion,
-module, codec, generated class, or callable. A sealed hierarchy accepts only the logical subtype
-names in its declared `@JsonSubTypes` table.
+module, codec, or callable. A sealed hierarchy accepts only the logical subtype names in its
+declared `@JsonSubTypes` table.
 
 Kotlin arrays, collections, maps, and objects use the same `maxDepth`, graph-memory, input-buffer,
 field-name-cache, and type-checker controls as the core JSON runtime. There are no Kotlin-specific
@@ -323,21 +336,23 @@ See [Security](security.md) before decoding untrusted input.
 
 ## KSP, GraalVM, and Android
 
-`@JsonType` asks KSP to emit exact direct access and construction operations. It does not select a
-different JSON schema. The generated output must be packaged with the model; a directly annotated
-model fails codec creation if its companion is missing.
+KSP is optional except in Android builds where R8 or ProGuard can rename or remove model members.
+For those builds, `@JsonType` and source-owned exact Mixins ask KSP to emit exact retention rules.
+KSP owns a Mixin request when either the Mixin source or its exact target is Kotlin. It does not
+generate a Kotlin codec or select a different JSON schema.
 
 On GraalVM Native Image, use the existing `@ForyJsonProvider` workflow, install
-`ForyJsonKotlin`, and enable code generation in the returned configuration. Every automatic Kotlin
-construction, value-class, or singleton model must have its KSP-generated `@JsonType` or exact
-Mixin companion. Only exact generic bindings reachable through provider-selected concrete roots
-are available. Do not add reflection configuration or package-wide opens.
+`ForyJsonKotlin`, and enable code generation in the returned configuration. Annotate each reachable
+concrete Kotlin model with `@JsonType`, or register an exact reachable Mixin for a third-party
+target. Fory reads the Kotlin metadata and prepares generated codecs while building the image.
+Only exact generic bindings reachable through provider-selected concrete roots are available. Do
+not add reflection configuration or package-wide opens.
 
-On Android, use API 26 or later, apply KSP to the application module, and annotate each Kotlin
-construction, value-class, or singleton model with `@JsonType` or an exact Mixin. Runtime JSON code
-generation remains disabled. Release builds support R8 through the exact generated consumer rules;
-do not add package-wide keep rules. An unannotated model that works through metadata on HotSpot is
-not an Android fallback.
+On Android, use API 26 or later. The runtime reads Kotlin metadata in both debug and release builds.
+If a release build enables R8 or ProGuard, apply KSP to the application module and mark every
+required source model with `@JsonType` or provide a source-owned exact Mixin. Package the generated
+retention rules and do not add package-wide keep rules. Runtime JSON code generation remains
+disabled.
 
 Kotlin/Native, Kotlin/JS, and Kotlin/Wasm are not supported by this JVM module.
 
@@ -346,14 +361,13 @@ See [GraalVM Native Image](graalvm.md), [Android](android.md), and
 
 ## Troubleshooting
 
-| Symptom                                | Action                                                                                                                                        |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| unsupported Kotlin metadata            | Compile the model with the supported Kotlin 2.3 compiler and verify that packaged JVM members match the model                                 |
-| generated companion is missing         | Apply `fory-json-kotlin-ksp` to the model module, annotate the source or exact Mixin, and package generated classes and resources             |
-| missing member or JSON null fails      | Check the exact occurrence in `jsonTypeRef<T>()`; absence may use a declared default, while null requires a nullable declaration              |
-| raw, star, or projected generic fails  | Supply one complete declared type; `in` and star projections do not define reconstructible schemas                                            |
-| model works on HotSpot but not Android | Add `@JsonType` or an exact generated Mixin and retain the generated consumer rules                                                           |
-| model is unavailable in Native Image   | Return a codegen-enabled `ForyJsonKotlin` configuration from a reachable provider and make the exact model binding reachable from that config |
+| Symptom                                     | Action                                                                                                                                        |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| unsupported Kotlin metadata                 | Compile the model with the supported Kotlin 2.3 compiler and verify that packaged JVM members match the model                                 |
+| missing member or JSON null fails           | Check the exact occurrence in `jsonTypeRef<T>()`; absence may use a declared default, while null requires a nullable declaration              |
+| raw, star, or projected generic fails       | Supply one complete declared type; `in` and star projections do not define reconstructible schemas                                            |
+| model fails only after Android minification | Apply KSP, mark the source with `@JsonType` or an exact Mixin, and verify that its generated retention rules are packaged                     |
+| model is unavailable in Native Image        | Return a codegen-enabled `ForyJsonKotlin` configuration from a reachable provider and make the exact model binding reachable from that config |
 
 The general [Troubleshooting](troubleshooting.md) page covers syntax, limits, custom codecs,
 subtypes, and root-operation failures shared with Java and Scala.

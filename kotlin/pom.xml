@@ -62,11 +62,12 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <kotlin.compiler.jvmTarget>1.8</kotlin.compiler.jvmTarget>
         <kotlin.version>2.3.20</kotlin.version>
-        <ksp.version>2.3.7</ksp.version>
+        <ksp.version>2.3.8</ksp.version>
         <ksp.maven.plugin.version>0.4.1</ksp.maven.plugin.version>
         <build-helper-maven-plugin.version>3.6.1</build-helper-maven-plugin.version>
         <dokka-maven-plugin.version>2.2.0</dokka-maven-plugin.version>
         <maven-spotless-plugin.version>2.43.0</maven-spotless-plugin.version>
+        <google-java-format.version>1.35.0</google-java-format.version>
         <dokka.skip>false</dokka.skip>
         <!-- Dokka owns the standard javadoc classifier for mixed Kotlin/Java modules. -->
         <maven.javadoc.skip>true</maven.javadoc.skip>
@@ -205,7 +206,7 @@
                     <configuration>
                         <java>
                             <googleJavaFormat>
-                                <version>1.19.1</version>
+                                <version>${google-java-format.version}</version>
                                 <style>GOOGLE</style>
                             </googleJavaFormat>
                         </java>

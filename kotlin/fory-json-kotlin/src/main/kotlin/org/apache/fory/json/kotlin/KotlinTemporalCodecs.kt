@@ -20,6 +20,7 @@
 package org.apache.fory.json.kotlin
 
 import java.lang.reflect.Method
+import kotlin.math.roundToLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
@@ -28,7 +29,6 @@ import kotlin.time.Instant
 import kotlin.time.TimedValue
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
-import kotlin.math.roundToLong
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.codec.DirectUnboxedValueCodec
 import org.apache.fory.json.codec.JsonValueCodec
@@ -53,11 +53,13 @@ internal object KotlinTemporalCodecs {
   private val readDurationCarrierMethod: Method =
     KotlinTemporalCodecs::class.java.getMethod("readDurationRaw", JsonReader::class.java)
   private val writeDurationCarrierMethod: Method =
-    KotlinTemporalCodecs::class.java.getMethod(
-      "writeDurationRaw",
-      JsonWriter::class.java,
-      java.lang.Long.TYPE,
-    )
+    KotlinTemporalCodecs::class
+      .java
+      .getMethod(
+        "writeDurationRaw",
+        JsonWriter::class.java,
+        java.lang.Long.TYPE,
+      )
 
   /** Returns whether this family owns the exact Kotlin class instead of metadata fallback. */
   fun supports(rawType: Class<*>): Boolean =
@@ -82,8 +84,7 @@ internal object KotlinTemporalCodecs {
     return parseDuration(text)
   }
 
-  @JvmName("timedDurationRaw")
-  fun timedDurationRaw(value: TimedValue<*>): Duration = value.duration
+  @JvmName("timedDurationRaw") fun timedDurationRaw(value: TimedValue<*>): Duration = value.duration
 
   @JvmName("newTimedValue")
   fun newTimedValue(value: Any?, duration: Duration): TimedValue<Any?> = TimedValue(value, duration)
@@ -197,8 +198,8 @@ internal object KotlinTemporalCodecs {
 
     private fun read(reader: JsonReader): Uuid? {
       val text = reader.readQuotedText() ?: return null
-      if (text.length != 36 ||
-        text[8] != '-' || text[13] != '-' || text[18] != '-' || text[23] != '-'
+      if (
+        text.length != 36 || text[8] != '-' || text[13] != '-' || text[18] != '-' || text[23] != '-'
       ) {
         invalidUuid()
       }
@@ -290,7 +291,8 @@ internal object KotlinTemporalCodecs {
           seen = seen or 2
           lastTimeOrder = 1
           sawTimeComponent = true
-          totalMillis = addDurationMillis(totalMillis, signedMillis(number, componentSign, 3_600_000L))
+          totalMillis =
+            addDurationMillis(totalMillis, signedMillis(number, componentSign, 3_600_000L))
         }
         'M' -> {
           if (!inTime || seen and 4 != 0 || lastTimeOrder >= 2) invalidDuration()
@@ -326,8 +328,9 @@ internal object KotlinTemporalCodecs {
 
   private fun addDurationMillis(total: Long, component: Long): Long {
     if (total == MAX_DURATION_MILLIS || total == -MAX_DURATION_MILLIS) {
-      if ((component == MAX_DURATION_MILLIS || component == -MAX_DURATION_MILLIS) &&
-        total xor component < 0
+      if (
+        (component == MAX_DURATION_MILLIS || component == -MAX_DURATION_MILLIS) &&
+          total xor component < 0
       ) {
         invalidDuration()
       }
@@ -412,8 +415,11 @@ internal object KotlinTemporalCodecs {
           index += 2
         }
       }
-      if (offsetHour > 18 || offsetMinute > 59 || offsetSecond > 59 ||
-        offsetHour == 18 && (offsetMinute != 0 || offsetSecond != 0)
+      if (
+        offsetHour > 18 ||
+          offsetMinute > 59 ||
+          offsetSecond > 59 ||
+          offsetHour == 18 && (offsetMinute != 0 || offsetSecond != 0)
       ) {
         invalidInstant()
       }
@@ -459,7 +465,10 @@ internal object KotlinTemporalCodecs {
     val maxDay =
       when (month) {
         2 -> if (leapYear(year)) 29 else 28
-        4, 6, 9, 11 -> 30
+        4,
+        6,
+        9,
+        11 -> 30
         else -> 31
       }
     if (day !in 1..maxDay) invalidInstant()

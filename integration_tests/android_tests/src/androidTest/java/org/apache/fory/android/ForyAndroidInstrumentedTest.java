@@ -91,11 +91,6 @@ public class ForyAndroidInstrumentedTest {
   }
 
   @Test
-  public void missingKotlinCompanionAndCleanup() {
-    AndroidKotlinJsonScenarios.missingCompanionAndCleanup();
-  }
-
-  @Test
   public void androidRuntimeDisablesCodegenAndUnsafeCopies() {
     AndroidForyRuntimeScenarios.androidRuntimeDisablesCodegenAndUnsafeCopies();
   }

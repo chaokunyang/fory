@@ -33,8 +33,10 @@ import org.apache.fory.json.ForyJson;
  * effective public, non-static, zero-argument instance method whose exact return type is {@link
  * ForyJson} is invoked once while the native image is built. This includes inherited superclass
  * methods and public interface default methods. The returned configurations select the generated
- * object codecs included in the image; configurations not returned by a provider continue to use
- * interpreted codecs. The provider package does not need to be exported or opened to Fory.
+ * object codecs included in the image. Configurations not returned by a provider continue to use
+ * interpreted codecs for ordinary Java models and complete value codecs; language-module object
+ * models require a returned generated configuration. The provider package does not need to be
+ * exported or opened to Fory.
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)

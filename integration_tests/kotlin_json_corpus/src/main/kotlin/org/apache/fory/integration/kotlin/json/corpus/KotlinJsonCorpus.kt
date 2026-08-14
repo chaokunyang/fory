@@ -38,8 +38,6 @@ public object KotlinJsonCorpus {
 
   @JvmStatic public fun unreachedBoxType(): TypeRef<PlatformBox<Int>> = jsonTypeRef()
 
-  @JvmStatic public fun missingCompanionType(): TypeRef<MissingPlatformCompanion> = jsonTypeRef()
-
   @JvmStatic public fun nodeType(): TypeRef<PlatformNode<String>> = jsonTypeRef()
 
   @JvmStatic public fun rootType(): TypeRef<PlatformRoot> = jsonTypeRef()

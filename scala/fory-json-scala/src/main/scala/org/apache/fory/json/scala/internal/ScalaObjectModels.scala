@@ -131,8 +131,7 @@ private[scala] object ScalaObjectModels {
         getters,
         Array.fill[Method](fields.length)(null),
         propertyTypes,
-        nonPropertyFields,
-        false
+        nonPropertyFields
       )
     )
   }

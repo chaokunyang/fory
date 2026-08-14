@@ -58,7 +58,6 @@ class KotlinJsonBenchmarkTest(unittest.TestCase):
                         "moshi_version": "1.15.2",
                         "jackson_version": "2.22.1",
                         "ksp_version": "2.3.8",
-                        "ksp_api_version": "2.3.7",
                         "jmh_plugin_version": "0.7.3",
                         "run_id": f"run-r{round_index}-{launch.position}",
                         "variant": "current",

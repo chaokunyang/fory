@@ -58,6 +58,7 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
   private final JsonTypeInfo[] children;
   private final ObjectCodec<Object>[] objectCodecs;
   private JsonFieldTable[] inlineReadTables;
+  private InlineReader[] fixedInlineReaders;
   private Latin1ReaderCodec<Object>[] inlineLatin1Readers;
   private Utf16ReaderCodec<Object>[] inlineUtf16Readers;
   private Utf8ReaderCodec<Object>[] inlineUtf8Readers;
@@ -130,8 +131,7 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
       JsonTypeInfo child =
           resolver.getSubtypeTypeInfo(
               baseType,
-              childType.getType(),
-              subtype,
+              childType,
               declaredType != null,
               exactChildCodecs == null ? null : exactChildCodecs[i]);
       if (definition.inclusion == Inclusion.PROPERTY) {
@@ -143,14 +143,20 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
         rejectDiscriminatorCollision(objectCodec, definition.scanInfo.property());
         objectCodecs[i] = (ObjectCodec<Object>) objectCodec;
         ObjectCodec.AnyInfo any = objectCodec.anyInfo();
-        if (objectCodec.fixedInstance()
-            || any != null && (any.readField() != null || any.readSetter() != null)) {
+        boolean fixed = objectCodec.fixedInstance();
+        if (fixed || any != null && (any.readField() != null || any.readSetter() != null)) {
           if (inlineReadTables == null) {
             inlineReadTables = new JsonFieldTable[children.length];
           }
           JsonFieldTable table =
               objectCodec.readTable().withSkippedName(definition.scanInfo.property());
           inlineReadTables[i] = table;
+          if (fixed) {
+            if (fixedInlineReaders == null) {
+              fixedInlineReaders = new InlineReader[children.length];
+            }
+            fixedInlineReaders[i] = new FixedInlineReader((ObjectCodec<Object>) objectCodec, table);
+          }
           // The subtype scan restores the cursor, so the outer child rereads the discriminator and
           // needs this parent-local skip table. The resolver constructs a complete immutable array
           // under its JIT lock and installs the array as one unit; never publish its elements
@@ -351,6 +357,17 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
     return inlineReadTables == null ? null : inlineReadTables[index];
   }
 
+  /** Returns the table-bound complete reader for a fixed inline branch, if this branch is fixed. */
+  @Internal
+  public InlineReader fixedInlineReader(int index) {
+    return fixedInlineReaders == null ? null : fixedInlineReaders[index];
+  }
+
+  /** Complete parent-table-bound reader capability for one fixed inline branch. */
+  @Internal
+  public interface InlineReader
+      extends Latin1ReaderCodec<Object>, Utf16ReaderCodec<Object>, Utf8ReaderCodec<Object> {}
+
   @Internal
   public Latin1ReaderCodec<Object>[] inlineLatin1Readers() {
     return inlineLatin1Readers;
@@ -401,6 +418,32 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
       if (inlineReadTables[i] != null && readers[i] == null) {
         throw new IllegalArgumentException("Missing inline reader for subtype branch " + i);
       }
+    }
+  }
+
+  /** One immutable fixed-body capability shared by all three parent-local reader arrays. */
+  private static final class FixedInlineReader implements InlineReader {
+    private final ObjectCodec<Object> codec;
+    private final JsonFieldTable table;
+
+    private FixedInlineReader(ObjectCodec<Object> codec, JsonFieldTable table) {
+      this.codec = codec;
+      this.table = table;
+    }
+
+    @Override
+    public Object readLatin1(Latin1JsonReader reader) {
+      return codec.readLatin1Object(reader, table);
+    }
+
+    @Override
+    public Object readUtf16(Utf16JsonReader reader) {
+      return codec.readUtf16Object(reader, table);
+    }
+
+    @Override
+    public Object readUtf8(Utf8JsonReader reader) {
+      return codec.readUtf8Object(reader, table);
     }
   }
 

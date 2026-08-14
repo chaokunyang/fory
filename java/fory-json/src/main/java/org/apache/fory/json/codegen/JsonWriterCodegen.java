@@ -37,6 +37,7 @@ import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Reference;
 import org.apache.fory.codegen.ExpressionOptimizer;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.codec.DirectUnboxedValueCodec;
 import org.apache.fory.json.codec.JsonUnwrappedInfo;
 import org.apache.fory.json.codec.JsonUnwrappedInfo.Group;
 import org.apache.fory.json.codec.JsonUnwrappedInfo.WriteEntry;
@@ -69,8 +70,7 @@ abstract class JsonWriterCodegen {
   private final ObjectCodec<?> objectOwner;
   private Class<?> ownerType;
 
-  JsonWriterCodegen(
-      JsonCodegen codegen, JsonTypeResolver resolver, ObjectCodec<?> objectOwner) {
+  JsonWriterCodegen(JsonCodegen codegen, JsonTypeResolver resolver, ObjectCodec<?> objectOwner) {
     this.codegen = codegen;
     this.resolver = resolver;
     this.objectOwner = objectOwner;
@@ -1361,6 +1361,13 @@ abstract class JsonWriterCodegen {
     }
     Class<?> valueType = property.writeTypeInfo().rawType();
     value = cast(inline(value), TypeRef.of(valueType));
+    if (property.writeTypeInfo().unboxedValueCodec() instanceof DirectUnboxedValueCodec) {
+      DirectUnboxedValueCodec terminal =
+          (DirectUnboxedValueCodec) property.writeTypeInfo().unboxedValueCodec();
+      return new Expression.ListExpression(
+          writeFieldName(property, id, commaKnown, index, writer),
+          builder.valueOperation(terminal.writeCarrierMethod(), writer, value));
+    }
     if (valueType.isPrimitive()) {
       return writePrimitive(property, id, value, commaKnown, index, writer);
     }

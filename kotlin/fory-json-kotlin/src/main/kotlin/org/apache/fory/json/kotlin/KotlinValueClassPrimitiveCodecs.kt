@@ -19,7 +19,6 @@
 
 package org.apache.fory.json.kotlin
 
-import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.codec.JsonValueCodec
 import org.apache.fory.json.codec.ScalarCodecs
 import org.apache.fory.json.meta.JsonCreatorFieldInfo
@@ -45,52 +44,84 @@ internal object KotlinValueClassCapabilities {
       java.lang.Boolean.TYPE -> {
         val expected = ScalarCodecs.BooleanCodec.PRIMITIVE
         if (typeId == Types.UNKNOWN && exact(child, expected)) {
-          return BooleanCapability(requireOperations(shape, operations))
+          operations.typed<KotlinBooleanValueClassOperations<Any>>()?.let {
+            return BooleanCapability(it)
+          }
         }
       }
       java.lang.Byte.TYPE -> {
         if (typeId == Types.UINT8) {
           val expected = KotlinUnsignedCodecs.scalar(typeId, false, false)
-          if (exact(child, expected)) return UByteCapability(requireOperations(shape, operations))
+          if (exact(child, expected)) {
+            operations.typed<KotlinByteValueClassOperations<Any>>()?.let {
+              return UByteCapability(it)
+            }
+          }
         } else if (typeId == Types.UNKNOWN && exact(child, ScalarCodecs.ByteCodec.PRIMITIVE)) {
-          return ByteCapability(requireOperations(shape, operations))
+          operations.typed<KotlinByteValueClassOperations<Any>>()?.let {
+            return ByteCapability(it)
+          }
         }
       }
       java.lang.Short.TYPE -> {
         if (typeId == Types.UINT16) {
           val expected = KotlinUnsignedCodecs.scalar(typeId, false, false)
-          if (exact(child, expected)) return UShortCapability(requireOperations(shape, operations))
+          if (exact(child, expected)) {
+            operations.typed<KotlinShortValueClassOperations<Any>>()?.let {
+              return UShortCapability(it)
+            }
+          }
         } else if (typeId == Types.UNKNOWN && exact(child, ScalarCodecs.ShortCodec.PRIMITIVE)) {
-          return ShortCapability(requireOperations(shape, operations))
+          operations.typed<KotlinShortValueClassOperations<Any>>()?.let {
+            return ShortCapability(it)
+          }
         }
       }
       java.lang.Integer.TYPE -> {
         if (typeId == Types.UINT32) {
           val expected = KotlinUnsignedCodecs.scalar(typeId, false, false)
-          if (exact(child, expected)) return UIntCapability(requireOperations(shape, operations))
+          if (exact(child, expected)) {
+            operations.typed<KotlinIntValueClassOperations<Any>>()?.let {
+              return UIntCapability(it)
+            }
+          }
         } else if (typeId == Types.UNKNOWN && exact(child, ScalarCodecs.IntCodec.PRIMITIVE)) {
-          return IntCapability(requireOperations(shape, operations))
+          operations.typed<KotlinIntValueClassOperations<Any>>()?.let {
+            return IntCapability(it)
+          }
         }
       }
       java.lang.Long.TYPE -> {
         if (typeId == Types.UINT64) {
           val expected = KotlinUnsignedCodecs.scalar(typeId, false, false)
-          if (exact(child, expected)) return ULongCapability(requireOperations(shape, operations))
+          if (exact(child, expected)) {
+            operations.typed<KotlinLongValueClassOperations<Any>>()?.let {
+              return ULongCapability(it)
+            }
+          }
         } else if (typeId == Types.UNKNOWN && exact(child, ScalarCodecs.LongCodec.PRIMITIVE)) {
-          return LongCapability(requireOperations(shape, operations))
+          operations.typed<KotlinLongValueClassOperations<Any>>()?.let {
+            return LongCapability(it)
+          }
         }
       }
       java.lang.Float.TYPE ->
         if (typeId == Types.UNKNOWN && exact(child, ScalarCodecs.FloatCodec.PRIMITIVE)) {
-          return FloatCapability(requireOperations(shape, operations))
+          operations.typed<KotlinFloatValueClassOperations<Any>>()?.let {
+            return FloatCapability(it)
+          }
         }
       java.lang.Double.TYPE ->
         if (typeId == Types.UNKNOWN && exact(child, ScalarCodecs.DoubleCodec.PRIMITIVE)) {
-          return DoubleCapability(requireOperations(shape, operations))
+          operations.typed<KotlinDoubleValueClassOperations<Any>>()?.let {
+            return DoubleCapability(it)
+          }
         }
       java.lang.Character.TYPE ->
         if (typeId == Types.UNKNOWN && exact(child, ScalarCodecs.CharCodec.PRIMITIVE)) {
-          return CharCapability(requireOperations(shape, operations))
+          operations.typed<KotlinCharValueClassOperations<Any>>()?.let {
+            return CharCapability(it)
+          }
         }
     }
     return GenericValueClassCapability(boxedOperations(operations), child)
@@ -104,13 +135,8 @@ internal object KotlinValueClassCapabilities {
       child.utf8Reader() === expected
 
   @Suppress("UNCHECKED_CAST")
-  private inline fun <reified T : KotlinValueClassOperations> requireOperations(
-    shape: KotlinValueClassShape,
-    operations: KotlinValueClassOperations,
-  ): T = operations as? T ?: throw ForyJsonException(
-    "Value-class operations for ${shape.ownerClass.name} do not match " +
-      "terminal carrier ${shape.layers.last().carrierClass.name}",
-  )
+  private inline fun <reified T : KotlinValueClassOperations> KotlinValueClassOperations.typed():
+    T? = this as? T
 }
 
 private class BooleanCapability(
@@ -173,9 +199,11 @@ private class ShortCapability(
 private class IntCapability(
   private val operations: KotlinIntValueClassOperations<Any>,
 ) : KotlinValueClassCapability {
-  override fun writeString(writer: StringJsonWriter, value: Any) = writer.writeInt(operations.unboxInt(value))
+  override fun writeString(writer: StringJsonWriter, value: Any) =
+    writer.writeInt(operations.unboxInt(value))
 
-  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) = writer.writeInt(operations.unboxInt(value))
+  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) =
+    writer.writeInt(operations.unboxInt(value))
 
   override fun readLatin1(reader: Latin1JsonReader): Any =
     operations.constructInt(reader, reader.readIntValue())
@@ -183,15 +211,18 @@ private class IntCapability(
   override fun readUtf16(reader: Utf16JsonReader): Any =
     operations.constructInt(reader, reader.readIntValue())
 
-  override fun readUtf8(reader: Utf8JsonReader): Any = operations.constructInt(reader, reader.readIntValue())
+  override fun readUtf8(reader: Utf8JsonReader): Any =
+    operations.constructInt(reader, reader.readIntValue())
 }
 
 private class LongCapability(
   private val operations: KotlinLongValueClassOperations<Any>,
 ) : KotlinValueClassCapability {
-  override fun writeString(writer: StringJsonWriter, value: Any) = writer.writeLong(operations.unboxLong(value))
+  override fun writeString(writer: StringJsonWriter, value: Any) =
+    writer.writeLong(operations.unboxLong(value))
 
-  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) = writer.writeLong(operations.unboxLong(value))
+  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) =
+    writer.writeLong(operations.unboxLong(value))
 
   override fun readLatin1(reader: Latin1JsonReader): Any =
     operations.constructLong(reader, reader.readLongValue())
@@ -199,127 +230,139 @@ private class LongCapability(
   override fun readUtf16(reader: Utf16JsonReader): Any =
     operations.constructLong(reader, reader.readLongValue())
 
-  override fun readUtf8(reader: Utf8JsonReader): Any = operations.constructLong(reader, reader.readLongValue())
+  override fun readUtf8(reader: Utf8JsonReader): Any =
+    operations.constructLong(reader, reader.readLongValue())
 }
 
 private class FloatCapability(
   private val operations: KotlinFloatValueClassOperations<Any>,
 ) : KotlinValueClassCapability {
-  override fun writeString(writer: StringJsonWriter, value: Any) = writer.writeFloat(operations.unboxFloat(value))
+  override fun writeString(writer: StringJsonWriter, value: Any) =
+    writer.writeFloat(operations.unboxFloat(value))
 
-  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) = writer.writeFloat(operations.unboxFloat(value))
+  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) =
+    writer.writeFloat(operations.unboxFloat(value))
 
-  override fun readLatin1(reader: Latin1JsonReader): Any = operations.constructFloat(reader, reader.readFloat())
+  override fun readLatin1(reader: Latin1JsonReader): Any =
+    operations.constructFloat(reader, reader.readFloat())
 
-  override fun readUtf16(reader: Utf16JsonReader): Any = operations.constructFloat(reader, reader.readFloat())
+  override fun readUtf16(reader: Utf16JsonReader): Any =
+    operations.constructFloat(reader, reader.readFloat())
 
-  override fun readUtf8(reader: Utf8JsonReader): Any = operations.constructFloat(reader, reader.readFloat())
+  override fun readUtf8(reader: Utf8JsonReader): Any =
+    operations.constructFloat(reader, reader.readFloat())
 }
 
 private class DoubleCapability(
   private val operations: KotlinDoubleValueClassOperations<Any>,
 ) : KotlinValueClassCapability {
-  override fun writeString(writer: StringJsonWriter, value: Any) = writer.writeDouble(operations.unboxDouble(value))
+  override fun writeString(writer: StringJsonWriter, value: Any) =
+    writer.writeDouble(operations.unboxDouble(value))
 
-  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) = writer.writeDouble(operations.unboxDouble(value))
+  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) =
+    writer.writeDouble(operations.unboxDouble(value))
 
-  override fun readLatin1(reader: Latin1JsonReader): Any = operations.constructDouble(reader, reader.readDouble())
+  override fun readLatin1(reader: Latin1JsonReader): Any =
+    operations.constructDouble(reader, reader.readDouble())
 
-  override fun readUtf16(reader: Utf16JsonReader): Any = operations.constructDouble(reader, reader.readDouble())
+  override fun readUtf16(reader: Utf16JsonReader): Any =
+    operations.constructDouble(reader, reader.readDouble())
 
-  override fun readUtf8(reader: Utf8JsonReader): Any = operations.constructDouble(reader, reader.readDouble())
+  override fun readUtf8(reader: Utf8JsonReader): Any =
+    operations.constructDouble(reader, reader.readDouble())
 }
 
 private class CharCapability(
   private val operations: KotlinCharValueClassOperations<Any>,
 ) : KotlinValueClassCapability {
-  override fun writeString(writer: StringJsonWriter, value: Any) = writer.writeChar(operations.unboxChar(value))
+  override fun writeString(writer: StringJsonWriter, value: Any) =
+    writer.writeChar(operations.unboxChar(value))
 
-  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) = writer.writeChar(operations.unboxChar(value))
+  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) =
+    writer.writeChar(operations.unboxChar(value))
 
-  override fun readLatin1(reader: Latin1JsonReader): Any = operations.constructChar(reader, reader.readChar())
+  override fun readLatin1(reader: Latin1JsonReader): Any =
+    operations.constructChar(reader, reader.readChar())
 
-  override fun readUtf16(reader: Utf16JsonReader): Any = operations.constructChar(reader, reader.readChar())
+  override fun readUtf16(reader: Utf16JsonReader): Any =
+    operations.constructChar(reader, reader.readChar())
 
-  override fun readUtf8(reader: Utf8JsonReader): Any = operations.constructChar(reader, reader.readChar())
+  override fun readUtf8(reader: Utf8JsonReader): Any =
+    operations.constructChar(reader, reader.readChar())
 }
 
 private class UByteCapability(
   private val operations: KotlinByteValueClassOperations<Any>,
 ) : KotlinValueClassCapability {
   override fun writeString(writer: StringJsonWriter, value: Any) =
-    writer.writeUnsignedInt(operations.unboxByte(value).toInt() and 0xff)
+    KotlinUnsignedCodecs.writeUByteRaw(writer, operations.unboxByte(value))
 
   override fun writeUtf8(writer: Utf8JsonWriter, value: Any) =
-    writer.writeUnsignedInt(operations.unboxByte(value).toInt() and 0xff)
+    KotlinUnsignedCodecs.writeUByteRaw(writer, operations.unboxByte(value))
 
-  override fun readLatin1(reader: Latin1JsonReader): Any = operations.constructByte(reader, read(reader))
+  override fun readLatin1(reader: Latin1JsonReader): Any =
+    operations.constructByte(reader, KotlinUnsignedCodecs.readUByteRaw(reader))
 
-  override fun readUtf16(reader: Utf16JsonReader): Any = operations.constructByte(reader, read(reader))
+  override fun readUtf16(reader: Utf16JsonReader): Any =
+    operations.constructByte(reader, KotlinUnsignedCodecs.readUByteRaw(reader))
 
-  override fun readUtf8(reader: Utf8JsonReader): Any = operations.constructByte(reader, read(reader))
-
-  private fun read(reader: org.apache.fory.json.reader.JsonReader): Byte {
-    val value = reader.readUnsignedInt()
-    if (Integer.compareUnsigned(value, UByte.MAX_VALUE.toInt()) > 0) {
-      throw ForyJsonException("UByte overflow")
-    }
-    return value.toByte()
-  }
+  override fun readUtf8(reader: Utf8JsonReader): Any =
+    operations.constructByte(reader, KotlinUnsignedCodecs.readUByteRaw(reader))
 }
 
 private class UShortCapability(
   private val operations: KotlinShortValueClassOperations<Any>,
 ) : KotlinValueClassCapability {
   override fun writeString(writer: StringJsonWriter, value: Any) =
-    writer.writeUnsignedInt(operations.unboxShort(value).toInt() and 0xffff)
+    KotlinUnsignedCodecs.writeUShortRaw(writer, operations.unboxShort(value))
 
   override fun writeUtf8(writer: Utf8JsonWriter, value: Any) =
-    writer.writeUnsignedInt(operations.unboxShort(value).toInt() and 0xffff)
+    KotlinUnsignedCodecs.writeUShortRaw(writer, operations.unboxShort(value))
 
-  override fun readLatin1(reader: Latin1JsonReader): Any = operations.constructShort(reader, read(reader))
+  override fun readLatin1(reader: Latin1JsonReader): Any =
+    operations.constructShort(reader, KotlinUnsignedCodecs.readUShortRaw(reader))
 
-  override fun readUtf16(reader: Utf16JsonReader): Any = operations.constructShort(reader, read(reader))
+  override fun readUtf16(reader: Utf16JsonReader): Any =
+    operations.constructShort(reader, KotlinUnsignedCodecs.readUShortRaw(reader))
 
-  override fun readUtf8(reader: Utf8JsonReader): Any = operations.constructShort(reader, read(reader))
-
-  private fun read(reader: org.apache.fory.json.reader.JsonReader): Short {
-    val value = reader.readUnsignedInt()
-    if (Integer.compareUnsigned(value, UShort.MAX_VALUE.toInt()) > 0) {
-      throw ForyJsonException("UShort overflow")
-    }
-    return value.toShort()
-  }
+  override fun readUtf8(reader: Utf8JsonReader): Any =
+    operations.constructShort(reader, KotlinUnsignedCodecs.readUShortRaw(reader))
 }
 
 private class UIntCapability(
   private val operations: KotlinIntValueClassOperations<Any>,
 ) : KotlinValueClassCapability {
-  override fun writeString(writer: StringJsonWriter, value: Any) = writer.writeUnsignedInt(operations.unboxInt(value))
+  override fun writeString(writer: StringJsonWriter, value: Any) =
+    KotlinUnsignedCodecs.writeUIntRaw(writer, operations.unboxInt(value))
 
-  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) = writer.writeUnsignedInt(operations.unboxInt(value))
+  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) =
+    KotlinUnsignedCodecs.writeUIntRaw(writer, operations.unboxInt(value))
 
   override fun readLatin1(reader: Latin1JsonReader): Any =
-    operations.constructInt(reader, reader.readUnsignedInt())
+    operations.constructInt(reader, KotlinUnsignedCodecs.readUIntRaw(reader))
 
   override fun readUtf16(reader: Utf16JsonReader): Any =
-    operations.constructInt(reader, reader.readUnsignedInt())
+    operations.constructInt(reader, KotlinUnsignedCodecs.readUIntRaw(reader))
 
-  override fun readUtf8(reader: Utf8JsonReader): Any = operations.constructInt(reader, reader.readUnsignedInt())
+  override fun readUtf8(reader: Utf8JsonReader): Any =
+    operations.constructInt(reader, KotlinUnsignedCodecs.readUIntRaw(reader))
 }
 
 private class ULongCapability(
   private val operations: KotlinLongValueClassOperations<Any>,
 ) : KotlinValueClassCapability {
-  override fun writeString(writer: StringJsonWriter, value: Any) = writer.writeUnsignedLong(operations.unboxLong(value))
+  override fun writeString(writer: StringJsonWriter, value: Any) =
+    KotlinUnsignedCodecs.writeULongRaw(writer, operations.unboxLong(value))
 
-  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) = writer.writeUnsignedLong(operations.unboxLong(value))
+  override fun writeUtf8(writer: Utf8JsonWriter, value: Any) =
+    KotlinUnsignedCodecs.writeULongRaw(writer, operations.unboxLong(value))
 
   override fun readLatin1(reader: Latin1JsonReader): Any =
-    operations.constructLong(reader, reader.readUnsignedLong())
+    operations.constructLong(reader, KotlinUnsignedCodecs.readULongRaw(reader))
 
   override fun readUtf16(reader: Utf16JsonReader): Any =
-    operations.constructLong(reader, reader.readUnsignedLong())
+    operations.constructLong(reader, KotlinUnsignedCodecs.readULongRaw(reader))
 
-  override fun readUtf8(reader: Utf8JsonReader): Any = operations.constructLong(reader, reader.readUnsignedLong())
+  override fun readUtf8(reader: Utf8JsonReader): Any =
+    operations.constructLong(reader, KotlinUnsignedCodecs.readULongRaw(reader))
 }

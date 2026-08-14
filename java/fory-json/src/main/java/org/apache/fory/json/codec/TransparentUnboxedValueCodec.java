@@ -36,12 +36,6 @@ public interface TransparentUnboxedValueCodec extends UnboxedValueCodec {
   /** Extracts the terminal value from one parent carrier. */
   Object extractValue(Object carrier);
 
-  /** Boxes one parent carrier for generated source that must cross the logical-value ABI. */
-  Object boxCarrier(Object carrier);
-
-  /** Unboxes one logical value for generated source that must cross the parent carrier ABI. */
-  Object unboxValue(Object value);
-
   /** Returns exact terminal-to-carrier methods in invocation order. */
   Method[] constructMethods();
 
@@ -50,13 +44,4 @@ public interface TransparentUnboxedValueCodec extends UnboxedValueCodec {
 
   /** Returns exact carrier-to-terminal methods in invocation order. */
   Method[] extractMethods();
-
-  /** Returns the exact carrier-to-logical-value box operation. */
-  Method boxMethod();
-
-  /** Returns the exact logical-value-to-carrier unbox operation. */
-  Method unboxMethod();
-
-  /** Returns the shallow graph-memory charge for the outer logical box. */
-  int boxBytes();
 }

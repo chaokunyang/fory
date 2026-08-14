@@ -230,6 +230,13 @@ public final class JsonCodegen {
         for (Method method : field.writeTransparentUnboxedValueCodec().extractMethods()) {
           addInvocation(invocations, DirectMethodCodegen.valueOperationInvocation(method));
         }
+        UnboxedValueCodec terminal = field.writeTypeInfo().unboxedValueCodec();
+        if (terminal instanceof DirectUnboxedValueCodec) {
+          addInvocation(
+              invocations,
+              DirectMethodCodegen.valueOperationInvocation(
+                  ((DirectUnboxedValueCodec) terminal).writeCarrierMethod()));
+        }
       }
     }
     AnyInfo any = codec.anyInfo();
@@ -257,9 +264,7 @@ public final class JsonCodegen {
     if (creator != null && !creator.fixedInstance()) {
       for (JsonCreatorFieldInfo field : creator.fields()) {
         addReadValueInvocations(
-            invocations,
-            field.directUnboxedValueCodec(),
-            field.transparentUnboxedValueCodec());
+            invocations, field.directUnboxedValueCodec(), field.transparentUnboxedValueCodec());
       }
       if (DirectMethodCodegen.requiresFullCreatorBridge(creator)) {
         addInvocation(invocations, DirectMethodCodegen.fullCreatorInvocation(creator));
@@ -277,9 +282,15 @@ public final class JsonCodegen {
       TransparentUnboxedValueCodec unboxed) {
     if (direct != null) {
       addInvocation(
-          invocations,
-          DirectMethodCodegen.valueOperationInvocation(direct.readCarrierMethod()));
+          invocations, DirectMethodCodegen.valueOperationInvocation(direct.readCarrierMethod()));
     } else if (unboxed != null) {
+      UnboxedValueCodec terminal = unboxed.valueTypeInfo().unboxedValueCodec();
+      if (terminal instanceof DirectUnboxedValueCodec) {
+        addInvocation(
+            invocations,
+            DirectMethodCodegen.valueOperationInvocation(
+                ((DirectUnboxedValueCodec) terminal).readCarrierMethod()));
+      }
       for (Method method : unboxed.constructMethods()) {
         addInvocation(invocations, DirectMethodCodegen.valueOperationInvocation(method));
       }
@@ -1440,10 +1451,10 @@ public final class JsonCodegen {
     appendIdentity(builder, typeName(field.writeType()));
     appendIdentity(builder, typeName(field.readType()));
     appendIdentity(builder, typeName(field.writeMapValueType()));
-    appendIdentity(builder, className(field.writeRawType()));
-    appendIdentity(builder, className(field.readRawType()));
-    appendIdentity(builder, className(field.writeArrayComponentType()));
-    appendIdentity(builder, className(field.writeElementRawType()));
+    appendIdentity(builder, nullableClassName(field.writeRawType()));
+    appendIdentity(builder, nullableClassName(field.readRawType()));
+    appendIdentity(builder, nullableClassName(field.writeArrayComponentType()));
+    appendIdentity(builder, nullableClassName(field.writeElementRawType()));
     appendIdentity(builder, Integer.toString(field.readIndex()));
     appendIdentity(builder, field.hasOccurrenceNullability() ? "1" : "0");
     appendIdentity(builder, field.occurrenceNullable() ? "1" : "0");
@@ -1611,9 +1622,6 @@ public final class JsonCodegen {
     appendExecutables(builder, transparent.constructMethods());
     appendInts(builder, transparent.constructBoxBytes());
     appendExecutables(builder, transparent.extractMethods());
-    appendExecutable(builder, transparent.boxMethod());
-    appendExecutable(builder, transparent.unboxMethod());
-    appendIdentity(builder, Integer.toString(transparent.boxBytes()));
   }
 
   private static void appendExecutables(StringBuilder builder, Executable[] executables) {
@@ -1658,7 +1666,7 @@ public final class JsonCodegen {
     return type == null ? "" : type.getTypeName();
   }
 
-  private static String className(Class<?> type) {
+  private static String nullableClassName(Class<?> type) {
     return type == null ? "" : type.getName();
   }
 

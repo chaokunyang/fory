@@ -1,12 +1,26 @@
 # Fory JSON Kotlin KSP
 
-`fory-json-kotlin-ksp` generates the exact JVM operations required by
-`fory-json-kotlin` for Kotlin classes annotated with `@JsonType` and for source-owned
-`@JsonMixin` requests involving Kotlin declarations.
+`fory-json-kotlin-ksp` generates exact R8 and ProGuard retention rules for Kotlin classes annotated
+with `@JsonType`. It also owns a source `@JsonMixin` request when either the Mixin or its exact
+target is Kotlin.
 
-The processor emits a deterministic `GeneratedJsonCodec`, direct JVM bridge bytecode, and
-model-specific R8 consumer rules. JSON parsing, naming, annotations, child-codec resolution,
-security accounting, and recursion remain owned by `fory-json`.
+Use it in Android applications that enable shrinking or obfuscation:
 
-Use this artifact as a KSP processor and depend on `fory-json-kotlin` at runtime. Generated class
-output must be included in the application JAR or Android artifact.
+```kotlin
+plugins {
+  id("com.google.devtools.ksp") version "2.3.8"
+}
+
+dependencies {
+  implementation("org.apache.fory:fory-json-kotlin:1.7.0-SNAPSHOT")
+  ksp("org.apache.fory:fory-json-kotlin-ksp:1.7.0-SNAPSHOT")
+}
+```
+
+The runtime reads Kotlin/JVM metadata directly. This processor does not generate application code,
+codecs, or construction operations, and it is not required for an unminified JVM build. Keep the
+generated rule resources in the Android application and do not replace them with package-wide keep
+rules.
+
+See the [Kotlin JSON guide](../../docs/json/kotlin.md) and
+[Android guide](../../docs/json/android.md) for model and release-build setup.

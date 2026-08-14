@@ -31,6 +31,8 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.annotation.JsonPropertyOrder;
 import org.apache.fory.json.annotation.JsonSubTypes;
@@ -42,9 +44,12 @@ import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Utf16JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
+import org.apache.fory.json.resolver.ExactTypeRequiredException;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.type.Types;
 import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
 
@@ -128,6 +133,47 @@ public class JsonSubTypesTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void exactSubtypeOccurrenceRollsBack() {
+    AtomicBoolean fail = new AtomicBoolean(true);
+    AtomicInteger exactAttempts = new AtomicInteger();
+    JsonCodecFactory factory =
+        (type, resolver) -> {
+          if (type.getRawType() != SemanticValue.class) {
+            return null;
+          }
+          TypeExtMeta metadata = type.getTypeExtMeta();
+          if (metadata == null) {
+            throw new ExactTypeRequiredException("SemanticValue requires an exact occurrence");
+          }
+          if (metadata.nullable()) {
+            throw new ForyJsonException("Closed subtype branch must be non-null");
+          }
+          exactAttempts.incrementAndGet();
+          if (fail.getAndSet(false)) {
+            throw new ForyJsonException("forced exact subtype failure");
+          }
+          return SemanticValueCodec.INSTANCE;
+        };
+    ForyJson json = newJsonBuilder().withModule(c -> c.registerCodecFactory(factory)).build();
+
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson("{\"semantic\":\"first\"}", SemanticBase.class));
+    SemanticBase decoded = json.fromJson("{\"semantic\":\"second\"}", SemanticBase.class);
+    assertEquals(((SemanticValue) decoded).text, "second");
+    assertEquals(exactAttempts.get(), 2);
+    assertEquals(json.toJson(decoded, SemanticBase.class), "{\"semantic\":\"second\"}");
+    assertEquals(json.toJson(null, SemanticBase.class), "null");
+    assertEquals(json.fromJson("null", SemanticBase.class), null);
+
+    assertThrows(
+        ExactTypeRequiredException.class, () -> json.fromJson("\"raw\"", SemanticValue.class));
+    TypeRef<SemanticValue> exactType =
+        TypeRef.of(SemanticValue.class, TypeExtMeta.of(Types.UNKNOWN, false, false));
+    assertEquals(json.fromJson("\"exact\"", exactType).text, "exact");
+  }
+
+  @Test
   public void fixedObjectSubtype() {
     JsonCodecFactory factory =
         (type, resolver) ->
@@ -181,8 +227,7 @@ public class JsonSubTypesTest extends ForyJsonTestModels {
                             new Method[0],
                             new Method[0],
                             new TypeRef<?>[0],
-                            new Field[] {compilerField},
-                            false)))
+                            new Field[] {compilerField})))
             .build();
     assertEquals(compilerStorage.toJson(CompilerFixed.INSTANCE, CompilerFixed.class), "{}");
     assertEquals(compilerStorage.fromJson("{}", CompilerFixed.class), CompilerFixed.INSTANCE);
@@ -384,6 +429,19 @@ public class JsonSubTypesTest extends ForyJsonTestModels {
   public interface Wrapped {}
 
   @JsonSubTypes(
+      inclusion = Inclusion.WRAPPER_OBJECT,
+      value = {@JsonSubTypes.Type(value = SemanticValue.class, name = "semantic")})
+  public interface SemanticBase {}
+
+  public static final class SemanticValue implements SemanticBase {
+    private final String text;
+
+    private SemanticValue(String text) {
+      this.text = text;
+    }
+  }
+
+  @JsonSubTypes(
       property = "kind",
       value = {@JsonSubTypes.Type(value = FixedValue.class, name = "fixed")})
   public interface FixedBase {}
@@ -487,6 +545,35 @@ public class JsonSubTypesTest extends ForyJsonTestModels {
     @Override
     public WrappedValue readUtf8(Utf8JsonReader reader) {
       return new WrappedValue(reader.readString());
+    }
+  }
+
+  private static final class SemanticValueCodec implements JsonValueCodec<SemanticValue> {
+    private static final SemanticValueCodec INSTANCE = new SemanticValueCodec();
+
+    @Override
+    public void writeString(StringJsonWriter writer, SemanticValue value) {
+      writer.writeString(value.text);
+    }
+
+    @Override
+    public void writeUtf8(Utf8JsonWriter writer, SemanticValue value) {
+      writer.writeString(value.text);
+    }
+
+    @Override
+    public SemanticValue readLatin1(Latin1JsonReader reader) {
+      return new SemanticValue(reader.readString());
+    }
+
+    @Override
+    public SemanticValue readUtf16(Utf16JsonReader reader) {
+      return new SemanticValue(reader.readString());
+    }
+
+    @Override
+    public SemanticValue readUtf8(Utf8JsonReader reader) {
+      return new SemanticValue(reader.readString());
     }
   }
 

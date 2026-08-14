@@ -42,6 +42,7 @@ import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codec.ObjectCodec.AnyInfo;
 import org.apache.fory.json.codec.ScalarCodecs;
 import org.apache.fory.json.codec.TransparentUnboxedValueCodec;
+import org.apache.fory.json.codec.UnboxedValueCodec;
 import org.apache.fory.json.meta.JsonAsciiToken;
 import org.apache.fory.json.meta.JsonCreatorFieldInfo;
 import org.apache.fory.json.meta.JsonCreatorInfo;
@@ -371,7 +372,7 @@ abstract class JsonReaderCodegen {
       addReaderFields(ctx, type, directFields);
     } else {
       for (int i = 0; i < directCreatorFields.length; i++) {
-        if (!isDirectCreatorPrimitive(directCreatorFields[i])) {
+        if (usesCreatorReader(directCreatorFields[i])) {
           addCreatorReaderField(ctx, directCreatorFields[i], "r" + i);
         }
       }
@@ -389,7 +390,7 @@ abstract class JsonReaderCodegen {
         if (storesReadObjectCodec(type, field)) {
           addObjectReaderField(ctx, field, "o" + id);
         }
-      } else if (!isDirectCreatorPrimitive(routes[i].creatorField())) {
+      } else if (usesCreatorReader(routes[i].creatorField())) {
         addCreatorReaderField(ctx, routes[i].creatorField(), "r" + id);
       }
     }
@@ -606,7 +607,7 @@ abstract class JsonReaderCodegen {
     ctx.addField(ObjectCodec.class, "owner");
     ctx.addField(JsonCreatorInfo.class, "creator");
     for (int i = 0; i < fields.length; i++) {
-      if (!isDirectCreatorPrimitive(fields[i])) {
+      if (usesCreatorReader(fields[i])) {
         addCreatorReaderField(ctx, fields[i], "r" + i);
       }
     }
@@ -657,7 +658,7 @@ abstract class JsonReaderCodegen {
       addAnyReaderField(ctx, any);
     }
     for (int i = 0; i < fields.length; i++) {
-      if (!isDirectCreatorPrimitive(fields[i])) {
+      if (usesCreatorReader(fields[i])) {
         addCreatorReaderField(ctx, fields[i], "r" + i);
       }
     }
@@ -834,10 +835,7 @@ abstract class JsonReaderCodegen {
     boolean fullBridge = DirectMethodCodegen.requiresFullCreatorBridge(creatorInfo);
     if (fullBridge) {
       String fullName = DirectMethodCodegen.fullCreatorName(creatorInfo.invocationExecutable());
-      builder.addDirectMethod(
-          fullName,
-          type,
-          creatorParameters(parameterTypes));
+      builder.addDirectMethod(fullName, type, creatorParameters(parameterTypes));
       expression = "this." + fullName + "(" + invocation + ")";
     } else {
       expression =
@@ -850,15 +848,11 @@ abstract class JsonReaderCodegen {
     if (maskCount == 0) {
       body.append("  value = ").append(expression).append(";\n");
     } else {
-      String defaultName =
-          DirectMethodCodegen.defaultCreatorName(creatorInfo.defaultConstructor());
+      String defaultName = DirectMethodCodegen.defaultCreatorName(creatorInfo.defaultConstructor());
       Class<?>[] bridgeParameters =
           Arrays.copyOf(parameterTypes, parameterTypes.length + maskCount);
       Arrays.fill(bridgeParameters, parameterTypes.length, bridgeParameters.length, int.class);
-      builder.addDirectMethod(
-          defaultName,
-          type,
-          creatorParameters(bridgeParameters));
+      builder.addDirectMethod(defaultName, type, creatorParameters(bridgeParameters));
       body.append("  if ((");
       for (int i = 0; i < maskCount; i++) {
         if (i != 0) {
@@ -917,7 +911,7 @@ abstract class JsonReaderCodegen {
     addSelfReaderAssignment(expressions);
     Reference codecs = new Reference("codecs", TypeRef.of(readerArrayType()));
     for (int i = 0; i < fields.length; i++) {
-      if (!isDirectCreatorPrimitive(fields[i])) {
+      if (usesCreatorReader(fields[i])) {
         if (usesReaderSlot(fields[i].typeInfo())) {
           Expression creator =
               new Expression.Invoke(owner, "creatorInfo", TypeRef.of(JsonCreatorInfo.class))
@@ -1109,12 +1103,10 @@ abstract class JsonReaderCodegen {
             new Expression.Assign(
                 arguments.masks[word],
                 new Expression.BitOr(
-                    arguments.masks[word],
-                    Expression.Literal.ofInt(1 << (maskBit & 31))));
+                    arguments.masks[word], Expression.Literal.ofInt(1 << (maskBit & 31))));
         expressions.add(new Expression.If(not(arguments.present[i]), setMask));
       } else {
-        Expression defaultValue =
-            creatorDefaultValue(creatorInfo, arguments, i, parameterTypes[i]);
+        Expression defaultValue = creatorDefaultValue(creatorInfo, arguments, i, parameterTypes[i]);
         expressions.add(
             new Expression.If(
                 not(arguments.present[i]),
@@ -1171,9 +1163,7 @@ abstract class JsonReaderCodegen {
     Expression.ListExpression expressions = new Expression.ListExpression();
     expressions.add(resolveMissingArguments(creatorInfo, arguments));
     Expression[] constructorArguments =
-        Arrays.copyOf(
-            arguments.values,
-            creatorInfo.argumentCount() + arguments.masks.length);
+        Arrays.copyOf(arguments.values, creatorInfo.argumentCount() + arguments.masks.length);
     System.arraycopy(
         arguments.masks,
         0,
@@ -1202,8 +1192,7 @@ abstract class JsonReaderCodegen {
     private final Expression[] present;
     private final Expression[] masks;
 
-    private CreatorArguments(
-        Expression[] values, Expression[] present, Expression[] masks) {
+    private CreatorArguments(Expression[] values, Expression[] present, Expression[] masks) {
       this.values = values;
       this.present = present;
       this.masks = masks;
@@ -1394,9 +1383,8 @@ abstract class JsonReaderCodegen {
     }
     TransparentUnboxedValueCodec transparent = field.transparentUnboxedValueCodec();
     if (transparent != null) {
-      Expression value = readCreatorTerminal(field, id);
-      return new Expression.Cast(
-          constructCarrier(builder, transparent, value), TypeRef.of(type));
+      Expression value = readCreatorTerminal(builder, field, id);
+      return new Expression.Cast(constructCarrier(builder, transparent, value), TypeRef.of(type));
     }
     if (!isDirectCreatorPrimitive(field)) {
       Expression codec =
@@ -1445,9 +1433,9 @@ abstract class JsonReaderCodegen {
     throw new IllegalStateException("Unsupported primitive creator type " + type);
   }
 
-  private Expression readCreatorTerminal(JsonCreatorFieldInfo field, int id) {
-    return readTerminal(
-        field.typeInfo(), id, false, creatorReader(field, id));
+  private Expression readCreatorTerminal(
+      JsonGeneratedCodecBuilder builder, JsonCreatorFieldInfo field, int id) {
+    return readTerminal(builder, field.typeInfo(), id, false, creatorReader(field, id));
   }
 
   private Expression creatorReader(JsonCreatorFieldInfo field, int id) {
@@ -1457,9 +1445,18 @@ abstract class JsonReaderCodegen {
   }
 
   private Expression readTerminal(
-      JsonTypeInfo typeInfo, int id, boolean tokenValueRead, Expression codec) {
+      JsonGeneratedCodecBuilder builder,
+      JsonTypeInfo typeInfo,
+      int id,
+      boolean tokenValueRead,
+      Expression codec) {
     Class<?> rawType = typeInfo.rawType();
     JsonFieldKind kind = typeInfo.kind();
+    UnboxedValueCodec operation = typeInfo.unboxedValueCodec();
+    if (operation instanceof DirectUnboxedValueCodec) {
+      return builder.valueOperation(
+          ((DirectUnboxedValueCodec) operation).readCarrierMethod(), readerRef());
+    }
     if (rawType.isPrimitive()) {
       if (rawType == boolean.class && kind == JsonFieldKind.BOOLEAN) {
         return readBooleanExpr(tokenValueRead);
@@ -1505,9 +1502,7 @@ abstract class JsonReaderCodegen {
   }
 
   private Expression constructCarrier(
-      JsonGeneratedCodecBuilder builder,
-      TransparentUnboxedValueCodec operation,
-      Expression value) {
+      JsonGeneratedCodecBuilder builder, TransparentUnboxedValueCodec operation, Expression value) {
     Method[] methods = operation.constructMethods();
     int[] boxBytes = operation.constructBoxBytes();
     if (methods.length == 0 || methods.length != boxBytes.length) {
@@ -1520,9 +1515,7 @@ abstract class JsonReaderCodegen {
         invoke =
             new Expression.ListExpression(
                 new Expression.Invoke(
-                    readerRef(),
-                    "reserveGraphMemory",
-                    Expression.Literal.ofInt(boxBytes[i])),
+                    readerRef(), "reserveGraphMemory", Expression.Literal.ofInt(boxBytes[i])),
                 invoke);
       }
       current = invoke;
@@ -1532,10 +1525,31 @@ abstract class JsonReaderCodegen {
 
   private static boolean isDirectCreatorPrimitive(JsonCreatorFieldInfo field) {
     Class<?> type = field.rawType();
+    return isDirectPrimitive(type, field.typeInfo().kind());
+  }
+
+  private static boolean usesCreatorReader(JsonCreatorFieldInfo field) {
+    if (field.directUnboxedValueCodec() != null) {
+      return false;
+    }
+    TransparentUnboxedValueCodec transparent = field.transparentUnboxedValueCodec();
+    if (transparent == null) {
+      return !isDirectCreatorPrimitive(field);
+    }
+    JsonTypeInfo terminal = transparent.valueTypeInfo();
+    if (terminal.unboxedValueCodec() instanceof DirectUnboxedValueCodec) {
+      return false;
+    }
+    if (terminal.rawType() == String.class && terminal.kind() == JsonFieldKind.STRING) {
+      return false;
+    }
+    return !isDirectPrimitive(terminal.rawType(), terminal.kind());
+  }
+
+  private static boolean isDirectPrimitive(Class<?> type, JsonFieldKind kind) {
     if (!type.isPrimitive()) {
       return false;
     }
-    JsonFieldKind kind = field.typeInfo().kind();
     return type == boolean.class && kind == JsonFieldKind.BOOLEAN
         || (type == byte.class && kind == JsonFieldKind.BYTE)
         || (type == short.class && kind == JsonFieldKind.SHORT)
@@ -1871,7 +1885,7 @@ abstract class JsonReaderCodegen {
               new Expression.Invoke(owner, "creatorInfo", TypeRef.of(JsonCreatorInfo.class))
                   .inline()));
       for (int i = 0; i < creatorFields.length; i++) {
-        if (!isDirectCreatorPrimitive(creatorFields[i])) {
+        if (usesCreatorReader(creatorFields[i])) {
           expressions.add(
               new Expression.Assign(
                   new Reference("this.r" + i, TypeRef.of(readerCapabilityType())),
@@ -1886,7 +1900,7 @@ abstract class JsonReaderCodegen {
       JsonFieldInfo field = routes[i].field();
       if (field != null) {
         addUnwrappedReaderAssignment(expressions, type, field, id, properties, codecs);
-      } else if (!isDirectCreatorPrimitive(routes[i].creatorField())) {
+      } else if (usesCreatorReader(routes[i].creatorField())) {
         expressions.add(
             new Expression.Assign(
                 new Reference("this.r" + id, TypeRef.of(readerCapabilityType())),
@@ -4349,19 +4363,13 @@ abstract class JsonReaderCodegen {
     DirectUnboxedValueCodec direct = property.readDirectUnboxedValueCodec();
     if (direct != null) {
       return builder.setField(
-          property,
-          object,
-          builder.valueOperation(direct.readCarrierMethod(), readerRef()));
+          property, object, builder.valueOperation(direct.readCarrierMethod(), readerRef()));
     }
     TransparentUnboxedValueCodec transparent = property.readTransparentUnboxedValueCodec();
     Expression value =
         readTerminal(
-            property.readTypeInfo(),
-            id,
-            tokenValueRead,
-            propertyReader(property, id));
-    return builder.setField(
-        property, object, constructCarrier(builder, transparent, value));
+            builder, property.readTypeInfo(), id, tokenValueRead, propertyReader(property, id));
+    return builder.setField(property, object, constructCarrier(builder, transparent, value));
   }
 
   private Expression propertyReader(JsonFieldInfo property, int id) {

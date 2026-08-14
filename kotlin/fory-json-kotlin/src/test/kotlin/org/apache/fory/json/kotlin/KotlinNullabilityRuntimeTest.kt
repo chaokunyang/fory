@@ -97,8 +97,7 @@ class KotlinNullabilityRuntimeTest {
   fun constructorPresenceAndNull() {
     forEachJsonMode { json ->
       val type = jsonTypeRef<ConstructorNulls>()
-      val defaultsJson =
-        """{"required":"漢","nullable":null,"count":1,"nullableCount":null}"""
+      val defaultsJson = """{"required":"漢","nullable":null,"count":1,"nullableCount":null}"""
       val defaults =
         ConstructorNulls(
           required = "漢",
@@ -164,9 +163,7 @@ class KotlinNullabilityRuntimeTest {
       assertFailsWith<ForyJsonException> {
         json.fromJson("{\"value\":null}", jsonTypeRef<Map<String, String>>())
       }
-      assertFailsWith<ForyJsonException> {
-        json.fromJson("{}", jsonTypeRef<Map<String?, Int>>())
-      }
+      assertFailsWith<ForyJsonException> { json.fromJson("{}", jsonTypeRef<Map<String?, Int>>()) }
 
       val nullableArray = jsonTypeRef<Array<String?>>()
       assertContentEquals(
@@ -214,12 +211,9 @@ class KotlinNullabilityRuntimeTest {
       assertAtomicRoundTrip(json, AtomicReferenceArray(arrayOf("a", "漢")), atomic)
       assertAtomicRoundTrip(json, AtomicReferenceArray(arrayOf("a", null)), nullableAtomic)
       assertFailsWith<ForyJsonException> { json.fromJson("[\"a\",null]", atomic) }
-      assertFailsWith<ForyJsonException> {
-        json.fromJson("[\"a\",null]".toByteArray(), atomic)
-      }
+      assertFailsWith<ForyJsonException> { json.fromJson("[\"a\",null]".toByteArray(), atomic) }
       @Suppress("UNCHECKED_CAST")
-      val invalidAtomic =
-        AtomicReferenceArray(arrayOf("a", null)) as AtomicReferenceArray<String>
+      val invalidAtomic = AtomicReferenceArray(arrayOf("a", null)) as AtomicReferenceArray<String>
       assertFailsWith<ForyJsonException> { json.toJson(invalidAtomic, atomic) }
       assertFailsWith<ForyJsonException> { json.toJsonBytes(invalidAtomic, atomic) }
     }
@@ -246,8 +240,7 @@ class KotlinNullabilityRuntimeTest {
       assertTrue(decoded.readOnlyList is ArrayList<*>)
       assertTrue(decoded.readOnlySet is LinkedHashSet<*>)
       assertTrue(decoded.readOnlyMap is LinkedHashMap<*, *>)
-      @Suppress("UNCHECKED_CAST")
-      (decoded.readOnlyList as MutableList<String>).add("mutable")
+      @Suppress("UNCHECKED_CAST") (decoded.readOnlyList as MutableList<String>).add("mutable")
       assertEquals(listOf("one", "two", "mutable"), decoded.readOnlyList)
     }
   }
@@ -256,15 +249,10 @@ class KotlinNullabilityRuntimeTest {
   fun transparentWrapperNullability() {
     forEachJsonMode { json ->
       assertEquals(Optional.empty<String>(), json.fromJson("null", jsonTypeRef<Optional<String>>()))
-      assertFailsWith<ForyJsonException> {
-        json.fromJson("null", jsonTypeRef<Optional<String?>>())
-      }
-      assertFailsWith<ForyJsonException> {
-        json.fromJson("null", jsonTypeRef<Optional<String>?>())
-      }
+      assertFailsWith<ForyJsonException> { json.fromJson("null", jsonTypeRef<Optional<String?>>()) }
+      assertFailsWith<ForyJsonException> { json.fromJson("null", jsonTypeRef<Optional<String>?>()) }
 
-      val childNullable =
-        json.fromJson("null", jsonTypeRef<AtomicReference<String?>>())
+      val childNullable = json.fromJson("null", jsonTypeRef<AtomicReference<String?>>())
       assertNull(childNullable.get())
       assertNull(json.fromJson("null", jsonTypeRef<AtomicReference<String>?>()))
       assertFailsWith<ForyJsonException> {
@@ -354,8 +342,7 @@ class KotlinNullabilityRuntimeTest {
   ) {
     assertFailsWith<ForyJsonException> { json.fromJson(text, type) }
     assertFailsWith<ForyJsonException> { json.fromJson(text.toByteArray(), type) }
-    @Suppress("UNCHECKED_CAST")
-    val invalid = nullableValue as Array<T>
+    @Suppress("UNCHECKED_CAST") val invalid = nullableValue as Array<T>
     assertFailsWith<ForyJsonException> { json.toJson(invalid, type) }
     assertFailsWith<ForyJsonException> { json.toJsonBytes(invalid, type) }
   }

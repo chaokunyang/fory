@@ -79,13 +79,6 @@
       "platforms": ["jvm", "android", "native"]
     },
     {
-      "id": "missing-companion",
-      "type": "MissingPlatformCompanion",
-      "resource": "cases/rejected-object.json",
-      "outcome": "cold-failure",
-      "platforms": ["android", "native"]
-    },
-    {
       "id": "unreached-generic",
       "type": "PlatformBox<Int>",
       "resource": "cases/rejected-box.json",

@@ -25,7 +25,9 @@ import org.apache.fory.json.reader.Utf16JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.type.Types;
 
 /**
  * Cold-bound operations for a logical value whose parent JVM member stores an unboxed carrier.
@@ -39,13 +41,20 @@ import org.apache.fory.reflect.TypeRef;
  */
 @Internal
 public interface UnboxedValueCodec {
-  /** Returns whether this explicit occurrence requires a phase-two unboxed carrier binding. */
+  /** Returns whether this occurrence requires an exact phase-two carrier operation. */
   static boolean requiresCarrier(Class<?> carrier, TypeRef<?> logicalType) {
-    Class<?> logicalClass = logicalType.getRawType();
-    if (carrier == logicalClass) {
+    if (carrier == null) {
       return false;
     }
-    return logicalType.getTypeExtMeta() != null;
+    Class<?> logicalClass = logicalType.getRawType();
+    TypeExtMeta metadata = logicalType.getTypeExtMeta();
+    if (carrier == logicalClass) {
+      // A primitive semantic leaf can share its JVM carrier with an ordinary primitive while
+      // requiring different JSON parsing and formatting. Bind its canonical operation before
+      // generated code specializes the field by carrier kind.
+      return carrier.isPrimitive() && metadata != null && metadata.typeId() != Types.UNKNOWN;
+    }
+    return metadata != null;
   }
 
   /** Returns the exact JVM carrier stored by the parent member. */

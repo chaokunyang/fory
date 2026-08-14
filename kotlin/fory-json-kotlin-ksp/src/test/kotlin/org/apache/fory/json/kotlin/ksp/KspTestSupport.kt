@@ -33,8 +33,7 @@ import java.lang.reflect.Proxy
 internal class RecordingCodeGenerator : CodeGenerator {
   val outputs = linkedMapOf<String, ByteArrayOutputStream>()
   val dependenciesByPath = linkedMapOf<String, Dependencies>()
-  val dependencies: Collection<Dependencies>
-    get() = dependenciesByPath.values
+  val outputKinds = linkedMapOf<String, OutputKind>()
 
   override fun createNewFile(
     dependencies: Dependencies,
@@ -45,7 +44,7 @@ internal class RecordingCodeGenerator : CodeGenerator {
     val directory = packageName.replace('.', '/')
     val path =
       if (directory.isEmpty()) "$fileName.$extensionName" else "$directory/$fileName.$extensionName"
-    return output(path, dependencies)
+    return output(path, dependencies, outputKind(extensionName))
   }
 
   override fun createNewFileByPath(
@@ -53,7 +52,11 @@ internal class RecordingCodeGenerator : CodeGenerator {
     path: String,
     extensionName: String,
   ): OutputStream =
-    output(path + if (extensionName.isEmpty()) "" else ".$extensionName", dependencies)
+    output(
+      path + if (extensionName.isEmpty()) "" else ".$extensionName",
+      dependencies,
+      outputKind(extensionName),
+    )
 
   override fun associate(
     sources: List<KSFile>,
@@ -78,16 +81,53 @@ internal class RecordingCodeGenerator : CodeGenerator {
   override val generatedFile: Collection<File>
     get() = emptyList()
 
-  fun text(path: String): String = bytes(path).decodeToString()
+  fun text(path: String): String = outputs.getValue(path).toByteArray().decodeToString()
 
-  fun bytes(path: String): ByteArray = outputs.getValue(path).toByteArray()
-
-  private fun output(path: String, dependencies: Dependencies): ByteArrayOutputStream {
+  private fun output(
+    path: String,
+    dependencies: Dependencies,
+    kind: OutputKind,
+  ): ByteArrayOutputStream {
     check(path !in outputs) { "Duplicate generated output $path" }
     dependenciesByPath[path] = dependencies
+    outputKinds[path] = kind
     return ByteArrayOutputStream().also { outputs[path] = it }
   }
+
+  private fun outputKind(extensionName: String): OutputKind =
+    when (extensionName) {
+      "java" -> OutputKind.JAVA
+      "kt" -> OutputKind.KOTLIN
+      "class" -> OutputKind.CLASS
+      else -> OutputKind.RESOURCE
+    }
 }
+
+internal enum class OutputKind {
+  JAVA,
+  KOTLIN,
+  CLASS,
+  RESOURCE,
+}
+
+internal fun jsonModel(
+  targetBinaryName: String = "example.Profile",
+  members: List<JvmMember> = emptyList(),
+  mixinBinaryName: String? = null,
+  originatingFiles: List<KSFile> = emptyList(),
+  retainedAnnotations: Set<String> = emptySet(),
+  retainedTypes: Set<String> = emptySet(),
+  codecTypes: Set<String> = emptySet(),
+): JsonModel =
+  JsonModel(
+    targetBinaryName = targetBinaryName,
+    members = members,
+    mixinBinaryName = mixinBinaryName,
+    originatingFiles = originatingFiles,
+    retainedAnnotations = retainedAnnotations,
+    retainedTypes = retainedTypes,
+    codecTypes = codecTypes,
+  )
 
 internal object SilentLogger : KSPLogger {
   override fun logging(message: String, symbol: KSNode?) {}

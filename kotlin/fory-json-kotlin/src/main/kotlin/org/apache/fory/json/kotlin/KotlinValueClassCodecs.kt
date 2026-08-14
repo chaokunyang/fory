@@ -36,14 +36,14 @@ import org.apache.fory.json.writer.StringJsonWriter
 import org.apache.fory.json.writer.Utf8JsonWriter
 import org.apache.fory.reflect.TypeRef
 
-/** Kotlin-owned entry for runtime and generated value-class capabilities. */
+/** Kotlin-owned entry for runtime value-class capabilities. */
 internal object KotlinValueClassCodecs {
   fun create(type: TypeRef<*>): CompositeJsonCodec<Any?> {
-    val model = KotlinValueClassMetadata.inspectRuntime(type)
-    return createGenerated(model.shape, KotlinMethodHandleValueClassOperations.create(model))
+    val model = KotlinValueClassMetadata.inspect(type)
+    return create(model.shape, KotlinValueClassOperations.create(model))
   }
 
-  fun createGenerated(
+  private fun create(
     shape: KotlinValueClassShape,
     operations: KotlinValueClassOperations,
   ): CompositeJsonCodec<Any?> =
@@ -65,33 +65,27 @@ internal object KotlinValueClassCodecs {
   }
 
   fun mapKeyCodec(type: TypeRef<*>, resolver: JsonTypeResolver): MapKeyCodec {
-    val model = KotlinValueClassMetadata.inspectRuntime(type)
+    val model = KotlinValueClassMetadata.inspect(type)
     val shape = model.shape
     shape.requireMapKey()
     for (layer in shape.layers) resolver.checkMapKeySecure(layer.ownerClass)
     resolver.checkMapKeySecure(shape.terminalType.rawType)
     return KotlinValueClassMapKeys.create(
       shape,
-      KotlinMethodHandleValueClassOperations.create(model),
-      terminalMapKey(shape.terminalType, resolver),
+      KotlinValueClassOperations.create(model),
+      terminalMapKey(shape.terminalType),
     )
   }
 
-  fun generatedMapKey(
-    shape: KotlinValueClassShape,
-    operations: KotlinValueClassOperations,
-  ): MapKeyCodec {
-    shape.requireMapKey()
-    return KotlinValueClassMapKeys.create(shape, operations, terminalMapKey(shape.terminalType, null))
-  }
-
-  private fun terminalMapKey(type: TypeRef<*>, resolver: JsonTypeResolver?): MapKeyCodec {
-    KotlinMapKeyCodecs.keyCodec(type)?.let { return it }
+  private fun terminalMapKey(type: TypeRef<*>): MapKeyCodec {
+    KotlinMapKeyCodecs.keyCodec(type)?.let {
+      return it
+    }
     val rawType = type.rawType
     if (rawType != String::class.java && !rawType.isEnum && !signedMapKey(rawType)) {
       throw ForyJsonException("Unsupported Kotlin JSON value-class map key terminal ${type.type}")
     }
-    return if (resolver == null) MapCodec.keyCodec(rawType) else resolver.getMapKeyCodec(rawType)
+    return MapCodec.keyCodec(rawType)
   }
 
   private fun signedMapKey(type: Class<*>): Boolean =
@@ -123,11 +117,7 @@ private abstract class KotlinValueClassCodec(
 ) : CompositeJsonCodec<Any?>, TransparentUnboxedValueCodec {
   private var capability: KotlinValueClassCapability = UnresolvedValueClassCapability
   private var terminalTypeInfo: JsonTypeInfo? = null
-  private val unboxedOperations: KotlinUnboxedValueClassOperations =
-    (operations as? KotlinValueClassOperationsOwner)?.unboxedOperations()
-      ?: throw ForyJsonException(
-        "Kotlin value-class operations for ${shape.ownerClass.name} have no unboxed capability",
-      )
+  private val unboxedOperations: KotlinUnboxedValueClassOperations = operations.unboxedOperations()
 
   final override fun resolveTypes(type: TypeRef<*>, resolver: JsonTypeResolver) {
     if (type != shape.ownerType) {
@@ -143,18 +133,14 @@ private abstract class KotlinValueClassCodec(
 
   final override fun carrierType(): Class<*> = shape.layers.first().carrierClass
 
-  final override fun valueTypeInfo(): JsonTypeInfo = terminalTypeInfo
-    ?: throw IllegalStateException("Kotlin value-class terminal capability is not resolved")
+  final override fun valueTypeInfo(): JsonTypeInfo =
+    terminalTypeInfo
+      ?: throw IllegalStateException("Kotlin value-class terminal capability is not resolved")
 
   final override fun constructCarrier(reader: JsonReader, value: Any?): Any? =
     unboxedOperations.constructCarrier(reader, value)
 
-  final override fun extractValue(carrier: Any?): Any? =
-    unboxedOperations.extractValue(carrier)
-
-  final override fun boxCarrier(carrier: Any?): Any = unboxedOperations.boxCarrier(carrier)
-
-  final override fun unboxValue(value: Any): Any? = unboxedOperations.unboxValue(value)
+  final override fun extractValue(carrier: Any?): Any? = unboxedOperations.extractValue(carrier)
 
   final override fun constructMethods(): Array<java.lang.reflect.Method> =
     unboxedOperations.constructMethods()
@@ -163,12 +149,6 @@ private abstract class KotlinValueClassCodec(
 
   final override fun extractMethods(): Array<java.lang.reflect.Method> =
     unboxedOperations.extractMethods()
-
-  final override fun boxMethod(): java.lang.reflect.Method = unboxedOperations.boxMethod()
-
-  final override fun unboxMethod(): java.lang.reflect.Method = unboxedOperations.unboxMethod()
-
-  final override fun boxBytes(): Int = unboxedOperations.boxBytes()
 
   final override fun readLatin1Carrier(reader: Latin1JsonReader): Any? =
     constructCarrier(reader, valueTypeInfo().latin1Reader().readLatin1(reader))
@@ -314,6 +294,7 @@ internal interface BoxedValueClassOperations {
 
 internal fun boxedOperations(operations: KotlinValueClassOperations): BoxedValueClassOperations =
   when (operations) {
+    is BoxedValueClassOperations -> operations
     is KotlinBooleanValueClassOperations<*> -> BooleanBoxedOperations(operations.cast())
     is KotlinByteValueClassOperations<*> -> ByteBoxedOperations(operations.cast())
     is KotlinShortValueClassOperations<*> -> ShortBoxedOperations(operations.cast())
@@ -323,11 +304,11 @@ internal fun boxedOperations(operations: KotlinValueClassOperations): BoxedValue
     is KotlinDoubleValueClassOperations<*> -> DoubleBoxedOperations(operations.cast())
     is KotlinCharValueClassOperations<*> -> CharBoxedOperations(operations.cast())
     is KotlinReferenceValueClassOperations<*> -> ReferenceBoxedOperations(operations.cast())
-    else -> throw ForyJsonException("Unknown Kotlin value-class operations ${operations.javaClass.name}")
+    else ->
+      throw ForyJsonException("Unknown Kotlin value-class operations ${operations.javaClass.name}")
   }
 
-@Suppress("UNCHECKED_CAST")
-private fun <T> Any.cast(): T = this as T
+@Suppress("UNCHECKED_CAST") private fun <T> Any.cast(): T = this as T
 
 private class BooleanBoxedOperations(
   private val delegate: KotlinBooleanValueClassOperations<Any>,
@@ -335,7 +316,8 @@ private class BooleanBoxedOperations(
   override fun construct(reader: JsonReader, value: Any?): Any =
     delegate.constructBoolean(reader, value as Boolean)
 
-  override fun constructUncharged(value: Any?): Any = delegate.constructBooleanUncharged(value as Boolean)
+  override fun constructUncharged(value: Any?): Any =
+    delegate.constructBooleanUncharged(value as Boolean)
 
   override fun unbox(value: Any): Any = delegate.unboxBoolean(value)
 }
@@ -426,7 +408,8 @@ private class CharBoxedOperations(
 private class ReferenceBoxedOperations(
   private val delegate: KotlinReferenceValueClassOperations<Any>,
 ) : BoxedValueClassOperations {
-  override fun construct(reader: JsonReader, value: Any?): Any = delegate.constructValue(reader, value)
+  override fun construct(reader: JsonReader, value: Any?): Any =
+    delegate.constructValue(reader, value)
 
   override fun constructUncharged(value: Any?): Any = delegate.constructValueUncharged(value)
 

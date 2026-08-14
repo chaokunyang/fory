@@ -28,78 +28,42 @@ import org.apache.fory.json.reader.JsonReader;
 final class KotlinExactUnboxedValueOperations implements KotlinUnboxedValueClassOperations {
   private final Class<?> owner;
   private final Class<?> carrier;
-  private final Class<?> valueCarrier;
   private final MethodHandle construct;
   private final MethodHandle extract;
-  private final MethodHandle box;
-  private final MethodHandle unbox;
   private final Method[] constructMethods;
   private final int[] constructBoxBytes;
   private final Method[] extractMethods;
-  private final Method boxMethod;
-  private final Method unboxMethod;
-  private final int boxBytes;
 
   private KotlinExactUnboxedValueOperations(
       Class<?> owner,
       Class<?> carrier,
-      Class<?> valueCarrier,
       MethodHandle construct,
       MethodHandle extract,
-      MethodHandle box,
-      MethodHandle unbox,
       Method[] constructMethods,
       int[] constructBoxBytes,
-      Method[] extractMethods,
-      Method boxMethod,
-      Method unboxMethod,
-      int boxBytes) {
+      Method[] extractMethods) {
     if (constructMethods.length != constructBoxBytes.length) {
       throw new IllegalArgumentException("Unboxed construct operations and charges must align");
     }
     this.owner = owner;
     this.carrier = carrier;
-    this.valueCarrier = valueCarrier;
     this.construct = construct;
     this.extract = extract;
-    this.box = box;
-    this.unbox = unbox;
     this.constructMethods = constructMethods.clone();
     this.constructBoxBytes = constructBoxBytes.clone();
     this.extractMethods = extractMethods.clone();
-    this.boxMethod = boxMethod;
-    this.unboxMethod = unboxMethod;
-    this.boxBytes = boxBytes;
   }
 
   static KotlinUnboxedValueClassOperations create(
       Class<?> owner,
       Class<?> carrier,
-      Class<?> valueCarrier,
       MethodHandle construct,
       MethodHandle extract,
-      MethodHandle box,
-      MethodHandle unbox,
       Method[] constructMethods,
       int[] constructBoxBytes,
-      Method[] extractMethods,
-      Method boxMethod,
-      Method unboxMethod,
-      int boxBytes) {
+      Method[] extractMethods) {
     return new KotlinExactUnboxedValueOperations(
-        owner,
-        carrier,
-        valueCarrier,
-        construct,
-        extract,
-        box,
-        unbox,
-        constructMethods,
-        constructBoxBytes,
-        extractMethods,
-        boxMethod,
-        unboxMethod,
-        boxBytes);
+        owner, carrier, construct, extract, constructMethods, constructBoxBytes, extractMethods);
   }
 
   @Override
@@ -122,25 +86,6 @@ final class KotlinExactUnboxedValueOperations implements KotlinUnboxedValueClass
   }
 
   @Override
-  public Object boxCarrier(Object carrierValue) {
-    requireCarrier(carrierValue);
-    try {
-      return (Object) box.invokeExact(carrierValue);
-    } catch (Throwable cause) {
-      throw failure("box", cause);
-    }
-  }
-
-  @Override
-  public Object unboxValue(Object value) {
-    try {
-      return (Object) unbox.invokeExact(value);
-    } catch (Throwable cause) {
-      throw failure("unbox", cause);
-    }
-  }
-
-  @Override
   public Method[] constructMethods() {
     return constructMethods.clone();
   }
@@ -153,21 +98,6 @@ final class KotlinExactUnboxedValueOperations implements KotlinUnboxedValueClass
   @Override
   public Method[] extractMethods() {
     return extractMethods.clone();
-  }
-
-  @Override
-  public Method boxMethod() {
-    return boxMethod;
-  }
-
-  @Override
-  public Method unboxMethod() {
-    return unboxMethod;
-  }
-
-  @Override
-  public int boxBytes() {
-    return boxBytes;
   }
 
   private void requireCarrier(Object value) {
@@ -184,14 +114,6 @@ final class KotlinExactUnboxedValueOperations implements KotlinUnboxedValueClass
       return (ForyJsonException) cause;
     }
     return new ForyJsonException(
-        "Kotlin value-class "
-            + operation
-            + " failed for "
-            + owner.getName()
-            + " using "
-            + valueCarrier.getName()
-            + " -> "
-            + carrier.getName(),
-        cause);
+        "Kotlin value-class " + operation + " failed for " + owner.getName(), cause);
   }
 }

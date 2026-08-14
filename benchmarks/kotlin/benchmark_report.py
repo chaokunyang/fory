@@ -84,7 +84,6 @@ SETTINGS_FIELDS = (
     "moshi_version",
     "jackson_version",
     "ksp_version",
-    "ksp_api_version",
     "jmh_plugin_version",
 )
 
@@ -360,7 +359,7 @@ def render_report(
         f"- Hardware: {metadata['hardware']}\n",
         f"- JDK: `{metadata['jdk_version']}`; Kotlin: `{metadata['kotlin_version']}`; JMH: `{metadata['jmh_version']}`\n",
         f"- Gradle: `{metadata['gradle_version']}`; JMH Gradle plugin: `{metadata['jmh_plugin_version']}`\n",
-        f"- KSP API: `{metadata['ksp_api_version']}`; KSP Gradle plugin: `{metadata['ksp_version']}`\n",
+        f"- Moshi codegen KSP Gradle plugin: `{metadata['ksp_version']}`\n",
         f"- Dependencies: Fory `{metadata['fory_version']}`, kotlinx.serialization `{metadata['kotlinx_version']}`, Moshi `{metadata['moshi_version']}`, Jackson Kotlin `{metadata['jackson_version']}`\n",
         f"- Forks: {metadata['forks']}; threads: {metadata['threads']}\n",
         f"- Warmup: {metadata['warmup_iterations']} iterations × `{metadata['warmup_time']}`\n",

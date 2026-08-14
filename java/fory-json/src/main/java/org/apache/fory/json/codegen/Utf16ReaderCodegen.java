@@ -87,8 +87,8 @@ final class Utf16ReaderCodegen extends JsonReaderCodegen {
   }
 
   @Override
-  Expression tryReadNextFieldNameColon(JsonFieldInfo property, boolean tokenValueRead) {
-    return tryReadUtf16FieldNameColon(property, tokenValueRead);
+  Expression tryReadNextFieldNameColon(String name) {
+    return tryReadUtf16FieldNameColon(name);
   }
 
   @Override

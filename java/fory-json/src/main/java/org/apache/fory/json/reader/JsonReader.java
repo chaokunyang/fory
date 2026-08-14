@@ -303,6 +303,18 @@ public abstract class JsonReader {
    */
   public abstract String readFieldName();
 
+  /** Consumes {@code expected} after whitespace when present. */
+  public abstract boolean consumeNextToken(char expected);
+
+  /** Consumes {@code expected} after whitespace or fails. */
+  public abstract void expectNextToken(char expected);
+
+  /** Consumes the comma before the next object member, or the closing brace. */
+  public abstract boolean consumeNextCommaOrEndObject();
+
+  /** Consumes the comma before the next array element, or the closing bracket. */
+  public abstract boolean consumeNextCommaOrEndArray();
+
   protected static long fieldNameHash(int length, long word0, long word1) {
     if (length == 0) {
       return JsonFieldNameHash.MAGIC_HASH_CODE;
@@ -324,6 +336,31 @@ public abstract class JsonReader {
   @Internal
   public final int position() {
     return position;
+  }
+
+  /**
+   * Proves that an already selected input span contains at least {@code bytes} readable bytes.
+   *
+   * <p>Every supported input code unit is backed by at least one byte, so the
+   * representation-neutral length is a conservative byte lower bound. Composite codecs use this
+   * before a compact scalar controls a larger variable-capacity allocation.
+   */
+  @Internal
+  public final void checkReadableBytesFrom(int start, int bytes) {
+    int inputLength = length();
+    if (start < 0 || start > position || bytes < 0 || bytes > inputLength - start) {
+      throwInsufficientReadableBytes(start, bytes, inputLength);
+    }
+  }
+
+  private void throwInsufficientReadableBytes(int start, int bytes, int inputLength) {
+    throw new ForyJsonException(
+        "Insufficient JSON input for variable-capacity value: requested "
+            + bytes
+            + " readable bytes from position "
+            + start
+            + ", input length "
+            + inputLength);
   }
 
   @Internal

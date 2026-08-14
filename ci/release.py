@@ -57,7 +57,8 @@ MAVEN_RELEASE_CMD = (
 )
 SCALA_RELEASE_CMDS = (
     "sbt clean",
-    "sbt +publishSigned",
+    "sbt 'project fory-scala' +publishSigned",
+    "sbt 'project fory-json-scala' +publishSigned",
     "sbt sonatypePrepare",
     "sbt sonatypeBundleUpload",
 )
@@ -67,6 +68,8 @@ RELEASE_DOC_ROOTS = (
     "java/fory-json/README.md",
     "rust/README.md",
     "scala/README.md",
+    "scala/fory-scala/README.md",
+    "scala/fory-json-scala/README.md",
     "csharp/README.md",
     "swift/README.md",
     "dart/packages/fory/README.md",

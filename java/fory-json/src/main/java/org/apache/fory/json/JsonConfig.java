@@ -58,6 +58,8 @@ public final class JsonConfig {
   private final int bufferSizeLimitBytes;
   private final CodecRegistry codecRegistry;
   private final Map<Class<?>, Class<?>> mixins;
+  private final JsonCodecFactory[] codecFactories;
+  private final String[] codecFactoryIdentities;
   private final JsonTypeChecker typeChecker;
   private final JsonTypeCheckContext typeCheckContext;
   private final JsonCodegenKey codegenKey;
@@ -77,6 +79,9 @@ public final class JsonConfig {
       int bufferSizeLimitBytes,
       CodecRegistry codecRegistry,
       Map<Class<?>, Class<?>> mixins,
+      JsonCodecFactory[] codecFactories,
+      List<String> moduleIdentities,
+      List<String> factoryIdentities,
       JsonTypeChecker typeChecker) {
     this.writeNullFields = writeNullFields;
     this.codegenEnabled = codegenEnabled;
@@ -94,9 +99,14 @@ public final class JsonConfig {
     this.bufferSizeLimitBytes = bufferSizeLimitBytes;
     this.codecRegistry = codecRegistry.copy();
     this.mixins = immutableMixins(mixins);
+    this.codecFactories = codecFactories.clone();
+    this.codecFactoryIdentities = factoryIdentities.toArray(new String[0]);
     this.typeChecker = typeChecker;
     typeCheckContext = new JsonTypeCheckContext();
-    String codecRegistryKey = this.codecRegistry.codegenKey();
+    String codecRegistryKey =
+        this.codecRegistry.codegenKey()
+            + identityKey("module", moduleIdentities)
+            + identityKey("factory", factoryIdentities);
     codegenKey =
         new JsonCodegenKey(
             writeNullFields,
@@ -170,6 +180,18 @@ public final class JsonConfig {
     return codecRegistry;
   }
 
+  /** Returns the immutable cold-path codec factory snapshot. */
+  @Internal
+  public JsonCodecFactory[] codecFactories() {
+    return codecFactories.clone();
+  }
+
+  /** Returns identities parallel to {@link #codecFactories()}. */
+  @Internal
+  public String[] codecFactoryIdentities() {
+    return codecFactoryIdentities.clone();
+  }
+
   /** Returns the immutable exact target-to-Mixin registration snapshot. */
   @Internal
   public Map<Class<?>, Class<?>> mixins() {
@@ -201,13 +223,28 @@ public final class JsonConfig {
             .thenComparing(entry -> entry.getValue().getName()));
     StringBuilder builder = new StringBuilder(entries.size() * 64);
     for (Map.Entry<Class<?>, Class<?>> entry : entries) {
-      builder
-          .append(entry.getKey().getName())
-          .append('=')
-          .append(entry.getValue().getName())
-          .append(';');
+      appendIdentity(builder, entry.getKey().getName());
+      appendIdentity(builder, entry.getValue().getName());
     }
     return builder.toString();
+  }
+
+  private static String identityKey(String kind, List<String> identities) {
+    if (identities.isEmpty()) {
+      return "";
+    }
+    ArrayList<String> sorted = new ArrayList<>(identities);
+    sorted.sort(String::compareTo);
+    StringBuilder builder = new StringBuilder(sorted.size() * 48);
+    for (String identity : sorted) {
+      appendIdentity(builder, kind);
+      appendIdentity(builder, identity);
+    }
+    return builder.toString();
+  }
+
+  private static void appendIdentity(StringBuilder builder, String value) {
+    builder.append(value.length()).append(':').append(value);
   }
 
   private static final AtomicInteger COUNTER = new AtomicInteger(0);

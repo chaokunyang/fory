@@ -846,7 +846,9 @@ abstract class JsonWriterCodegen {
 
   private static boolean usesWriteInfo(JsonFieldInfo property) {
     JsonFieldKind kind = property.writeKind();
-    return kind == JsonFieldKind.BOOLEAN || kind == JsonFieldKind.ENUM;
+    return kind == JsonFieldKind.BOOLEAN
+        || kind == JsonFieldKind.ENUM
+        || property.requiresNonNullWrite();
   }
 
   private Expression writerConstructorExpression(
@@ -901,7 +903,10 @@ abstract class JsonWriterCodegen {
       index = new Expression.Variable("index", Expression.Literal.ofInt(0));
       JsonFieldInfo first = properties.length == 0 ? null : properties[0];
       Expression value =
-          first != null && !first.writeNull() && first.writeKind() == JsonFieldKind.STRING
+          first != null
+                  && !first.writeNull()
+                  && !first.requiresNonNullWrite()
+                  && first.writeKind() == JsonFieldKind.STRING
               ? new Expression.Variable(
                   "v0", cast(inline(builder.fieldValue(first, object)), TypeRef.of(String.class)))
               : null;
@@ -1001,6 +1006,7 @@ abstract class JsonWriterCodegen {
           any.writeIndex() > 0
                   && first != null
                   && !first.writeNull()
+                  && !first.requiresNonNullWrite()
                   && first.writeKind() == JsonFieldKind.STRING
               ? new Expression.Variable(
                   "v0", cast(inline(builder.fieldValue(first, object)), TypeRef.of(String.class)))
@@ -1253,6 +1259,11 @@ abstract class JsonWriterCodegen {
       Expression object,
       Expression writer) {
     Class<?> rawType = property.writeRawType();
+    if (rawType == void.class) {
+      return new Expression.ListExpression(
+          writeFieldName(property, id, commaKnown, index, writer),
+          new Expression.Invoke(writer, "writeNull"));
+    }
     if (rawType.isPrimitive()) {
       // Primitive members cannot be null and this path consumes the access once. Nullable
       // references stay cached below because their null check and write must share one value.
@@ -1305,6 +1316,14 @@ abstract class JsonWriterCodegen {
             : new Expression.ListExpression(
                 writeFieldName(property, id, commaKnown, index, writer),
                 writeValue(property, id, value, true, index, writer));
+    if (property.requiresNonNullWrite()) {
+      return new Expression.ListExpression(
+          value,
+          new Expression.If(
+              eq(value, nullValue),
+              new Expression.Invoke(fieldRef("wp" + id, JsonFieldInfo.class), "rejectNullWrite"),
+              write));
+    }
     return new Expression.ListExpression(value, new Expression.If(ne(value, nullValue), write));
   }
 

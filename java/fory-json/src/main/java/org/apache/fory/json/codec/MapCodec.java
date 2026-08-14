@@ -323,6 +323,12 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
     throw new ForyJsonException("Unsupported JSON map key type " + rawType);
   }
 
+  /** Returns the built-in object-member codec for one already approved map key type. */
+  @Internal
+  public static MapKeyCodec keyCodec(Class<?> rawType) {
+    return defaultKeyCodec(rawType);
+  }
+
   @SuppressWarnings("unchecked")
   private static MapFactory mapFactory(Class<?> rawType, Class<?> keyRawType) {
     if (unsupportedMapType(rawType) || GuavaCodecs.isUnsupportedImmutableImpl(rawType)) {

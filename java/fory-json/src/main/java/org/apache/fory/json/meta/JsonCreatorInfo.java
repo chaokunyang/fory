@@ -20,6 +20,7 @@
 package org.apache.fory.json.meta;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
@@ -60,6 +61,11 @@ public final class JsonCreatorInfo {
   private final long[] hashes;
   private final MethodHandle invoker;
   private final GeneratedJsonCodec<?> generatedCodec;
+  private final Method[] defaultMethods;
+  private final MethodHandle[] defaultInvokers;
+  private final String[] parameterNames;
+  private final JsonFieldInfo[] deferredFields;
+  private static final Object MISSING = new Object();
 
   public JsonCreatorInfo(
       Class<?> ownerType,
@@ -67,16 +73,121 @@ public final class JsonCreatorInfo {
       JsonCreatorFieldInfo[] fields,
       Object[] defaults,
       GeneratedJsonCodec<?> generatedCodec) {
+    this(ownerType, executable, fields, defaults, generatedCodec, null, null, null);
+  }
+
+  public JsonCreatorInfo(
+      Class<?> ownerType,
+      Executable executable,
+      JsonCreatorFieldInfo[] fields,
+      Object[] defaults,
+      GeneratedJsonCodec<?> generatedCodec,
+      Method[] defaultMethods,
+      String[] parameterNames) {
+    this(
+        ownerType,
+        executable,
+        fields,
+        defaults,
+        generatedCodec,
+        defaultMethods,
+        parameterNames,
+        null);
+  }
+
+  private JsonCreatorInfo(
+      Class<?> ownerType,
+      Executable executable,
+      JsonCreatorFieldInfo[] fields,
+      Object[] defaults,
+      GeneratedJsonCodec<?> generatedCodec,
+      Method[] defaultMethods,
+      String[] parameterNames,
+      JsonFieldInfo[] deferredFields) {
     this.ownerType = ownerType;
     this.executable = executable;
-    this.fields = fields;
+    this.deferredFields = deferredFields == null ? new JsonFieldInfo[0] : deferredFields;
+    if (this.deferredFields.length == 0) {
+      this.fields = fields;
+    } else {
+      this.fields = Arrays.copyOf(fields, fields.length + this.deferredFields.length);
+      for (int i = 0; i < this.deferredFields.length; i++) {
+        this.fields[fields.length + i] = this.deferredFields[i].asCreatorField(defaults.length + i);
+      }
+    }
     this.defaults = defaults;
     this.generatedCodec = generatedCodec;
-    invoker = generatedCodec == null ? buildInvoker(executable) : null;
+    this.parameterNames = parameterNames == null ? null : parameterNames.clone();
+    this.defaultMethods = defaultMethods == null ? null : defaultMethods.clone();
+    defaultInvokers =
+        this.defaultMethods == null
+            ? null
+            : buildDefaultInvokers(ownerType, executable, this.defaultMethods);
+    invoker =
+        generatedCodec == null
+            ? buildInvoker(executable, defaults.length + this.deferredFields.length)
+            : null;
+    hashes = new long[this.fields.length];
+    for (int i = 0; i < this.fields.length; i++) {
+      hashes[i] = this.fields[i].nameHash();
+    }
+  }
+
+  private JsonCreatorInfo(
+      JsonCreatorInfo source,
+      JsonFieldInfo[] deferredFields,
+      JsonFieldInfo[] directDeferredFields) {
+    ownerType = source.ownerType;
+    executable = source.executable;
+    defaults = source.defaults;
+    generatedCodec = source.generatedCodec;
+    defaultMethods = source.defaultMethods;
+    defaultInvokers = source.defaultInvokers;
+    parameterNames = source.parameterNames;
+    this.deferredFields = deferredFields;
+    fields = Arrays.copyOf(source.fields, source.fields.length + directDeferredFields.length);
+    for (int i = 0; i < directDeferredFields.length; i++) {
+      int deferredIndex = identityIndex(deferredFields, directDeferredFields[i]);
+      if (deferredIndex < 0) {
+        throw new IllegalArgumentException(
+            "Direct deferred field is not in the deferred field set");
+      }
+      fields[source.fields.length + i] =
+          directDeferredFields[i].asCreatorField(defaults.length + deferredIndex);
+    }
+    invoker =
+        generatedCodec == null
+            ? buildInvoker(executable, defaults.length + deferredFields.length)
+            : null;
     hashes = new long[fields.length];
     for (int i = 0; i < fields.length; i++) {
       hashes[i] = fields[i].nameHash();
     }
+  }
+
+  /** Returns immutable construction metadata extended with post-constructor mutable properties. */
+  public JsonCreatorInfo withDeferredFields(JsonFieldInfo[] fields) {
+    return withDeferredFields(fields, fields);
+  }
+
+  /** Extends construction with all deferred properties and their directly named JSON subset. */
+  public JsonCreatorInfo withDeferredFields(JsonFieldInfo[] fields, JsonFieldInfo[] directFields) {
+    if (fields.length == 0) {
+      return this;
+    }
+    if (deferredFields.length != 0) {
+      throw new IllegalStateException("Deferred JSON properties are already installed");
+    }
+    return new JsonCreatorInfo(this, fields.clone(), directFields.clone());
+  }
+
+  private static int identityIndex(JsonFieldInfo[] fields, JsonFieldInfo target) {
+    for (int i = 0; i < fields.length; i++) {
+      if (fields[i] == target) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   public Executable executable() {
@@ -87,8 +198,35 @@ public final class JsonCreatorInfo {
     return fields;
   }
 
+  /** Returns post-constructor mutable properties in construction-workspace order. */
+  public JsonFieldInfo[] deferredFields() {
+    return deferredFields;
+  }
+
+  /** Returns the construction-workspace slot for a deferred property. */
+  public int deferredSlot(int index) {
+    return defaults.length + index;
+  }
+
+  /** Returns the number of arguments passed to the constructor or factory. */
+  public int argumentCount() {
+    return defaults.length;
+  }
+
+  /** Returns whether construction includes post-constructor mutable properties. */
+  public boolean hasDeferredFields() {
+    return deferredFields.length != 0;
+  }
+
   public Object[] newArguments() {
-    return Arrays.copyOf(defaults, defaults.length);
+    Object[] arguments = Arrays.copyOf(defaults, defaults.length + deferredFields.length);
+    if (defaultInvokers != null) {
+      Arrays.fill(arguments, 0, defaults.length, MISSING);
+    }
+    if (deferredFields.length != 0) {
+      Arrays.fill(arguments, defaults.length, arguments.length, MISSING);
+    }
+    return arguments;
   }
 
   public int index(long hash) {
@@ -109,34 +247,173 @@ public final class JsonCreatorInfo {
   }
 
   public Object create(Object[] arguments) {
+    prepareArguments(arguments);
+    Object value;
     if (generatedCodec != null) {
       try {
-        return requireResult(generatedCodec.newInstance(arguments));
+        value = requireResult(generatedCodec.newInstance(arguments));
       } catch (Throwable cause) {
         if (cause instanceof Error) {
           throw (Error) cause;
         }
         throw new ForyJsonException("JSON creator failed for " + ownerType.getName(), cause);
       }
+    } else if (invoker != null) {
+      value = invoke(arguments);
+    } else {
+      try {
+        value =
+            executable instanceof Constructor
+                ? ((Constructor<?>) executable).newInstance(arguments)
+                : ((Method) executable).invoke(null, arguments);
+        value = requireResult(value);
+      } catch (InstantiationException | IllegalAccessException e) {
+        throw new ForyJsonException("Failed to invoke JSON creator for " + ownerType.getName(), e);
+      } catch (InvocationTargetException e) {
+        Throwable cause = e.getCause();
+        if (cause instanceof Error) {
+          throw (Error) cause;
+        }
+        throw new ForyJsonException("JSON creator failed for " + ownerType.getName(), cause);
+      }
     }
-    if (invoker != null) {
-      return invoke(arguments);
+    applyDeferred(value, arguments);
+    return value;
+  }
+
+  /** Returns whether generated readers must track the presence of constructor arguments. */
+  @Internal
+  public boolean tracksArgumentPresence() {
+    return defaultInvokers != null || deferredFields.length != 0;
+  }
+
+  /** Returns whether one constructor argument has a language-defined default. */
+  @Internal
+  public boolean hasDefault(int index) {
+    return defaultInvokers != null && defaultInvokers[index] != null;
+  }
+
+  /** Returns one prevalidated language-defined constructor default method. */
+  @Internal
+  public Method defaultMethod(int index) {
+    return defaultMethods == null ? null : defaultMethods[index];
+  }
+
+  /** Evaluates one prevalidated language-defined constructor default. */
+  @Internal
+  public Object defaultValue(int index, Object[] arguments) {
+    MethodHandle invoker = defaultInvokers[index];
+    if (invoker == null) {
+      throw missingArgument(index);
     }
     try {
-      Object value =
-          executable instanceof Constructor
-              ? ((Constructor<?>) executable).newInstance(arguments)
-              : ((Method) executable).invoke(null, arguments);
-      return requireResult(value);
-    } catch (InstantiationException | IllegalAccessException e) {
-      throw new ForyJsonException("Failed to invoke JSON creator for " + ownerType.getName(), e);
-    } catch (InvocationTargetException e) {
-      Throwable cause = e.getCause();
+      return (Object) invoker.invokeExact(arguments);
+    } catch (Throwable cause) {
       if (cause instanceof Error) {
         throw (Error) cause;
       }
-      throw new ForyJsonException("JSON creator failed for " + ownerType.getName(), cause);
+      throw new ForyJsonException(
+          "JSON constructor default failed for " + ownerType.getName(), cause);
     }
+  }
+
+  /** Creates the missing-required-property failure outside generated common paths. */
+  @Internal
+  public ForyJsonException missingArgument(int index) {
+    String name = parameterNames == null ? Integer.toString(index) : parameterNames[index];
+    return new ForyJsonException(
+        "Missing required JSON constructor property " + name + " for " + ownerType.getName());
+  }
+
+  /** Returns whether one construction-workspace slot has not been read. */
+  @Internal
+  public static boolean isMissing(Object value) {
+    return value == MISSING;
+  }
+
+  private void prepareArguments(Object[] arguments) {
+    if (defaultInvokers == null) {
+      return;
+    }
+    for (int i = 0; i < defaults.length; i++) {
+      if (arguments[i] == MISSING) {
+        arguments[i] = defaultValue(i, arguments);
+      }
+    }
+  }
+
+  private void applyDeferred(Object value, Object[] arguments) {
+    for (int i = 0; i < deferredFields.length; i++) {
+      Object deferred = arguments[defaults.length + i];
+      if (deferred != MISSING) {
+        deferredFields[i].putValue(value, deferred);
+      }
+    }
+  }
+
+  private static MethodHandle[] buildDefaultInvokers(
+      Class<?> ownerType, Executable executable, Method[] defaultMethods) {
+    if (defaultMethods.length != executable.getParameterCount()) {
+      throw new ForyJsonException("Constructor default count does not match " + executable);
+    }
+    MethodHandle[] invokers = new MethodHandle[defaultMethods.length];
+    Class<?>[] parameterTypes = executable.getParameterTypes();
+    for (int i = 0; i < defaultMethods.length; i++) {
+      Method method = defaultMethods[i];
+      if (method == null) {
+        continue;
+      }
+      if ((method.getDeclaringClass() != ownerType
+              || !java.lang.reflect.Modifier.isStatic(method.getModifiers()))
+          || !method.getName().equals("$lessinit$greater$default$" + (i + 1))
+          || method.getParameterCount() > i
+          || !java.lang.reflect.Modifier.isPublic(method.getModifiers())
+          || !boxed(parameterTypes[i]).isAssignableFrom(boxed(method.getReturnType()))) {
+        throw new ForyJsonException("Invalid JSON constructor default method " + method);
+      }
+      Class<?>[] dependencyTypes = method.getParameterTypes();
+      for (int j = 0; j < dependencyTypes.length; j++) {
+        if (dependencyTypes[j] != parameterTypes[j]) {
+          throw new ForyJsonException("Invalid JSON constructor default method " + method);
+        }
+      }
+      try {
+        MethodHandle target =
+            _JDKAccess._trustedLookup(method.getDeclaringClass()).unreflect(method);
+        invokers[i] = workspaceInvoker(target, dependencyTypes);
+      } catch (IllegalAccessException e) {
+        throw new ForyJsonException("Cannot access JSON constructor default " + method, e);
+      }
+    }
+    return invokers;
+  }
+
+  private static Class<?> boxed(Class<?> type) {
+    if (!type.isPrimitive()) {
+      return type;
+    }
+    if (type == boolean.class) {
+      return Boolean.class;
+    }
+    if (type == byte.class) {
+      return Byte.class;
+    }
+    if (type == short.class) {
+      return Short.class;
+    }
+    if (type == int.class) {
+      return Integer.class;
+    }
+    if (type == long.class) {
+      return Long.class;
+    }
+    if (type == float.class) {
+      return Float.class;
+    }
+    if (type == double.class) {
+      return Double.class;
+    }
+    return Character.class;
   }
 
   private Object invoke(Object[] arguments) {
@@ -160,14 +437,22 @@ public final class JsonCreatorInfo {
     return value;
   }
 
-  private static MethodHandle buildInvoker(Executable executable) {
+  private static MethodHandle buildInvoker(Executable executable, int workspaceSize) {
     if (AndroidSupport.IS_ANDROID) {
       // Android has no supported trusted MethodHandle lookup. Creator shape validation guarantees
       // a public executable; accessibility is needed only when its declaring class is non-public.
       executable.setAccessible(true);
       return null;
     }
-    return creatorHandle(executable);
+    int parameterCount = executable.getParameterCount();
+    if (workspaceSize == parameterCount) {
+      return creatorHandle(executable);
+    }
+    MethodHandle target =
+        GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+            ? nativeCreatorHandles(executable).target
+            : creatorTarget(executable);
+    return workspaceInvoker(target, executable.getParameterTypes());
   }
 
   /** Returns the array-argument invocation handle for one JSON creator. */
@@ -184,6 +469,21 @@ public final class JsonCreatorInfo {
     // exact array into the creator without a second carrier or per-call reflective access check.
     return target
         .asSpreader(Object[].class, parameterCount)
+        .asType(MethodType.methodType(Object.class, Object[].class));
+  }
+
+  private static MethodHandle workspaceInvoker(MethodHandle target, Class<?>[] parameterTypes) {
+    MethodHandle elementGetter = MethodHandles.arrayElementGetter(Object[].class);
+    MethodHandle[] filters = new MethodHandle[parameterTypes.length];
+    for (int i = 0; i < parameterTypes.length; i++) {
+      filters[i] =
+          MethodHandles.insertArguments(elementGetter, 1, i)
+              .asType(MethodType.methodType(parameterTypes[i], Object[].class));
+    }
+    MethodHandle filtered = MethodHandles.filterArguments(target, 0, filters);
+    int[] reorder = new int[parameterTypes.length];
+    return MethodHandles.permuteArguments(
+            filtered, MethodType.methodType(target.type().returnType(), Object[].class), reorder)
         .asType(MethodType.methodType(Object.class, Object[].class));
   }
 
@@ -208,7 +508,8 @@ public final class JsonCreatorInfo {
         executable.getParameterCount() == 1 && executable.getParameterTypes()[0] == String.class
             ? target.asType(MethodType.methodType(Object.class, String.class))
             : null;
-    return new CreatorHandles(arrayInvoker(target, executable.getParameterCount()), stringInvoker);
+    return new CreatorHandles(
+        target, arrayInvoker(target, executable.getParameterCount()), stringInvoker);
   }
 
   private static MethodHandle creatorTarget(Executable executable) {
@@ -226,10 +527,13 @@ public final class JsonCreatorInfo {
   }
 
   private static final class CreatorHandles {
+    private final MethodHandle target;
     private final MethodHandle arrayInvoker;
     private final MethodHandle stringInvoker;
 
-    private CreatorHandles(MethodHandle arrayInvoker, MethodHandle stringInvoker) {
+    private CreatorHandles(
+        MethodHandle target, MethodHandle arrayInvoker, MethodHandle stringInvoker) {
+      this.target = target;
       this.arrayInvoker = arrayInvoker;
       this.stringInvoker = stringInvoker;
     }

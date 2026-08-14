@@ -16,6 +16,7 @@
 # under the License.
 
 import unittest
+from unittest import mock
 
 if __package__:
     from . import release
@@ -38,6 +39,7 @@ class ReleaseDocVersionTest(unittest.TestCase):
             '    .package(url: "https://github.com/apache/fory.git", exact: "1.5.0")\n',
             'implementation("org.apache.fory:fory-core:1.5.0")\n',
             'libraryDependencies += "org.apache.fory" %% "fory-scala" % "1.5.0"\n',
+            'libraryDependencies += "org.apache.fory" %% "fory-json-scala" % "1.5.0"\n',
             'implementation("io.grpc:grpc-api:1.73.0")\n',
             "The wire format was introduced in version 1.5.0.\n",
         ]
@@ -54,6 +56,7 @@ class ReleaseDocVersionTest(unittest.TestCase):
             '    .package(url: "https://github.com/apache/fory.git", exact: "1.6.0")\n',
             'implementation("org.apache.fory:fory-core:1.6.0")\n',
             'libraryDependencies += "org.apache.fory" %% "fory-scala" % "1.6.0"\n',
+            'libraryDependencies += "org.apache.fory" %% "fory-json-scala" % "1.6.0"\n',
             'implementation("io.grpc:grpc-api:1.73.0")\n',
             "The wire format was introduced in version 1.5.0.\n",
         ]
@@ -62,6 +65,23 @@ class ReleaseDocVersionTest(unittest.TestCase):
 
         self.assertEqual(expected, updated)
         self.assertEqual(expected, release._update_release_doc_lines(updated, "1.6.0"))
+
+
+class ScalaReleaseTest(unittest.TestCase):
+    @mock.patch.object(release, "_run_release_cmd")
+    def test_publishes_each_module(self, run_release_cmd):
+        release._publish_scala()
+
+        self.assertEqual(
+            [
+                mock.call("sbt clean", "scala"),
+                mock.call("sbt 'project fory-scala' +publishSigned", "scala"),
+                mock.call("sbt 'project fory-json-scala' +publishSigned", "scala"),
+                mock.call("sbt sonatypePrepare", "scala"),
+                mock.call("sbt sonatypeBundleUpload", "scala"),
+            ],
+            run_release_cmd.call_args_list,
+        )
 
 
 if __name__ == "__main__":

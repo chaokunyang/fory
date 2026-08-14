@@ -98,6 +98,7 @@ import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.GeneratedClassNames;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.JsonCodecFactory;
 import org.apache.fory.json.JsonConfig;
 import org.apache.fory.json.JsonTypeCheckContext;
 import org.apache.fory.json.JsonTypeChecker;
@@ -124,6 +125,7 @@ import org.apache.fory.json.codegen.JsonJITContext;
 import org.apache.fory.json.meta.JsonAnySetterAccessor;
 import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.meta.JsonFieldKind;
+import org.apache.fory.json.resolver.CodecRegistry.FactoryBinding;
 import org.apache.fory.json.resolver.JsonGeneratedClassRegistry.Configuration;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
@@ -167,6 +169,9 @@ public final class JsonSharedRegistry {
       };
 
   private final CodecRegistry customCodecs;
+  private final JsonCodecFactory[] codecFactories;
+  private final String[] codecFactoryIdentities;
+  private final IdentityHashMap<Class<?>, ExactFactoryBinding> runtimeFactories;
   private final IdentityHashMap<Class<?>, JsonValueCodec<?>> exactCodecs;
   private final JsonTypeChecker typeChecker;
   private final JsonTypeCheckContext typeCheckContext;
@@ -215,6 +220,21 @@ public final class JsonSharedRegistry {
   private JsonSharedRegistry(
       JsonConfig config, ExecutorService compilationService, boolean hostedCodegen) {
     this.customCodecs = config.codecRegistry();
+    codecFactories = config.codecFactories();
+    codecFactoryIdentities = config.codecFactoryIdentities();
+    runtimeFactories = new IdentityHashMap<>();
+    for (Map.Entry<Class<?>, FactoryBinding> entry : customCodecs.factoryBindings().entrySet()) {
+      Class<?> target = entry.getKey();
+      FactoryBinding binding = entry.getValue();
+      for (Class<?> runtimeType : binding.handledRuntimeClasses()) {
+        ExactFactoryBinding previous =
+            runtimeFactories.put(runtimeType, new ExactFactoryBinding(target, binding));
+        if (previous != null && previous.binding != binding) {
+          throw new IllegalArgumentException(
+              "Conflicting JSON runtime codec factories for " + runtimeType.getName());
+        }
+      }
+    }
     // Hosted compilation produces classes shared by configurations with the same source shape.
     // Runtime type policy is intentionally not part of that shape and remains enforced by each
     // runtime resolver before it installs a generated capability.
@@ -537,7 +557,9 @@ public final class JsonSharedRegistry {
   }
 
   GeneratedJsonCodec<?> generatedCodec(Class<?> type) {
-    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+    // Hosted analysis generates the codec selected by the active configuration. Requiring an
+    // annotation-processor companion here would exclude models owned by language modules.
+    if (hostedCodegen || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return null;
     }
     Class<?> mixinType = mixinType(type);
@@ -945,6 +967,10 @@ public final class JsonSharedRegistry {
     if (customCodec != null) {
       return customCodec;
     }
+    FactoryBinding exactFactory = customCodecs.getFactory(rawType);
+    if (exactFactory != null) {
+      return createExactCodec(rawType, typeRef, exactFactory, localResolver);
+    }
     JsonValueCodec<?> codec = exactCodecs.get(rawType);
     if (codec != null) {
       return codec;
@@ -958,9 +984,6 @@ public final class JsonSharedRegistry {
       throw new ForyJsonException("Unsupported JSON type " + rawType);
     }
     if (URL.class.isAssignableFrom(rawType)) {
-      throw new ForyJsonException("Unsupported JSON type " + rawType);
-    }
-    if (Number.class.isAssignableFrom(rawType) || CharSequence.class.isAssignableFrom(rawType)) {
       throw new ForyJsonException("Unsupported JSON type " + rawType);
     }
     if (rawType.isEnum()) {
@@ -999,6 +1022,13 @@ public final class JsonSharedRegistry {
     if (Path.class.isAssignableFrom(rawType)) {
       return ScalarCodecs.PathCodec.INSTANCE;
     }
+    codec = createModuleCodec(typeRef, localResolver);
+    if (codec != null) {
+      return codec;
+    }
+    if (Number.class.isAssignableFrom(rawType) || CharSequence.class.isAssignableFrom(rawType)) {
+      throw new ForyJsonException("Unsupported JSON type " + rawType);
+    }
     if (Collection.class.isAssignableFrom(rawType)) {
       return CollectionCodec.create(rawType, typeRef, localResolver);
     }
@@ -1008,10 +1038,86 @@ public final class JsonSharedRegistry {
     return null;
   }
 
+  private JsonValueCodec<?> createExactCodec(
+      Class<?> target, TypeRef<?> typeRef, FactoryBinding binding, JsonTypeResolver localResolver) {
+    JsonValueCodec<?> codec;
+    try {
+      codec = binding.factory().create(typeRef, localResolver);
+    } catch (UnsupportedJsonTypeException e) {
+      throw new ForyJsonException("Exact JSON codec factory rejected " + target.getTypeName(), e);
+    }
+    if (codec == null) {
+      throw new ForyJsonException(
+          "Exact JSON codec factory returned null for " + target.getTypeName());
+    }
+    return codec;
+  }
+
+  Class<?> runtimeCodecTarget(Class<?> runtimeType) {
+    ExactFactoryBinding binding = runtimeFactories.get(runtimeType);
+    if (binding == null) {
+      return null;
+    }
+    checkSecure(binding.target);
+    return binding.target;
+  }
+
+  private JsonValueCodec<?> createModuleCodec(TypeRef<?> typeRef, JsonTypeResolver localResolver) {
+    JsonValueCodec<?> selected = null;
+    UnsupportedJsonTypeException unsupported = null;
+    ArrayList<String> claims = null;
+    for (int i = 0; i < codecFactories.length; i++) {
+      JsonValueCodec<?> codec = null;
+      UnsupportedJsonTypeException rejected = null;
+      try {
+        codec = codecFactories[i].create(typeRef, localResolver);
+      } catch (UnsupportedJsonTypeException e) {
+        rejected = e;
+      }
+      if (codec == null && rejected == null) {
+        continue;
+      }
+      if (claims == null) {
+        claims = new ArrayList<>(2);
+      }
+      claims.add(codecFactoryIdentities[i]);
+      if (codec != null && selected == null) {
+        selected = codec;
+      }
+      if (rejected != null && unsupported == null) {
+        unsupported = rejected;
+      }
+    }
+    if (claims == null) {
+      return null;
+    }
+    if (claims.size() == 1) {
+      if (selected != null) {
+        return selected;
+      }
+      throw unsupported;
+    }
+    claims.sort(String::compareTo);
+    throw new ForyJsonException(
+        "Conflicting JSON codec factories for " + typeRef.getType() + ": " + claims);
+  }
+
+  private static final class ExactFactoryBinding {
+    private final Class<?> target;
+    private final FactoryBinding binding;
+
+    private ExactFactoryBinding(Class<?> target, FactoryBinding binding) {
+      this.target = target;
+      this.binding = binding;
+    }
+  }
+
   public JsonFieldKind kind(Class<?> type) {
     // A registered codec owns the full representation. Resolve that choice before object metadata
     // and codegen specialize fields so generated and interpreted paths cannot bypass the codec.
-    if (customCodecs.get(type) != null) {
+    if (customCodecs.get(type) != null
+        || customCodecs.getFactory(type) != null
+        || runtimeFactories.containsKey(type)) {
       return JsonFieldKind.OBJECT;
     }
     if (type == boolean.class || type == Boolean.class) {

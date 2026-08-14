@@ -50,6 +50,9 @@ final class JsonTestSupport {
           2 * 1024 * 1024,
           new CodecRegistry(),
           Collections.<Class<?>, Class<?>>emptyMap(),
+          new JsonCodecFactory[0],
+          Collections.<String>emptyList(),
+          Collections.<String>emptyList(),
           null);
   private static final JsonSharedRegistry REGISTRY = new JsonSharedRegistry(CONFIG);
   private static final JsonValueCodec<Object> NULL_CODEC =

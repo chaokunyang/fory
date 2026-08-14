@@ -26,6 +26,7 @@ import static org.testng.Assert.fail;
 
 import java.nio.charset.StandardCharsets;
 import org.apache.fory.json.annotation.JsonCreator;
+import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.annotation.JsonProperty;
 import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
@@ -49,6 +50,59 @@ public class JsonCreatorTest extends ForyJsonTestModels {
         json.fromJson("{\"name\":\"你好\",\"id\":9}".getBytes(StandardCharsets.UTF_8), User.class);
     assertEquals(utf8.id, 9L);
     assertEquals(utf8.name, "你好");
+  }
+
+  @Test
+  public void fieldFallbacks() {
+    ForyJson json = newJson();
+    User spaced =
+        json.fromJson("{ \n \"id\" \t : 7, \"name\" : \"alice\", \"unknown\" : 1}", User.class);
+    assertEquals(spaced.id, 7L);
+    assertEquals(spaced.name, "alice");
+
+    User escaped =
+        json.fromJson(
+            "{\"\\u0069d\":8,\"unknown\":[1],\"name\":\"bob\"}".getBytes(StandardCharsets.UTF_8),
+            User.class);
+    assertEquals(escaped.id, 8L);
+    assertEquals(escaped.name, "bob");
+
+    User utf16 = json.fromJson("{\"unknown\":\"值\",\"id\" : 9,\"name\":\"你好\"}", User.class);
+    assertEquals(utf16.id, 9L);
+    assertEquals(utf16.name, "你好");
+  }
+
+  @Test
+  public void fieldPrefixCollision() {
+    ForyJson json = newJson();
+    PrefixCreator latin1 = json.fromJson("{\"abcTwo\":2,\"abcOne\":1}", PrefixCreator.class);
+    assertEquals(latin1.abcOne, 1);
+    assertEquals(latin1.abcTwo, 2);
+
+    PrefixCreator utf8 =
+        json.fromJson(
+            "{\"abcOne\":3,\"abcTwo\":4}".getBytes(StandardCharsets.UTF_8), PrefixCreator.class);
+    assertEquals(utf8.abcOne, 3);
+    assertEquals(utf8.abcTwo, 4);
+
+    PrefixCreator utf16 =
+        json.fromJson("{\"unknown\":\"值\",\"abcTwo\":6,\"abcOne\":5}", PrefixCreator.class);
+    assertEquals(utf16.abcOne, 5);
+    assertEquals(utf16.abcTwo, 6);
+  }
+
+  @Test
+  public void malformedFieldNames() {
+    ForyJson json = newJson();
+    assertThrows(
+        ForyJsonException.class, () -> json.fromJson("{\"id\" 7,\"name\":\"alice\"}", User.class));
+    assertThrows(
+        ForyJsonException.class,
+        () ->
+            json.fromJson(
+                "{\"id:7,\"name\":\"alice\"}".getBytes(StandardCharsets.UTF_8), User.class));
+    assertThrows(
+        ForyJsonException.class, () -> json.fromJson("{\"id\" 9,\"name\":\"你好\"}", User.class));
   }
 
   @Test
@@ -149,6 +203,15 @@ public class JsonCreatorTest extends ForyJsonTestModels {
     assertEquals(value.value, 7);
   }
 
+  @Test
+  public void ignoredCreatorParameter() {
+    IgnoredCreator value =
+        newJson().fromJson("{\"visible\":7,\"hidden\":\"secret\"}", IgnoredCreator.class);
+    assertEquals(value.visible, 7);
+    assertEquals(value.hidden, "secret");
+    assertEquals(newJson().toJson(value), "{\"visible\":7}");
+  }
+
   static final class HiddenArgument {
     public int value;
   }
@@ -162,6 +225,19 @@ public class JsonCreatorTest extends ForyJsonTestModels {
     }
   }
 
+  public static final class IgnoredCreator {
+    public final int visible;
+    public final String hidden;
+
+    @JsonCreator
+    public IgnoredCreator(
+        @JsonProperty("visible") int visible,
+        @JsonProperty("hidden") @JsonIgnore(ignoreRead = false) String hidden) {
+      this.visible = visible;
+      this.hidden = hidden;
+    }
+  }
+
   public static final class User {
     public final long id;
     public final String name;
@@ -170,6 +246,17 @@ public class JsonCreatorTest extends ForyJsonTestModels {
     public User(long id, String name) {
       this.id = id;
       this.name = name;
+    }
+  }
+
+  public static final class PrefixCreator {
+    public final int abcOne;
+    public final int abcTwo;
+
+    @JsonCreator({"abcOne", "abcTwo"})
+    public PrefixCreator(int abcOne, int abcTwo) {
+      this.abcOne = abcOne;
+      this.abcTwo = abcTwo;
     }
   }
 

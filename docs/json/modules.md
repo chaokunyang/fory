@@ -103,4 +103,5 @@ public final class ConfiguredJsonModule implements ForyJsonModule {
 }
 ```
 
-For a concrete language integration, see the [Scala guide](scala.md).
+For a Scala example that packages derived third-party enum codecs in a module, see
+[Packaging Derived Codecs in a Module](scala.md#packaging-derived-codecs-in-a-module).

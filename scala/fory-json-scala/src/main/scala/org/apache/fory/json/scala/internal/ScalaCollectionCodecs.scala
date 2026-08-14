@@ -365,8 +365,12 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int)
       "Scala Map",
       resolver.resolvingRuntimeType()
     )
-    val keyRawType = if (specializedKey == null) ScalaTypeSupport.rawType(arguments(0)) else specializedKey
-    keyCodec = resolver.getMapKeyCodec(keyRawType)
+    val keyType = if (specializedKey == null) arguments(0) else specializedKey
+    val keyRawType = ScalaTypeSupport.rawType(keyType)
+    val enumerationKeyCodec = ScalaEnumerationTypes.mapKeyCodec(keyType)
+    keyCodec =
+      if (enumerationKeyCodec == null) resolver.getMapKeyCodec(keyRawType)
+      else enumerationKeyCodec
     val valueType = arguments(if (specializedKey == null) 1 else 0)
     valueInfo = resolver.getTypeInfo(valueType, ScalaTypeSupport.rawType(valueType))
   }
@@ -386,8 +390,13 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int)
     val keyType = if (specializedKey == null) arguments(0) else specializedKey
     val keyRawType = ScalaTypeSupport.rawType(keyType)
     keyCodec =
-      if (childCodecs.keyCodec() == classOf[JsonCodec.NoMapKeyCodec]) resolver.getMapKeyCodec(keyRawType)
-      else resolver.getMapKeyCodec(keyRawType, childCodecs.keyCodec())
+      if (childCodecs.keyCodec() != classOf[JsonCodec.NoMapKeyCodec])
+        resolver.getMapKeyCodec(keyRawType, childCodecs.keyCodec())
+      else {
+        val enumerationKeyCodec = ScalaEnumerationTypes.mapKeyCodec(keyType)
+        if (enumerationKeyCodec == null) resolver.getMapKeyCodec(keyRawType)
+        else enumerationKeyCodec
+      }
     val valueType = arguments(if (specializedKey == null) 1 else 0)
     val valueRawType = ScalaTypeSupport.rawType(valueType)
     valueInfo =

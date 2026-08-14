@@ -76,6 +76,7 @@ lazy val foryJsonScala = Project(id = "fory-json-scala", base = file("fory-json-
   .settings(commonSettings)
   .settings(
     name := "fory-json-scala",
+    Compile / javacOptions ++= Seq("--release", "8"),
     libraryDependencies ++= {
       val reflect =
         if (scalaBinaryVersion.value == "2.13")

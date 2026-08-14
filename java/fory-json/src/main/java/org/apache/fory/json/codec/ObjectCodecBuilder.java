@@ -24,10 +24,12 @@ import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
+import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1084,18 +1086,12 @@ final class ObjectCodecBuilder {
     String[] names = objectModel.propertyNames();
     Method[] accessors = objectModel.propertyGetters();
     Method[] setters = objectModel.propertySetters();
-    String[] parameterNames = objectModel.parameterNames();
-    Type[] parameterTypes = objectModel.constructor().getGenericParameterTypes();
+    Type[] propertyTypes = objectModel.propertyTypes();
     for (int i = 0; i < names.length; i++) {
       Method accessor = accessors[i];
       FieldBuilder builder =
           builders.computeIfAbsent(names[i], name -> new FieldBuilder(name, annotations));
-      for (int parameterIndex = 0; parameterIndex < parameterNames.length; parameterIndex++) {
-        if (names[i].equals(parameterNames[parameterIndex])) {
-          builder.setObjectModelType(parameterTypes[parameterIndex]);
-          break;
-        }
-      }
+      builder.setObjectModelType(propertyTypes[i]);
       if (accessor != null) {
         builder.setWriteGetter(type, accessor);
       }
@@ -1412,7 +1408,7 @@ final class ObjectCodecBuilder {
         continue;
       }
       if (!builder.isAny() && builder.unwrappedAnnotation == null) {
-        Type resolved = ownerType.resolveType(parameterTypes[i]).getType();
+        Type resolved = builder.logicalType(ownerType);
         fields.add(
             new JsonCreatorFieldInfo(
                 builder.jsonName(namingStrategy),
@@ -1494,7 +1490,9 @@ final class ObjectCodecBuilder {
       FieldBuilder builder) {
     Type resolvedParameter = ownerType.resolveType(parameterType).getType();
     Type propertyType = builder.logicalType(ownerType);
-    if (!resolvedParameter.equals(propertyType)) {
+    if (!resolvedParameter.equals(propertyType)
+        && (builder.objectModelType == null
+            || !sameObjectModelShape(resolvedParameter, propertyType))) {
       throw new ForyJsonException(
           "@JsonCreator parameter type "
               + resolvedParameter
@@ -1508,6 +1506,71 @@ final class ObjectCodecBuilder {
               + parameterIndex);
     }
     builder.creatorArgumentIndex = parameterIndex;
+  }
+
+  private static boolean sameObjectModelShape(Type left, Type right) {
+    if (left.equals(right)) {
+      return true;
+    }
+    if (left instanceof Class<?> && ((Class<?>) left).isArray()) {
+      Type rightComponent = arrayComponent(right);
+      return rightComponent != null
+          && sameObjectModelShape(((Class<?>) left).getComponentType(), rightComponent);
+    }
+    if (right instanceof Class<?> && ((Class<?>) right).isArray()) {
+      Type leftComponent = arrayComponent(left);
+      return leftComponent != null
+          && sameObjectModelShape(leftComponent, ((Class<?>) right).getComponentType());
+    }
+    if (left instanceof GenericArrayType || right instanceof GenericArrayType) {
+      Type leftComponent = arrayComponent(left);
+      Type rightComponent = arrayComponent(right);
+      return leftComponent != null
+          && rightComponent != null
+          && sameObjectModelShape(leftComponent, rightComponent);
+    }
+    Class<?> leftRaw = objectModelRawType(left);
+    Class<?> rightRaw = objectModelRawType(right);
+    if (leftRaw == null || leftRaw != rightRaw) {
+      return false;
+    }
+    Type[] leftArguments = typeArguments(left);
+    Type[] rightArguments = typeArguments(right);
+    if (leftArguments.length != rightArguments.length) {
+      return false;
+    }
+    for (int i = 0; i < leftArguments.length; i++) {
+      if (!sameObjectModelShape(leftArguments[i], rightArguments[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static Type arrayComponent(Type type) {
+    if (type instanceof Class<?> && ((Class<?>) type).isArray()) {
+      return ((Class<?>) type).getComponentType();
+    }
+    return type instanceof GenericArrayType
+        ? ((GenericArrayType) type).getGenericComponentType()
+        : null;
+  }
+
+  private static Type[] typeArguments(Type type) {
+    return type instanceof ParameterizedType
+        ? ((ParameterizedType) type).getActualTypeArguments()
+        : new Type[0];
+  }
+
+  private static Class<?> objectModelRawType(Type type) {
+    if (type instanceof Class<?>) {
+      return (Class<?>) type;
+    }
+    if (type instanceof ParameterizedType) {
+      Type rawType = ((ParameterizedType) type).getRawType();
+      return rawType instanceof Class<?> ? (Class<?>) rawType : null;
+    }
+    return null;
   }
 
   private static void rejectCreatorHashCollisions(JsonCreatorFieldInfo[] fields) {
@@ -2748,6 +2811,7 @@ final class ObjectCodecBuilder {
           writeAccessor,
           readAccessor,
           ownerType,
+          objectModelType,
           codecAnnotation,
           valueCodecClass,
           formatAnnotation,
@@ -3096,8 +3160,8 @@ final class ObjectCodecBuilder {
         if (writeType == void.class) {
           writeType = modelType;
         }
-        if (writeType != null && !writeType.equals(modelType)
-            || readType != null && !readType.equals(modelType)) {
+        if (writeType != null && !sameObjectModelShape(writeType, modelType)
+            || readType != null && !sameObjectModelShape(readType, modelType)) {
           throw new ForyJsonException(
               "JSON object-model type " + modelType + " does not match property " + name);
         }

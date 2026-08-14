@@ -69,6 +69,14 @@ private[scala] object ScalaObjectModels {
     val propertySetters =
       Array.fill[Method](names.length)(null) ++
         bodyPropertyIndexes.map(index => propertySetter(typeClass, bodyFields(index)))
+    val propertyTypes =
+      ScalaEnumerationTypes.propertyTypes(
+        typeClass,
+        constructor,
+        propertyNames,
+        propertyGetters,
+        propertySetters
+      )
     val defaults = constructorDefaults(typeClass, parameterTypes)
     resolver.createObjectCodec(
       typeRef,
@@ -79,7 +87,8 @@ private[scala] object ScalaObjectModels {
         defaults,
         propertyNames,
         propertyGetters,
-        propertySetters
+        propertySetters,
+        propertyTypes
       )
     )
   }

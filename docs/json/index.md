@@ -36,6 +36,7 @@ reference identity, circular graphs, or Fory's binary-only features.
 | Understand Java object mapping and configuration               | [Object Mapping](object-mapping.md)   |
 | Configure properties, creators, values, validators, and mixins | [Annotations](annotations.md)         |
 | Extend complete values, children, and map keys                 | [Custom Codecs](custom-codecs.md)     |
+| Package and distribute reusable JSON extensions                | [Modules](modules.md)                 |
 | Use case classes, Scala collections, and Scala enums           | [Scala](scala.md)                     |
 | Deploy on Android                                              | [Android](android.md)                 |
 | Build a GraalVM native image                                   | [GraalVM Native Image](graalvm.md)    |

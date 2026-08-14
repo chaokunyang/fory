@@ -177,6 +177,7 @@ The canonical Fory JSON documentation is split by reader task:
 - [Object Mapping](../../docs/json/object-mapping.md)
 - [Annotations](../../docs/json/annotations.md)
 - [Custom Codecs](../../docs/json/custom-codecs.md)
+- [Modules](../../docs/json/modules.md)
 - [Android](../../docs/json/android.md)
 - [GraalVM Native Image](../../docs/json/graalvm.md)
 - [Security](../../docs/json/security.md)
@@ -190,6 +191,9 @@ closed polymorphism, and dynamic members. See the
 `JsonValueCodec`, `MapKeyCodec`, registrations, and `JsonCodec` customize a
 complete value or one direct child level. See
 [Custom Codecs](../../docs/json/custom-codecs.md).
+
+`ForyJsonModule` packages codecs, factories, and Mixins for installation by a language integration,
+third-party library, framework, or application. See [Modules](../../docs/json/modules.md).
 
 Android uses interpreted or annotation-processor-generated access with exact R8
 rules. See the [Android guide](../../docs/json/android.md).

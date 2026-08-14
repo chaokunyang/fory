@@ -104,6 +104,12 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
             : null;
   }
 
+  /** Returns the closed root that owns this codec's discriminator schema. */
+  @Internal
+  public Class<?> baseType() {
+    return baseType;
+  }
+
   /**
    * Resolves every finite subtype branch after this dispatcher's base-type shell is published.
    *

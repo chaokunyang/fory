@@ -95,6 +95,16 @@ private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
 
     val enumFamily = ScalaEnumCodec.familyRoot(rawType)
     val enumRoot = ScalaEnumCodec.enumRoot(rawType)
+    if (
+      enumFamily != null && enumRoot == null &&
+      (enumFamily == rawType ||
+        resolver.resolvingRuntimeType() && !resolver.resolvingSubtypeOf(enumFamily))
+    ) {
+      val derivedCodec = ScalaDerivedCodec.find(enumFamily)
+      if (derivedCodec != null) {
+        return derivedCodec.create(TypeRef.of(enumFamily), resolver)
+      }
+    }
     if (enumRoot != null && (enumRoot == rawType || resolver.resolvingRuntimeType())) {
       return ScalaEnumCodec.create(enumRoot, typeRef)
     }

@@ -17,24 +17,10 @@
  * under the License.
  */
 
-package org.apache.fory.json.scala
+package org.apache.fory.json.scala.internal
 
-import org.apache.fory.json.{ForyJsonBuilder, JsonCodecFactory}
+import org.apache.fory.json.JsonCodecFactory
 
-import scala.reflect.ClassTag
-
-/** Compile-time JSON schema for one closed Scala 3 enum. */
-trait ScalaJsonCodec[T] extends JsonCodecFactory
-
-object ScalaJsonCodec {
-  inline def derived[T]: ScalaJsonCodec[T] =
-    ${ org.apache.fory.json.scala.internal.ScalaJsonCodecMacros.derive[T] }
+private[scala] object ScalaDerivedCodec {
+  def find(rootType: Class[_]): JsonCodecFactory = null
 }
-
-extension (builder: ForyJsonBuilder)
-  /** Derives and registers a closed schema for a third-party Scala 3 enum. */
-  inline def register[T](using tag: ClassTag[T]): ForyJsonBuilder =
-    builder.registerCodec(
-      tag.runtimeClass.asInstanceOf[Class[T]],
-      ScalaJsonCodec.derived[T]
-    )

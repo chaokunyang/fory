@@ -29,6 +29,11 @@ enum Result derives ScalaJsonCodec {
   case Pending
 }
 
+enum ExternalResult {
+  case Ok(value: String)
+  case Error(code: Int)
+}
+
 enum Color {
   case Red, Blue
 }
@@ -48,9 +53,7 @@ class ScalaJsonDerivationSuite extends AnyFunSuite {
   }
 
   test("derived enum uses one wrapper-object shape") {
-    import org.apache.fory.json.scala.*
-
-    val json = ForyJsonScala.builder().register[Result].withAsyncCompilation(false).build()
+    val json = ForyJsonScala.builder().withAsyncCompilation(false).build()
     val ok: Result = Result.Ok("ready")
     val error: Result = Result.Error(7)
     val pending: Result = Result.Pending
@@ -66,10 +69,15 @@ class ScalaJsonDerivationSuite extends AnyFunSuite {
     assert(json.fromJson(json.toJson(pending), classOf[Result]) == pending)
   }
 
-  test("sum enum requires explicit registration") {
-    val json = ForyJsonScala.builder().withCodegen(false).build()
-    assertThrows[ForyJsonException](json.toJson(Result.Ok("ready")))
-    assertThrows[ForyJsonException](json.fromJson("{\"value\":\"ready\"}", classOf[Result.Ok]))
+  test("third-party enum uses builder registration") {
+    val plainJson = ForyJsonScala.builder().withCodegen(false).build()
+    assertThrows[ForyJsonException](plainJson.toJson(ExternalResult.Ok("ready")))
+
+    val json =
+      ForyJsonScala.builder().register[ExternalResult].withAsyncCompilation(false).build()
+    val result: ExternalResult = ExternalResult.Ok("ready")
+    assert(json.toJson(result) == "{\"Ok\":{\"value\":\"ready\"}}")
+    assert(json.fromJson(json.toJson(result), classOf[ExternalResult]) == result)
   }
 
   test("parameterless enum uses its declared root") {

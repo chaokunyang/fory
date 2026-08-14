@@ -81,6 +81,12 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
 
 /** Prepares reachable Fory JSON models and provider-selected codecs for Native Image. */
 final class ForyJsonGraalVMFeature implements Feature {
+  private static final String SCALA_DERIVED_CODEC_METHOD = "derived$ScalaJsonCodec";
+  private static final String SCALA_JSON_CODEC_CLASS =
+      "org.apache.fory.json.scala.ScalaJsonCodec";
+  private static final String SCALA_JSON_CODEC_FACTORY =
+      "org.apache.fory.json.scala.internal.ScalaTypeCodecFactory$";
+  private static final String SCALA_ENUM_CLASS = "scala.reflect.Enum";
   private static final String[] SQL_TYPES = {
     "java.sql.Date", "java.sql.Time", "java.sql.Timestamp"
   };
@@ -93,6 +99,7 @@ final class ForyJsonGraalVMFeature implements Feature {
   private final Map<Class<?>, Set<Class<?>>> reachableMixins = new LinkedHashMap<>();
   private final Set<Class<?>> processedProviders = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedFactoryModels = ConcurrentHashMap.newKeySet();
+  private final Set<Class<?>> scalaDerivedModels = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedCodecs = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedContainers = ConcurrentHashMap.newKeySet();
   private final Set<Executable> processedCreators = new LinkedHashSet<>();
@@ -128,6 +135,7 @@ final class ForyJsonGraalVMFeature implements Feature {
       if (processedReachableTypes.add(type)) {
         changed |= registerContainer(type);
         changed |= registerDeclarations(type);
+        changed |= registerScalaDerivedCodec(access, type);
         if (type.getDeclaredAnnotation(JsonType.class) != null) {
           changed |= registerModel(access, type);
         }
@@ -148,6 +156,36 @@ final class ForyJsonGraalVMFeature implements Feature {
     if (changed) {
       access.requireAnalysisIteration();
     }
+  }
+
+  private boolean registerScalaDerivedCodec(DuringAnalysisAccess access, Class<?> type) {
+    boolean scalaEnum = false;
+    for (Class<?> interfaceType : type.getInterfaces()) {
+      if (interfaceType.getName().equals(SCALA_ENUM_CLASS)) {
+        scalaEnum = true;
+        break;
+      }
+    }
+    if (!scalaEnum) {
+      return false;
+    }
+    Method method;
+    try {
+      method = type.getDeclaredMethod(SCALA_DERIVED_CODEC_METHOD);
+    } catch (NoSuchMethodException ignored) {
+      return false;
+    }
+    int modifiers = method.getModifiers();
+    if (!Modifier.isPublic(modifiers)
+        || !Modifier.isStatic(modifiers)
+        || method.getParameterCount() != 0
+        || !method.getReturnType().getName().equals(SCALA_JSON_CODEC_CLASS)) {
+      return false;
+    }
+    RuntimeReflection.register(method);
+    scalaDerivedModels.add(type);
+    registerFactoryModel(access, type);
+    return true;
   }
 
   private boolean registerProvider(DuringAnalysisAccess access, Class<?> providerClass) {
@@ -300,6 +338,9 @@ final class ForyJsonGraalVMFeature implements Feature {
       for (HostedConfiguration configuration : entry.getValue()) {
         LinkedHashSet<Class<?>> selectedModels = new LinkedHashSet<>(processedModels);
         selectedModels.addAll(configuration.factoryModels);
+        if (configuration.scalaJsonCodecs) {
+          selectedModels.addAll(scalaDerivedModels);
+        }
         for (Map.Entry<Class<?>, Set<Class<?>>> mixin : reachableMixins.entrySet()) {
           if (mixin.getValue().contains(configuration.mixins.get(mixin.getKey()))) {
             selectedModels.add(mixin.getKey());
@@ -916,6 +957,7 @@ final class ForyJsonGraalVMFeature implements Feature {
     private final JsonSharedRegistry registry;
     private final JsonTypeResolver resolver;
     private final Map<Class<?>, Class<?>> mixins;
+    private final boolean scalaJsonCodecs;
     private final Set<Class<?>> processedModels = new LinkedHashSet<>();
     private final Set<Class<?>> factoryModels = new LinkedHashSet<>();
 
@@ -924,6 +966,14 @@ final class ForyJsonGraalVMFeature implements Feature {
       registry = JsonSharedRegistry.forHostedCodegen(config);
       resolver = new JsonTypeResolver(registry);
       mixins = config.mixins();
+      boolean hasScalaJsonCodecs = false;
+      for (JsonCodecFactory factory : config.codecFactories()) {
+        if (factory.getClass().getName().equals(SCALA_JSON_CODEC_FACTORY)) {
+          hasScalaJsonCodecs = true;
+          break;
+        }
+      }
+      scalaJsonCodecs = hasScalaJsonCodecs;
     }
   }
 

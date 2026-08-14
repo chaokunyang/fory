@@ -152,9 +152,8 @@ The codec also implements the map-key contract, so its class can be used in `key
 
 ## Scala 3 closed enums
 
-A parameterless Scala 3 enum uses its case name as a JSON string. An enum with parameterized cases
-uses one explicit wrapper-object representation for every case and must be registered as a closed
-schema:
+A parameterless Scala 3 enum uses its case name as a JSON string. Add `derives ScalaJsonCodec` to an
+enum with parameterized cases to define one closed wrapper-object representation for every case:
 
 ```scala
 import org.apache.fory.json.scala.*
@@ -165,13 +164,17 @@ enum Result derives ScalaJsonCodec {
   case Pending
 }
 
-val json = ForyJsonScala.builder().register[Result].build()
+val json = ForyJsonScala.builder().build()
 ```
 
 The values above use `{"Ok":{"value":"ready"}}`, `{"Error":{"code":7}}`, and
 `{"Pending":{}}`. The reader never accepts a class name or chooses a subtype from runtime
-reflection. For third-party source, define `given ScalaJsonCodec[Result] =
-ScalaJsonCodec.derived[Result]` at the registration site.
+reflection. For a third-party enum that cannot add `derives`, derive and register its schema at the
+builder call site:
+
+```scala
+val json = ForyJsonScala.builder().register[thirdparty.Result].build()
+```
 
 ## GraalVM Native Image
 

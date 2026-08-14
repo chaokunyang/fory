@@ -45,13 +45,13 @@ enum NativeColor {
 @ForyJsonProvider
 final class ScalaJsonNativeConfig {
   def json(): ForyJson =
-    ForyJsonScala.builder().register[NativeResult].build()
+    ForyJsonScala.builder().build()
 }
 
 object ScalaJsonNativeImageMain {
   def main(args: Array[String]): Unit = {
     require(classOf[ScalaJsonNativeConfig].isAnnotationPresent(classOf[ForyJsonProvider]))
-    val json = ForyJsonScala.builder().register[NativeResult].build()
+    val json = ForyJsonScala.builder().build()
     val node = NativeNode(1, Some(NativeNode(2)))
     require(json.fromJson(json.toJson(node), classOf[NativeNode]) == node)
     require(json.fromJson("""{"value":3}""", classOf[NativeNode]) == NativeNode(3))

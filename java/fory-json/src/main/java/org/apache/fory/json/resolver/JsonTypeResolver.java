@@ -872,6 +872,21 @@ public final class JsonTypeResolver {
     if (codec == null) {
       codec = getObjectCodec(typeRef);
     }
+    if (codec instanceof ClosedSubtypeCodec) {
+      Class<?> baseType = ((ClosedSubtypeCodec) codec).baseType();
+      if (baseType != runtimeType) {
+        if (!baseType.isAssignableFrom(runtimeType)) {
+          throw new ForyJsonException(
+              "Closed JSON root " + baseType.getName() + " does not own " + runtimeType.getName());
+        }
+        // A module may recognize a runtime branch by returning its closed root codec. Resolve the
+        // declared root before publishing the runtime alias so child binding cannot observe that
+        // root shell as the branch's own recursive metadata.
+        typeInfo = getTypeInfo(baseType, baseType);
+        runtimeTypeInfos.put(runtimeType, typeInfo);
+        return typeInfo;
+      }
+    }
     typeInfo = typeInfos.get(runtimeType);
     if (typeInfo == null) {
       typeInfo = newTypeInfo(runtimeType, runtimeType, codec);

@@ -19,6 +19,9 @@
 
 package org.apache.fory.json.scala
 
+import java.nio.charset.StandardCharsets.UTF_8
+
+import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.annotation.{JsonIgnore, JsonProperty, JsonUnwrapped}
 import org.apache.fory.json.codec.AbstractJsonValueCodec
 import org.apache.fory.json.reader.JsonReader
@@ -187,9 +190,6 @@ class ScalaJsonSuite extends AnyFunSuite {
     val value = Map("a" -> Some(1), "b" -> None)
     assert(json.fromJson(json.toJson(value, mapType), mapType) == value)
 
-    val eitherType = new TypeRef[Either[Int, String]]() {}
-    assert(json.fromJson(json.toJson(Right("ok"), eitherType), eitherType) == Right("ok"))
-
     val someType = new TypeRef[Some[Int]]() {}
     assert(json.fromJson("1", someType) == Some(1))
     assertThrows[org.apache.fory.json.ForyJsonException](json.fromJson("null", someType))
@@ -197,6 +197,46 @@ class ScalaJsonSuite extends AnyFunSuite {
     val optionType = new TypeRef[Option[Int]]() {}
     assert(json.fromJson("null", optionType) == None)
     assert(json.fromJson(json.toJson(None), classOf[None.type]) == None)
+  }
+
+  test("Either uses compact branch names and reads legacy names") {
+    val json = ForyJsonScala.builder().withCodegen(false).build()
+    val eitherType = new TypeRef[Either[Int, String]]() {}
+    val leftType = new TypeRef[Left[Int, String]]() {}
+    val rightType = new TypeRef[Right[Int, String]]() {}
+    val left: Either[Int, String] = Left(7)
+    val right: Either[Int, String] = Right("ok")
+
+    assert(json.toJson(left, eitherType) == "{\"l\":7}")
+    assert(json.toJson(right, eitherType) == "{\"r\":\"ok\"}")
+    assert(new String(json.toJsonBytes(left, eitherType), UTF_8) == "{\"l\":7}")
+    assert(new String(json.toJsonBytes(right, eitherType), UTF_8) == "{\"r\":\"ok\"}")
+
+    assert(json.fromJson("{\"l\":7}", eitherType) == left)
+    assert(json.fromJson("{\"left\":7}", eitherType) == left)
+    assert(json.fromJson("{\"r\":\"ok\"}", eitherType) == right)
+    assert(json.fromJson("{\"right\":\"ok\"}", eitherType) == right)
+    assert(json.fromJson("{\"r\":\"中文\"}", eitherType) == Right("中文"))
+    assert(json.fromJson("{\"l\":7}".getBytes(UTF_8), eitherType) == left)
+    assert(json.fromJson("{\"left\":7}".getBytes(UTF_8), eitherType) == left)
+    assert(json.fromJson("{\"r\":\"ok\"}".getBytes(UTF_8), eitherType) == right)
+    assert(json.fromJson("{\"right\":\"ok\"}".getBytes(UTF_8), eitherType) == right)
+
+    assert(json.fromJson("null", eitherType) == null)
+    assert(json.toJson(null.asInstanceOf[Either[Int, String]], eitherType) == "null")
+    assert(json.fromJson("{\"l\":7}", leftType) == Left(7))
+    assert(json.fromJson("{\"r\":\"ok\"}".getBytes(UTF_8), rightType) == Right("ok"))
+    assertThrows[ForyJsonException](json.fromJson("{\"r\":\"ok\"}", leftType))
+    assertThrows[ForyJsonException](json.fromJson("{\"left\":7}".getBytes(UTF_8), rightType))
+
+    val nullableType = new TypeRef[Either[String, String]]() {}
+    assert(json.toJson(Left[String, String](null), nullableType) == "{\"l\":null}")
+    assert(json.fromJson("{\"r\":null}", nullableType) == Right(null))
+
+    for (invalid <- Seq("{}", "{\"l\":7,\"r\":\"ok\"}", "{\"x\":7}", "[7]")) {
+      assertThrows[ForyJsonException](json.fromJson(invalid, eitherType))
+      assertThrows[ForyJsonException](json.fromJson(invalid.getBytes(UTF_8), eitherType))
+    }
   }
 
   test("range and duration shapes") {

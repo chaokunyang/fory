@@ -179,6 +179,31 @@ The child members have these meanings:
 | `keyCodec`     | `Map<K, V>`                                       | JSON member name for `K`          |
 | `valueCodec`   | `Map<K, V>`                                       | direct `V` value                  |
 
+### Kotlin occurrences
+
+Kotlin uses the same codec registrations and `JsonCodec` annotation. Apply property annotations to
+an explicit supported use site, for example:
+
+```kotlin
+import org.apache.fory.json.annotation.JsonCodec
+
+data class Ledger(
+  @field:JsonCodec(value = MoneyCodec::class)
+  val total: Money,
+  @field:JsonCodec(elementCodec = MoneyCodec::class)
+  val entries: List<Money>,
+)
+```
+
+The complete-value codec owns the whole JSON value. Child codecs leave the standard array,
+collection, Optional/atomic, or map representation in control. Kotlin nullability is still the
+declared occurrence contract around a selected application codec: after a non-null JSON token, the
+codec must return the exact declared type and must not return null for a non-null occurrence.
+
+An unsigned or eligible value-class map key can use the built-in member-name mapping without an
+annotation. Use an explicit `keyCodec` or whole-map codec when the key has a different tagged text
+shape. An exact application registration still takes precedence over the Kotlin module defaults.
+
 A custom Map-key codec converts between the declared key and a JSON member name:
 
 ```java

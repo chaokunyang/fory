@@ -56,6 +56,7 @@ public final class JsonCreatorInfo {
 
   private final Class<?> ownerType;
   private final Executable executable;
+  private final Executable invocationExecutable;
   private final JsonCreatorFieldInfo[] fields;
   private final Object[] defaults;
   private final long[] hashes;
@@ -63,8 +64,15 @@ public final class JsonCreatorInfo {
   private final GeneratedJsonCodec<?> generatedCodec;
   private final Method[] defaultMethods;
   private final MethodHandle[] defaultInvokers;
+  private final Constructor<?> defaultConstructor;
+  private final MethodHandle defaultConstructorInvoker;
+  private final int[] defaultMaskBits;
+  private final boolean[] parameterNullable;
+  private final Object fixedInstance;
   private final String[] parameterNames;
   private final JsonFieldInfo[] deferredFields;
+  private final boolean[] deferredRequired;
+  private boolean[] nullCarriers;
   private static final Object MISSING = new Object();
 
   public JsonCreatorInfo(
@@ -73,7 +81,19 @@ public final class JsonCreatorInfo {
       JsonCreatorFieldInfo[] fields,
       Object[] defaults,
       GeneratedJsonCodec<?> generatedCodec) {
-    this(ownerType, executable, fields, defaults, generatedCodec, null, null, null);
+    this(
+        ownerType,
+        executable,
+        executable,
+        fields,
+        defaults,
+        generatedCodec,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   public JsonCreatorInfo(
@@ -87,45 +107,107 @@ public final class JsonCreatorInfo {
     this(
         ownerType,
         executable,
+        executable,
         fields,
         defaults,
         generatedCodec,
         defaultMethods,
         parameterNames,
+        null,
+        null,
+        null,
         null);
   }
 
-  private JsonCreatorInfo(
+  /** Creates creator metadata with compiler-mask defaults supplied by a language object model. */
+  public JsonCreatorInfo(
       Class<?> ownerType,
       Executable executable,
+      Executable invocationExecutable,
       JsonCreatorFieldInfo[] fields,
       Object[] defaults,
       GeneratedJsonCodec<?> generatedCodec,
       Method[] defaultMethods,
       String[] parameterNames,
-      JsonFieldInfo[] deferredFields) {
+      Constructor<?> defaultConstructor,
+      int[] defaultMaskBits,
+      boolean[] parameterNullable) {
+    this(
+        ownerType,
+        executable,
+        invocationExecutable,
+        fields,
+        defaults,
+        generatedCodec,
+        defaultMethods,
+        parameterNames,
+        defaultConstructor,
+        defaultMaskBits,
+        parameterNullable,
+        null);
+  }
+
+  /** Creates a fixed-instance creator for a stateless language singleton. */
+  public static JsonCreatorInfo fixedInstance(Class<?> ownerType, Object instance) {
+    return new JsonCreatorInfo(
+        ownerType,
+        null,
+        null,
+        new JsonCreatorFieldInfo[0],
+        new Object[0],
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        instance);
+  }
+
+  /** Returns whether this creator returns a pre-existing singleton instead of allocating. */
+  @Internal
+  public boolean fixedInstance() {
+    return fixedInstance != null;
+  }
+
+  private JsonCreatorInfo(
+      Class<?> ownerType,
+      Executable executable,
+      Executable invocationExecutable,
+      JsonCreatorFieldInfo[] fields,
+      Object[] defaults,
+      GeneratedJsonCodec<?> generatedCodec,
+      Method[] defaultMethods,
+      String[] parameterNames,
+      Constructor<?> defaultConstructor,
+      int[] defaultMaskBits,
+      boolean[] parameterNullable,
+      Object fixedInstance) {
     this.ownerType = ownerType;
     this.executable = executable;
-    this.deferredFields = deferredFields == null ? new JsonFieldInfo[0] : deferredFields;
-    if (this.deferredFields.length == 0) {
-      this.fields = fields;
-    } else {
-      this.fields = Arrays.copyOf(fields, fields.length + this.deferredFields.length);
-      for (int i = 0; i < this.deferredFields.length; i++) {
-        this.fields[fields.length + i] = this.deferredFields[i].asCreatorField(defaults.length + i);
-      }
-    }
+    this.invocationExecutable = invocationExecutable;
+    this.deferredFields = new JsonFieldInfo[0];
+    this.deferredRequired = new boolean[0];
+    this.fields = fields;
     this.defaults = defaults;
     this.generatedCodec = generatedCodec;
+    this.defaultConstructor = defaultConstructor;
+    this.defaultMaskBits = defaultMaskBits == null ? null : defaultMaskBits.clone();
+    this.parameterNullable = parameterNullable == null ? null : parameterNullable.clone();
+    this.fixedInstance = fixedInstance;
     this.parameterNames = parameterNames == null ? null : parameterNames.clone();
     this.defaultMethods = defaultMethods == null ? null : defaultMethods.clone();
     defaultInvokers =
         this.defaultMethods == null
             ? null
             : buildDefaultInvokers(ownerType, executable, this.defaultMethods);
+    defaultConstructorInvoker =
+        defaultConstructor == null
+            ? null
+            : buildInvoker(defaultConstructor, defaultConstructor.getParameterCount());
     invoker =
-        generatedCodec == null
-            ? buildInvoker(executable, defaults.length + this.deferredFields.length)
+        generatedCodec == null && invocationExecutable != null
+            ? buildInvoker(invocationExecutable, defaults.length + this.deferredFields.length)
             : null;
     hashes = new long[this.fields.length];
     for (int i = 0; i < this.fields.length; i++) {
@@ -136,15 +218,23 @@ public final class JsonCreatorInfo {
   private JsonCreatorInfo(
       JsonCreatorInfo source,
       JsonFieldInfo[] deferredFields,
-      JsonFieldInfo[] directDeferredFields) {
+      JsonFieldInfo[] directDeferredFields,
+      boolean[] deferredRequired) {
     ownerType = source.ownerType;
     executable = source.executable;
+    invocationExecutable = source.invocationExecutable;
     defaults = source.defaults;
     generatedCodec = source.generatedCodec;
     defaultMethods = source.defaultMethods;
     defaultInvokers = source.defaultInvokers;
+    defaultConstructor = source.defaultConstructor;
+    defaultConstructorInvoker = source.defaultConstructorInvoker;
+    defaultMaskBits = source.defaultMaskBits;
+    parameterNullable = source.parameterNullable;
+    fixedInstance = source.fixedInstance;
     parameterNames = source.parameterNames;
     this.deferredFields = deferredFields;
+    this.deferredRequired = deferredRequired;
     fields = Arrays.copyOf(source.fields, source.fields.length + directDeferredFields.length);
     for (int i = 0; i < directDeferredFields.length; i++) {
       int deferredIndex = identityIndex(deferredFields, directDeferredFields[i]);
@@ -157,7 +247,7 @@ public final class JsonCreatorInfo {
     }
     invoker =
         generatedCodec == null
-            ? buildInvoker(executable, defaults.length + deferredFields.length)
+            ? buildInvoker(invocationExecutable, defaults.length + deferredFields.length)
             : null;
     hashes = new long[fields.length];
     for (int i = 0; i < fields.length; i++) {
@@ -167,18 +257,27 @@ public final class JsonCreatorInfo {
 
   /** Returns immutable construction metadata extended with post-constructor mutable properties. */
   public JsonCreatorInfo withDeferredFields(JsonFieldInfo[] fields) {
-    return withDeferredFields(fields, fields);
+    return withDeferredFields(fields, fields, new boolean[fields.length]);
   }
 
   /** Extends construction with all deferred properties and their directly named JSON subset. */
   public JsonCreatorInfo withDeferredFields(JsonFieldInfo[] fields, JsonFieldInfo[] directFields) {
+    return withDeferredFields(fields, directFields, new boolean[fields.length]);
+  }
+
+  /** Extends construction with deferred properties and required-presence flags. */
+  public JsonCreatorInfo withDeferredFields(
+      JsonFieldInfo[] fields, JsonFieldInfo[] directFields, boolean[] required) {
     if (fields.length == 0) {
       return this;
+    }
+    if (required.length != fields.length) {
+      throw new IllegalArgumentException("Deferred JSON required flags must match fields");
     }
     if (deferredFields.length != 0) {
       throw new IllegalStateException("Deferred JSON properties are already installed");
     }
-    return new JsonCreatorInfo(this, fields.clone(), directFields.clone());
+    return new JsonCreatorInfo(this, fields.clone(), directFields.clone(), required.clone());
   }
 
   private static int identityIndex(JsonFieldInfo[] fields, JsonFieldInfo target) {
@@ -192,6 +291,32 @@ public final class JsonCreatorInfo {
 
   public Executable executable() {
     return executable;
+  }
+
+  /** Returns the exact full JVM invocation target selected during cold model validation. */
+  @Internal
+  public Executable invocationExecutable() {
+    return invocationExecutable;
+  }
+
+  /** Returns the exact Kotlin compiler-default constructor, or {@code null}. */
+  @Internal
+  public Constructor<?> defaultConstructor() {
+    return defaultConstructor;
+  }
+
+  /** Returns the compiler-default mask bit for one logical argument, or {@code -1}. */
+  @Internal
+  public int defaultMaskBit(int index) {
+    return defaultMaskBits == null ? -1 : defaultMaskBits[index];
+  }
+
+  /** Returns the number of compiler-default mask words in the exact target descriptor. */
+  @Internal
+  public int defaultMaskCount() {
+    return defaultConstructor == null
+        ? 0
+        : defaultConstructor.getParameterCount() - defaults.length - 1;
   }
 
   public JsonCreatorFieldInfo[] fields() {
@@ -208,6 +333,12 @@ public final class JsonCreatorInfo {
     return defaults.length + index;
   }
 
+  /** Returns whether one deferred property must be present before construction. */
+  @Internal
+  public boolean deferredRequired(int index) {
+    return deferredRequired[index];
+  }
+
   /** Returns the number of arguments passed to the constructor or factory. */
   public int argumentCount() {
     return defaults.length;
@@ -220,7 +351,7 @@ public final class JsonCreatorInfo {
 
   public Object[] newArguments() {
     Object[] arguments = Arrays.copyOf(defaults, defaults.length + deferredFields.length);
-    if (defaultInvokers != null) {
+    if (defaultInvokers != null || defaultMaskBits != null || parameterNullable != null) {
       Arrays.fill(arguments, 0, defaults.length, MISSING);
     }
     if (deferredFields.length != 0) {
@@ -243,11 +374,21 @@ public final class JsonCreatorInfo {
   public void resolveTypes(JsonTypeResolver resolver) {
     for (JsonCreatorFieldInfo field : fields) {
       field.resolveType(resolver);
+      if (field.materializesNullCarrier()) {
+        if (nullCarriers == null) {
+          nullCarriers = new boolean[defaults.length];
+        }
+        nullCarriers[field.argumentIndex()] = true;
+      }
     }
   }
 
   public Object create(Object[] arguments) {
-    prepareArguments(arguments);
+    if (fixedInstance != null) {
+      return fixedInstance;
+    }
+    validateLanguageArguments(arguments);
+    validateDeferredArguments(arguments);
     Object value;
     if (generatedCodec != null) {
       try {
@@ -258,14 +399,17 @@ public final class JsonCreatorInfo {
         }
         throw new ForyJsonException("JSON creator failed for " + ownerType.getName(), cause);
       }
+    } else if (defaultConstructorInvoker != null) {
+      value = invokeDefaultConstructor(arguments);
     } else if (invoker != null) {
+      prepareArguments(arguments);
       value = invoke(arguments);
     } else {
       try {
         value =
-            executable instanceof Constructor
-                ? ((Constructor<?>) executable).newInstance(arguments)
-                : ((Method) executable).invoke(null, arguments);
+            invocationExecutable instanceof Constructor
+                ? ((Constructor<?>) invocationExecutable).newInstance(arguments)
+                : ((Method) invocationExecutable).invoke(null, arguments);
         value = requireResult(value);
       } catch (InstantiationException | IllegalAccessException e) {
         throw new ForyJsonException("Failed to invoke JSON creator for " + ownerType.getName(), e);
@@ -284,13 +428,17 @@ public final class JsonCreatorInfo {
   /** Returns whether generated readers must track the presence of constructor arguments. */
   @Internal
   public boolean tracksArgumentPresence() {
-    return defaultInvokers != null || deferredFields.length != 0;
+    return defaultInvokers != null
+        || defaultMaskBits != null
+        || parameterNullable != null
+        || deferredFields.length != 0;
   }
 
   /** Returns whether one constructor argument has a language-defined default. */
   @Internal
   public boolean hasDefault(int index) {
-    return defaultInvokers != null && defaultInvokers[index] != null;
+    return defaultInvokers != null && defaultInvokers[index] != null
+        || defaultMaskBits != null && defaultMaskBits[index] >= 0;
   }
 
   /** Returns one prevalidated language-defined constructor default method. */
@@ -302,7 +450,7 @@ public final class JsonCreatorInfo {
   /** Evaluates one prevalidated language-defined constructor default. */
   @Internal
   public Object defaultValue(int index, Object[] arguments) {
-    MethodHandle invoker = defaultInvokers[index];
+    MethodHandle invoker = defaultInvokers == null ? null : defaultInvokers[index];
     if (invoker == null) {
       throw missingArgument(index);
     }
@@ -325,6 +473,22 @@ public final class JsonCreatorInfo {
         "Missing required JSON constructor property " + name + " for " + ownerType.getName());
   }
 
+  /** Creates the missing-required-deferred-property failure outside generated common paths. */
+  @Internal
+  public ForyJsonException missingDeferred(int index) {
+    return new ForyJsonException(
+        "Missing required deferred JSON property "
+            + deferredFields[index].name()
+            + " for "
+            + ownerType.getName());
+  }
+
+  /** Throws the cold missing-deferred failure from a generated presence branch. */
+  @Internal
+  public void requireDeferred(int index) {
+    throw missingDeferred(index);
+  }
+
   /** Returns whether one construction-workspace slot has not been read. */
   @Internal
   public static boolean isMissing(Object value) {
@@ -340,6 +504,103 @@ public final class JsonCreatorInfo {
         arguments[i] = defaultValue(i, arguments);
       }
     }
+  }
+
+  private void validateLanguageArguments(Object[] arguments) {
+    if (parameterNullable == null) {
+      return;
+    }
+    for (int i = 0; i < defaults.length; i++) {
+      Object argument = arguments[i];
+      if (argument == MISSING) {
+        if (!hasDefault(i)) {
+          throw missingArgument(i);
+        }
+      } else if (argument == null && !parameterNullable[i] && !materializesNullCarrier(i)) {
+        throw nullArgument(i);
+      }
+    }
+  }
+
+  private void validateDeferredArguments(Object[] arguments) {
+    for (int i = 0; i < deferredRequired.length; i++) {
+      if (deferredRequired[i] && arguments[defaults.length + i] == MISSING) {
+        throw missingDeferred(i);
+      }
+    }
+  }
+
+  private Object invokeDefaultConstructor(Object[] arguments) {
+    int parameterCount = defaults.length;
+    int maskCount = defaultConstructor.getParameterCount() - parameterCount - 1;
+    boolean useDefault = false;
+    for (int i = 0; i < parameterCount; i++) {
+      Object argument = arguments[i];
+      if (argument == MISSING) {
+        int bit = defaultMaskBits[i];
+        if (bit < 0) {
+          throw missingArgument(i);
+        }
+        useDefault = true;
+      } else if (argument == null
+          && parameterNullable != null
+          && !parameterNullable[i]
+          && !materializesNullCarrier(i)) {
+        throw nullArgument(i);
+      }
+    }
+    if (!useDefault) {
+      return invoke(arguments);
+    }
+    int[] masks = new int[maskCount];
+    Object[] invocation = new Object[defaultConstructor.getParameterCount()];
+    for (int i = 0; i < parameterCount; i++) {
+      Object argument = arguments[i];
+      invocation[i] = argument == MISSING ? defaults[i] : argument;
+      if (argument == MISSING) {
+        int bit = defaultMaskBits[i];
+        masks[bit >>> 5] |= 1 << (bit & 31);
+      }
+    }
+    for (int i = 0; i < maskCount; i++) {
+      invocation[parameterCount + i] = Integer.valueOf(masks[i]);
+    }
+    invocation[invocation.length - 1] = null;
+    return invokeDefaultTarget(invocation);
+  }
+
+  private Object invokeDefaultTarget(Object[] arguments) {
+    if (defaultConstructorInvoker != null) {
+      try {
+        return requireResult((Object) defaultConstructorInvoker.invokeExact(arguments));
+      } catch (Throwable cause) {
+        if (cause instanceof Error) {
+          throw (Error) cause;
+        }
+        throw new ForyJsonException("JSON creator failed for " + ownerType.getName(), cause);
+      }
+    }
+    try {
+      return requireResult(defaultConstructor.newInstance(arguments));
+    } catch (InstantiationException | IllegalAccessException e) {
+      throw new ForyJsonException("Failed to invoke JSON creator for " + ownerType.getName(), e);
+    } catch (InvocationTargetException e) {
+      Throwable cause = e.getCause();
+      if (cause instanceof Error) {
+        throw (Error) cause;
+      }
+      throw new ForyJsonException("JSON creator failed for " + ownerType.getName(), cause);
+    }
+  }
+
+  private ForyJsonException nullArgument(int index) {
+    String name = parameterNames == null ? Integer.toString(index) : parameterNames[index];
+    return new ForyJsonException(
+        "JSON constructor property " + name + " is not nullable for " + ownerType.getName());
+  }
+
+  private boolean materializesNullCarrier(int index) {
+    return nullCarriers != null && nullCarriers[index];
   }
 
   private void applyDeferred(Object value, Object[] arguments) {
@@ -444,15 +705,20 @@ public final class JsonCreatorInfo {
       executable.setAccessible(true);
       return null;
     }
-    int parameterCount = executable.getParameterCount();
-    if (workspaceSize == parameterCount) {
-      return creatorHandle(executable);
-    }
     MethodHandle target =
         GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
             ? nativeCreatorHandles(executable).target
             : creatorTarget(executable);
-    return workspaceInvoker(target, executable.getParameterTypes());
+    Class<?>[] parameterTypes = executable.getParameterTypes();
+    int logicalCount = Math.min(workspaceSize, parameterTypes.length);
+    if (parameterTypes.length == logicalCount + 1 && !parameterTypes[logicalCount].isPrimitive()) {
+      target = MethodHandles.insertArguments(target, logicalCount, new Object[] {null});
+      parameterTypes = Arrays.copyOf(parameterTypes, logicalCount);
+    }
+    if (workspaceSize == parameterTypes.length) {
+      return arrayInvoker(target, parameterTypes.length);
+    }
+    return workspaceInvoker(target, parameterTypes);
   }
 
   /** Returns the array-argument invocation handle for one JSON creator. */

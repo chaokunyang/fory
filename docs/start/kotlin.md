@@ -19,8 +19,8 @@ license: |
   limitations under the License.
 ---
 
-Fory Kotlin provides binary Object Serialization, generated models, Fory gRPC,
-and Android support. It runs on Fory Java and supports Java 8 and later.
+Fory Kotlin provides binary Object Serialization, standard JSON mapping, generated models, Fory
+gRPC, and Android support. It runs on Fory Java and supports Java 8 and later.
 
 ## Verify the Toolchain
 
@@ -72,6 +72,32 @@ within the JVM Fory implementation family. Continue with
 [Kotlin Object Serialization](../object-serialization/kotlin/index.md),
 [xlang](../object-serialization/kotlin/basic-serialization.md#cross-language-interoperability), or
 [native mode](../object-serialization/kotlin/native.md).
+
+## Standard JSON
+
+Fory JSON is a separate text format from binary Object Serialization. Add its optional Kotlin
+module when interoperating with ordinary JSON APIs, browsers, logs, or other JSON libraries:
+
+```kotlin title="build.gradle.kts"
+dependencies {
+  implementation("org.apache.fory:fory-json-kotlin:1.7.0-SNAPSHOT")
+}
+```
+
+```kotlin
+import org.apache.fory.json.kotlin.ForyJsonKotlin
+import org.apache.fory.json.kotlin.jsonTypeRef
+
+data class User(val id: Long, val name: String)
+
+val json = ForyJsonKotlin.builder().build()
+val userType = jsonTypeRef<User>()
+val text = json.toJson(User(1, "Alice"), userType)
+val decoded = json.fromJson(text, userType)
+```
+
+Use `fory-json-kotlin-ksp` for `@JsonType`/Mixin generation and for Android or Native Image Kotlin
+models. Continue with [Kotlin JSON](../json/kotlin.md).
 
 ## Other Capabilities
 

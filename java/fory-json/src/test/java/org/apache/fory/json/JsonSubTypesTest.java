@@ -26,12 +26,16 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
 
 import java.io.ByteArrayOutputStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
+import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.annotation.JsonPropertyOrder;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonSubTypes.Inclusion;
+import org.apache.fory.json.codec.JsonObjectModel;
 import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.meta.JsonSubtypeScanInfo;
 import org.apache.fory.json.reader.JsonReader;
@@ -121,6 +125,67 @@ public class JsonSubTypesTest extends ForyJsonTestModels {
                 json.fromJson("{\"value\":\"z\"}".getBytes(StandardCharsets.UTF_8), Wrapped.class))
             .text,
         "z");
+  }
+
+  @Test
+  public void fixedObjectSubtype() {
+    JsonCodecFactory factory =
+        (type, resolver) ->
+            resolver.createObjectCodec(type, JsonObjectModel.fixedInstance(FixedValue.INSTANCE));
+    ForyJson json = newJsonBuilder().registerCodec(FixedValue.class, factory).build();
+
+    assertEquals(json.toJson(FixedValue.INSTANCE, FixedBase.class), "{\"kind\":\"fixed\"}");
+    assertEquals(json.fromJson("{\"kind\":\"fixed\"}", FixedBase.class), FixedValue.INSTANCE);
+    assertEquals(json.toJson(FixedValue.INSTANCE, FixedValue.class), "{}");
+    assertEquals(json.fromJson("{}", FixedValue.class), FixedValue.INSTANCE);
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson("{\"kind\":\"fixed\",\"extra\":1}", FixedBase.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("{\"extra\":1}", FixedValue.class));
+  }
+
+  @Test
+  public void fixedObjectState() {
+    ForyJson inherited =
+        newJsonBuilder()
+            .registerCodec(
+                InheritedFixed.class,
+                (type, resolver) ->
+                    resolver.createObjectCodec(
+                        type, JsonObjectModel.fixedInstance(InheritedFixed.INSTANCE)))
+            .build();
+    assertThrows(ForyJsonException.class, () -> inherited.fromJson("{}", InheritedFixed.class));
+
+    ForyJson ignored =
+        newJsonBuilder()
+            .registerCodec(
+                IgnoredFixed.class,
+                (type, resolver) ->
+                    resolver.createObjectCodec(
+                        type, JsonObjectModel.fixedInstance(IgnoredFixed.INSTANCE)))
+            .build();
+    assertEquals(ignored.toJson(IgnoredFixed.INSTANCE, IgnoredFixed.class), "{}");
+    assertEquals(ignored.fromJson("{}", IgnoredFixed.class), IgnoredFixed.INSTANCE);
+
+    Field compilerField = declaredField(CompilerFixed.class, "ordinal");
+    ForyJson compilerStorage =
+        newJsonBuilder()
+            .registerCodec(
+                CompilerFixed.class,
+                (type, resolver) ->
+                    resolver.createObjectCodec(
+                        type,
+                        JsonObjectModel.fixedInstance(
+                            CompilerFixed.INSTANCE,
+                            new String[0],
+                            new Method[0],
+                            new Method[0],
+                            new TypeRef<?>[0],
+                            new Field[] {compilerField},
+                            false)))
+            .build();
+    assertEquals(compilerStorage.toJson(CompilerFixed.INSTANCE, CompilerFixed.class), "{}");
+    assertEquals(compilerStorage.fromJson("{}", CompilerFixed.class), CompilerFixed.INSTANCE);
   }
 
   @Test
@@ -295,6 +360,14 @@ public class JsonSubTypesTest extends ForyJsonTestModels {
     reader.expect('{');
   }
 
+  private static Field declaredField(Class<?> owner, String name) {
+    try {
+      return owner.getDeclaredField(name);
+    } catch (NoSuchFieldException e) {
+      throw new AssertionError(e);
+    }
+  }
+
   @JsonSubTypes(
       property = "kind",
       value = {
@@ -309,6 +382,44 @@ public class JsonSubTypesTest extends ForyJsonTestModels {
       inclusion = Inclusion.WRAPPER_OBJECT,
       value = {@JsonSubTypes.Type(value = WrappedValue.class, name = "value")})
   public interface Wrapped {}
+
+  @JsonSubTypes(
+      property = "kind",
+      value = {@JsonSubTypes.Type(value = FixedValue.class, name = "fixed")})
+  public interface FixedBase {}
+
+  public static final class FixedValue implements FixedBase {
+    static final FixedValue INSTANCE = new FixedValue();
+
+    private FixedValue() {}
+  }
+
+  public static class InheritedState {
+    public int state = 1;
+  }
+
+  public static final class InheritedFixed extends InheritedState {
+    static final InheritedFixed INSTANCE = new InheritedFixed();
+
+    private InheritedFixed() {}
+  }
+
+  public static class IgnoredInheritedState {
+    @JsonIgnore public int state = 1;
+  }
+
+  public static final class IgnoredFixed extends IgnoredInheritedState {
+    static final IgnoredFixed INSTANCE = new IgnoredFixed();
+
+    private IgnoredFixed() {}
+  }
+
+  public static final class CompilerFixed {
+    static final CompilerFixed INSTANCE = new CompilerFixed();
+    private final int ordinal = 1;
+
+    private CompilerFixed() {}
+  }
 
   @JsonSubTypes(
       inclusion = Inclusion.WRAPPER_ARRAY,

@@ -24,10 +24,15 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.fail;
 
+import java.lang.reflect.Executable;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonIgnore;
+import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonProperty;
+import org.apache.fory.json.codec.JsonObjectModel;
+import org.apache.fory.reflect.TypeRef;
 import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
 
@@ -50,6 +55,110 @@ public class JsonCreatorTest extends ForyJsonTestModels {
         json.fromJson("{\"name\":\"你好\",\"id\":9}".getBytes(StandardCharsets.UTF_8), User.class);
     assertEquals(utf8.id, 9L);
     assertEquals(utf8.name, "你好");
+  }
+
+  @Test
+  public void languageModelCreatorMapping() throws Exception {
+    Executable listCreator = LanguageList.class.getConstructor(String.class);
+    Method listGetter = LanguageList.class.getMethod("getOutput");
+    ForyJson listJson =
+        newJsonBuilder()
+            .registerCodec(
+                LanguageList.class,
+                (type, resolver) ->
+                    resolver.createObjectCodec(
+                        type, languageModel(listCreator, "source", listGetter)))
+            .build();
+    LanguageList list = listJson.fromJson("{\"output\":\"list\"}", LanguageList.class);
+    assertEquals(list.output, "list");
+    assertEquals(listJson.toJson(list, LanguageList.class), "{\"output\":\"list\"}");
+
+    Executable parameterCreator = LanguageParameter.class.getConstructor(String.class);
+    Method parameterGetter = LanguageParameter.class.getMethod("getOutput");
+    ForyJson parameterJson =
+        newJsonBuilder()
+            .registerCodec(
+                LanguageParameter.class,
+                (type, resolver) ->
+                    resolver.createObjectCodec(
+                        type, languageModel(parameterCreator, "source", parameterGetter)))
+            .build();
+    LanguageParameter parameter =
+        parameterJson.fromJson("{\"wire_value\":\"parameter\"}", LanguageParameter.class);
+    assertEquals(parameter.output, "parameter");
+    assertEquals(
+        parameterJson.toJson(parameter, LanguageParameter.class), "{\"wire_value\":\"parameter\"}");
+
+    Executable factoryCreator = LanguageFactory.class.getMethod("create", String.class);
+    Method factoryGetter = LanguageFactory.class.getMethod("getOutput");
+    ForyJson factoryJson =
+        newJsonBuilder()
+            .registerCodec(
+                LanguageFactory.class,
+                (type, resolver) ->
+                    resolver.createObjectCodec(
+                        type, languageModel(factoryCreator, "source", factoryGetter)))
+            .build();
+    LanguageFactory factory =
+        factoryJson.fromJson("{\"output\":\"factory\"}", LanguageFactory.class);
+    assertEquals(factory.output, "factory");
+
+    Executable mixinCreator = LanguageMixinTarget.class.getConstructor(String.class);
+    Method mixinGetter = LanguageMixinTarget.class.getMethod("getOutput");
+    ForyJson mixinJson =
+        newJsonBuilder()
+            .registerMixin(LanguageMixin.class)
+            .registerCodec(
+                LanguageMixinTarget.class,
+                (type, resolver) ->
+                    resolver.createObjectCodec(
+                        type, languageModel(mixinCreator, "source", mixinGetter)))
+            .build();
+    LanguageMixinTarget mixin =
+        mixinJson.fromJson("{\"output\":\"mixin\"}", LanguageMixinTarget.class);
+    assertEquals(mixin.output, "mixin");
+
+    Executable logicalCreator = LanguageInvocation.class.getDeclaredConstructor(String.class);
+    Executable invocationCreator =
+        LanguageInvocation.class.getConstructor(String.class, InvocationMarker.class);
+    Method invocationGetter = LanguageInvocation.class.getMethod("getOutput");
+    ForyJson invocationJson =
+        newJsonBuilder()
+            .registerCodec(
+                LanguageInvocation.class,
+                (type, resolver) ->
+                    resolver.createObjectCodec(
+                        type,
+                        languageModel(
+                            logicalCreator, invocationCreator, "source", invocationGetter)))
+            .build();
+    LanguageInvocation invocation =
+        invocationJson.fromJson("{\"output\":\"bridge\"}", LanguageInvocation.class);
+    assertEquals(invocation.output, "bridge");
+  }
+
+  private static JsonObjectModel languageModel(
+      Executable creator, String parameterName, Method getter) {
+    return languageModel(creator, creator, parameterName, getter);
+  }
+
+  private static JsonObjectModel languageModel(
+      Executable creator, Executable invocationCreator, String parameterName, Method getter) {
+    TypeRef<?> type = TypeRef.of(String.class);
+    return new JsonObjectModel(
+        creator,
+        invocationCreator,
+        null,
+        new String[] {parameterName},
+        new Method[] {getter},
+        new Method[1],
+        new int[] {-1},
+        new boolean[] {false},
+        new TypeRef<?>[] {type},
+        new String[] {"output"},
+        new Method[] {getter},
+        new Method[1],
+        new TypeRef<?>[] {type});
   }
 
   @Test
@@ -421,6 +530,87 @@ public class JsonCreatorTest extends ForyJsonTestModels {
     @JsonCreator
     public static ErrorFactory create(@JsonProperty("id") int id) {
       throw new AssertionError("creator error");
+    }
+  }
+
+  public static final class LanguageList {
+    private final String output;
+
+    @JsonCreator({"output"})
+    public LanguageList(String source) {
+      output = source;
+    }
+
+    public String getOutput() {
+      return output;
+    }
+  }
+
+  public static final class LanguageParameter {
+    private final String output;
+
+    @JsonCreator
+    public LanguageParameter(@JsonProperty("wire_value") String source) {
+      output = source;
+    }
+
+    @JsonProperty("wire_value")
+    public String getOutput() {
+      return output;
+    }
+  }
+
+  public static final class LanguageFactory {
+    private final String output;
+
+    private LanguageFactory(String output) {
+      this.output = output;
+    }
+
+    @JsonCreator({"output"})
+    public static LanguageFactory create(String source) {
+      return new LanguageFactory(source);
+    }
+
+    public String getOutput() {
+      return output;
+    }
+  }
+
+  public static final class LanguageMixinTarget {
+    private final String output;
+
+    public LanguageMixinTarget(String source) {
+      output = source;
+    }
+
+    public String getOutput() {
+      return output;
+    }
+  }
+
+  @JsonMixin(target = LanguageMixinTarget.class)
+  public abstract static class LanguageMixin {
+    @JsonCreator({"output"})
+    LanguageMixin(String source) {}
+  }
+
+  public static final class InvocationMarker {}
+
+  public static final class LanguageInvocation {
+    private final String output;
+
+    private LanguageInvocation(String source) {
+      output = source;
+    }
+
+    @JsonCreator({"output"})
+    public LanguageInvocation(String source, InvocationMarker ignored) {
+      this(source);
+    }
+
+    public String getOutput() {
+      return output;
     }
   }
 }

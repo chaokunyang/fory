@@ -28,6 +28,7 @@ import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.meta.JsonAnySetterAccessor;
 import org.apache.fory.json.meta.JsonFieldAccessor;
+import org.apache.fory.reflect.TypeRef;
 
 /** Source-generated execution operations for one JSON model. */
 @Internal
@@ -74,6 +75,70 @@ public abstract class GeneratedJsonCodec<T> {
   /** Returns whether the source model is a Java Record. */
   public boolean isRecord() {
     return false;
+  }
+
+  /**
+   * Creates a resolver-local semantic codec shell owned by this generated model, or {@code null}
+   * when the companion supplies object operations only.
+   *
+   * <p>The generated companion is shared across resolver instances and must remain immutable. A
+   * returned composite shell owns its own resolved child slots and is published through the normal
+   * resolver lifecycle.
+   */
+  public JsonValueCodec<?> newTypeCodec(TypeRef<?> type) {
+    return null;
+  }
+
+  /**
+   * Returns a generated object-member operation for this exact declared key type, or {@code null}
+   * when the model is not a supported map key.
+   *
+   * <p>The result contains only immutable generated operations and the exact classes materialized
+   * while decoding the key. The shared registry authorizes those classes before handing the
+   * operation to the standard {@link MapCodec}; no resolver state is retained here.
+   */
+  public GeneratedMapKey newMapKey(TypeRef<?> type) {
+    return null;
+  }
+
+  /**
+   * Returns the exact fixed instance for a generated zero-property model, or {@code null} when the
+   * model is constructed normally.
+   *
+   * <p>The generated companion is shared, so this method may expose only an immutable type-owned
+   * instance. The resolver validates the exact class and creates its ordinary state-local {@link
+   * ObjectCodec}; the companion never owns resolver state or a second singleton codec path.
+   */
+  public Object fixedInstance() {
+    return null;
+  }
+
+  /** Immutable generated operation and its complete map-key security surface. */
+  public static final class GeneratedMapKey {
+    private final MapKeyCodec codec;
+    private final Class<?>[] secureTypes;
+
+    public GeneratedMapKey(MapKeyCodec codec, Class<?>[] secureTypes) {
+      if (codec == null || secureTypes == null || secureTypes.length == 0) {
+        throw new IllegalArgumentException(
+            "A generated map key requires one codec and at least one secure type");
+      }
+      this.codec = codec;
+      this.secureTypes = secureTypes.clone();
+      for (Class<?> secureType : this.secureTypes) {
+        if (secureType == null) {
+          throw new IllegalArgumentException("A generated map-key secure type must not be null");
+        }
+      }
+    }
+
+    public MapKeyCodec codec() {
+      return codec;
+    }
+
+    public Class<?>[] secureTypes() {
+      return secureTypes.clone();
+    }
   }
 
   /**

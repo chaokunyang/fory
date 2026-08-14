@@ -66,6 +66,12 @@ case class ExplicitNullable(
     @JsonProperty(include = JsonProperty.Include.ALWAYS) value: String
 )
 
+object StableToken
+
+object StatefulToken {
+  val value: Int = 1
+}
+
 object Weekday extends Enumeration {
   val Monday, Tuesday = Value
 }
@@ -326,6 +332,22 @@ class ScalaJsonSuite extends AnyFunSuite {
     assert(json.fromJson("7", classOf[UserId]) == UserId(7))
     assert(json.toJson(UnitValue(())) == "{\"value\":null}")
     assert(json.fromJson("{\"value\":null}", classOf[UnitValue]) == UnitValue(()))
+  }
+
+  test("standalone object uses strict fixed object codec") {
+    for (json <- Seq(
+        ForyJsonScala.builder().withCodegen(false).build(),
+        ForyJsonScala.builder().withAsyncCompilation(false).build()
+      )) {
+      assert(json.toJson(StableToken) == "{}")
+      assert(json.fromJson("{}", StableToken.getClass) eq StableToken)
+      assertThrows[ForyJsonException](json.fromJson("{\"extra\":1}", StableToken.getClass))
+    }
+  }
+
+  test("stateful object requires an exact codec") {
+    val json = ForyJsonScala.builder().withCodegen(false).build()
+    assertThrows[ForyJsonException](json.toJson(StatefulToken))
   }
 
   test("Scala composite child codec annotations") {

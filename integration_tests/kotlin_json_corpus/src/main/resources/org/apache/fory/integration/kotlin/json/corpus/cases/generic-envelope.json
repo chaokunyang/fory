@@ -1,0 +1,6 @@
+{
+  "account": { "id": 2, "name": "nested" },
+  "names": ["a"],
+  "boxedNames": [{ "value": "b" }],
+  "unsigned": 4294967295
+}

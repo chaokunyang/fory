@@ -28,9 +28,11 @@ import org.apache.fory.json.reader.Utf16JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.CodecRegistry;
 import org.apache.fory.json.resolver.JsonSharedRegistry;
+import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.StringSerializer;
 
 final class JsonTestSupport {
@@ -185,14 +187,29 @@ final class JsonTestSupport {
     return codec.getClass();
   }
 
-  static int generatedCodecId(Class<?> generatedClass) {
+  static Class<?> generatedUtf8WriterClass(ForyJson json, TypeRef<?> type) {
+    JsonTypeResolver resolver = currentTypeResolver(json);
+    JsonTypeInfo typeInfo = resolver.getTypeInfo(type);
+    Object owner = resolver.canonicalObjectCodec(typeInfo);
+    Object codec = typeInfo.utf8Writer();
+    if (owner == null || codec == owner) {
+      throw new AssertionError("No generated UTF-8 writer for " + type);
+    }
+    return codec.getClass();
+  }
+
+  static String generatedCodecIdentity(Class<?> generatedClass) {
     String simpleName = generatedClass.getSimpleName();
-    int suffixStart = simpleName.lastIndexOf(GENERATED_CODEC_SUFFIX);
+    int suffixStart = simpleName.lastIndexOf(GENERATED_CODEC_SUFFIX + "_");
     if (suffixStart < 0) {
       throw new AssertionError("Unexpected generated class " + generatedClass.getName());
     }
-    String id = simpleName.substring(suffixStart + GENERATED_CODEC_SUFFIX.length());
-    return id.isEmpty() ? 0 : Integer.parseInt(id);
+    String identity =
+        simpleName.substring(suffixStart + GENERATED_CODEC_SUFFIX.length() + 1);
+    if (!identity.matches("[0-9a-f]{64}")) {
+      throw new AssertionError("Unexpected generated class " + generatedClass.getName());
+    }
+    return identity;
   }
 
   static String stringReaderPath(String input) {

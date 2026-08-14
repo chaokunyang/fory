@@ -19,7 +19,13 @@
 
 package org.apache.fory.json.scala
 
-import org.apache.fory.json.ForyJsonException
+import java.util.concurrent.atomic.AtomicBoolean
+
+import org.apache.fory.json.{ForyJsonException, JsonCodecFactory}
+import org.apache.fory.json.codec.{AbstractJsonValueCodec, JsonValueCodec}
+import org.apache.fory.json.reader.JsonReader
+import org.apache.fory.json.resolver.JsonTypeResolver
+import org.apache.fory.json.writer.JsonWriter
 import org.scalatest.funsuite.AnyFunSuite
 import org.apache.fory.reflect.TypeRef
 
@@ -44,6 +50,32 @@ enum DisplayColor {
   override def toString: String = "display"
 }
 
+final class PendingCodec extends AbstractJsonValueCodec[Result] {
+  override def write(writer: JsonWriter, value: Result): Unit = {
+    if (value != Result.Pending)
+      throw new ForyJsonException("Expected Result.Pending")
+    writer.writeString("pending")
+  }
+
+  override def read(reader: JsonReader): Result = {
+    if (reader.readString() != "pending")
+      throw new ForyJsonException("Expected pending")
+    Result.Pending
+  }
+}
+
+final class PendingFactory extends JsonCodecFactory {
+  private val first = new AtomicBoolean(true)
+
+  override def factoryKey(): String = getClass.getName
+
+  override def create(typeRef: TypeRef[_], resolver: JsonTypeResolver): JsonValueCodec[_] = {
+    if (first.getAndSet(false))
+      throw new ForyJsonException("First child resolution fails")
+    new PendingCodec
+  }
+}
+
 class ScalaJsonDerivationSuite extends AnyFunSuite {
   test("EmptyTuple uses an empty JSON array") {
     val json = ForyJsonScala.builder().withCodegen(false).build()
@@ -64,9 +96,40 @@ class ScalaJsonDerivationSuite extends AnyFunSuite {
     assertThrows[ForyJsonException](
       json.fromJson("{\"value\":\"raw\"}", classOf[Result.Ok])
     )
+    val pendingClass = Result.Pending.getClass.asInstanceOf[Class[Result]]
+    assertThrows[ForyJsonException](json.fromJson("{}", pendingClass))
     assert(json.fromJson(json.toJson(ok), classOf[Result]) == ok)
     assert(json.fromJson(json.toJson(error), classOf[Result]) == error)
     assert(json.fromJson(json.toJson(pending), classOf[Result]) == pending)
+    assert(json.fromJson("{\"Pending\":{}}", classOf[Result]) eq Result.Pending)
+    assertThrows[ForyJsonException](
+      json.fromJson("{\"Pending\":{\"extra\":1}}", classOf[Result])
+    )
+  }
+
+  test("derived child honors exact codec") {
+    val pendingClass = Result.Pending.getClass.asInstanceOf[Class[Result]]
+    val json =
+      ForyJsonScala.builder().registerCodec(pendingClass, new PendingCodec).withCodegen(false).build()
+
+    assert(json.toJson(Result.Pending, classOf[Result]) == "{\"Pending\":\"pending\"}")
+    assert(json.fromJson("{\"Pending\":\"pending\"}", classOf[Result]) eq Result.Pending)
+    assert(json.toJson(Result.Pending, pendingClass) == "\"pending\"")
+  }
+
+  test("derived child rollback") {
+    val pendingClass = Result.Pending.getClass.asInstanceOf[Class[Result]]
+    val json = ForyJsonScala
+      .builder()
+      .registerCodec(pendingClass, new PendingFactory)
+      .withCodegen(false)
+      .withConcurrencyLevel(1)
+      .build()
+
+    assertThrows[ForyJsonException](
+      json.fromJson("{\"Pending\":\"pending\"}", classOf[Result])
+    )
+    assert(json.fromJson("{\"Pending\":\"pending\"}", classOf[Result]) eq Result.Pending)
   }
 
   test("third-party enum uses builder registration") {

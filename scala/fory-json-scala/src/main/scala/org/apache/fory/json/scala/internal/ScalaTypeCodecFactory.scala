@@ -99,8 +99,7 @@ private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
     val enumRoot = ScalaEnumCodec.enumRoot(rawType)
     if (
       enumFamily != null && enumRoot == null &&
-      (enumFamily == rawType ||
-        resolver.resolvingRuntimeType() && !resolver.resolvingSubtypeOf(enumFamily))
+      (enumFamily == rawType || resolver.resolvingRuntimeType())
     ) {
       val derivedCodec = ScalaDerivedCodec.find(enumFamily)
       if (derivedCodec != null) {
@@ -110,13 +109,13 @@ private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
     if (enumRoot != null && (enumRoot == rawType || resolver.resolvingRuntimeType())) {
       return ScalaEnumCodec.create(enumRoot, typeRef)
     }
-    if (enumFamily != null && !resolver.resolvingSubtypeOf(enumFamily)) {
+    if (enumFamily != null) {
       throw ScalaTypeSupport.unsupported(
         typeRef,
         "Scala enum with parameters requires an exact derived or custom codec"
       )
     }
-    val singleton = ScalaObjectModels.singletonCodec(rawType)
+    val singleton = ScalaObjectModels.singletonCodec(typeRef, resolver)
     if (singleton != null) return singleton
     val valueClass = ScalaValueClassCodec.create(rawType)
     if (valueClass != null) return valueClass

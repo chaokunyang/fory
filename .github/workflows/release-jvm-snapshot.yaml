@@ -18,21 +18,24 @@
 # All `uses:` action pins in this workflow must come from the Apache action allowlist:
 # https://github.com/apache/infrastructure-actions/blob/main/actions.yml
 
-name: Publish Fory Java Snapshot
+name: Publish Fory JVM Snapshot
 
 on:
   push:
     branches:
       - main
-      - release-java-snapshot
+      - release-jvm-snapshot
+
+permissions:
+  contents: read
 
 jobs:
-  publish-java:
+  publish-jvm:
     runs-on: ubuntu-latest
     if: github.repository == 'apache/fory'
     steps:
       - uses: actions/checkout@v5
-      - name: Set up Maven Central Repository
+      - name: Set up Apache snapshot repository
         uses: actions/setup-java@v4
         with:
           java-version: "25"
@@ -42,8 +45,11 @@ jobs:
           server-id: apache.snapshots.https
           server-username: NEXUS_USERNAME
           server-password: NEXUS_PASSWORD
-      - name: Publish Fory Java Snapshot
-        run: python ./ci/run_ci.py java --version 25 --release
+      - uses: sbt/setup-sbt@9d56cf12e9b58d219605e1d8bfe69a8395fedde0 # v1.5.1
+        with:
+          disk-cache: false
+      - name: Publish Java, Kotlin, and Scala snapshots
+        run: python ./ci/release.py publish_jvm --mode snapshot
         env:
           NEXUS_USERNAME: ${{ secrets.NEXUS_USER }}
           NEXUS_PASSWORD: ${{ secrets.NEXUS_PW }}

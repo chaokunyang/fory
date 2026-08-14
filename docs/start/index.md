@@ -61,7 +61,7 @@ round trip for an application project, and the next capability-specific steps:
 | -------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------- |
 | Object Serialization | Reconstruct object graphs, including shared references and schema changes      | All languages                                                    | [Object Serialization](../object-serialization/index.md) |
 | Row Format           | Trusted analytical data with zero-copy, random, or partial field access        | Java, Python, C++, Rust                                          | [Row Format](../row-format/index.md)                     |
-| Fory JSON            | High-performance standard JSON mapping                                         | Java                                                             | [Fory JSON](../json/index.md)                            |
+| Fory JSON            | High-performance standard JSON mapping                                         | Java, Kotlin, Scala                                              | [Fory JSON](../json/index.md)                            |
 | Fory IDL             | Generate native models and serializers from Fory, protobuf, or FlatBuffers IDL | All languages                                                    | [Fory IDL and Compiler](../compiler/index.md)            |
 | Fory gRPC            | Use generated models over normal gRPC transports with Fory-encoded messages    | Java, Python, C++, Go, Rust, JavaScript, C#, Dart, Scala, Kotlin | [Fory gRPC](../grpc/index.md)                            |
 

@@ -19,7 +19,7 @@
 
 package org.apache.fory.json;
 
-import static org.apache.fory.json.JsonTestSupport.generatedCodecId;
+import static org.apache.fory.json.JsonTestSupport.generatedCodecIdentity;
 import static org.apache.fory.json.JsonTestSupport.generatedUtf8WriterClass;
 import static org.apache.fory.json.JsonTestSupport.newLatin1Reader;
 import static org.apache.fory.json.JsonTestSupport.newUtf8Reader;
@@ -213,9 +213,25 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
     assertGeneratedName(secondCodecClass, PublicFields.class, "Utf8Writer");
     assertGeneratedName(writeNullCodecClass, PublicFields.class, "Utf8Writer");
     assertGeneratedName(snakeCaseCodecClass, PublicFields.class, "Utf8Writer");
-    assertEquals(generatedCodecId(secondCodecClass), generatedCodecId(firstCodecClass));
-    assertNotEquals(generatedCodecId(writeNullCodecClass), generatedCodecId(firstCodecClass));
-    assertNotEquals(generatedCodecId(snakeCaseCodecClass), generatedCodecId(firstCodecClass));
+    assertEquals(generatedCodecIdentity(secondCodecClass), generatedCodecIdentity(firstCodecClass));
+    assertNotEquals(
+        generatedCodecIdentity(writeNullCodecClass), generatedCodecIdentity(firstCodecClass));
+    assertNotEquals(
+        generatedCodecIdentity(snakeCaseCodecClass), generatedCodecIdentity(firstCodecClass));
+  }
+
+  @Test
+  public void boundedGeneratedName() {
+    ForyJson json = newJson(true);
+    json.toJsonBytes(new ModelWithANameLongEnoughToRequireDeterministicPrefixTruncation());
+    Class<?> generated =
+        generatedUtf8WriterClass(
+            json, ModelWithANameLongEnoughToRequireDeterministicPrefixTruncation.class);
+    assertTrue(
+        generated.getSimpleName().length()
+            <= 32 + "Utf8Writer".length() + GENERATED_SUFFIX.length() + 1 + 64,
+        generated.getName());
+    assertEquals(generatedCodecIdentity(generated).length(), 64);
   }
 
   @Test
@@ -405,6 +421,10 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
     public int altar;
   }
 
+  public static final class ModelWithANameLongEnoughToRequireDeterministicPrefixTruncation {
+    public int value;
+  }
+
   public static class WideFields {
     public int f0;
     public String f1;
@@ -502,7 +522,7 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
     String simpleName = generatedClass.getSimpleName();
     assertTrue(simpleName.startsWith(valueType.getSimpleName()), generatedClass.getName());
     assertTrue(simpleName.contains(role + GENERATED_SUFFIX), generatedClass.getName());
-    assertFalse(simpleName.contains(GENERATED_SUFFIX + "_"), generatedClass.getName());
-    assertTrue(generatedCodecId(generatedClass) >= 0, generatedClass.getName());
+    assertTrue(simpleName.contains(GENERATED_SUFFIX + "_"), generatedClass.getName());
+    assertEquals(generatedCodecIdentity(generatedClass).length(), 64, generatedClass.getName());
   }
 }

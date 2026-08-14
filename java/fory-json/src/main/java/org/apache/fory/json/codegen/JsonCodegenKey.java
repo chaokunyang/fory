@@ -68,4 +68,19 @@ public final class JsonCodegenKey {
             writeNullFields, propertyDiscoveryEnabled, propertyNamingStrategy, codecRegistryKey);
     return 31 * result + mixinKey.hashCode();
   }
+
+  /** Returns the deterministic generated-source identity used in generated class names. */
+  public String identity() {
+    StringBuilder builder = new StringBuilder();
+    builder.append(writeNullFields ? '1' : '0');
+    builder.append(propertyDiscoveryEnabled ? '1' : '0');
+    append(builder, propertyNamingStrategy);
+    append(builder, codecRegistryKey);
+    append(builder, mixinKey);
+    return builder.toString();
+  }
+
+  private static void append(StringBuilder builder, String value) {
+    builder.append(value.length()).append(':').append(value);
+  }
 }

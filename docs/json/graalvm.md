@@ -1,6 +1,6 @@
 ---
 title: GraalVM Native Image
-sidebar_position: 9
+sidebar_position: 10
 id: graalvm
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -21,8 +21,9 @@ license: |
 
 ## Reachable Models
 
-Fory JSON has its own Native Image Feature and does not use the Fory annotation processor. Add
-`@JsonType` to each reachable concrete object model that the native executable reads or writes:
+Fory JSON has one Native Image Feature. Java models are discovered from reachable annotations; the
+Feature does not use the Java annotation processor. Add `@JsonType` to each reachable concrete
+Java object model that the native executable reads or writes:
 
 ```java
 import org.apache.fory.json.ForyJson;
@@ -100,6 +101,34 @@ uses its prepared interpreted codecs and logs one process-wide warning recommend
 `@ForyJsonProvider`. `withCodegen(false)` explicitly selects interpreted codecs and does not request
 generated-codec lookup. Asynchronous compilation is disabled in a native executable.
 
+### Kotlin configurations
+
+Kotlin Native Image support uses the same Feature and provider API. Add the Kotlin runtime and KSP
+processor to the application build, then return a codegen-enabled configuration that installs
+`ForyJsonKotlin`:
+
+```kotlin
+import org.apache.fory.json.ForyJson
+import org.apache.fory.json.annotation.ForyJsonProvider
+import org.apache.fory.json.kotlin.ForyJsonKotlin
+
+@ForyJsonProvider
+class JsonConfigs {
+  fun api(): ForyJson = ForyJsonKotlin.builder().build()
+}
+```
+
+Every reachable Kotlin construction, value-class, or singleton model must have the generated
+companion from a direct `@JsonType` declaration or exact Mixin. Kotlin metadata discovery and
+reflective construction do not run inside the executable. A missing provider, disabled code
+generation, missing companion, or unsupported metadata ABI fails image construction instead of
+selecting an interpreted Kotlin fallback.
+
+An exact generic Kotlin root is available only when its complete binding is reached through a
+property, constructor argument, container/map child, or closed subtype of a provider-selected
+concrete root. Keep using `jsonTypeRef<T>()` at the direct root call; no public root registry or
+reflection configuration is needed.
+
 ## Mixins
 
 Use Fory JSON Mixins for models that cannot be modified:
@@ -146,7 +175,8 @@ by a class name resolved at runtime is not reachable;
 `JsonSubTypes.Type.className` is therefore unsupported in a native image.
 
 Do not add application reflection configuration as a replacement for the generated configuration.
-The native executable resolves the same effective annotations as the JVM.
+The native executable resolves the same effective annotations as the JVM. Kotlin applications must
+also avoid package-wide opens or reflection configuration; package their exact KSP output instead.
 
 ## Annotations and Custom Codecs
 

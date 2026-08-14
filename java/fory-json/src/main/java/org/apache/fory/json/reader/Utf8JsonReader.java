@@ -268,6 +268,55 @@ public final class Utf8JsonReader extends JsonReader {
     return matches && index == expected.length();
   }
 
+  @Override
+  protected CharSequence decodeQuotedText(int start, int end) {
+    byte[] outBytes = stringDecodeBuffer;
+    int out = 0;
+    int offset = start;
+    while (offset < end) {
+      int raw = input[offset++] & 0xff;
+      if (raw == '\\') {
+        int escaped = input[offset++] & 0xff;
+        char ch;
+        if (escaped == 'u') {
+          ch = scanUnicodeEscape(offset);
+          offset += 4;
+        } else {
+          ch = scanSimpleEscape(escaped, offset - 1);
+        }
+        if (Character.isHighSurrogate(ch)) {
+          offset += 2;
+          char low = scanUnicodeEscape(offset);
+          offset += 4;
+          outBytes = ensureStringDecodeCapacity(outBytes, out + 4);
+          out = putUtf16Char(outBytes, out, ch);
+          out = putUtf16Char(outBytes, out, low);
+        } else {
+          outBytes = ensureStringDecodeCapacity(outBytes, out + 2);
+          out = putUtf16Char(outBytes, out, ch);
+        }
+        continue;
+      }
+      if (raw < 0x80) {
+        outBytes = ensureStringDecodeCapacity(outBytes, out + 2);
+        out = putUtf16Char(outBytes, out, (char) raw);
+        continue;
+      }
+      long decoded = scanUtf8CodePoint(offset - 1);
+      offset = (int) (decoded >>> 32);
+      int codePoint = (int) decoded;
+      if (codePoint <= 0xffff) {
+        outBytes = ensureStringDecodeCapacity(outBytes, out + 2);
+        out = putUtf16Char(outBytes, out, (char) codePoint);
+      } else {
+        outBytes = ensureStringDecodeCapacity(outBytes, out + 4);
+        out = putUtf16Char(outBytes, out, Character.highSurrogate(codePoint));
+        out = putUtf16Char(outBytes, out, Character.lowSurrogate(codePoint));
+      }
+    }
+    return decodedQuotedText(outBytes, out, true);
+  }
+
   private int scanEscape(int slash, int inputLength) {
     int cursor = slash + 1;
     if (cursor >= inputLength) {
@@ -829,7 +878,7 @@ public final class Utf8JsonReader extends JsonReader {
       return readUuidToken();
     } catch (RuntimeException e) {
       position = mark;
-      return UUID.fromString(readStringToken());
+      return parseUuidValue(readQuotedTextValue());
     }
   }
 
@@ -2064,7 +2113,7 @@ public final class Utf8JsonReader extends JsonReader {
       return value;
     }
     position = mark;
-    return readIsoLocalDateFallback(readStringToken());
+    return readIsoLocalDateFallback(readQuotedTextValue());
   }
 
   public OffsetDateTime readIsoOffsetDateTime() {
@@ -2075,7 +2124,7 @@ public final class Utf8JsonReader extends JsonReader {
       return value;
     }
     position = mark;
-    return readIsoOffsetDateTimeFallback(readStringToken());
+    return readIsoOffsetDateTimeFallback(readQuotedTextValue());
   }
 
   private String readStringToken() {

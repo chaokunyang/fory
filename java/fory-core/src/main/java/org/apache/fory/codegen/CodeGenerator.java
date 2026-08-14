@@ -32,6 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.builder.AccessorHelper;
 import org.apache.fory.builder.Generated;
 import org.apache.fory.collection.Collections;
@@ -115,10 +116,30 @@ public class CodeGenerator {
    * @param units compile units
    */
   public ClassLoader compile(CompileUnit... units) {
-    return compile(Arrays.asList(units), compileState -> compileState.lock.lock());
+    return compile(
+        Arrays.asList(units), compileState -> compileState.lock.lock(), null, null);
   }
 
   public ClassLoader compile(List<CompileUnit> units, CompileCallback callback) {
+    return compile(units, callback, null, null);
+  }
+
+  /** Compiles one unit and installs its verified direct invocation bridges before publication. */
+  @Internal
+  public ClassLoader compileDirect(
+      CompileUnit unit, JaninoUtils.DirectInvocation... invocations) {
+    return compile(
+        Arrays.asList(unit),
+        compileState -> compileState.lock.lock(),
+        unit,
+        invocations);
+  }
+
+  private ClassLoader compile(
+      List<CompileUnit> units,
+      CompileCallback callback,
+      CompileUnit directUnit,
+      JaninoUtils.DirectInvocation[] invocations) {
     checkRuntimeCodegenSupported();
     List<CompileUnit> compileUnits = new ArrayList<>();
     ClassLoader parentClassLoader;
@@ -145,6 +166,15 @@ public class CodeGenerator {
       try {
         classes =
             JaninoUtils.toBytecode(parentClassLoader, compileUnits.toArray(new CompileUnit[0]));
+        if (directUnit != null && invocations.length != 0) {
+          String classFile =
+              directUnit.getQualifiedClassName().replace('.', '/') + ".class";
+          byte[] bytecode = classes.get(classFile);
+          if (bytecode == null) {
+            throw new CodegenException("Missing generated direct invocation class " + classFile);
+          }
+          classes.put(classFile, JaninoUtils.installDirectInvocations(bytecode, invocations));
+        }
         compileState.result = classes;
         compileState.finished = true;
       } finally {

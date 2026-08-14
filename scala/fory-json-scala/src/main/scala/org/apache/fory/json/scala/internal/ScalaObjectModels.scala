@@ -22,10 +22,8 @@ package org.apache.fory.json.scala.internal
 import java.lang.reflect.{Constructor, Field, Method, Modifier}
 
 import org.apache.fory.json.ForyJsonException
-import org.apache.fory.json.codec.{AbstractJsonValueCodec, JsonObjectModel, JsonValueCodec}
-import org.apache.fory.json.reader.JsonReader
+import org.apache.fory.json.codec.{JsonObjectModel, JsonValueCodec, ObjectCodec}
 import org.apache.fory.json.resolver.JsonTypeResolver
-import org.apache.fory.json.writer.JsonWriter
 import org.apache.fory.reflect.TypeRef
 
 private[scala] object ScalaObjectModels {
@@ -36,7 +34,7 @@ private[scala] object ScalaObjectModels {
     findPrimaryConstructor(typeClass) != null
   }
 
-  def caseClassCodec(typeRef: TypeRef[_], resolver: JsonTypeResolver): JsonValueCodec[_] = {
+  def caseClassCodec(typeRef: TypeRef[_], resolver: JsonTypeResolver): ObjectCodec[_] = {
     val typeClass = typeRef.getRawType
     val constructor = findPrimaryConstructor(typeClass)
     if (constructor == null) {
@@ -76,15 +74,22 @@ private[scala] object ScalaObjectModels {
         propertyNames,
         propertyGetters,
         propertySetters
-      )
+      ).map(typeRef.resolveType)
+    // Constructor properties and their accessors are one logical occurrence. In particular,
+    // @JsonEnumeration binds an erased Enumeration.Value parameter to the exact MODULE$ owner.
+    val logicalParameterTypes = propertyTypes.take(names.length)
     val defaults = constructorDefaults(typeClass, parameterTypes)
     resolver.createObjectCodec(
       typeRef,
       new JsonObjectModel(
         constructor,
+        null,
         names,
         accessors,
         defaults,
+        Array.fill(names.length)(-1),
+        Array.fill(names.length)(true),
+        logicalParameterTypes,
         propertyNames,
         propertyGetters,
         propertySetters,
@@ -93,9 +98,72 @@ private[scala] object ScalaObjectModels {
     )
   }
 
-  def singletonCodec(typeClass: Class[_]): JsonValueCodec[_] = {
+  def singletonCodec(
+      typeRef: TypeRef[_],
+      resolver: JsonTypeResolver
+  ): JsonValueCodec[_] = {
+    val typeClass = typeRef.getRawType
     val field = singletonField(typeClass)
-    if (field == null) null else new ScalaSingletonCodec(typeClass, field)
+    if (field == null) null
+    else fixedCodec(typeRef, resolver, field.get(null))
+  }
+
+  def fixedCodec(
+      typeRef: TypeRef[_],
+      resolver: JsonTypeResolver,
+      instance: AnyRef
+  ): ObjectCodec[_] = {
+    val typeClass = typeRef.getRawType
+    if (instance == null || instance.getClass != typeClass)
+      throw ScalaTypeSupport.unsupported(typeRef, "singleton instance has a different runtime class")
+    val nonPropertyFields = singletonNonPropertyFields(typeClass)
+    val fields = singletonStateFields(typeClass, nonPropertyFields)
+    val getters = fields.map(field => propertyGetter(typeClass, field.getName, field.getType))
+    val propertyTypes = fields.indices.map { index =>
+      val getter = getters(index)
+      typeRef.resolveType(if (getter == null) fields(index).getGenericType else getter.getGenericReturnType)
+    }.toArray
+    resolver.createObjectCodec(
+      typeRef,
+      JsonObjectModel.fixedInstance(
+        instance,
+        fields.map(_.getName),
+        getters,
+        Array.fill[Method](fields.length)(null),
+        propertyTypes,
+        nonPropertyFields,
+        false
+      )
+    )
+  }
+
+  private def singletonStateFields(
+      typeClass: Class[_],
+      nonPropertyFields: Array[Field]
+  ): Array[Field] = {
+    val moduleClass = typeClass.getName.endsWith("$")
+    typeClass.getDeclaredFields.filter { field =>
+      val name = field.getName
+      val modifiers = field.getModifiers
+      if (moduleClass) {
+        name != "MODULE$" && !field.isSynthetic &&
+        (!Modifier.isStatic(modifiers) || !Modifier.isFinal(modifiers) ||
+          propertyGetter(typeClass, name, field.getType) != null)
+      }
+      else {
+        !Modifier.isStatic(modifiers) && !field.isSynthetic && !nonPropertyFields.contains(field)
+      }
+    }
+  }
+
+  private def singletonNonPropertyFields(typeClass: Class[_]): Array[Field] = {
+    if (typeClass.getName.endsWith("$")) return Array.empty
+    typeClass.getDeclaredFields.filter { field =>
+      val name = field.getName
+      val modifiers = field.getModifiers
+      !Modifier.isStatic(modifiers) && Modifier.isFinal(modifiers) && !field.isSynthetic &&
+      (name.startsWith("_$ordinal$") || name.startsWith("$name$"))
+    }
   }
 
   private def productFields(typeClass: Class[_]): Array[Field] = {
@@ -233,30 +301,5 @@ private[scala] object ScalaObjectModels {
       ) field
       else null
     } catch { case _: NoSuchFieldException => null }
-  }
-}
-
-private final class ScalaSingletonCodec(typeClass: Class[_], field: Field)
-    extends AbstractJsonValueCodec[AnyRef] {
-  private val singleton = field.get(null).asInstanceOf[AnyRef]
-
-  override def write(writer: JsonWriter, value: AnyRef): Unit = {
-    if (value == null) writer.writeNull()
-    else if (value ne singleton)
-      throw new ForyJsonException(s"Expected singleton ${typeClass.getName}")
-    else {
-      writer.writeObjectStart()
-      writer.writeObjectEnd()
-    }
-  }
-
-  override def read(reader: JsonReader): AnyRef = {
-    if (reader.tryReadNullToken()) return null
-    reader.enterDepth()
-    reader.expectNextToken('{')
-    if (!reader.consumeNextToken('}'))
-      throw new ForyJsonException(s"Scala singleton ${typeClass.getName} requires an empty object")
-    reader.exitDepth()
-    singleton
   }
 }

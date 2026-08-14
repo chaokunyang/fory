@@ -28,6 +28,7 @@ import java.lang.reflect.WildcardType;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
+import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Utf16JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
@@ -132,7 +133,7 @@ public final class ForyJson {
         if (value == null) {
           writer.writeNull();
         } else {
-          JsonTypeInfo typeInfo = state.rootTypeInfo(value.getClass());
+          JsonTypeInfo typeInfo = state.runtimeRootTypeInfo(value.getClass());
           typeInfo.stringWriter().writeString(writer, value);
         }
       } finally {
@@ -162,7 +163,7 @@ public final class ForyJson {
   public <T> String toJson(T value, Class<T> declaredType) {
     requireDeclaredType(declaredType);
     validateWriteValue(value, declaredType);
-    return toJsonDeclared(value, declaredType, declaredType);
+    return toJsonDeclared(value, declaredType);
   }
 
   /**
@@ -178,9 +179,8 @@ public final class ForyJson {
   public <T> String toJson(T value, TypeRef<T> declaredType) {
     requireDeclaredType(declaredType);
     validateDeclaredType(declaredType.getType());
-    Class<?> rawType = declaredType.getRawType();
-    validateWriteValue(value, rawType);
-    return toJsonDeclared(value, declaredType.getType(), rawType);
+    validateWriteValue(value, declaredType);
+    return toJsonDeclared(value, declaredType);
   }
 
   /**
@@ -200,7 +200,7 @@ public final class ForyJson {
         if (value == null) {
           writer.writeNull();
         } else {
-          JsonTypeInfo typeInfo = state.rootTypeInfo(value.getClass());
+          JsonTypeInfo typeInfo = state.runtimeRootTypeInfo(value.getClass());
           typeInfo.utf8Writer().writeUtf8(writer, value);
         }
       } finally {
@@ -226,7 +226,7 @@ public final class ForyJson {
   public <T> byte[] toJsonBytes(T value, Class<T> declaredType) {
     requireDeclaredType(declaredType);
     validateWriteValue(value, declaredType);
-    return toJsonBytesDeclared(value, declaredType, declaredType);
+    return toJsonBytesDeclared(value, declaredType);
   }
 
   /**
@@ -239,9 +239,8 @@ public final class ForyJson {
   public <T> byte[] toJsonBytes(T value, TypeRef<T> declaredType) {
     requireDeclaredType(declaredType);
     validateDeclaredType(declaredType.getType());
-    Class<?> rawType = declaredType.getRawType();
-    validateWriteValue(value, rawType);
-    return toJsonBytesDeclared(value, declaredType.getType(), rawType);
+    validateWriteValue(value, declaredType);
+    return toJsonBytesDeclared(value, declaredType);
   }
 
   /**
@@ -265,7 +264,7 @@ public final class ForyJson {
         if (value == null) {
           writer.writeNull();
         } else {
-          JsonTypeInfo typeInfo = state.rootTypeInfo(value.getClass());
+          JsonTypeInfo typeInfo = state.runtimeRootTypeInfo(value.getClass());
           // Keep root dispatch direct so generated codecs own their own compilation boundaries.
           typeInfo.utf8Writer().writeUtf8(writer, value);
         }
@@ -293,7 +292,7 @@ public final class ForyJson {
   public <T> void writeJsonTo(T value, Class<T> declaredType, OutputStream output) {
     requireDeclaredType(declaredType);
     validateWriteValue(value, declaredType);
-    writeJsonDeclared(value, declaredType, declaredType, output);
+    writeJsonDeclared(value, declaredType, output);
   }
 
   /**
@@ -307,19 +306,18 @@ public final class ForyJson {
   public <T> void writeJsonTo(T value, TypeRef<T> declaredType, OutputStream output) {
     requireDeclaredType(declaredType);
     validateDeclaredType(declaredType.getType());
-    Class<?> rawType = declaredType.getRawType();
-    validateWriteValue(value, rawType);
-    writeJsonDeclared(value, declaredType.getType(), rawType, output);
+    validateWriteValue(value, declaredType);
+    writeJsonDeclared(value, declaredType, output);
   }
 
-  private String toJsonDeclared(Object value, Type type, Class<?> fallback) {
+  private String toJsonDeclared(Object value, Class<?> type) {
     PooledState entry = acquire();
     JsonState state = entry.state;
     StringJsonWriter writer = state.stringWriter;
     try {
       state.typeResolver.lockJIT();
       try {
-        state.rootTypeInfo(type, fallback).stringWriter().writeString(writer, value);
+        state.declaredRootTypeInfo(type).stringWriter().writeString(writer, value);
       } finally {
         state.typeResolver.unlockJIT();
       }
@@ -333,7 +331,28 @@ public final class ForyJson {
     }
   }
 
-  private byte[] toJsonBytesDeclared(Object value, Type type, Class<?> fallback) {
+  private String toJsonDeclared(Object value, TypeRef<?> type) {
+    PooledState entry = acquire();
+    JsonState state = entry.state;
+    StringJsonWriter writer = state.stringWriter;
+    try {
+      state.typeResolver.lockJIT();
+      try {
+        state.declaredRootTypeInfo(type).stringWriter().writeString(writer, value);
+      } finally {
+        state.typeResolver.unlockJIT();
+      }
+      return writer.toJson();
+    } finally {
+      try {
+        writer.reset();
+      } finally {
+        release(entry);
+      }
+    }
+  }
+
+  private byte[] toJsonBytesDeclared(Object value, Class<?> type) {
     PooledState entry = acquire();
     JsonState state = entry.state;
     Utf8JsonWriter writer = state.utf8Writer;
@@ -341,7 +360,7 @@ public final class ForyJson {
       state.typeResolver.lockJIT();
       try {
         // Declared root dispatch stays direct; generated codecs own their own boundaries.
-        state.rootTypeInfo(type, fallback).utf8Writer().writeUtf8(writer, value);
+        state.declaredRootTypeInfo(type).utf8Writer().writeUtf8(writer, value);
       } finally {
         state.typeResolver.unlockJIT();
       }
@@ -355,7 +374,28 @@ public final class ForyJson {
     }
   }
 
-  private void writeJsonDeclared(Object value, Type type, Class<?> fallback, OutputStream output) {
+  private byte[] toJsonBytesDeclared(Object value, TypeRef<?> type) {
+    PooledState entry = acquire();
+    JsonState state = entry.state;
+    Utf8JsonWriter writer = state.utf8Writer;
+    try {
+      state.typeResolver.lockJIT();
+      try {
+        state.declaredRootTypeInfo(type).utf8Writer().writeUtf8(writer, value);
+      } finally {
+        state.typeResolver.unlockJIT();
+      }
+      return writer.toJsonBytes();
+    } finally {
+      try {
+        writer.reset();
+      } finally {
+        release(entry);
+      }
+    }
+  }
+
+  private void writeJsonDeclared(Object value, Class<?> type, OutputStream output) {
     Objects.requireNonNull(output, "output");
     PooledState entry = acquire();
     JsonState state = entry.state;
@@ -363,7 +403,29 @@ public final class ForyJson {
     try {
       state.typeResolver.lockJIT();
       try {
-        state.rootTypeInfo(type, fallback).utf8Writer().writeUtf8(writer, value);
+        state.declaredRootTypeInfo(type).utf8Writer().writeUtf8(writer, value);
+      } finally {
+        state.typeResolver.unlockJIT();
+      }
+      writer.writeTo(output);
+    } finally {
+      try {
+        writer.reset();
+      } finally {
+        release(entry);
+      }
+    }
+  }
+
+  private void writeJsonDeclared(Object value, TypeRef<?> type, OutputStream output) {
+    Objects.requireNonNull(output, "output");
+    PooledState entry = acquire();
+    JsonState state = entry.state;
+    Utf8JsonWriter writer = state.utf8Writer;
+    try {
+      state.typeResolver.lockJIT();
+      try {
+        state.declaredRootTypeInfo(type).utf8Writer().writeUtf8(writer, value);
       } finally {
         state.typeResolver.unlockJIT();
       }
@@ -394,6 +456,27 @@ public final class ForyJson {
       throw new IllegalArgumentException(
           "Value type " + value.getClass() + " is not assignable to " + declaredType);
     }
+  }
+
+  private static void validateWriteValue(Object value, TypeRef<?> declaredType) {
+    if (isNullableVoid(declaredType)) {
+      if (value != null) {
+        throw new IllegalArgumentException("Nothing? accepts only null");
+      }
+      return;
+    }
+    validateWriteValue(value, declaredType.getRawType());
+    if (value == null
+        && declaredType.getTypeExtMeta() != null
+        && !declaredType.getTypeExtMeta().nullable()) {
+      throw new IllegalArgumentException("Cannot write null as non-null " + declaredType);
+    }
+  }
+
+  private static boolean isNullableVoid(TypeRef<?> declaredType) {
+    return declaredType.getRawType() == Void.class
+        && declaredType.getTypeExtMeta() != null
+        && declaredType.getTypeExtMeta().nullable();
   }
 
   private static void requireDeclaredType(Object declaredType) {
@@ -462,7 +545,7 @@ public final class ForyJson {
     try {
       state.typeResolver.lockJIT();
       try {
-        return castValue(readJavaStringValue(json, type, type, state), type);
+        return castValue(readJavaStringValue(json, type, state), type);
       } finally {
         state.typeResolver.unlockJIT();
       }
@@ -490,7 +573,7 @@ public final class ForyJson {
     try {
       state.typeResolver.lockJIT();
       try {
-        Object value = readJavaStringValue(json, typeRef.getType(), typeRef.getRawType(), state);
+        Object value = readJavaStringValue(json, typeRef, state);
         return castValue(value, typeRef);
       } finally {
         state.typeResolver.unlockJIT();
@@ -518,7 +601,7 @@ public final class ForyJson {
     try {
       state.typeResolver.lockJIT();
       try {
-        return castValue(readUtf8Value(state.utf8Reader(bytes), type, type, state), type);
+        return castValue(readUtf8Value(state.utf8Reader(bytes), type, state), type);
       } finally {
         state.typeResolver.unlockJIT();
       }
@@ -545,8 +628,7 @@ public final class ForyJson {
     try {
       state.typeResolver.lockJIT();
       try {
-        Object value =
-            readUtf8Value(state.utf8Reader(bytes), typeRef.getType(), typeRef.getRawType(), state);
+        Object value = readUtf8Value(state.utf8Reader(bytes), typeRef, state);
         return castValue(value, typeRef);
       } finally {
         state.typeResolver.unlockJIT();
@@ -625,43 +707,100 @@ public final class ForyJson {
     return hash ^ (hash >>> 16);
   }
 
-  private Object readJavaStringValue(String json, Type type, Class<?> fallback, JsonState state) {
+  private Object readJavaStringValue(String json, Class<?> type, JsonState state) {
     if (StringSerializer.isBytesBackedString()) {
       byte coder = StringSerializer.getStringCoder(json);
       if (StringSerializer.isLatin1Coder(coder)) {
         // Keep String input on its reader owner even when ASCII Latin1 bytes match UTF-8;
         // custom JsonValueCodec implementations can observe readLatin1/readUtf16 dispatch.
-        return readLatin1Value(state.latin1Reader(json), type, fallback, state);
+        return readLatin1Value(state.latin1Reader(json), type, state);
       }
       if (StringSerializer.isUtf16Coder(coder)) {
-        return readUtf16Value(state.utf16Reader(json), type, fallback, state);
+        return readUtf16Value(state.utf16Reader(json), type, state);
       }
     }
-    return readUtf16Value(state.charBackedUtf16Reader(json), type, fallback, state);
+    return readUtf16Value(state.charBackedUtf16Reader(json), type, state);
   }
 
-  private Object readLatin1Value(
-      Latin1JsonReader reader, Type type, Class<?> fallback, JsonState state) {
-    JsonTypeInfo typeInfo = state.rootTypeInfo(type, fallback);
+  private Object readJavaStringValue(String json, TypeRef<?> type, JsonState state) {
+    if (StringSerializer.isBytesBackedString()) {
+      byte coder = StringSerializer.getStringCoder(json);
+      if (StringSerializer.isLatin1Coder(coder)) {
+        return readLatin1Value(state.latin1Reader(json), type, state);
+      }
+      if (StringSerializer.isUtf16Coder(coder)) {
+        return readUtf16Value(state.utf16Reader(json), type, state);
+      }
+    }
+    return readUtf16Value(state.charBackedUtf16Reader(json), type, state);
+  }
+
+  private Object readLatin1Value(Latin1JsonReader reader, Class<?> type, JsonState state) {
+    JsonTypeInfo typeInfo = state.declaredRootTypeInfo(type);
     Object value = typeInfo.latin1Reader().readLatin1(reader);
     reader.finish();
     return value;
   }
 
-  private Object readUtf16Value(
-      Utf16JsonReader reader, Type type, Class<?> fallback, JsonState state) {
-    JsonTypeInfo typeInfo = state.rootTypeInfo(type, fallback);
+  private Object readLatin1Value(Latin1JsonReader reader, TypeRef<?> type, JsonState state) {
+    JsonTypeInfo typeInfo = state.declaredRootTypeInfo(type);
+    if (readOuterNull(reader, type, typeInfo)) {
+      reader.finish();
+      return null;
+    }
+    Object value = typeInfo.latin1Reader().readLatin1(reader);
+    reader.finish();
+    return value;
+  }
+
+  private Object readUtf16Value(Utf16JsonReader reader, Class<?> type, JsonState state) {
+    JsonTypeInfo typeInfo = state.declaredRootTypeInfo(type);
     Object value = typeInfo.utf16Reader().readUtf16(reader);
     reader.finish();
     return value;
   }
 
-  private Object readUtf8Value(
-      Utf8JsonReader reader, Type type, Class<?> fallback, JsonState state) {
-    JsonTypeInfo typeInfo = state.rootTypeInfo(type, fallback);
+  private Object readUtf16Value(Utf16JsonReader reader, TypeRef<?> type, JsonState state) {
+    JsonTypeInfo typeInfo = state.declaredRootTypeInfo(type);
+    if (readOuterNull(reader, type, typeInfo)) {
+      reader.finish();
+      return null;
+    }
+    Object value = typeInfo.utf16Reader().readUtf16(reader);
+    reader.finish();
+    return value;
+  }
+
+  private Object readUtf8Value(Utf8JsonReader reader, Class<?> type, JsonState state) {
+    JsonTypeInfo typeInfo = state.declaredRootTypeInfo(type);
     Object value = typeInfo.utf8Reader().readUtf8(reader);
     reader.finish();
     return value;
+  }
+
+  private Object readUtf8Value(Utf8JsonReader reader, TypeRef<?> type, JsonState state) {
+    JsonTypeInfo typeInfo = state.declaredRootTypeInfo(type);
+    if (readOuterNull(reader, type, typeInfo)) {
+      reader.finish();
+      return null;
+    }
+    Object value = typeInfo.utf8Reader().readUtf8(reader);
+    reader.finish();
+    return value;
+  }
+
+  private static boolean readOuterNull(
+      JsonReader reader, TypeRef<?> type, JsonTypeInfo typeInfo) {
+    if (!typeInfo.nullable() && !typeInfo.rejectsNull()) {
+      return false;
+    }
+    if (!reader.tryReadNull()) {
+      return false;
+    }
+    if (typeInfo.rejectsNull()) {
+      throw new ForyJsonException("Cannot read null as non-null " + type);
+    }
+    return true;
   }
 
   @SuppressWarnings("unchecked")
@@ -730,8 +869,9 @@ public final class ForyJson {
     private byte[] charBackedUtf16Bytes;
     private Class<?> lastRuntimeRootType;
     private JsonTypeInfo lastRuntimeRootInfo;
-    private Type lastRootType;
-    private Class<?> lastRootFallback;
+    private Class<?> lastDeclaredRootType;
+    private JsonTypeInfo lastDeclaredRootInfo;
+    private TypeRef<?> lastRootType;
     private JsonTypeInfo lastRootInfo;
 
     private JsonState(JsonConfig config, JsonSharedRegistry sharedRegistry) {
@@ -792,7 +932,7 @@ public final class ForyJson {
       utf8Reader.clear();
     }
 
-    private JsonTypeInfo rootTypeInfo(Class<?> type) {
+    private JsonTypeInfo runtimeRootTypeInfo(Class<?> type) {
       JsonTypeInfo typeInfo = lastRuntimeRootInfo;
       if (lastRuntimeRootType == type && typeInfo != null) {
         return typeInfo;
@@ -803,14 +943,24 @@ public final class ForyJson {
       return typeInfo;
     }
 
-    private JsonTypeInfo rootTypeInfo(Type type, Class<?> fallback) {
-      JsonTypeInfo typeInfo = lastRootInfo;
-      if (lastRootType == type && lastRootFallback == fallback && typeInfo != null) {
+    private JsonTypeInfo declaredRootTypeInfo(Class<?> type) {
+      JsonTypeInfo typeInfo = lastDeclaredRootInfo;
+      if (lastDeclaredRootType == type && typeInfo != null) {
         return typeInfo;
       }
-      typeInfo = typeResolver.getTypeInfo(type, fallback);
+      typeInfo = typeResolver.getTypeInfo(type, type);
+      lastDeclaredRootType = type;
+      lastDeclaredRootInfo = typeInfo;
+      return typeInfo;
+    }
+
+    private JsonTypeInfo declaredRootTypeInfo(TypeRef<?> type) {
+      JsonTypeInfo typeInfo = lastRootInfo;
+      if (lastRootType == type && typeInfo != null) {
+        return typeInfo;
+      }
+      typeInfo = typeResolver.getTypeInfo(type);
       lastRootType = type;
-      lastRootFallback = fallback;
       lastRootInfo = typeInfo;
       return typeInfo;
     }

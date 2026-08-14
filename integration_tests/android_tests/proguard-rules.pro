@@ -21,6 +21,13 @@
   public static void generatedMixin();
 }
 
+# Instrumentation invokes these application entry points across the target/test APK boundary.
+# Model and companion retention is intentionally owned only by KSP's exact consumer rules.
+-keep,allowoptimization class org.apache.fory.android.AndroidKotlinJsonScenarios {
+  public static void generatedModels();
+  public static void missingCompanionAndCleanup();
+}
+
 # Equivalent user-authored rules for models that deliberately omit @JsonType.
 -keepattributes Signature,RuntimeVisibleAnnotations
 -keepattributes RuntimeVisibleParameterAnnotations,AnnotationDefault,MethodParameters

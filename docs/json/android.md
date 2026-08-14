@@ -1,6 +1,6 @@
 ---
 title: Android
-sidebar_position: 8
+sidebar_position: 9
 id: android
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -23,6 +23,9 @@ Fory JSON supports ordinary classes on Android API level 26 and later through th
 `fory-json` artifact. Runtime JSON code generation and asynchronous compilation are disabled
 automatically, so `ForyJson.builder().build()` uses the interpreted object mapper.
 
+Kotlin applications use the ordinary `fory-json-kotlin` runtime and its KSP processor. Kotlin
+construction, singleton, and value-class models have no reflection fallback on Android.
+
 ## Installation and Codec Model
 
 Add Fory JSON to the application:
@@ -32,6 +35,24 @@ dependencies {
   implementation("org.apache.fory:fory-json:${foryVersion}")
 }
 ```
+
+For Kotlin, apply Kotlin 2.3.20 and KSP 2.3.8 to the application module:
+
+```kotlin
+plugins {
+  kotlin("android") version "2.3.20"
+  id("com.google.devtools.ksp") version "2.3.8"
+}
+
+dependencies {
+  implementation("org.apache.fory:fory-json-kotlin:${foryVersion}")
+  ksp("org.apache.fory:fory-json-kotlin-ksp:${foryVersion}")
+}
+```
+
+Create the runtime with `ForyJsonKotlin.builder()`. Annotate every application Kotlin model that
+needs construction, singleton identity, or value-class operations with `@JsonType`, or register an
+exact generated Mixin. The KSP classes and resources must be present in the final application.
 
 ## Custom Codecs
 
@@ -129,6 +150,9 @@ only the last registered source.
 
 Use the processor-generated R8 rules for non-empty Mixins instead of broad package keep rules.
 
+For Kotlin Mixins, use `fory-json-kotlin-ksp`. A Java-source Mixin whose exact target is Kotlin must
+also be processed by KSP; the Java annotation processor alone cannot generate the Kotlin operations.
+
 ## Reflection-Based Models
 
 Ordinary non-Record classes that omit `JsonType` can supply equivalent exact rules themselves unless
@@ -153,6 +177,10 @@ validator:
 
 The same exact-rule approach supports every `JsonCodec` member; it is not limited to complete-value
 codecs. `JsonType` is not required for codec selection on an ordinary class.
+
+This reflection-based section applies to Java models. An unannotated Kotlin immutable model may use
+metadata on HotSpot, but it is unsupported on Android. Do not replace the missing KSP companion
+with Kotlin metadata keep rules, `setAccessible`, or a broad package keep rule.
 
 For `@JsonType` models, generated operations and R8 rules also cover effective `JsonValidator`
 methods, `JsonValue` fields and effective methods, fixed `JsonRawValue` and `JsonBase64` fields and

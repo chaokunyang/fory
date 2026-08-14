@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-sidebar_position: 11
+sidebar_position: 12
 id: troubleshooting
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -35,6 +35,12 @@ license: |
 | Subtype is rejected                       | The base is not declared on the write, the runtime class is not an exact table entry, or the input wire shape differs from the configured inclusion |
 | Collection cannot be read                 | Target a supported interface/common implementation or register a custom codec                                                                       |
 | OutputStream write fails                  | The underlying `IOException` is wrapped as the cause of `ForyJsonException`                                                                         |
+| Kotlin null or missing member fails       | Check the exact `jsonTypeRef`, constructor default, and nullable occurrence; null does not request a compiler default                               |
+| Raw/star/projected Kotlin generic fails   | Supply a complete `jsonTypeRef<T>()`; `in` and star projections cannot reconstruct one exact schema                                                 |
+| Unsupported Kotlin metadata               | Compile the model with a supported Kotlin 2.3 compiler and ensure its validated JVM members match the metadata                                      |
+| Generated Kotlin companion is missing     | Apply `fory-json-kotlin-ksp`, annotate the source model or exact Mixin, and package KSP class/resource output                                       |
+| Kotlin model works on JVM but not Android | Android has no reflective Kotlin fallback; add `@JsonType` or an exact generated Mixin and retain the generated consumer rules                      |
+| Kotlin model is absent in Native Image    | Install `ForyJsonKotlin` from a reachable `ForyJsonProvider`, enable code generation, and make the exact binding reachable from that configuration  |
 
 Fory JSON mapping, syntax, codec, depth, graph-memory, validator, and output failures use
 `ForyJsonException`. User codec code may still throw its own runtime exception. Creator and

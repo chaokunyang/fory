@@ -24,7 +24,7 @@ import java.util.{ArrayList, Collections, HashSet, List => JList}
 
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.annotation.JsonSubTypes.Inclusion
-import org.apache.fory.json.codec.{ClosedSubtypeCodec, JsonSubTypesInfo, JsonValueCodec}
+import org.apache.fory.json.codec.{ClosedSubtypeCodec, JsonSubTypesInfo, JsonValueCodec, ObjectCodec}
 import org.apache.fory.json.resolver.JsonTypeResolver
 import org.apache.fory.json.scala.ScalaJsonCodec
 import org.apache.fory.reflect.TypeRef
@@ -34,7 +34,8 @@ private[scala] final class DerivedScalaJsonCodec[T](
     caseClasses: Array[Class[_]],
     caseNames: Array[String],
     singletonCases: Array[AnyRef]
-) extends ScalaJsonCodec[T] {
+) extends ScalaJsonCodec[T]
+{
   if (
     caseClasses.length == 0 || caseClasses.length != caseNames.length ||
     caseClasses.length != singletonCases.length
@@ -62,7 +63,7 @@ private[scala] final class DerivedScalaJsonCodec[T](
       if (singleton != null && singleton.getClass != caseClass)
         throw new IllegalArgumentException(s"Invalid derived Scala enum singleton $name")
       if (classSet.add(caseClass)) result.add(caseClass)
-      else if (singleton == null)
+      else
         throw new IllegalArgumentException(s"Duplicate derived Scala enum case ${caseClass.getName}")
       index += 1
     }
@@ -87,11 +88,21 @@ private[scala] final class DerivedScalaJsonCodec[T](
   override def create(typeRef: TypeRef[_], resolver: JsonTypeResolver): JsonValueCodec[_] = {
     if (typeRef.getRawType != rootType)
       throw new ForyJsonException(s"Derived Scala enum codec expected ${rootType.getName}")
+    val childCodecs = new Array[ObjectCodec[_]](classes.length)
+    var index = 0
+    while (index < classes.length) {
+      val childType = typeRef.getSubtype(classes(index))
+      val singleton = singletons(index)
+      childCodecs(index) =
+        if (singleton == null) ScalaObjectModels.caseClassCodec(childType, resolver)
+        else ScalaObjectModels.fixedCodec(childType, resolver, singleton)
+      index += 1
+    }
     new ClosedSubtypeCodec(
       rootType,
       new JsonSubTypesInfo(Inclusion.WRAPPER_OBJECT, "", classes.clone(), names.clone()),
       typeRef,
-      singletons.clone()
+      childCodecs
     )
   }
 

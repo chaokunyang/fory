@@ -44,6 +44,32 @@ implementation("org.apache.fory:fory-json:1.6.1")
 
 Use the same version for every Fory module in one application.
 
+### Kotlin
+
+Kotlin/JVM applications add the optional Kotlin JSON runtime and use its single builder entry:
+
+```kotlin title="build.gradle.kts"
+dependencies {
+  implementation("org.apache.fory:fory-json-kotlin:1.7.0-SNAPSHOT")
+}
+```
+
+```kotlin
+import org.apache.fory.json.kotlin.ForyJsonKotlin
+import org.apache.fory.json.kotlin.jsonTypeRef
+
+data class User(val id: Long, val name: String)
+
+val json = ForyJsonKotlin.builder().build()
+val userType = jsonTypeRef<User>()
+val text = json.toJson(User(7, "Alice"), userType)
+val decoded = json.fromJson(text, userType)
+```
+
+Add `fory-json-kotlin-ksp` through KSP when using `@JsonType` or a Kotlin Mixin, and for Kotlin
+models on Android or GraalVM Native Image. The complete setup and Kotlin type behavior are in the
+[Kotlin JSON guide](kotlin.md).
+
 ### JDK 25 and later
 
 On JDK 25 and later, opening `java.lang.invoke` to Fory core is also recommended. It avoids
@@ -61,6 +87,7 @@ For a module-path application:
 ```
 
 The JPMS module name of Fory JSON is `org.apache.fory.json`.
+The Kotlin integration module name is `org.apache.fory.json.kotlin`.
 
 ## Quick start
 

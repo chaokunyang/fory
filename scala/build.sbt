@@ -18,7 +18,7 @@
 
 val foryVersion = "1.7.0-SNAPSHOT"
 val scala213Version = "2.13.15"
-val repositoryRoot = file("..").getCanonicalFile
+val repositoryRoot = Def.setting((ThisBuild / baseDirectory).value.getParentFile)
 
 ThisBuild / apacheSonatypeProjectProfile := "fory"
 ThisBuild / version := foryVersion
@@ -38,8 +38,8 @@ ThisBuild / externalResolvers := Seq(
 )
 
 lazy val commonSettings = Seq(
-  apacheSonatypeLicenseFile := repositoryRoot / "LICENSE",
-  apacheSonatypeNoticeFile := repositoryRoot / "NOTICE",
+  apacheSonatypeLicenseFile := repositoryRoot.value / "LICENSE",
+  apacheSonatypeNoticeFile := repositoryRoot.value / "NOTICE",
   description := "Apache Fory™ is a blazingly fast multi-language serialization framework powered by JIT and zero-copy.",
   homepage := Some(url("https://fory.apache.org/")),
   scmInfo := Some(
@@ -96,8 +96,8 @@ lazy val root = (project in file("."))
     name := "fory-scala-parent",
     publish / skip := true,
     crossScalaVersions := Nil,
-    apacheSonatypeLicenseFile := repositoryRoot / "LICENSE",
-    apacheSonatypeNoticeFile := repositoryRoot / "NOTICE",
+    apacheSonatypeLicenseFile := repositoryRoot.value / "LICENSE",
+    apacheSonatypeNoticeFile := repositoryRoot.value / "NOTICE",
     writeTestClasspath := {
       val output = target.value / "scala-xlang-test-classpath"
       IO.write(

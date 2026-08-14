@@ -57,7 +57,8 @@ MAVEN_RELEASE_CMD = (
 )
 SCALA_RELEASE_CMDS = (
     "sbt clean",
-    "sbt +publishSigned",
+    "sbt 'project fory-scala' +publishSigned",
+    "sbt 'project fory-json-scala' +publishSigned",
     "sbt sonatypePrepare",
     "sbt sonatypeBundleUpload",
 )

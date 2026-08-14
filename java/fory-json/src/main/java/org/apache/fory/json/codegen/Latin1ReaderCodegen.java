@@ -104,8 +104,8 @@ final class Latin1ReaderCodegen extends JsonReaderCodegen {
   }
 
   @Override
-  Expression tryReadNextFieldNameColon(JsonFieldInfo property, boolean tokenValueRead) {
-    return tryReadAsciiFieldNameColon(property);
+  Expression tryReadNextFieldNameColon(String name) {
+    return tryReadAsciiFieldNameColon(name);
   }
 
   @Override

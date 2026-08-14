@@ -132,7 +132,7 @@ abstract class JsonReaderCodegen {
 
   abstract boolean isDirectName(String name, boolean tokenValueRead);
 
-  abstract Expression tryReadNextFieldNameColon(JsonFieldInfo property, boolean tokenValueRead);
+  abstract Expression tryReadNextFieldNameColon(String name);
 
   abstract Expression readEnumField(
       JsonGeneratedCodecBuilder builder,
@@ -927,20 +927,11 @@ abstract class JsonReaderCodegen {
                 finishCreator(builder, type, creatorInfo, arguments))));
 
     Expression.ListExpression loop = new Expression.ListExpression();
-    Expression hash = readFieldNameHash("creatorFieldHash");
-    Expression fieldIndex =
+    Reference fieldIndex = new Reference("creatorFieldIndex", TypeRef.of(int.class));
+    loop.add(
         new Expression.Variable(
-            "creatorFieldIndex",
-            new Expression.Invoke(
-                    fieldRef("creator", JsonCreatorInfo.class),
-                    "index",
-                    TypeRef.of(int.class),
-                    true,
-                    hash)
-                .inline());
-    loop.add(hash);
-    loop.add(fieldIndex);
-    loop.add(expectExpr(':'));
+            "creatorFieldIndex", Expression.Literal.ofInt(JsonFieldTable.UNKNOWN)));
+    loop.add(readCreatorFieldIndex(fieldIndex, fields));
     Expression.Switch.Case[] cases = new Expression.Switch.Case[fields.length];
     for (int i = 0; i < fields.length; i++) {
       cases[i] =
@@ -962,6 +953,36 @@ abstract class JsonReaderCodegen {
     expressions.add(new Expression.Invoke(readerRef(), "exitDepth"));
     expressions.add(finishCreator(builder, type, creatorInfo, arguments));
     return expressions;
+  }
+
+  private Expression readCreatorFieldIndex(Expression fieldIndex, JsonCreatorFieldInfo[] fields) {
+    Expression hash = readFieldNameHash("creatorFieldHash");
+    Expression fallback =
+        new Expression.ListExpression(
+            hash,
+            new Expression.Assign(
+                fieldIndex,
+                new Expression.Invoke(
+                        fieldRef("creator", JsonCreatorInfo.class),
+                        "index",
+                        TypeRef.of(int.class),
+                        true,
+                        hash)
+                    .inline()),
+            expectExpr(':'));
+    if (!rawFieldNameDispatch() || !hasDirectCreatorFieldName(fields)) {
+      return fallback;
+    }
+    Expression prefix =
+        new Expression.Invoke(
+            readerRef(), "readFieldNamePrefix", "creatorFieldPrefix", TypeRef.of(int.class), false);
+    // A complete direct token consumes the colon. A miss leaves the name unread, so the existing
+    // hash path retains whitespace, escape, unknown-name, collision, and malformed-input behavior.
+    return new Expression.ListExpression(
+        prefix,
+        directCreatorFieldNameSwitch(fieldIndex, prefix, fields),
+        new Expression.If(
+            eq(fieldIndex, Expression.Literal.ofInt(JsonFieldTable.UNKNOWN)), fallback));
   }
 
   private CreatorArguments creatorArguments(
@@ -2647,7 +2668,7 @@ abstract class JsonReaderCodegen {
       Expression[] skips) {
     if (isDirectName(properties[index].name(), true)) {
       return statementIf(
-          tryReadNextFieldNameColon(properties[index], true),
+          tryReadNextFieldNameColon(properties[index].name()),
           new Expression.ListExpression(
               readField(builder, type, properties[index], index, object, true),
               fieldEnd(slowMethod, properties.length, groupEnd, groupHelper, index, object)),
@@ -2682,7 +2703,7 @@ abstract class JsonReaderCodegen {
     int nextIndex = index + 1;
     if (nextIndex < groupEnd && isDirectName(properties[nextIndex].name(), true)) {
       return statementIf(
-          tryReadNextFieldNameColon(properties[nextIndex], true),
+          tryReadNextFieldNameColon(properties[nextIndex].name()),
           new Expression.ListExpression(
               readField(builder, type, properties[nextIndex], nextIndex, object, true),
               new Expression.Assign(skips[nextIndex], Expression.Literal.True),
@@ -3220,15 +3241,42 @@ abstract class JsonReaderCodegen {
     return false;
   }
 
+  private boolean hasDirectCreatorFieldName(JsonCreatorFieldInfo[] fields) {
+    for (JsonCreatorFieldInfo field : fields) {
+      if (!field.name().isEmpty() && isDirectName(field.name(), true)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private Expression directFieldNameSwitch(
       Expression fieldIndex, Expression prefix, JsonFieldInfo[] properties) {
-    int[] keys = new int[properties.length];
+    String[] names = new String[properties.length];
+    for (int i = 0; i < properties.length; i++) {
+      names[i] = properties[i].name();
+    }
+    return directFieldNameSwitch(fieldIndex, prefix, names);
+  }
+
+  private Expression directCreatorFieldNameSwitch(
+      Expression fieldIndex, Expression prefix, JsonCreatorFieldInfo[] fields) {
+    String[] names = new String[fields.length];
+    for (int i = 0; i < fields.length; i++) {
+      names[i] = fields[i].name();
+    }
+    return directFieldNameSwitch(fieldIndex, prefix, names);
+  }
+
+  private Expression directFieldNameSwitch(
+      Expression fieldIndex, Expression prefix, String[] names) {
+    int[] keys = new int[names.length];
     int keyCount = 0;
-    for (JsonFieldInfo property : properties) {
-      if (property.name().isEmpty() || !isDirectName(property.name(), true)) {
+    for (String name : names) {
+      if (name.isEmpty() || !isDirectName(name, true)) {
         continue;
       }
-      int key = (int) JsonAsciiToken.prefix(fieldNameToken(property.name()));
+      int key = (int) JsonAsciiToken.prefix(fieldNameToken(name));
       boolean found = false;
       for (int i = 0; i < keyCount; i++) {
         if (keys[i] == key) {
@@ -3244,14 +3292,14 @@ abstract class JsonReaderCodegen {
     for (int keyIndex = 0; keyIndex < keyCount; keyIndex++) {
       int key = keys[keyIndex];
       Expression resolve = new Expression.Empty();
-      for (int field = properties.length - 1; field >= 0; field--) {
-        JsonFieldInfo property = properties[field];
-        if (!property.name().isEmpty()
-            && isDirectName(property.name(), true)
-            && (int) JsonAsciiToken.prefix(fieldNameToken(property.name())) == key) {
+      for (int field = names.length - 1; field >= 0; field--) {
+        String name = names[field];
+        if (!name.isEmpty()
+            && isDirectName(name, true)
+            && (int) JsonAsciiToken.prefix(fieldNameToken(name)) == key) {
           resolve =
               new Expression.If(
-                  tryReadNextFieldNameColon(property, true),
+                  tryReadNextFieldNameColon(name),
                   new Expression.Assign(fieldIndex, Expression.Literal.ofInt(field)),
                   resolve);
         }
@@ -3729,8 +3777,8 @@ abstract class JsonReaderCodegen {
         .inline();
   }
 
-  final Expression tryReadAsciiFieldNameColon(JsonFieldInfo property) {
-    String token = fieldNameToken(property.name());
+  final Expression tryReadAsciiFieldNameColon(String name) {
+    String token = fieldNameToken(name);
     int tokenLength = token.length();
     int suffixLength = JsonAsciiToken.suffixLength(tokenLength);
     // Whitespace, escapes, and UTF8 spellings that do not match the raw token fall through without
@@ -3767,48 +3815,30 @@ abstract class JsonReaderCodegen {
         .inline();
   }
 
-  final Expression tryReadUtf16FieldNameColon(JsonFieldInfo property, boolean tokenValueRead) {
-    String name = property.name();
-    int length = name.length();
-    if (tokenValueRead) {
-      String token = fieldNameToken(name);
-      int tokenLength = token.length();
-      int tailLength = Math.max(0, tokenLength - 4);
-      if (tokenLength <= 8) {
-        return new Expression.Invoke(
-                readerRef(),
-                "tryReadNextFieldNameUtf16Token2",
-                TypeRef.of(boolean.class),
-                Expression.Literal.ofLong(utf16TokenWord(token, 0, Math.min(tokenLength, 4))),
-                Expression.Literal.ofLong(utf16WordMask(Math.min(tokenLength, 4))),
-                Expression.Literal.ofLong(
-                    tailLength == 0 ? 0 : utf16TokenWord(token, 4, tailLength)),
-                Expression.Literal.ofLong(tailLength == 0 ? 0 : utf16WordMask(tailLength)),
-                Expression.Literal.ofInt(tokenLength))
-            .inline();
-      }
+  final Expression tryReadUtf16FieldNameColon(String name) {
+    String token = fieldNameToken(name);
+    int tokenLength = token.length();
+    int tailLength = Math.max(0, tokenLength - 4);
+    if (tokenLength <= 8) {
       return new Expression.Invoke(
               readerRef(),
-              "tryReadNextFieldNameUtf16Token3",
+              "tryReadNextFieldNameUtf16Token2",
               TypeRef.of(boolean.class),
-              Expression.Literal.ofLong(utf16TokenWord(token, 0, 4)),
-              Expression.Literal.ofLong(utf16TokenWord(token, 4, 4)),
-              Expression.Literal.ofLong(utf16TokenWord(token, 8, tokenLength - 8)),
+              Expression.Literal.ofLong(utf16TokenWord(token, 0, Math.min(tokenLength, 4))),
+              Expression.Literal.ofLong(utf16WordMask(Math.min(tokenLength, 4))),
+              Expression.Literal.ofLong(tailLength == 0 ? 0 : utf16TokenWord(token, 4, tailLength)),
+              Expression.Literal.ofLong(tailLength == 0 ? 0 : utf16WordMask(tailLength)),
               Expression.Literal.ofInt(tokenLength))
           .inline();
     }
-    int tailLength = Math.max(0, length - 4);
     return new Expression.Invoke(
             readerRef(),
-            "tryReadNextFieldNameUtf16",
+            "tryReadNextFieldNameUtf16Token3",
             TypeRef.of(boolean.class),
-            Expression.Literal.ofLong(property.nameHash()),
-            Expression.Literal.ofLong(packedNameMask(length)),
-            Expression.Literal.ofLong(utf16NameWord(name, 0, Math.min(length, 4))),
-            Expression.Literal.ofLong(utf16WordMask(Math.min(length, 4))),
-            Expression.Literal.ofLong(tailLength == 0 ? 0 : utf16NameWord(name, 4, tailLength)),
-            Expression.Literal.ofLong(tailLength == 0 ? 0 : utf16WordMask(tailLength)),
-            Expression.Literal.ofInt(length))
+            Expression.Literal.ofLong(utf16TokenWord(token, 0, 4)),
+            Expression.Literal.ofLong(utf16TokenWord(token, 4, 4)),
+            Expression.Literal.ofLong(utf16TokenWord(token, 8, tokenLength - 8)),
+            Expression.Literal.ofInt(tokenLength))
         .inline();
   }
 

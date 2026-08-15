@@ -34,8 +34,7 @@ private[scala] final class DerivedScalaJsonCodec[T](
     caseClasses: Array[Class[_]],
     caseNames: Array[String],
     singletonCases: Array[AnyRef]
-) extends ScalaJsonCodec[T]
-{
+) extends ScalaJsonCodec[T] {
   if (
     caseClasses.length == 0 || caseClasses.length != caseNames.length ||
     caseClasses.length != singletonCases.length

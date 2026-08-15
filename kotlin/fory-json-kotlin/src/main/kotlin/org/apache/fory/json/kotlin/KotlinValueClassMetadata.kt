@@ -98,7 +98,7 @@ internal class KotlinValueClassShape(
           if (layer.carrierClass != terminalClass) {
             invalidLayer(layer, "primitive carrier does not match the terminal type")
           }
-        } else if (!layer.carrierClass.isAssignableFrom(box(terminalClass))) {
+        } else if (!layer.carrierClass.isAssignableFrom(KotlinMetadataTypes.box(terminalClass))) {
           invalidLayer(layer, "reference carrier does not accept the terminal type")
         }
       }
@@ -306,7 +306,7 @@ internal object KotlinValueClassMetadata {
     val constructorImpl = exactMethod(rawType, "constructor-impl", arrayOf(carrier), carrier, true)
     if (
       constructorSignature.name != constructorImpl.name ||
-        constructorSignature.descriptor != methodDescriptor(constructorImpl)
+        constructorSignature.descriptor != KotlinMetadataTypes.methodDescriptor(constructorImpl)
     ) {
       unsupported(rawType, "primary constructor metadata does not name the exact constructor-impl")
     }
@@ -359,12 +359,22 @@ internal object KotlinValueClassMetadata {
     val method =
       owner.declaredMethods.singleOrNull {
         it.name == name && it.parameterTypes.contentEquals(parameters) && it.returnType == result
-      } ?: unsupported(owner, "method $name${descriptor(parameters, result)} was not found exactly")
+      }
+        ?: unsupported(
+          owner,
+          "method $name${KotlinMetadataTypes.descriptor(parameters, result)} was not found exactly",
+        )
     if (!Modifier.isPublic(method.modifiers) || Modifier.isStatic(method.modifiers) != static) {
-      unsupported(owner, "method $name${descriptor(parameters, result)} is not directly callable")
+      unsupported(
+        owner,
+        "method $name${KotlinMetadataTypes.descriptor(parameters, result)} is not directly callable",
+      )
     }
     if (!static && !Modifier.isFinal(method.modifiers)) {
-      unsupported(owner, "method $name${descriptor(parameters, result)} is not final")
+      unsupported(
+        owner,
+        "method $name${KotlinMetadataTypes.descriptor(parameters, result)} is not final",
+      )
     }
     return method
   }
@@ -374,43 +384,3 @@ internal object KotlinValueClassMetadata {
 }
 
 private fun nullable(type: TypeRef<*>): Boolean = type.typeExtMeta?.nullable() == true
-
-private fun methodDescriptor(method: Method): String =
-  descriptor(method.parameterTypes, method.returnType)
-
-private fun descriptor(parameters: Array<Class<*>>, result: Class<*>): String = buildString {
-  append('(')
-  parameters.forEach { append(descriptor(it)) }
-  append(')')
-  append(descriptor(result))
-}
-
-private fun descriptor(type: Class<*>): String =
-  when {
-    type.isArray -> type.name.replace('.', '/')
-    !type.isPrimitive -> "L${type.name.replace('.', '/')};"
-    type == Void.TYPE -> "V"
-    type == java.lang.Boolean.TYPE -> "Z"
-    type == java.lang.Byte.TYPE -> "B"
-    type == java.lang.Short.TYPE -> "S"
-    type == java.lang.Integer.TYPE -> "I"
-    type == java.lang.Long.TYPE -> "J"
-    type == java.lang.Float.TYPE -> "F"
-    type == java.lang.Double.TYPE -> "D"
-    type == java.lang.Character.TYPE -> "C"
-    else -> error("Unsupported primitive carrier $type")
-  }
-
-private fun box(type: Class<*>): Class<*> =
-  when (type) {
-    java.lang.Boolean.TYPE -> Boolean::class.javaObjectType
-    java.lang.Byte.TYPE -> Byte::class.javaObjectType
-    java.lang.Short.TYPE -> Short::class.javaObjectType
-    java.lang.Integer.TYPE -> Int::class.javaObjectType
-    java.lang.Long.TYPE -> Long::class.javaObjectType
-    java.lang.Float.TYPE -> Float::class.javaObjectType
-    java.lang.Double.TYPE -> Double::class.javaObjectType
-    java.lang.Character.TYPE -> Char::class.javaObjectType
-    java.lang.Void.TYPE -> java.lang.Void::class.java
-    else -> type
-  }

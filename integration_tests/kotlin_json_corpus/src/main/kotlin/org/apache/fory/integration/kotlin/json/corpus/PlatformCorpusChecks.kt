@@ -97,12 +97,16 @@ public object PlatformCorpusChecks {
         KotlinJsonCorpus.tokenType(),
       ) == PlatformToken("module-token")
     )
+    val markerType = jsonTypeRef<PlatformMarker>()
+    PlatformMarker.ignoredState = 7
     check(
       json.fromJson(
         KotlinJsonCorpus.caseJson("singleton"),
-        jsonTypeRef<PlatformMarker>(),
+        markerType,
       ) === PlatformMarker
     )
+    check(PlatformMarker.ignoredState == 7)
+    check(json.toJson(PlatformMarker, markerType) == "{}")
     check(
       json.fromJson(
         KotlinJsonCorpus.caseJson("property-marker"),

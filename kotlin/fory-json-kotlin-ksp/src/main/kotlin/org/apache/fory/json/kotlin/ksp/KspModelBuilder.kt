@@ -126,13 +126,6 @@ internal class KspModelBuilder(
       return fail(target, "Kotlin JSON does not support inner classes")
     }
     val singleton = target.classKind == ClassKind.OBJECT && !target.isCompanionObject
-    if (singleton) {
-      val state =
-        target.declarations.filterIsInstance<KSPropertyDeclaration>().firstOrNull {
-          Modifier.CONST !in it.modifiers
-        }
-      if (state != null) return fail(state, "Kotlin JSON object $targetName is stateful")
-    }
     val closed =
       if (mixin == null) hasAnnotation(target, JSON_SUB_TYPES)
       else effectiveTypeAnnotation(target, mixin, JSON_SUB_TYPES)
@@ -158,10 +151,10 @@ internal class KspModelBuilder(
               "INSTANCE",
               "L${targetName.replace('.', '/')};",
             )
-          )
+          ) + (members(target, emptyMap()) ?: return null)
         valueClass -> valueClassMembers(target) ?: return null
         creatorMembers != null ->
-          (members(target, creatorMembers) ?: return null) + creatorMembers.members
+          (members(target, creatorMembers.parameters) ?: return null) + creatorMembers.members
         else -> emptyList()
       }
     val anySetter = effectiveMethods(target, mixin, JSON_ANY_SETTER)
@@ -731,9 +724,11 @@ internal class KspModelBuilder(
     )
   }
 
-  private fun members(target: KSClassDeclaration, creator: CreatorMembers): List<JvmMember>? {
+  private fun members(
+    target: KSClassDeclaration,
+    creatorTypes: Map<String, JvmType>,
+  ): List<JvmMember>? {
     val result = ArrayList<JvmMember>()
-    val creatorTypes = creator.parameters
     for (property in target.getAllProperties()) {
       if (Modifier.CONST in property.modifiers || property.extensionReceiver != null) continue
       val owner = property.parentDeclaration as? KSClassDeclaration ?: continue

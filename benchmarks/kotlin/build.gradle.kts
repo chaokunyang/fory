@@ -109,7 +109,6 @@ tasks.register("writeBenchmarkClasspath") {
   doLast {
     val files =
       (sourceSets.main.get().runtimeClasspath.files +
-          configurations.getByName("kspKotlinProcessorClasspath").files +
           tasks.named<Jar>("jar").get().archiveFile.get().asFile)
         .filter { it.isFile }
         .distinctBy { it.canonicalPath }

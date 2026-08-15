@@ -19,6 +19,7 @@
 
 package org.apache.fory.integration.kotlin.json.corpus
 
+import org.apache.fory.json.annotation.JsonIgnore
 import org.apache.fory.json.annotation.JsonType
 
 @JsonType
@@ -63,7 +64,10 @@ public data class PlatformUnitHolder(
   public val nothing: Nothing?,
 )
 
-@JsonType public object PlatformMarker
+@JsonType
+public object PlatformMarker {
+  @get:JsonIgnore @set:JsonIgnore public var ignoredState: Int = 1
+}
 
 @JsonType public data class PlatformKotlinProfile(public val label: String)
 

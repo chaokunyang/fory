@@ -68,7 +68,11 @@ internal object KotlinTypeRefs {
         null
       }
     val actualRaw =
-      if (component != null) ReflectArray.newInstance(box(component.rawType), 0).javaClass else raw
+      if (component != null) {
+        ReflectArray.newInstance(KotlinMetadataTypes.box(component.rawType), 0).javaClass
+      } else {
+        raw
+      }
     val metadata = typeMetadata(classifier, type.isMarkedNullable, covariant)
     return when {
       component != null -> TypeRef.of<Any>(actualRaw, metadata, null, component)
@@ -91,21 +95,7 @@ internal object KotlinTypeRefs {
     TypeRef.of(type as Class<Any>, metadata)
 
   private fun carrier(type: Class<*>, boxed: Boolean): Class<*> =
-    if (!boxed || !type.isPrimitive) type else box(type)
-
-  private fun box(type: Class<*>): Class<*> =
-    when (type) {
-      Boolean::class.javaPrimitiveType -> Boolean::class.javaObjectType
-      Byte::class.javaPrimitiveType -> Byte::class.javaObjectType
-      Short::class.javaPrimitiveType -> Short::class.javaObjectType
-      Int::class.javaPrimitiveType -> Int::class.javaObjectType
-      Long::class.javaPrimitiveType -> Long::class.javaObjectType
-      Float::class.javaPrimitiveType -> Float::class.javaObjectType
-      Double::class.javaPrimitiveType -> Double::class.javaObjectType
-      Char::class.javaPrimitiveType -> Char::class.javaObjectType
-      java.lang.Void.TYPE -> java.lang.Void::class.java
-      else -> type
-    }
+    if (!boxed || !type.isPrimitive) type else KotlinMetadataTypes.box(type)
 
   private fun typeMetadata(type: KClass<*>, nullable: Boolean, covariant: Boolean): TypeExtMeta =
     TypeExtMeta.of(semanticTypeId(type), nullable, false, false, covariant)

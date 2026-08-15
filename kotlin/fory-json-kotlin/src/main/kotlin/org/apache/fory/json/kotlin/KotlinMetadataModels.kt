@@ -215,7 +215,7 @@ internal object KotlinMetadataModels {
       when (executable) {
         is Constructor<*> -> {
           if (executable.declaringClass != rawType) continue
-          val descriptor = constructorDescriptor(executable)
+          val descriptor = KotlinMetadataTypes.constructorDescriptor(executable)
           val source = model.constructors.singleOrNull { it.signature?.descriptor == descriptor }
           if (source != null) {
             exact += constructorMetadata(rawType, source, !source.isSecondary, executable)
@@ -293,7 +293,7 @@ internal object KotlinMetadataModels {
         return null
       }
     val companion = readClass(companionType)
-    val descriptor = methodDescriptor(factory)
+    val descriptor = KotlinMetadataTypes.methodDescriptor(factory)
     val source =
       companion.functions.singleOrNull {
         it.signature?.name == factory.name && it.signature?.descriptor == descriptor
@@ -458,7 +458,8 @@ internal object KotlinMetadataModels {
     if (signature == null) return null
     val method =
       declaringType.declaredMethods.singleOrNull {
-        it.name == signature.name && methodDescriptor(it) == signature.descriptor
+        it.name == signature.name &&
+          KotlinMetadataTypes.methodDescriptor(it) == signature.descriptor
       } ?: unsupported(declaringType, "method $signature was not found exactly")
     val modifiers = method.modifiers
     return if (
@@ -479,7 +480,7 @@ internal object KotlinMetadataModels {
     if (signature.name != property.name) return null
     val field =
       declaringType.declaredFields.singleOrNull {
-        it.name == signature.name && descriptor(it.type) == signature.descriptor
+        it.name == signature.name && KotlinMetadataTypes.descriptor(it.type) == signature.descriptor
       } ?: unsupported(declaringType, "field $signature was not found exactly")
     val modifiers = field.modifiers
     return if (Modifier.isPublic(modifiers) && !Modifier.isStatic(modifiers) && !field.isSynthetic)
@@ -533,8 +534,9 @@ internal object KotlinMetadataModels {
     if (type.getAnnotation(Metadata::class.java) == null) null else readClass(type)
 
   private fun findConstructor(rawType: Class<*>, descriptor: String): Constructor<*> =
-    rawType.declaredConstructors.singleOrNull { constructorDescriptor(it) == descriptor }
-      ?: unsupported(rawType, "constructor descriptor $descriptor was not found exactly")
+    rawType.declaredConstructors.singleOrNull {
+      KotlinMetadataTypes.constructorDescriptor(it) == descriptor
+    } ?: unsupported(rawType, "constructor descriptor $descriptor was not found exactly")
 
   private fun logicalConstructor(
     rawType: Class<*>,
@@ -605,35 +607,6 @@ internal object KotlinMetadataModels {
     } ?: unsupported(rawType, "public compiler accessibility constructor was not found exactly")
   }
 
-  private fun constructorDescriptor(constructor: Constructor<*>): String =
-    descriptor(constructor.parameterTypes, Void.TYPE)
-
-  private fun methodDescriptor(method: Method): String =
-    descriptor(method.parameterTypes, method.returnType)
-
-  private fun descriptor(parameters: Array<Class<*>>, result: Class<*>): String = buildString {
-    append('(')
-    parameters.forEach { append(descriptor(it)) }
-    append(')')
-    append(descriptor(result))
-  }
-
-  private fun descriptor(type: Class<*>): String =
-    when {
-      type.isArray -> type.name.replace('.', '/')
-      !type.isPrimitive -> "L${type.name.replace('.', '/')};"
-      type == Void.TYPE -> "V"
-      type == java.lang.Boolean.TYPE -> "Z"
-      type == java.lang.Byte.TYPE -> "B"
-      type == java.lang.Short.TYPE -> "S"
-      type == java.lang.Integer.TYPE -> "I"
-      type == java.lang.Long.TYPE -> "J"
-      type == java.lang.Float.TYPE -> "F"
-      type == java.lang.Double.TYPE -> "D"
-      type == java.lang.Character.TYPE -> "C"
-      else -> error("Unsupported primitive carrier $type")
-    }
-
   private fun nullable(type: TypeRef<*>): Boolean =
     type.typeExtMeta?.nullable()
       ?: throw ForyJsonException("Kotlin JSON occurrence has no nullability: ${type.type}")
@@ -666,8 +639,37 @@ internal object KotlinMetadataModels {
   )
 }
 
-/** The single owner of strict Kotlin metadata type substitution and structural JSON tokens. */
+/** The single owner of strict Kotlin metadata substitution, JVM carriers, and JSON type tokens. */
 internal object KotlinMetadataTypes {
+  fun constructorDescriptor(constructor: Constructor<*>): String =
+    descriptor(constructor.parameterTypes, Void.TYPE)
+
+  fun methodDescriptor(method: Method): String =
+    descriptor(method.parameterTypes, method.returnType)
+
+  fun descriptor(parameters: Array<Class<*>>, result: Class<*>): String = buildString {
+    append('(')
+    parameters.forEach { append(descriptor(it)) }
+    append(')')
+    append(descriptor(result))
+  }
+
+  fun descriptor(type: Class<*>): String =
+    when {
+      type.isArray -> type.name.replace('.', '/')
+      !type.isPrimitive -> "L${type.name.replace('.', '/')};"
+      type == Void.TYPE -> "V"
+      type == java.lang.Boolean.TYPE -> "Z"
+      type == java.lang.Byte.TYPE -> "B"
+      type == java.lang.Short.TYPE -> "S"
+      type == java.lang.Integer.TYPE -> "I"
+      type == java.lang.Long.TYPE -> "J"
+      type == java.lang.Float.TYPE -> "F"
+      type == java.lang.Double.TYPE -> "D"
+      type == java.lang.Character.TYPE -> "C"
+      else -> error("Unsupported primitive carrier $type")
+    }
+
   fun substitutions(ownerType: TypeRef<*>, model: KmClass): Map<Int, TypeRef<*>> {
     if (model.typeParameters.isEmpty()) return emptyMap()
     val arguments = ownerType.typeArguments
@@ -886,7 +888,7 @@ internal object KotlinMetadataTypes {
     return packageName + metadataName.substring(packageEnd + 1).replace('.', '$')
   }
 
-  private fun box(type: Class<*>): Class<*> =
+  fun box(type: Class<*>): Class<*> =
     when (type) {
       java.lang.Boolean.TYPE -> Boolean::class.javaObjectType
       java.lang.Byte.TYPE -> Byte::class.javaObjectType

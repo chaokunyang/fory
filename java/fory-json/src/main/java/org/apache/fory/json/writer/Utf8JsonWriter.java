@@ -817,6 +817,16 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     writeRaw(index == 0 ? field.utf8NamePrefix() : field.utf8CommaNamePrefix());
   }
 
+  public void writeNullField(long prefix0, long prefix1, int prefixLength) {
+    int additional = Math.max(packedPrefixSize(prefixLength), prefixLength + 4);
+    if (position + additional > buffer.length) {
+      grow(additional);
+    }
+    writePackedRawNoEnsure(prefix0, prefix1, prefixLength);
+    LittleEndian.putInt32(buffer, position, 0x6c6c756e);
+    position += 4;
+  }
+
   @Override
   public void writeIntFieldName(int value) {
     writeByteRaw((byte) '"');

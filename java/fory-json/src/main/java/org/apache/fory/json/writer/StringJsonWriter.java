@@ -704,6 +704,32 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
     writeRaw(index == 0 ? field.stringNamePrefix() : field.stringCommaNamePrefix());
   }
 
+  public void writeNullField(
+      byte[] prefix,
+      long utf16Prefix0,
+      long utf16Prefix1,
+      long utf16Prefix2,
+      long utf16Prefix3,
+      int utf16PrefixLength) {
+    if (coder == LATIN1) {
+      int additional = prefix.length + 4;
+      if (position + additional > buffer.length) {
+        grow(additional);
+      }
+      writeRawLatin1NoEnsure(prefix);
+      LittleEndian.putInt32(buffer, position, 0x6c6c756e);
+      position += 4;
+      return;
+    }
+    int additional = Math.max(packedUtf16PrefixSize(utf16PrefixLength), utf16PrefixLength + 8);
+    if (position + additional > buffer.length) {
+      grow(additional);
+    }
+    writePackedUtf16ValueNoEnsure(
+        utf16Prefix0, utf16Prefix1, utf16Prefix2, utf16Prefix3, utf16PrefixLength);
+    writeAsciiUtf16NoEnsure("null", 4);
+  }
+
   @Override
   public void writeIntFieldName(int value) {
     writeByteRaw((byte) '"');

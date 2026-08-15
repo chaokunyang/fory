@@ -47,6 +47,8 @@ import org.apache.fory.json.meta.JsonAsciiToken;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
+import org.apache.fory.json.resolver.JsonTypeInfo;
+import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.testng.annotations.Test;
 
 public class JsonGeneratedCodecTest extends ForyJsonTestModels {
@@ -291,6 +293,22 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
             JsonAsciiToken.prefix("\"alpha\":"), -1L, "\"alpha\":".length()));
     assertEquals(utf8.readIntTokenValue(), 1);
 
+    String commaField = ", \n\t\"alpha\":1";
+    Utf8JsonReader adjacentComma = newUtf8Reader(commaField.getBytes(StandardCharsets.UTF_8));
+    assertTrue(adjacentComma.tryConsumeNextOrderedComma());
+    assertTrue(
+        adjacentComma.tryReadNextFieldNameToken0(
+            JsonAsciiToken.prefix("\"alpha\":"), -1L, "\"alpha\":".length()));
+    assertEquals(adjacentComma.readIntTokenValue(), 1);
+
+    Utf8JsonReader spacedComma =
+        newUtf8Reader((" \n" + commaField).getBytes(StandardCharsets.UTF_8));
+    assertTrue(spacedComma.consumeNextOrderedObjectEndOrSlow());
+    assertTrue(
+        spacedComma.tryReadNextFieldNameToken0(
+            JsonAsciiToken.prefix("\"alpha\":"), -1L, "\"alpha\":".length()));
+    assertEquals(spacedComma.readIntTokenValue(), 1);
+
     Latin1JsonReader truncatedLatin1 = newLatin1Reader(latin1Bytes(" \"a"));
     assertEquals(truncatedLatin1.readFieldNamePrefix(), 0);
     assertEquals(truncatedLatin1.position(), 1);
@@ -322,6 +340,47 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
     assertGeneratedWhenSupported(json, LongAsciiFields.class, codegen);
   }
 
+  @Test
+  public void readOrderedCreator() {
+    ForyJson json = newJson(true);
+    JsonCreatorTest.User latin1 =
+        json.fromJson("{\"id\":7, \n\t\"name\":\"alice\"}", JsonCreatorTest.User.class);
+    JsonCreatorTest.User latin1Fallback =
+        json.fromJson("{\"name\":\"bob\",\"id\":8}", JsonCreatorTest.User.class);
+    JsonCreatorTest.User utf16 =
+        json.fromJson("{\"id\":9, \n\t\"name\":\"你好\"}", JsonCreatorTest.User.class);
+    JsonCreatorTest.User utf16Fallback =
+        json.fromJson("{\"name\":\"你好\",\"id\":10}", JsonCreatorTest.User.class);
+    JsonCreatorTest.User utf8 =
+        json.fromJson(
+            "{\"id\":11, \n\t\"name\":\"carol\"}".getBytes(StandardCharsets.UTF_8),
+            JsonCreatorTest.User.class);
+    JsonCreatorTest.User utf8Fallback =
+        json.fromJson(
+            "{\"name\":\"dave\",\"id\":12}".getBytes(StandardCharsets.UTF_8),
+            JsonCreatorTest.User.class);
+    assertEquals(latin1.id, 7L);
+    assertEquals(latin1Fallback.id, 8L);
+    assertEquals(utf16.id, 9L);
+    assertEquals(utf16Fallback.id, 10L);
+    assertEquals(utf8.id, 11L);
+    assertEquals(utf8Fallback.id, 12L);
+
+    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
+    resolver.getObjectCodec(JsonCreatorTest.User.class);
+    JsonTypeInfo typeInfo =
+        resolver.getTypeInfo(JsonCreatorTest.User.class, JsonCreatorTest.User.class);
+    assertTrue(
+        Arrays.stream(typeInfo.latin1Reader().getClass().getDeclaredMethods())
+            .anyMatch(method -> method.getName().startsWith("readLatin1Slow")));
+    assertTrue(
+        Arrays.stream(typeInfo.utf16Reader().getClass().getDeclaredMethods())
+            .anyMatch(method -> method.getName().startsWith("readUtf16Slow")));
+    assertTrue(
+        Arrays.stream(typeInfo.utf8Reader().getClass().getDeclaredMethods())
+            .anyMatch(method -> method.getName().startsWith("readUtf8Slow")));
+  }
+
   @Test(dataProvider = "enableCodegen")
   public void readSplitGeneratedFields(boolean codegen) {
     ForyJson json = newJson(codegen);
@@ -344,23 +403,36 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
 
   @Test
   public void writeSplitGeneratedFields() throws Exception {
-    ForyJson json = newJson(true);
+    ForyJson json = newJsonBuilder(true).writeNullFields(true).build();
     WideWriterFields value = new WideWriterFields();
+    value.field01 = null;
     StringBuilder expected = new StringBuilder("{\"field00\":1");
     for (int i = 1; i < 24; i++) {
       expected.append(",\"field");
       if (i < 10) {
         expected.append('0');
       }
-      expected.append(i).append("\":\"v");
+      expected.append(i).append("\":");
+      if (i == 1) {
+        expected.append("null");
+        continue;
+      }
+      expected.append("\"v");
       if (i < 10) {
         expected.append('0');
       }
       expected.append(i).append('"');
     }
     expected.append('}');
+    assertEquals(json.toJson(value), expected.toString());
     assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected.toString());
 
+    JsonTypeInfo typeInfo =
+        JsonTestSupport.currentTypeResolver(json)
+            .getTypeInfo(WideWriterFields.class, WideWriterFields.class);
+    assertTrue(
+        Arrays.stream(typeInfo.stringWriter().getClass().getDeclaredMethods())
+            .anyMatch(method -> method.getName().startsWith("writeStringMembers")));
     Class<?> generated = generatedUtf8WriterClass(json, WideWriterFields.class);
     int groups = 0;
     for (Method method : generated.getDeclaredMethods()) {

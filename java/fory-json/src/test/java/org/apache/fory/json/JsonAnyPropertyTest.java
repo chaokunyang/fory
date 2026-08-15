@@ -621,7 +621,7 @@ public class JsonAnyPropertyTest extends ForyJsonTestModels {
             .get("byte")
             .value,
         3);
-    assertInterpretedCapabilities(json, type);
+    assertGeneratedCapabilities(json, type);
   }
 
   @Test
@@ -923,19 +923,37 @@ public class JsonAnyPropertyTest extends ForyJsonTestModels {
     JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
     resolver.lockJIT();
     try {
-      Object owner = resolver.getObjectCodec(type);
+      ObjectCodec<?> owner = resolver.getObjectCodec(type);
       JsonTypeInfo info = resolver.getTypeInfo(type, type);
-      if (!StringSerializer.isBytesBackedString()) {
-        resolver.latin1Reader((ObjectCodec<?>) owner);
-      }
-      assertGenerated(info.stringWriter(), owner);
-      assertGenerated(info.utf8Writer(), owner);
-      assertGenerated(info.latin1Reader(), owner);
-      assertGenerated(info.utf16Reader(), owner);
-      assertGenerated(info.utf8Reader(), owner);
+      assertGeneratedCapabilities(resolver, info, owner);
     } finally {
       resolver.unlockJIT();
     }
+  }
+
+  private void assertGeneratedCapabilities(ForyJson json, TypeRef<?> type) {
+    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
+    resolver.lockJIT();
+    try {
+      JsonTypeInfo info = resolver.getTypeInfo(type);
+      ObjectCodec<?> owner = resolver.canonicalObjectCodec(info);
+      assertTrue(owner != null);
+      assertGeneratedCapabilities(resolver, info, owner);
+    } finally {
+      resolver.unlockJIT();
+    }
+  }
+
+  private void assertGeneratedCapabilities(
+      JsonTypeResolver resolver, JsonTypeInfo info, ObjectCodec<?> owner) {
+    if (!StringSerializer.isBytesBackedString()) {
+      resolver.latin1Reader(owner);
+    }
+    assertGenerated(info.stringWriter(), owner);
+    assertGenerated(info.utf8Writer(), owner);
+    assertGenerated(info.latin1Reader(), owner);
+    assertGenerated(info.utf16Reader(), owner);
+    assertGenerated(info.utf8Reader(), owner);
   }
 
   private void assertGeneratedWriters(ForyJson json, Class<?> type) {
@@ -963,21 +981,6 @@ public class JsonAnyPropertyTest extends ForyJsonTestModels {
       assertGenerated(info.latin1Reader(), owner);
       assertGenerated(info.utf16Reader(), owner);
       assertGenerated(info.utf8Reader(), owner);
-    } finally {
-      resolver.unlockJIT();
-    }
-  }
-
-  private static void assertInterpretedCapabilities(ForyJson json, TypeRef<?> type) {
-    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
-    resolver.lockJIT();
-    try {
-      JsonTypeInfo info = resolver.getTypeInfo(type.getType(), type.getRawType());
-      Object owner = info.stringWriter();
-      assertSame(info.utf8Writer(), owner);
-      assertSame(info.latin1Reader(), owner);
-      assertSame(info.utf16Reader(), owner);
-      assertSame(info.utf8Reader(), owner);
     } finally {
       resolver.unlockJIT();
     }

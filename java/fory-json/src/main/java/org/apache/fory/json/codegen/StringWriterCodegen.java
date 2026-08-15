@@ -275,6 +275,18 @@ final class StringWriterCodegen extends JsonWriterCodegen {
   }
 
   @Override
+  Expression writeNullField(
+      JsonFieldInfo property, int id, boolean commaKnown, Expression index, Expression writer) {
+    if (commaKnown && canPackUtf16Prefix(property, true)) {
+      return new Expression.Invoke(
+          writer, "writeNullField", stringPackedPrefixArgs(property, id, true));
+    }
+    return new Expression.ListExpression(
+        writeFieldName(property, id, commaKnown, index, writer),
+        new Expression.Invoke(writer, "writeNull"));
+  }
+
+  @Override
   Expression booleanFieldValue(int id, Expression value, boolean commaKnown, Expression index) {
     return fieldValue(id, "stringBooleanFieldValue", value, commaKnown, index);
   }

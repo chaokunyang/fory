@@ -296,6 +296,17 @@ final class Utf8WriterCodegen extends JsonWriterCodegen {
   }
 
   @Override
+  Expression writeNullField(
+      JsonFieldInfo property, int id, boolean commaKnown, Expression index, Expression writer) {
+    if (commaKnown && canPackPrefix(property, true)) {
+      return new Expression.Invoke(writer, "writeNullField", packedPrefixArgs(property, true));
+    }
+    return new Expression.ListExpression(
+        writeFieldName(property, id, commaKnown, index, writer),
+        new Expression.Invoke(writer, "writeNull"));
+  }
+
+  @Override
   Expression writeObjectEnd(Expression writer) {
     if (!inlineSchemaWrites) {
       return super.writeObjectEnd(writer);

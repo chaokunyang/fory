@@ -136,6 +136,9 @@ abstract class JsonWriterCodegen {
   abstract Expression writeFieldName(
       JsonFieldInfo property, int id, boolean commaKnown, Expression index, Expression writer);
 
+  abstract Expression writeNullField(
+      JsonFieldInfo property, int id, boolean commaKnown, Expression index, Expression writer);
+
   Expression writeObjectEnd(Expression writer) {
     return new Expression.Invoke(writer, "writeObjectEnd");
   }
@@ -1271,9 +1274,7 @@ abstract class JsonWriterCodegen {
     }
     Class<?> rawType = property.writeRawType();
     if (rawType == void.class) {
-      return new Expression.ListExpression(
-          writeFieldName(property, id, commaKnown, index, writer),
-          new Expression.Invoke(writer, "writeNull"));
+      return writeNullField(property, id, commaKnown, index, writer);
     }
     if (rawType.isPrimitive()) {
       // Primitive members cannot be null and this path consumes the access once. Nullable
@@ -1298,6 +1299,17 @@ abstract class JsonWriterCodegen {
               || kind == JsonFieldKind.OBJECT && writeExactScalar(property, value, writer) == null
               || kind == JsonFieldKind.COLLECTION && !writesStringCollectionDirectly(property);
       if (onlyCodec) {
+        if (kind == JsonFieldKind.OBJECT
+            && resolver.canonicalObjectCodec(property.writeTypeInfo()) != null) {
+          return new Expression.ListExpression(
+              value,
+              new Expression.If(
+                  eq(value, nullValue),
+                  writeNullField(property, id, commaKnown, index, writer),
+                  new Expression.ListExpression(
+                      writeFieldName(property, id, commaKnown, index, writer),
+                      writeCodec(property, id, value, writer))));
+        }
         return new Expression.ListExpression(
             value,
             writeFieldName(property, id, commaKnown, index, writer),
@@ -1308,18 +1320,17 @@ abstract class JsonWriterCodegen {
             value,
             new Expression.If(
                 eq(value, nullValue),
-                new Expression.ListExpression(
-                    writeFieldName(property, id, commaKnown, index, writer),
-                    new Expression.Invoke(writer, "writeNull")),
+                writeNullField(property, id, commaKnown, index, writer),
                 writeValue(property, id, value, commaKnown, index, writer)));
       }
       return new Expression.ListExpression(
           value,
-          writeFieldName(property, id, commaKnown, index, writer),
           new Expression.If(
               eq(value, nullValue),
-              new Expression.Invoke(writer, "writeNull"),
-              writeValue(property, id, value, true, index, writer)));
+              writeNullField(property, id, commaKnown, index, writer),
+              new Expression.ListExpression(
+                  writeFieldName(property, id, commaKnown, index, writer),
+                  writeValue(property, id, value, true, index, writer))));
     }
     Expression write =
         isPrefixValue(property.writeKind())
@@ -1385,18 +1396,17 @@ abstract class JsonWriterCodegen {
             local,
             new Expression.If(
                 eq(local, nullValue),
-                new Expression.ListExpression(
-                    writeFieldName(property, id, commaKnown, index, writer),
-                    new Expression.Invoke(writer, "writeNull")),
+                writeNullField(property, id, commaKnown, index, writer),
                 write));
       }
       return new Expression.ListExpression(
           local,
-          writeFieldName(property, id, commaKnown, index, writer),
           new Expression.If(
               eq(local, nullValue),
-              new Expression.Invoke(writer, "writeNull"),
-              writeValue(property, id, local, true, index, writer)));
+              writeNullField(property, id, commaKnown, index, writer),
+              new Expression.ListExpression(
+                  writeFieldName(property, id, commaKnown, index, writer),
+                  writeValue(property, id, local, true, index, writer))));
     }
     if (property.requiresNonNullWrite()) {
       return new Expression.ListExpression(

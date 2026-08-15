@@ -115,6 +115,18 @@ final class Utf8ReaderCodegen extends JsonReaderCodegen {
     return new Expression.LogicalOr(comma, endOrSlow);
   }
 
+  @Override
+  Expression consumeOrderedCommaOrEndObjectExpr() {
+    Expression comma =
+        new Expression.Invoke(readerRef(), "tryConsumeNextOrderedComma", TypeRef.of(boolean.class))
+            .inline();
+    Expression endOrSlow =
+        new Expression.Invoke(
+                readerRef(), "consumeNextOrderedObjectEndOrSlow", TypeRef.of(boolean.class))
+            .inline();
+    return new Expression.LogicalOr(comma, endOrSlow);
+  }
+
   static Expression readStringElement(String id) {
     Reference reader = new Reference("reader", TypeRef.of(Utf8JsonReader.class));
     Expression.Variable value =

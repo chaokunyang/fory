@@ -532,6 +532,23 @@ public final class Utf8JsonReader extends JsonReader {
   }
 
   /**
+   * Consumes an adjacent comma and positions an ordered raw-token reader at its next field.
+   *
+   * <p>Only generated ordered creator readers need this stronger postcondition. General field loops
+   * classify whitespace while reading the next name; normalizing it here as well would scan the
+   * same separator twice.
+   */
+  @Internal
+  public boolean tryConsumeNextOrderedComma() {
+    if (position < input.length && input[position] == ',') {
+      position++;
+      skipWhitespaceFast();
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Consumes an object end or a separator requiring whitespace/error classification.
    *
    * <p>This is the complement of {@link #tryConsumeNextComma()}. Generated readers call it only
@@ -547,6 +564,15 @@ public final class Utf8JsonReader extends JsonReader {
       }
     }
     return consumeNextCommaOrEndObjectSlow();
+  }
+
+  @Internal
+  public boolean consumeNextOrderedObjectEndOrSlow() {
+    boolean hasNext = consumeNextObjectEndOrSlow();
+    if (hasNext) {
+      skipWhitespaceFast();
+    }
+    return hasNext;
   }
 
   private boolean consumeNextCommaOrEndObjectSlow() {

@@ -37,6 +37,7 @@ import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.StringSerializer;
 
@@ -179,7 +180,6 @@ public final class ForyJson {
   public <T> String toJson(T value, TypeRef<T> declaredType) {
     requireDeclaredType(declaredType);
     validateDeclaredType(declaredType.getType());
-    validateWriteValue(value, declaredType);
     return toJsonDeclared(value, declaredType);
   }
 
@@ -239,7 +239,6 @@ public final class ForyJson {
   public <T> byte[] toJsonBytes(T value, TypeRef<T> declaredType) {
     requireDeclaredType(declaredType);
     validateDeclaredType(declaredType.getType());
-    validateWriteValue(value, declaredType);
     return toJsonBytesDeclared(value, declaredType);
   }
 
@@ -306,7 +305,6 @@ public final class ForyJson {
   public <T> void writeJsonTo(T value, TypeRef<T> declaredType, OutputStream output) {
     requireDeclaredType(declaredType);
     validateDeclaredType(declaredType.getType());
-    validateWriteValue(value, declaredType);
     writeJsonDeclared(value, declaredType, output);
   }
 
@@ -338,7 +336,7 @@ public final class ForyJson {
     try {
       state.typeResolver.lockJIT();
       try {
-        state.declaredRootTypeInfo(type).stringWriter().writeString(writer, value);
+        state.declaredWriteTypeInfo(value, type).stringWriter().writeString(writer, value);
       } finally {
         state.typeResolver.unlockJIT();
       }
@@ -381,7 +379,7 @@ public final class ForyJson {
     try {
       state.typeResolver.lockJIT();
       try {
-        state.declaredRootTypeInfo(type).utf8Writer().writeUtf8(writer, value);
+        state.declaredWriteTypeInfo(value, type).utf8Writer().writeUtf8(writer, value);
       } finally {
         state.typeResolver.unlockJIT();
       }
@@ -425,7 +423,7 @@ public final class ForyJson {
     try {
       state.typeResolver.lockJIT();
       try {
-        state.declaredRootTypeInfo(type).utf8Writer().writeUtf8(writer, value);
+        state.declaredWriteTypeInfo(value, type).utf8Writer().writeUtf8(writer, value);
       } finally {
         state.typeResolver.unlockJIT();
       }
@@ -459,24 +457,21 @@ public final class ForyJson {
   }
 
   private static void validateWriteValue(Object value, TypeRef<?> declaredType) {
-    if (isNullableVoid(declaredType)) {
+    validateWriteValue(value, declaredType, declaredType.getRawType());
+  }
+
+  private static void validateWriteValue(Object value, TypeRef<?> declaredType, Class<?> rawType) {
+    TypeExtMeta typeExtMeta = declaredType.getTypeExtMeta();
+    if (rawType == Void.class && typeExtMeta != null && typeExtMeta.nullable()) {
       if (value != null) {
         throw new IllegalArgumentException("Nothing? accepts only null");
       }
       return;
     }
-    validateWriteValue(value, declaredType.getRawType());
-    if (value == null
-        && declaredType.getTypeExtMeta() != null
-        && !declaredType.getTypeExtMeta().nullable()) {
+    validateWriteValue(value, rawType);
+    if (value == null && typeExtMeta != null && !typeExtMeta.nullable()) {
       throw new IllegalArgumentException("Cannot write null as non-null " + declaredType);
     }
-  }
-
-  private static boolean isNullableVoid(TypeRef<?> declaredType) {
-    return declaredType.getRawType() == Void.class
-        && declaredType.getTypeExtMeta() != null
-        && declaredType.getTypeExtMeta().nullable();
   }
 
   private static void requireDeclaredType(Object declaredType) {
@@ -965,6 +960,18 @@ public final class ForyJson {
       lastRootType = type;
       lastRootInfo = typeInfo;
       return typeInfo;
+    }
+
+    private JsonTypeInfo declaredWriteTypeInfo(Object value, TypeRef<?> type) {
+      JsonTypeInfo typeInfo = lastRootInfo;
+      if (lastRootType == type && typeInfo != null) {
+        // The exact-root cache already owns the canonical raw type. Recomputing it from TypeRef on
+        // every typed write repeats structural type traversal in the root hot path.
+        validateWriteValue(value, type, typeInfo.rawType());
+        return typeInfo;
+      }
+      validateWriteValue(value, type);
+      return declaredRootTypeInfo(type);
     }
   }
 }

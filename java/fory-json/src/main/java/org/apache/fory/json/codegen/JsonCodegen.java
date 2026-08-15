@@ -1351,12 +1351,17 @@ public final class JsonCodegen {
   private static void appendObjectModel(
       StringBuilder builder,
       ObjectCodec<?> codec,
-      IdentityHashMap<ObjectCodec<?>, Boolean> visited) {
+      IdentityHashMap<ObjectCodec<?>, Integer> visited) {
     appendIdentity(builder, codec.type().getName());
-    if (visited.put(codec, Boolean.TRUE) != null) {
-      appendIdentity(builder, "recursive");
+    Integer reference = visited.get(codec);
+    if (reference != null) {
+      // Unwrapped metadata can reach the same descendant through every ancestor group. Encode the
+      // graph reference once; expanding each repeated node makes deep signatures exponential.
+      appendIdentity(builder, "ref");
+      appendIdentity(builder, Integer.toString(reference));
       return;
     }
+    visited.put(codec, visited.size());
     appendIdentity(builder, codec.getClass().getName());
     appendIdentity(builder, Integer.toString(codec.graphMemoryBytes()));
     appendIdentity(builder, codec.hasValidators() ? "1" : "0");
@@ -1427,7 +1432,6 @@ public final class JsonCodegen {
         appendCreatorField(builder, route.creatorField());
       }
     }
-    visited.remove(codec);
   }
 
   private static void appendFields(StringBuilder builder, JsonFieldInfo[] fields) {

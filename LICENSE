@@ -266,6 +266,12 @@ The text of each license is the standard Apache 2.0 license.
       java/fory-json/src/main/java/org/apache/fory/json/annotation/JsonUnwrapped.java
       java/fory-json/src/main/java/org/apache/fory/json/annotation/JsonValue.java
 
+* jackson-module-scala (https://github.com/FasterXML/jackson-module-scala)
+    Fory JSON's Scala JsonEnumeration annotation implementation is based on Jackson's
+    JsonScalaEnumeration annotation.
+    Files:
+      scala/fory-json-scala/src/main/java/org/apache/fory/json/scala/JsonEnumeration.java
+
 
 ================================================================
 BSD-3-Clause licenses

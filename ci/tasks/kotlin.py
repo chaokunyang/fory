@@ -28,6 +28,7 @@ from . import common
 
 PRODUCTION_MODULES = "fory-kotlin,fory-kotlin-ksp,fory-json-kotlin,fory-json-kotlin-ksp"
 LOW_JDK_MODULES = "fory-kotlin,fory-kotlin-ksp,fory-json-kotlin"
+JSON_MODULES = "fory-json-kotlin,fory-json-kotlin-ksp"
 CORPUS_MODULE_NAME = "org.apache.fory.integration.kotlin.json.corpus"
 CORPUS_PACKAGE = "org.apache.fory.integration.kotlin.json.corpus"
 CORPUS_RULE_MODELS = (
@@ -84,17 +85,18 @@ def install_java_json(include_jpms=False):
 
 def install_artifacts(include_corpus=True, modules=PRODUCTION_MODULES):
     """Install Kotlin production artifacts and the shared JSON corpus."""
+    # Artifact consumers need only main JARs. Test stages compile their own test sources later.
     common.cd_project_subdir("kotlin")
     common.exec_cmd(
         "mvn -T16 --batch-mode --no-transfer-progress "
-        f"-pl {modules} -am clean install -DskipTests "
+        f"-pl {modules} -am clean install -Dmaven.test.skip=true "
         "-Ddokka.skip=true -Dmaven.source.skip=true"
     )
     if include_corpus:
         common.cd_project_subdir("integration_tests/kotlin_json_corpus")
         common.exec_cmd(
             "mvn -T16 --batch-mode --no-transfer-progress clean install "
-            "-DskipTests -Ddokka.skip=true -Dmaven.source.skip=true"
+            "-Dmaven.test.skip=true -Ddokka.skip=true -Dmaven.source.skip=true"
         )
         verify_corpus_artifact()
 
@@ -216,9 +218,9 @@ def run(task="tests"):
     """Run the selected Kotlin CI task."""
     if task == "tests":
         run_tests()
-    elif task == "install":
+    elif task == "install-json":
         install_java_json()
-        install_artifacts(include_corpus=True)
+        install_artifacts(include_corpus=True, modules=JSON_MODULES)
     elif task == "install-kotlin":
         install_artifacts(include_corpus=True)
     elif task == "native-json":

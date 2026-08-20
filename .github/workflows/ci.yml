@@ -332,7 +332,7 @@ jobs:
         with:
           gradle-version: "8.13"
       - name: Install Fory Java and Kotlin JSON artifacts
-        run: python ./ci/run_ci.py kotlin --task install
+        run: python ./ci/run_ci.py kotlin --task install-json
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -347,8 +347,8 @@ jobs:
           working-directory: integration_tests/android_tests
           script: |
             yes | sdkmanager "platforms;android-${{ matrix.api-level }}" "build-tools;35.0.0"
-            if [ "${{ matrix.api-level }}" = "26" ]; then gradle --no-daemon --stacktrace verifyKotlinJsonRules; fi
-            if [ "${{ matrix.api-level }}" = "26" ]; then gradle --no-daemon --stacktrace -PforyTestBuildType=debug connectedCheck; fi
+            # API 26 owns the rule gate; share one Gradle startup with its debug instrumentation.
+            if [ "${{ matrix.api-level }}" = "26" ]; then gradle --no-daemon --stacktrace -PforyTestBuildType=debug verifyKotlinJsonRules connectedCheck; fi
             gradle --no-daemon --stacktrace -PforyTestBuildType=release connectedCheck
       - name: Upload Android Test Report
         uses: actions/upload-artifact@v4

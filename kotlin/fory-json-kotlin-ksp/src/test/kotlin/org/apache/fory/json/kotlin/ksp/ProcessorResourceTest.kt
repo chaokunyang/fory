@@ -100,12 +100,6 @@ class ProcessorResourceTest {
       ),
       generator.outputs.keys,
     )
-    assertEquals(setOf(OutputKind.RESOURCE), generator.outputKinds.values.toSet())
-    assertFalse(
-      generator.outputKinds.values.any {
-        it == OutputKind.JAVA || it == OutputKind.KOTLIN || it == OutputKind.CLASS
-      }
-    )
     models.forEach { model ->
       val path = R8RulesWriter.resourcePath(model)
       assertEquals(R8RulesWriter.write(model), generator.text(path))

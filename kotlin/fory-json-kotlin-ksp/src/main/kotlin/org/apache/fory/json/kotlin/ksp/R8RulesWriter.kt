@@ -35,6 +35,8 @@ internal object R8RulesWriter {
           model.mixinBinaryName?.indexOf('$')?.let { it >= 0 } == true ||
           model.members.any { it.ownerBinaryName.indexOf('$') >= 0 } ||
           model.codecTypes.any { it.indexOf('$') >= 0 } ||
+          model.containerTypes.any { it.indexOf('$') >= 0 } ||
+          model.annotationOwnerTypes.any { it.indexOf('$') >= 0 } ||
           model.retainedTypes.any { it.indexOf('$') >= 0 }
       if (nestedType) {
         append("-keepattributes InnerClasses,EnclosingMethod\n")
@@ -64,6 +66,11 @@ internal object R8RulesWriter {
       model.retainedTypes.sorted().filterNot(memberRules::containsKey).forEach { type ->
         append("-keep,allowoptimization class $type\n")
       }
+      model.annotationOwnerTypes
+        .sorted()
+        .filterNot(memberRules::containsKey)
+        .filterNot(model.retainedTypes::contains)
+        .forEach { type -> append("-keep,allowoptimization,allowobfuscation class $type\n") }
     }
 
   private fun memberRules(model: JsonModel): Map<String, List<String>> {
@@ -88,6 +95,9 @@ internal object R8RulesWriter {
     // JsonSharedRegistry instantiates annotation-selected codecs through Class.getConstructor().
     // Retaining only the class literal does not preserve that reflective constructor under R8.
     model.codecTypes.sorted().forEach { codecType -> add(codecType, "public <init>();") }
+    model.containerTypes.sorted().forEach { containerType ->
+      add(containerType, "public <init>();")
+    }
     return result.mapValues { (_, members) -> members.sorted() }
   }
 

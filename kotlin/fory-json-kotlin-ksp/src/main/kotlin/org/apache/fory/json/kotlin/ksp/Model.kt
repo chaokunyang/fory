@@ -39,6 +39,8 @@ internal data class JsonModel(
   val mixinBinaryName: String?,
   val originatingFiles: List<KSFile>,
   val retainedAnnotations: Set<String>,
+  val annotationOwnerTypes: Set<String>,
   val retainedTypes: Set<String>,
   val codecTypes: Set<String>,
+  val containerTypes: Set<String>,
 )

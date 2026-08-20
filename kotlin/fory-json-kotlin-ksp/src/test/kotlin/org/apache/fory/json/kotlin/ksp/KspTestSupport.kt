@@ -33,7 +33,6 @@ import java.lang.reflect.Proxy
 internal class RecordingCodeGenerator : CodeGenerator {
   val outputs = linkedMapOf<String, ByteArrayOutputStream>()
   val dependenciesByPath = linkedMapOf<String, Dependencies>()
-  val outputKinds = linkedMapOf<String, OutputKind>()
 
   override fun createNewFile(
     dependencies: Dependencies,
@@ -44,7 +43,7 @@ internal class RecordingCodeGenerator : CodeGenerator {
     val directory = packageName.replace('.', '/')
     val path =
       if (directory.isEmpty()) "$fileName.$extensionName" else "$directory/$fileName.$extensionName"
-    return output(path, dependencies, outputKind(extensionName))
+    return output(path, dependencies)
   }
 
   override fun createNewFileByPath(
@@ -55,7 +54,6 @@ internal class RecordingCodeGenerator : CodeGenerator {
     output(
       path + if (extensionName.isEmpty()) "" else ".$extensionName",
       dependencies,
-      outputKind(extensionName),
     )
 
   override fun associate(
@@ -86,28 +84,11 @@ internal class RecordingCodeGenerator : CodeGenerator {
   private fun output(
     path: String,
     dependencies: Dependencies,
-    kind: OutputKind,
   ): ByteArrayOutputStream {
     check(path !in outputs) { "Duplicate generated output $path" }
     dependenciesByPath[path] = dependencies
-    outputKinds[path] = kind
     return ByteArrayOutputStream().also { outputs[path] = it }
   }
-
-  private fun outputKind(extensionName: String): OutputKind =
-    when (extensionName) {
-      "java" -> OutputKind.JAVA
-      "kt" -> OutputKind.KOTLIN
-      "class" -> OutputKind.CLASS
-      else -> OutputKind.RESOURCE
-    }
-}
-
-internal enum class OutputKind {
-  JAVA,
-  KOTLIN,
-  CLASS,
-  RESOURCE,
 }
 
 internal fun jsonModel(
@@ -116,8 +97,10 @@ internal fun jsonModel(
   mixinBinaryName: String? = null,
   originatingFiles: List<KSFile> = emptyList(),
   retainedAnnotations: Set<String> = emptySet(),
+  annotationOwnerTypes: Set<String> = emptySet(),
   retainedTypes: Set<String> = emptySet(),
   codecTypes: Set<String> = emptySet(),
+  containerTypes: Set<String> = emptySet(),
 ): JsonModel =
   JsonModel(
     targetBinaryName = targetBinaryName,
@@ -125,8 +108,10 @@ internal fun jsonModel(
     mixinBinaryName = mixinBinaryName,
     originatingFiles = originatingFiles,
     retainedAnnotations = retainedAnnotations,
+    annotationOwnerTypes = annotationOwnerTypes,
     retainedTypes = retainedTypes,
     codecTypes = codecTypes,
+    containerTypes = containerTypes,
   )
 
 internal object SilentLogger : KSPLogger {

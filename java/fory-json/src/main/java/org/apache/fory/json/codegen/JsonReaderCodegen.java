@@ -77,7 +77,6 @@ abstract class JsonReaderCodegen {
 
   final JsonCodegen codegen;
   final JsonTypeResolver resolver;
-  private final boolean finalDependencies;
   private final int[] fastReadGroupEnds;
   private AnyInfo any;
   private Class<?> ownerType;
@@ -85,21 +84,12 @@ abstract class JsonReaderCodegen {
   private boolean storesSelfReader;
 
   JsonReaderCodegen(JsonCodegen codegen, JsonTypeResolver resolver) {
-    this(codegen, resolver, false, null);
+    this(codegen, resolver, null);
   }
 
-  JsonReaderCodegen(JsonCodegen codegen, JsonTypeResolver resolver, boolean finalDependencies) {
-    this(codegen, resolver, finalDependencies, null);
-  }
-
-  JsonReaderCodegen(
-      JsonCodegen codegen,
-      JsonTypeResolver resolver,
-      boolean finalDependencies,
-      int[] fastReadGroupEnds) {
+  JsonReaderCodegen(JsonCodegen codegen, JsonTypeResolver resolver, int[] fastReadGroupEnds) {
     this.codegen = codegen;
     this.resolver = resolver;
-    this.finalDependencies = finalDependencies;
     this.fastReadGroupEnds = fastReadGroupEnds;
   }
 
@@ -152,10 +142,6 @@ abstract class JsonReaderCodegen {
 
   final Class<?> readNestedType(JsonFieldInfo property) {
     return JsonCodegen.readNestedType(property, resolver);
-  }
-
-  final boolean finalDependencies() {
-    return finalDependencies;
   }
 
   String genReaderCode(
@@ -224,7 +210,7 @@ abstract class JsonReaderCodegen {
   }
 
   private void addCapabilityField(CodegenContext ctx, Class<?> type, String name) {
-    ctx.addField(finalDependencies, JsonCodegen.generatedCodecType(ctx, type), name, null);
+    ctx.addField(true, JsonCodegen.generatedCodecType(ctx, type), name, null);
   }
 
   private void addObjectReaderField(CodegenContext ctx, JsonFieldInfo field, String name) {

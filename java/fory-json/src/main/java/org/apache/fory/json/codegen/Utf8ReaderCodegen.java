@@ -35,21 +35,17 @@ final class Utf8ReaderCodegen extends JsonReaderCodegen {
   // of each generated prefix method.
   private static final int DIRECT_STRING_WORDS = 3;
 
-  Utf8ReaderCodegen(JsonCodegen codegen, JsonTypeResolver resolver, boolean finalDependencies) {
-    super(codegen, resolver, finalDependencies);
+  Utf8ReaderCodegen(JsonCodegen codegen, JsonTypeResolver resolver) {
+    super(codegen, resolver);
   }
 
-  Utf8ReaderCodegen(
-      JsonCodegen codegen,
-      JsonTypeResolver resolver,
-      boolean finalDependencies,
-      int[] fastReadGroupEnds) {
-    super(codegen, resolver, finalDependencies, fastReadGroupEnds);
+  Utf8ReaderCodegen(JsonCodegen codegen, JsonTypeResolver resolver, int[] fastReadGroupEnds) {
+    super(codegen, resolver, fastReadGroupEnds);
   }
 
   @Override
   Class<?> codecFieldType(JsonFieldInfo property) {
-    return codegen.utf8ReaderFieldType(property.readTypeInfo(), resolver, finalDependencies());
+    return codegen.utf8ReaderFieldType(property.readTypeInfo(), resolver);
   }
 
   @Override

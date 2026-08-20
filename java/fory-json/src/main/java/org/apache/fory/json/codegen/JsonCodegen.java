@@ -158,14 +158,11 @@ public final class JsonCodegen {
 
   @Internal
   public Class<?> compileUtf8Reader(
-      TypeRef<?> declaredType,
-      ObjectCodec<?> codec,
-      JsonTypeResolver resolver,
-      boolean finalDependencies) {
+      TypeRef<?> declaredType, ObjectCodec<?> codec, JsonTypeResolver resolver) {
     if (!canCompileReader(codec)) {
       return null;
     }
-    return buildUtf8Reader(declaredType, codec, resolver, finalDependencies);
+    return buildUtf8Reader(declaredType, codec, resolver);
   }
 
   @Internal
@@ -540,10 +537,7 @@ public final class JsonCodegen {
   }
 
   private Class<?> buildUtf8Reader(
-      TypeRef<?> declaredType,
-      ObjectCodec<?> codec,
-      JsonTypeResolver resolver,
-      boolean finalDependencies) {
+      TypeRef<?> declaredType, ObjectCodec<?> codec, JsonTypeResolver resolver) {
     Class<?> type = codec.type();
     String generatedPackage = CodeGenerator.getPackage(type);
     String className = className(declaredType, "Utf8Reader");
@@ -553,7 +547,7 @@ public final class JsonCodegen {
       JsonGeneratedCodecBuilder builder =
           new JsonGeneratedCodecBuilder(generatedPackage, className, type);
       String code =
-          new Utf8ReaderCodegen(this, resolver, finalDependencies)
+          new Utf8ReaderCodegen(this, resolver)
               .genUnwrappedReaderCode(builder, type, codec, unwrapped);
       return compileObjectCodecClass(type, generatedPackage, className, code, invocations);
     }
@@ -563,8 +557,7 @@ public final class JsonCodegen {
         groupEnds -> {
           JsonGeneratedCodecBuilder builder =
               new JsonGeneratedCodecBuilder(generatedPackage, className, type);
-          Utf8ReaderCodegen reader =
-              new Utf8ReaderCodegen(this, resolver, finalDependencies, groupEnds);
+          Utf8ReaderCodegen reader = new Utf8ReaderCodegen(this, resolver, groupEnds);
           return any == null || any.readField() == null && any.readSetter() == null
               ? reader.genReaderCode(builder, codec, properties, codec.creatorInfo())
               : reader.genAnyReaderCode(builder, codec, properties, codec.creatorInfo(), any);
@@ -1115,12 +1108,11 @@ public final class JsonCodegen {
     return Utf16ReaderCodec.class;
   }
 
-  Class<?> utf8ReaderFieldType(
-      JsonTypeInfo typeInfo, JsonTypeResolver resolver, boolean finalDependencies) {
+  Class<?> utf8ReaderFieldType(JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
     if (typeInfo.usesAnnotationCodec()) {
       return Utf8ReaderCodec.class;
     }
-    if (finalDependencies && resolver.exactUtf8Collection(typeInfo) != null) {
+    if (resolver.exactUtf8Collection(typeInfo) != null) {
       return Utf8ReaderCodec.class;
     }
     if (resolver.canonicalObjectCodec(typeInfo) != null) {

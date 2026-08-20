@@ -953,7 +953,12 @@ public final class JsonTypeResolver {
     TypeRef<?> typeRef = TypeRef.of(runtimeType);
     JsonValueCodec<?> codec = sharedRegistry.createRuntimeCodec(runtimeType, this);
     if (codec == null) {
-      codec = getObjectCodec(typeRef);
+      // The default Java object model is the declared schema for this exact class. Reuse that
+      // binding so generated capabilities stay on the direct root path. Only a codec actually
+      // selected by a runtime factory needs the runtime-only publication below.
+      typeInfo = getTypeInfo(typeRef);
+      runtimeTypeInfos.put(runtimeType, typeInfo);
+      return typeInfo;
     }
     if (codec instanceof ClosedSubtypeCodec) {
       Class<?> baseType = ((ClosedSubtypeCodec) codec).baseType();

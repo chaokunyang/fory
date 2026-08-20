@@ -342,6 +342,34 @@ public class JsonModuleTest {
     assertEquals(json.toJson(value), "{\"value\":\"runtime\"}");
     JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
     JsonTypeInfo typeInfo = JsonTestSupport.runtimeTypeInfo(json, RuntimeGeneratedValue.class);
+    assertGeneratedCapabilities(resolver, typeInfo);
+
+    RuntimeGeneratedValue decoded =
+        json.fromJson("{\"value\":\"declared\"}", RuntimeGeneratedValue.class);
+    assertEquals(decoded.getValue(), "declared");
+    assertEquals(runtimeTypes, Arrays.asList(true, false));
+  }
+
+  @Test
+  public void defaultRuntimeObjectStaysCanonical() {
+    ForyJson json = ForyJson.builder().withConcurrencyLevel(1).withAsyncCompilation(false).build();
+    RuntimeGeneratedValue value = new RuntimeGeneratedValue();
+    value.setValue("runtime");
+    assertEquals(json.toJson(value), "{\"value\":\"runtime\"}");
+    assertEquals(
+        json.fromJson("{\"value\":\"declared\"}", RuntimeGeneratedValue.class).getValue(),
+        "declared");
+
+    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
+    JsonTypeInfo runtime = JsonTestSupport.runtimeTypeInfo(json, RuntimeGeneratedValue.class);
+    JsonTypeInfo declared =
+        resolver.getTypeInfo(RuntimeGeneratedValue.class, RuntimeGeneratedValue.class);
+    assertSame(runtime, declared);
+    assertGeneratedCapabilities(resolver, runtime);
+  }
+
+  private static void assertGeneratedCapabilities(
+      JsonTypeResolver resolver, JsonTypeInfo typeInfo) {
     ObjectCodec<?> owner = resolver.canonicalObjectCodec(typeInfo);
     assertNotNull(owner);
     assertNotSame(typeInfo.stringWriter(), owner);
@@ -349,11 +377,6 @@ public class JsonModuleTest {
     assertNotSame(typeInfo.latin1Reader(), owner);
     assertNotSame(typeInfo.utf16Reader(), owner);
     assertNotSame(typeInfo.utf8Reader(), owner);
-
-    RuntimeGeneratedValue decoded =
-        json.fromJson("{\"value\":\"declared\"}", RuntimeGeneratedValue.class);
-    assertEquals(decoded.getValue(), "declared");
-    assertEquals(runtimeTypes, Arrays.asList(true, false));
   }
 
   private static JsonObjectModel runtimeGeneratedModel() {

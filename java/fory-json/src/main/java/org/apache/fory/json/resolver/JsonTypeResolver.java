@@ -242,7 +242,15 @@ public final class JsonTypeResolver {
 
   private ObjectCodec<?> canonicalObjectOwner(JsonTypeInfo typeInfo) {
     ObjectCodec<?> owner = objectCodecs.get(metadataKey(typeInfo));
-    return owner != null && canonicalObjectTypeInfos.get(owner) == typeInfo ? owner : null;
+    if (owner != null && canonicalObjectTypeInfos.get(owner) == typeInfo) {
+      return owner;
+    }
+    for (Map.Entry<ObjectCodec<?>, JsonTypeInfo> entry : canonicalObjectTypeInfos.iterable()) {
+      if (entry.getValue() == typeInfo) {
+        return entry.getKey();
+      }
+    }
+    return null;
   }
 
   /** Returns an exact declared ArrayList-backed UTF-8 collection owner, or {@code null}. */
@@ -797,6 +805,11 @@ public final class JsonTypeResolver {
         roots.add(entry.getValue());
       }
     }
+    for (Map.Entry<Class<?>, JsonTypeInfo> entry : runtimeTypeInfos.entrySet()) {
+      if (!snapshot.runtimeKeys.contains(entry.getKey()) && !roots.contains(entry.getValue())) {
+        roots.add(entry.getValue());
+      }
+    }
     if (roots.isEmpty()) {
       return;
     }
@@ -932,6 +945,8 @@ public final class JsonTypeResolver {
     }
     typeInfo = typeInfos.get(runtimeType);
     if (typeInfo != null) {
+      // An exact declared binding is authoritative for values of that same raw class. The runtime
+      // factory path exists for implementation classes that have no declared binding.
       runtimeTypeInfos.put(runtimeType, typeInfo);
       return typeInfo;
     }

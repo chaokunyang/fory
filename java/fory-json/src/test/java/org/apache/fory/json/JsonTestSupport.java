@@ -22,6 +22,7 @@ package org.apache.fory.json;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Collections;
+import java.util.Map;
 import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Utf16JsonReader;
@@ -131,6 +132,17 @@ final class JsonTestSupport {
 
   static JsonTypeResolver currentTypeResolver(ForyJson json) {
     return (JsonTypeResolver) currentStateField(json, "typeResolver");
+  }
+
+  @SuppressWarnings("unchecked")
+  static JsonTypeInfo runtimeTypeInfo(ForyJson json, Class<?> type) {
+    try {
+      Map<Class<?>, JsonTypeInfo> runtimeTypes =
+          (Map<Class<?>, JsonTypeInfo>) field(currentTypeResolver(json), "runtimeTypeInfos");
+      return runtimeTypes.get(type);
+    } catch (ReflectiveOperationException e) {
+      throw new AssertionError(e);
+    }
   }
 
   static Object currentStateField(ForyJson json, String name) {

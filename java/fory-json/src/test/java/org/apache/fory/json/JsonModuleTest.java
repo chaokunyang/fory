@@ -20,10 +20,12 @@
 package org.apache.fory.json;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertThrows;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,6 +38,7 @@ import org.apache.fory.json.codec.AbstractJsonValueCodec;
 import org.apache.fory.json.codec.CompositeJsonCodec;
 import org.apache.fory.json.codec.JsonObjectModel;
 import org.apache.fory.json.codec.JsonValueCodec;
+import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codec.ScalarCodecs;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.reader.Latin1JsonReader;
@@ -315,6 +318,65 @@ public class JsonModuleTest {
     assertEquals(runtimeTypes, Arrays.asList(true, false));
   }
 
+  @Test
+  public void runtimeObjectModelGeneratesCapabilities() throws Exception {
+    List<Boolean> runtimeTypes = new ArrayList<>();
+    JsonCodecFactory factory =
+        (type, resolver, runtimeType) -> {
+          if (type.getRawType() != RuntimeGeneratedValue.class) {
+            return null;
+          }
+          runtimeTypes.add(runtimeType);
+          return resolver.createObjectCodec(type, runtimeGeneratedModel());
+        };
+    ForyJson json =
+        ForyJson.builder()
+            .withModule(context -> context.registerCodecFactory(factory))
+            .withConcurrencyLevel(1)
+            .withAsyncCompilation(false)
+            .build();
+
+    RuntimeGeneratedValue value = new RuntimeGeneratedValue();
+    value.setValue("runtime");
+    assertEquals(json.toJson(value), "{\"value\":\"runtime\"}");
+    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
+    JsonTypeInfo typeInfo = JsonTestSupport.runtimeTypeInfo(json, RuntimeGeneratedValue.class);
+    ObjectCodec<?> owner = resolver.canonicalObjectCodec(typeInfo);
+    assertNotSame(typeInfo.stringWriter(), owner);
+    assertNotSame(typeInfo.utf8Writer(), owner);
+    assertNotSame(typeInfo.latin1Reader(), owner);
+    assertNotSame(typeInfo.utf16Reader(), owner);
+    assertNotSame(typeInfo.utf8Reader(), owner);
+
+    RuntimeGeneratedValue decoded =
+        json.fromJson("{\"value\":\"declared\"}", RuntimeGeneratedValue.class);
+    assertEquals(decoded.getValue(), "declared");
+    assertEquals(runtimeTypes, Arrays.asList(true, false));
+  }
+
+  private static JsonObjectModel runtimeGeneratedModel() {
+    try {
+      Constructor<RuntimeGeneratedValue> constructor = RuntimeGeneratedValue.class.getConstructor();
+      Method getter = RuntimeGeneratedValue.class.getMethod("getValue");
+      Method setter = RuntimeGeneratedValue.class.getMethod("setValue", String.class);
+      return new JsonObjectModel(
+          constructor,
+          null,
+          new String[0],
+          new Method[0],
+          new Method[0],
+          new int[0],
+          new boolean[0],
+          new TypeRef<?>[0],
+          new String[] {"value"},
+          new Method[] {getter},
+          new Method[] {setter},
+          new TypeRef<?>[] {TypeRef.of(String.class)});
+    } catch (ReflectiveOperationException e) {
+      throw new AssertionError(e);
+    }
+  }
+
   private static final class KeyedModule implements ForyJsonModule {
     private final String key;
 
@@ -585,5 +647,19 @@ public class JsonModuleTest {
     private static final RuntimeFixedValue DECLARED = new RuntimeFixedValue();
 
     private RuntimeFixedValue() {}
+  }
+
+  public static final class RuntimeGeneratedValue {
+    private String value;
+
+    public RuntimeGeneratedValue() {}
+
+    public String getValue() {
+      return value;
+    }
+
+    public void setValue(String value) {
+      this.value = value;
+    }
   }
 }

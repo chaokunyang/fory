@@ -35,6 +35,11 @@ enum Result derives ScalaJsonCodec {
   case Pending
 }
 
+enum SharedSingletons derives ScalaJsonCodec {
+  case First, Second
+  case Item(value: Int)
+}
+
 enum StatefulResult derives ScalaJsonCodec {
   case Item(value: () => Int)
 }
@@ -136,6 +141,24 @@ class ScalaJsonDerivationSuite extends AnyFunSuite {
     assertThrows[ForyJsonException](
       json.fromJson("{\"Pending\":{\"extra\":1}}", classOf[Result])
     )
+  }
+
+  test("derived enum shares singleton classes") {
+    val values = Seq[SharedSingletons](
+      SharedSingletons.First,
+      SharedSingletons.Second,
+      SharedSingletons.Item(3)
+    )
+    val runtimes = Seq(
+      ForyJsonScala.builder().withCodegen(false).build(),
+      ForyJsonScala.builder().withAsyncCompilation(false).build()
+    )
+    runtimes.foreach { json =>
+      values.foreach { value =>
+        val text = json.toJson(value, classOf[SharedSingletons])
+        assert(json.fromJson(text, classOf[SharedSingletons]) == value)
+      }
+    }
   }
 
   test("derived child honors exact codec") {

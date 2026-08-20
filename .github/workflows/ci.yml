@@ -169,7 +169,7 @@ jobs:
             echo "javascript=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if grep -Eq '^(\.github/workflows/(ci\.yml|release-jvm-snapshot\.yaml)$|ci/run_ci\.(py|sh)$|ci/tasks/(common|java|kotlin)\.py$|ci/(release|test_release)\.py$|java/(pom\.xml$|fory-(core|json|annotation-processor)/)|kotlin/|integration_tests/(kotlin_json_corpus|graalvm_kotlin_tests|jpms_tests|grpc_tests/kotlin|idl_tests/kotlin)/)' <<< "$changed_files"; then
+          if grep -Eq '^(\.github/workflows/(ci\.yml|release-jvm-snapshot\.yaml)$|ci/run_ci\.(py|sh)$|ci/tasks/(common|java|kotlin)\.py$|ci/release\.py$|java/(pom\.xml$|fory-(core|json|annotation-processor)/)|kotlin/|integration_tests/(kotlin_json_corpus|graalvm_kotlin_tests|jpms_tests|grpc_tests/kotlin|idl_tests/kotlin)/)' <<< "$changed_files"; then
             echo "kotlin=true" >> "$GITHUB_OUTPUT"
           else
             echo "kotlin=false" >> "$GITHUB_OUTPUT"

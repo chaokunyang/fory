@@ -62,8 +62,14 @@ private[scala] final class DerivedScalaJsonCodec[T](
       if (singleton != null && singleton.getClass != caseClass)
         throw new IllegalArgumentException(s"Invalid derived Scala enum singleton $name")
       if (classSet.add(caseClass)) result.add(caseClass)
-      else
-        throw new IllegalArgumentException(s"Duplicate derived Scala enum case ${caseClass.getName}")
+      else {
+        var prior = 0
+        while (classes(prior) != caseClass) prior += 1
+        if (singleton == null || singletons(prior) == null)
+          throw new IllegalArgumentException(
+            s"Duplicate derived Scala enum case ${caseClass.getName}"
+          )
+      }
       index += 1
     }
     Collections.unmodifiableList(result)
@@ -91,7 +97,8 @@ private[scala] final class DerivedScalaJsonCodec[T](
         rootType,
         new JsonSubTypesInfo(Inclusion.WRAPPER_OBJECT, "", classes.clone(), names.clone()),
         typeRef,
-        this
+        this,
+        singletons.clone()
       )
     }
     val index = classes.indexOf(rawType)

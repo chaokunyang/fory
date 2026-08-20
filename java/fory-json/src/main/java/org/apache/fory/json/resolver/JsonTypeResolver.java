@@ -1220,6 +1220,13 @@ public final class JsonTypeResolver {
     return sharedRegistry.mapKeyCodec(type, codecClass);
   }
 
+  /** Creates uncached metadata for one parent-local closed-subtype leaf. */
+  @Internal
+  public JsonTypeInfo createSubtypeLeaf(TypeRef<?> type, JsonValueCodec<?> codec) {
+    sharedRegistry.checkSecure(type.getRawType());
+    return newTypeInfo(type, codec);
+  }
+
   @SuppressWarnings("unchecked")
   public <T> StringWriterCodec<T> stringWriter(ObjectCodec<T> codec) {
     requireJITLock();

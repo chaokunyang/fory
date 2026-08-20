@@ -42,8 +42,8 @@ in the measured runtime.
 ## Build and run
 
 Install the current `fory-json-kotlin` artifact in Maven local first. Use Gradle 9.3.0 and a JDK 17
-or later toolchain. Install the pinned Python report dependencies before running the report tests
-or producing charts:
+or later toolchain. Install the pinned Python report dependencies before producing reports or
+charts:
 
 ```bash
 python -m pip install -r requirements.txt

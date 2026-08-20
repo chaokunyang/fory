@@ -56,6 +56,7 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
   private final JsonSubTypesInfo definition;
   private final TypeRef<?> declaredType;
   private final JsonCodecFactory childFactory;
+  private final Object[] fixedInstances;
   private final JsonTypeInfo[] children;
   private final ObjectCodec<Object>[] objectCodecs;
   private JsonFieldTable[] inlineReadTables;
@@ -84,10 +85,33 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
       JsonSubTypesInfo definition,
       TypeRef<?> declaredType,
       JsonCodecFactory childFactory) {
+    this(baseType, definition, declaredType, childFactory, null);
+  }
+
+  /** Creates an unresolved dispatcher with parent-owned fixed branch values. */
+  @Internal
+  public ClosedSubtypeCodec(
+      Class<?> baseType,
+      JsonSubTypesInfo definition,
+      TypeRef<?> declaredType,
+      JsonCodecFactory childFactory,
+      Object[] fixedInstances) {
+    if (fixedInstances != null && fixedInstances.length != definition.classes.length) {
+      throw new IllegalArgumentException("Subtype branch metadata does not match the definition");
+    }
     this.baseType = baseType;
     this.definition = definition;
     this.declaredType = declaredType;
     this.childFactory = childFactory;
+    this.fixedInstances = fixedInstances == null ? null : fixedInstances.clone();
+    if (fixedInstances != null) {
+      for (int i = 0; i < fixedInstances.length; i++) {
+        Object fixed = fixedInstances[i];
+        if (fixed != null && fixed.getClass() != definition.classes[i]) {
+          throw new IllegalArgumentException("Fixed value does not match subtype branch " + i);
+        }
+      }
+    }
     children = new JsonTypeInfo[definition.classes.length];
     objectCodecs =
         definition.inclusion == Inclusion.PROPERTY
@@ -115,8 +139,18 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
     for (int i = 0; i < children.length; i++) {
       Class<?> subtype = definition.classes[i];
       TypeRef<?> childType = rootType.getSubtype(subtype);
-      JsonTypeInfo child =
-          resolver.getSubtypeTypeInfo(baseType, childType, declaredType != null, childFactory);
+      int prior = priorBranch(i, subtype);
+      JsonTypeInfo child;
+      if (prior >= 0 && fixedInstances[i] != null) {
+        ObjectCodec<?> priorCodec = resolver.canonicalObjectCodec(children[prior]);
+        child =
+            priorCodec != null && priorCodec.fixedInstance()
+                ? resolver.createSubtypeLeaf(childType, new FixedBranchCodec(fixedInstances[i]))
+                : children[prior];
+      } else {
+        child =
+            resolver.getSubtypeTypeInfo(baseType, childType, declaredType != null, childFactory);
+      }
       if (definition.inclusion == Inclusion.PROPERTY) {
         ObjectCodec<?> objectCodec = resolver.canonicalObjectCodec(child);
         if (objectCodec == null) {
@@ -317,12 +351,92 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
 
   private int requireSubtype(Object value) {
     Class<?> runtimeType = value.getClass();
-    int index = definition.classIndex(runtimeType);
+    int index = -1;
+    for (int i = 0; i < definition.classes.length; i++) {
+      if (definition.classes[i] != runtimeType) {
+        continue;
+      }
+      Object fixed = fixedInstances == null ? null : fixedInstances[i];
+      if (fixed == value) {
+        return i;
+      }
+      if (fixed == null && index < 0) {
+        index = i;
+      }
+    }
     if (index < 0) {
       throw new ForyJsonException(
           "Runtime type " + runtimeType.getName() + " is not a declared subtype of " + baseType);
     }
     return index;
+  }
+
+  private int priorBranch(int index, Class<?> type) {
+    if (fixedInstances == null) {
+      return -1;
+    }
+    for (int i = 0; i < index; i++) {
+      if (definition.classes[i] == type) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /** Parent-local fixed branch used when multiple discriminators share one runtime class. */
+  private static final class FixedBranchCodec implements JsonValueCodec<Object> {
+    private final Object instance;
+
+    private FixedBranchCodec(Object instance) {
+      this.instance = instance;
+    }
+
+    @Override
+    public void writeString(StringJsonWriter writer, Object value) {
+      requireInstance(value);
+      writer.writeObjectStart();
+      writer.writeObjectEnd();
+    }
+
+    @Override
+    public void writeUtf8(Utf8JsonWriter writer, Object value) {
+      requireInstance(value);
+      writer.writeObjectStart();
+      writer.writeObjectEnd();
+    }
+
+    @Override
+    public Object readLatin1(Latin1JsonReader reader) {
+      readEmptyObject(reader);
+      return instance;
+    }
+
+    @Override
+    public Object readUtf16(Utf16JsonReader reader) {
+      readEmptyObject(reader);
+      return instance;
+    }
+
+    @Override
+    public Object readUtf8(Utf8JsonReader reader) {
+      readEmptyObject(reader);
+      return instance;
+    }
+
+    private void requireInstance(Object value) {
+      if (value != instance) {
+        throw new ForyJsonException("Expected closed subtype fixed instance " + instance);
+      }
+    }
+
+    private static void readEmptyObject(org.apache.fory.json.reader.JsonReader reader) {
+      reader.enterDepth();
+      reader.expectNextToken('{');
+      if (!reader.consumeNextToken('}')) {
+        throw new ForyJsonException("Closed subtype fixed instance requires an empty JSON object");
+      }
+      reader.exitDepth();
+    }
   }
 
   @Internal

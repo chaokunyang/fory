@@ -1101,10 +1101,6 @@ public final class JsonSharedRegistry {
     return createCodec(rawType, typeRef, localResolver, null, false);
   }
 
-  JsonValueCodec<?> createRuntimeCodec(Class<?> rawType, JsonTypeResolver localResolver) {
-    return createCodec(rawType, TypeRef.of(rawType), localResolver, null, true);
-  }
-
   JsonValueCodec<?> createCodec(
       Class<?> rawType,
       TypeRef<?> typeRef,
@@ -1220,6 +1216,10 @@ public final class JsonSharedRegistry {
       return MapCodec.create(rawType, typeRef, localResolver);
     }
     return null;
+  }
+
+  JsonValueCodec<?> createRuntimeCodec(Class<?> rawType, JsonTypeResolver localResolver) {
+    return createCodec(rawType, TypeRef.of(rawType), localResolver, null, true);
   }
 
   private JsonValueCodec<?> createExactCodec(

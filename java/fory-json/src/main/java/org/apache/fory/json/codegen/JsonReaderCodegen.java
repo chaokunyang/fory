@@ -3169,7 +3169,7 @@ abstract class JsonReaderCodegen {
       return statementIf(
           tryReadNextFieldNameColon(properties[index].name()),
           new Expression.ListExpression(
-              readField(builder, type, properties[index], index, object, true),
+              readField(builder, type, properties[index], index, object, false),
               fieldEnd(slowMethod, properties.length, groupEnd, groupHelper, index, object)),
           nextDirectFallback(
               builder,
@@ -3204,7 +3204,7 @@ abstract class JsonReaderCodegen {
       return statementIf(
           tryReadNextFieldNameColon(properties[nextIndex].name()),
           new Expression.ListExpression(
-              readField(builder, type, properties[nextIndex], nextIndex, object, true),
+              readField(builder, type, properties[nextIndex], nextIndex, object, false),
               new Expression.Assign(skips[nextIndex], Expression.Literal.True),
               fieldEnd(slowMethod, properties.length, groupEnd, groupHelper, nextIndex, object)),
           hashFallback(

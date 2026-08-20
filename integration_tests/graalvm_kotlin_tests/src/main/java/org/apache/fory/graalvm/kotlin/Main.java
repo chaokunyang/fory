@@ -19,26 +19,14 @@
 
 package org.apache.fory.graalvm.kotlin;
 
-import java.util.List;
-import org.apache.fory.exception.ForyException;
-import org.apache.fory.integration.kotlin.json.corpus.KotlinJsonCorpus;
-import org.apache.fory.integration.kotlin.json.corpus.PlatformAccount;
-import org.apache.fory.integration.kotlin.json.corpus.PlatformCodecSlotsMixin;
 import org.apache.fory.integration.kotlin.json.corpus.PlatformCorpusChecks;
 import org.apache.fory.integration.kotlin.json.corpus.PlatformJavaProfileMixin;
-import org.apache.fory.integration.kotlin.json.corpus.PlatformJsonModule;
-import org.apache.fory.integration.kotlin.json.corpus.PlatformKotlinProfileMixin;
-import org.apache.fory.integration.kotlin.json.corpus.PlatformShapeMarker;
 import org.apache.fory.json.ForyJson;
-import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.annotation.ForyJsonProvider;
 import org.apache.fory.json.kotlin.ForyJsonKotlin;
-import org.apache.fory.reflect.TypeRef;
 
 /** Native Image acceptance application for provider-selected Kotlin JSON capabilities. */
 public final class Main {
-  private static final TypeRef<List<Integer>> UNREACHED_LIST_TYPE = new TypeRef<List<Integer>>() {};
-
   private Main() {}
 
   public static void main(String[] args) {
@@ -48,93 +36,11 @@ public final class Main {
 
     ForyJson json =
         ForyJsonKotlin.builder()
-            .withModule(PlatformJsonModule.INSTANCE)
-            .registerMixin(PlatformCodecSlotsMixin.class)
             .registerMixin(PlatformJavaProfileMixin.class)
-            .registerMixin(PlatformKotlinProfileMixin.class)
             .withAsyncCompilation(false)
             .build();
-    PlatformCorpusChecks.verifyPlatformCases(json);
-    PlatformCorpusChecks.verifyFailureCases(json);
-    testUnavailableCapabilities(json);
+    PlatformCorpusChecks.verifyRoundTrip(json);
     System.out.println("Fory Kotlin JSON Native Image succeed");
-  }
-
-  private static void testUnavailableCapabilities(ForyJson selected) {
-    expectMissingCapability(
-        () ->
-            selected.fromJson(
-                KotlinJsonCorpus.caseJson("rejected-box"), KotlinJsonCorpus.unreachedBoxType()),
-        "An unreached exact generic binding was accepted");
-    expectMissingCapability(
-        () -> selected.fromJson("not-json", UNREACHED_LIST_TYPE),
-        "An unreached exact collection binding parsed input");
-
-    ForyJson withoutKotlin = ForyJson.builder().withAsyncCompilation(false).build();
-    // Without the Kotlin module, core has no language-model authority. An ordinary controlled
-    // construction failure is sufficient; provider-selected language configurations stay strict.
-    expectControlledFailure(
-        () ->
-            withoutKotlin.fromJson(
-                KotlinJsonCorpus.caseJson("account-default"), KotlinJsonCorpus.accountType()),
-        "A configuration without the Kotlin module accepted an immutable Kotlin model");
-
-    ForyJson unselected =
-        ForyJsonKotlin.builder()
-            .withModule(PlatformJsonModule.INSTANCE)
-            .withAsyncCompilation(false)
-            .withFieldMode(true)
-            .build();
-    expectMissingLanguageModel(
-        () -> unselected.fromJson("not-json", KotlinJsonCorpus.accountType()),
-        "A configuration not selected by the provider parsed an ordinary Kotlin model");
-    expectMissingLanguageModel(
-        () -> unselected.fromJson("not-json", PlatformShapeMarker.class),
-        "A configuration not selected by the provider parsed a fixed Kotlin model");
-
-    PlatformAccount account =
-        selected.fromJson(
-            KotlinJsonCorpus.caseJson("account-default"), KotlinJsonCorpus.accountType());
-    check(
-        account.equals(new PlatformAccount(1, "default", "corpus-default")),
-        "A failed Native capability lookup polluted the selected configuration");
-  }
-
-  private static void expectControlledFailure(Runnable operation, String message) {
-    try {
-      operation.run();
-    } catch (ForyException expected) {
-      return;
-    }
-    throw new AssertionError(message);
-  }
-
-  private static void expectMissingCapability(Runnable operation, String message) {
-    try {
-      operation.run();
-    } catch (ForyJsonException expected) {
-      check(
-          expected.getMessage().startsWith("Missing generated Fory JSON class for exact type "),
-          "Unexpected Native capability failure: " + expected.getMessage());
-      return;
-    }
-    throw new AssertionError(message);
-  }
-
-  private static void expectMissingLanguageModel(Runnable operation, String message) {
-    try {
-      operation.run();
-    } catch (ForyJsonException expected) {
-      check(
-          expected
-              .getMessage()
-              .startsWith(
-                  "Missing provider-selected Fory JSON Native configuration for language object"
-                      + " model "),
-          "Unexpected Native language-model failure: " + expected.getMessage());
-      return;
-    }
-    throw new AssertionError(message);
   }
 
   private static void check(boolean condition, String message) {

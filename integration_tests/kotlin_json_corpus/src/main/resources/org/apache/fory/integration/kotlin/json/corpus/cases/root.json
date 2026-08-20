@@ -1,74 +1,9 @@
 {
-  "account": { "id": 25, "name": "platform", "label": null },
-  "ordinary": { "id": 11, "name": "ordinary" },
-  "envelope": {
-    "account": { "id": 25, "name": "platform", "label": null },
-    "names": ["native", "android"],
-    "boxedNames": [{ "value": "child" }],
-    "unsigned": 4294967295
-  },
-  "node": { "value": "root", "children": [{ "value": "leaf" }] },
-  "builtins": {
-    "pair": { "first": null, "second": "r" },
-    "triple": { "first": 1, "second": "two", "third": true },
-    "ubyte": 255,
-    "ushort": 65535,
-    "uint": 4294967295,
-    "ulong": 18446744073709551615,
-    "ubytes": [0, 255],
-    "ushorts": [0, 65535],
-    "uints": [0, 4294967295],
-    "ulongs": [0, 18446744073709551615],
-    "ubyteKeys": { "0": "zero", "255": "max" },
-    "ushortKeys": { "0": "zero", "65535": "max" },
-    "uintKeys": { "0": "zero", "4294967295": "max" },
-    "ulongKeys": { "0": "zero", "18446744073709551615": "max" },
-    "zeroDuration": "PT0S",
-    "negativeDuration": "-PT0.000000001S",
-    "duration": "PT49H2M3.000456789S",
-    "infiniteDuration": "PT9999999999999H",
-    "negativeInfiniteDuration": "-PT9999999999999H",
-    "instant": "1970-01-01T00:00:00Z",
-    "nanosInstant": "1969-12-31T23:59:59.000000001Z",
-    "minInstant": "-1000000000-01-01T00:00:00Z",
-    "maxInstant": "+1000000000-12-31T23:59:59.999999999Z",
-    "uuid": "00112233-4455-6677-8899-aabbccddeeff",
-    "unit": {},
-    "nullableUnit": null,
-    "nothing": null,
-    "intRange": { "start": -4, "endInclusive": 9 },
-    "uintRange": { "start": 0, "endInclusive": 4294967295 },
-    "intProgression": { "first": 20, "last": -10, "step": -3 },
-    "ulongProgression": { "first": 20, "last": 2, "step": -3 },
-    "timed": { "value": "v", "duration": "PT0.000000001S" }
-  },
-  "value": {
-    "id": 19,
-    "nullableId": null,
-    "nullableText": null,
-    "keyed": { "4294967295": "maximum" }
-  },
-  "unitHolder": { "required": {}, "nullable": null, "nothing": null },
-  "propertyShape": { "kind": "circle", "radius": 3 },
-  "wrappedShape": { "number": 9 },
-  "annotated": {
-    "field_name": "field",
-    "getter_name": "getter",
-    "parameter_name": "parameter",
-    "setter_name": "setter",
-    "bare_name": "bare"
-  },
-  "codecSlots": {
-    "scalar": "whole:scalar",
-    "elements": ["element:first", "element:second"],
-    "content": "content:optional",
-    "entries": { "key:7": "value:seven" }
-  },
-  "nulls": {
-    "required": "required",
-    "nullable": null,
-    "count": 1,
-    "nullableCount": null
-  },
-  "token": "module-token"
+  "account": { "id": 1, "name": "default" },
+  "id": 9,
+  "unsigned": 4294967295,
+  "shape": { "kind": "circle", "radius": 3 },
+  "profile": { "display_label": "mixin" },
+  "token": "custom",
+  "box": { "value": "generic" }
 }

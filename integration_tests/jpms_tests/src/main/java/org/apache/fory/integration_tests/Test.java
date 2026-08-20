@@ -51,8 +51,7 @@ public class Test {
     if (!value.equals(decoded)) {
       throw new AssertionError("Kotlin JSON JPMS round trip failed: " + decoded);
     }
-    PlatformAccount defaulted =
-        json.fromJson(KotlinJsonCorpus.caseJson("account-default"), accountType);
+    PlatformAccount defaulted = json.fromJson("{\"id\":1,\"name\":\"default\"}", accountType);
     if (defaulted.getId() != 1
         || !"default".equals(defaulted.getName())
         || !"corpus-default".equals(defaulted.getLabel())) {

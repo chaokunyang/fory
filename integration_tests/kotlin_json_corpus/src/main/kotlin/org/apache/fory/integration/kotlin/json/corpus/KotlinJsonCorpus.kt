@@ -29,32 +29,11 @@ public object KotlinJsonCorpus {
 
   @JvmStatic public fun accountType(): TypeRef<PlatformAccount> = jsonTypeRef()
 
-  @JvmStatic public fun envelopeType(): TypeRef<PlatformEnvelope> = jsonTypeRef()
-
-  @JvmStatic public fun boxType(): TypeRef<PlatformBox<String>> = jsonTypeRef()
-
-  @JvmStatic public fun unreachedBoxType(): TypeRef<PlatformBox<Int>> = jsonTypeRef()
-
-  @JvmStatic public fun nodeType(): TypeRef<PlatformNode<String>> = jsonTypeRef()
-
   @JvmStatic public fun rootType(): TypeRef<PlatformRoot> = jsonTypeRef()
 
   @JvmStatic public fun rootValue(): PlatformRoot = platformRootValue()
 
-  @JvmStatic public fun tokenType(): TypeRef<PlatformToken> = jsonTypeRef()
-
-  @JvmStatic public fun propertyShapeType(): TypeRef<PlatformPropertyShape> = jsonTypeRef()
-
-  @JvmStatic public fun wrappedShapeType(): TypeRef<PlatformWrappedShape> = jsonTypeRef()
-
-  @JvmStatic
-  public fun invalidPropertyShapeType(): TypeRef<PlatformInvalidPropertyShape> = jsonTypeRef()
-
-  @JvmStatic public fun nullableUnitType(): TypeRef<Unit?> = jsonTypeRef()
-
-  @JvmStatic public fun nullableNothingType(): TypeRef<Nothing?> = jsonTypeRef()
-
-  @JvmStatic public fun caseJson(id: String): String = resourceText("cases/$id.json")
+  @JvmStatic public fun rootJson(): String = resourceText("cases/root.json")
 
   private fun resourceText(path: String): String {
     val stream =

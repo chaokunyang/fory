@@ -19,8 +19,13 @@
 
 package org.apache.fory.integration.kotlin.json.corpus
 
-import org.apache.fory.json.annotation.JsonIgnore
+import kotlin.jvm.JvmInline
+import org.apache.fory.json.annotation.JsonCodec
+import org.apache.fory.json.annotation.JsonSubTypes
 import org.apache.fory.json.annotation.JsonType
+import org.apache.fory.json.codec.AbstractJsonValueCodec
+import org.apache.fory.json.reader.JsonReader
+import org.apache.fory.json.writer.JsonWriter
 
 @JsonType
 public data class PlatformAccount(
@@ -31,59 +36,54 @@ public data class PlatformAccount(
 
 @JsonType public data class PlatformBox<T>(public val value: T)
 
-@JsonType public class PlatformOrdinary(public val id: Int, public val name: String)
+@JsonType @JvmInline public value class PlatformId(public val value: Long)
 
 @JsonType
-public data class PlatformEnvelope(
+@JsonSubTypes(
+  value =
+    [
+      JsonSubTypes.Type(value = PlatformCircle::class, name = "circle"),
+      JsonSubTypes.Type(value = PlatformMarker::class, name = "marker"),
+    ],
+  property = "kind",
+)
+public sealed interface PlatformShape
+
+@JsonType public data class PlatformCircle(public val radius: Int) : PlatformShape
+
+@JsonType public data object PlatformMarker : PlatformShape
+
+public data class PlatformToken(public val value: String)
+
+public class PlatformTokenCodec : AbstractJsonValueCodec<PlatformToken>() {
+  override fun write(writer: JsonWriter, value: PlatformToken?) {
+    if (value == null) writer.writeNull() else writer.writeString(value.value)
+  }
+
+  override fun read(reader: JsonReader): PlatformToken? {
+    val value = reader.readString() ?: return null
+    return PlatformToken(value)
+  }
+}
+
+@JsonType
+public data class PlatformRoot(
   public val account: PlatformAccount,
-  public val names: List<String>,
-  public val boxedNames: List<PlatformBox<String>>,
+  public val id: PlatformId,
   public val unsigned: UInt,
+  public val shape: PlatformShape,
+  public val profile: PlatformJavaProfile,
+  @field:JsonCodec(PlatformTokenCodec::class) public val token: PlatformToken,
+  public val box: PlatformBox<String>,
 )
 
-@JsonType
-public data class PlatformNode<T>(
-  public val value: T,
-  public val children: List<PlatformNode<T>> = emptyList(),
-)
-
-@JsonType
-public data class PlatformNulls(
-  public val required: String,
-  public val nullable: String?,
-  public val count: Int,
-  public val nullableCount: Int?,
-  public val defaultNullable: String? = "nullable-default",
-  public val defaultNonNull: String = "non-null-default",
-)
-
-@JsonType
-public data class PlatformUnitHolder(
-  public val required: Unit,
-  public val nullable: Unit?,
-  public val nothing: Nothing?,
-)
-
-@JsonType
-public object PlatformMarker {
-  @get:JsonIgnore @set:JsonIgnore public var ignoredState: Int = 1
-}
-
-@JsonType public data class PlatformKotlinProfile(public val label: String)
-
-public object PlatformStatefulMarker {
-  public var state: Int = 1
-}
-
-public class PlatformComputed(public val id: Int) {
-  public val computed: Int
-    get() = id * 2
-}
-
-public class PlatformDelegated(public val id: Int) {
-  public val delegated: String by lazy { id.toString() }
-}
-
-public class PlatformInnerOwner {
-  public inner class InnerModel(public val id: Int)
-}
+internal fun platformRootValue(): PlatformRoot =
+  PlatformRoot(
+    account = PlatformAccount(1, "default"),
+    id = PlatformId(9),
+    unsigned = UInt.MAX_VALUE,
+    shape = PlatformCircle(3),
+    profile = PlatformJavaProfile("mixin"),
+    token = PlatformToken("custom"),
+    box = PlatformBox("generic"),
+  )

@@ -19,13 +19,8 @@
 
 package org.apache.fory.android
 
-import org.apache.fory.integration.kotlin.json.corpus.KotlinJsonCorpus
-import org.apache.fory.integration.kotlin.json.corpus.PlatformAccount
-import org.apache.fory.integration.kotlin.json.corpus.PlatformCodecSlotsMixin
 import org.apache.fory.integration.kotlin.json.corpus.PlatformCorpusChecks
 import org.apache.fory.integration.kotlin.json.corpus.PlatformJavaProfileMixin
-import org.apache.fory.integration.kotlin.json.corpus.PlatformJsonModule
-import org.apache.fory.integration.kotlin.json.corpus.PlatformKotlinProfileMixin
 import org.apache.fory.json.annotation.JsonType
 import org.apache.fory.json.kotlin.ForyJsonKotlin
 import org.apache.fory.json.kotlin.jsonTypeRef
@@ -82,10 +77,7 @@ internal object AndroidKotlinJsonScenarios {
     fun metadataSurvivesMinification() {
         val json =
             ForyJsonKotlin.builder()
-                .withModule(PlatformJsonModule)
                 .registerMixin(PlatformJavaProfileMixin::class.java)
-                .registerMixin(PlatformKotlinProfileMixin::class.java)
-                .registerMixin(PlatformCodecSlotsMixin::class.java)
                 .withAsyncCompilation(false)
                 .build()
         val accountType = jsonTypeRef<AndroidKotlinAccount>()
@@ -105,12 +97,7 @@ internal object AndroidKotlinJsonScenarios {
         check(defaults.v32 == 320)
         check(json.fromJson("{}", jsonTypeRef<AndroidKotlinMarker>()) === AndroidKotlinMarker)
 
-        val corpusAccount = PlatformAccount(30, "library", null)
-        val corpusType = KotlinJsonCorpus.accountType()
-        check(json.fromJson(json.toJson(corpusAccount, corpusType), corpusType) == corpusAccount)
-        PlatformCorpusChecks.verifyPlatformCases(json)
-        PlatformCorpusChecks.verifyFailureCases(json)
-        PlatformCorpusChecks.verifyPropertyFailure(json)
+        PlatformCorpusChecks.verifyRoundTrip(json)
     }
 
 }

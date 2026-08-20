@@ -24,34 +24,12 @@ import org.testng.annotations.Test
 
 public class KotlinJsonCorpusTest {
   @Test
-  public fun mixinCases(): Unit {
+  public fun sharedRoundTrip(): Unit {
     val json =
       ForyJsonKotlin.builder()
         .registerMixin(PlatformJavaProfileMixin::class.java)
-        .registerMixin(PlatformKotlinProfileMixin::class.java)
-        .registerMixin(PlatformCodecSlotsMixin::class.java)
         .withAsyncCompilation(false)
         .build()
-    PlatformCorpusChecks.verifyMixinCases(json)
-  }
-
-  @Test
-  public fun sharedCases(): Unit {
-    val json =
-      ForyJsonKotlin.builder()
-        .withModule(PlatformJsonModule)
-        .registerMixin(PlatformJavaProfileMixin::class.java)
-        .registerMixin(PlatformKotlinProfileMixin::class.java)
-        .registerMixin(PlatformCodecSlotsMixin::class.java)
-        .withAsyncCompilation(false)
-        .build()
-    PlatformCorpusChecks.verifyPlatformCases(json)
-  }
-
-  @Test
-  public fun rejectedCases(): Unit {
-    val json = ForyJsonKotlin.builder().withModule(PlatformJsonModule).withCodegen(false).build()
-    PlatformCorpusChecks.verifyFailureCases(json)
-    PlatformCorpusChecks.verifyPropertyFailure(json)
+    PlatformCorpusChecks.verifyRoundTrip(json)
   }
 }

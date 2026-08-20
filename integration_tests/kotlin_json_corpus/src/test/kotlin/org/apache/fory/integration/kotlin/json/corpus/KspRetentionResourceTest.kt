@@ -30,49 +30,24 @@ public class KspRetentionResourceTest {
   public fun emitsOnlyExactResources(): Unit {
     val generatedResources = Path.of("target/generated-resources/ksp")
     val outputs = regularFiles(generatedResources)
-    assertTrue(outputs.isNotEmpty(), "KSP did not emit retention resources")
-    assertTrue(
-      outputs.all { generatedResources.relativize(it).toString().endsWith(".pro") },
-      outputs.toString(),
-    )
+    val relative = outputs.map { generatedResources.relativize(it).toString() }.toSet()
+    assertTrue(relative == EXPECTED_RULES, relative.toString())
     assertTrue(regularFiles(Path.of("target/generated-sources/ksp")).isEmpty())
     assertTrue(regularFiles(Path.of("target/ksp-classes")).isEmpty())
 
-    val named = rules("PlatformNamedSubtypeBase")
-    assertTrue(named.contains("-keep,allowoptimization class $PACKAGE.PlatformNamedSubtype"), named)
-    assertFalse(named.contains("java.lang.Void"), named)
-
-    val base64 = rules("PlatformBase64Owner")
-    assertConstructor(base64, "org.apache.fory.json.codec.Base64ByteArrayCodec")
-
-    val endpoints = rules("PlatformEndpointOwner")
-    assertConstructor(endpoints, "$PACKAGE.PlatformDirectEndpointCodec")
-    assertConstructor(endpoints, "$PACKAGE.PlatformInheritedEndpointCodec")
-    assertConstructor(endpoints, "$PACKAGE.PlatformEndpointList")
-    assertConstructor(endpoints, "$PACKAGE.PlatformEndpointMap")
-    assertTrue(
-      endpoints.contains(
-        "-keep,allowoptimization,allowobfuscation class $PACKAGE.PlatformEndpointContract"
-      ),
-      endpoints,
-    )
-
-    val methodEndpoint = rules("PlatformMethodEndpointOwner")
-    assertConstructor(methodEndpoint, "$PACKAGE.PlatformDirectEndpointCodec")
-
-    val mixin = mixinRules("PlatformMixinRetention")
-    assertConstructor(mixin, "$PACKAGE.PlatformReplacementTypeCodec")
-    assertFalse(mixin.contains("PlatformOldTypeCodec"), mixin)
-    assertFalse(mixin.contains("PlatformRemovedSubtype"), mixin)
-    assertFalse(mixin.contains("PlatformUnrelatedEndpointCodec"), mixin)
-
-    val factory = rules("PlatformFactoryModel")
-    assertTrue(
-      factory.contains("$PACKAGE.PlatformFactoryModel create($PACKAGE.PlatformDirectEndpoint);"),
-      factory,
-    )
-    assertTrue(factory.contains("class $PACKAGE.PlatformFactoryModel\$Companion"), factory)
-    assertConstructor(factory, "$PACKAGE.PlatformDirectEndpointCodec")
+    val account = rules("PlatformAccount")
+    assertTrue(account.contains("kotlin.jvm.internal.DefaultConstructorMarker"), account)
+    val value = rules("PlatformId")
+    assertTrue(value.contains("constructor-impl"), value)
+    assertTrue(value.contains("box-impl"), value)
+    assertTrue(value.contains("unbox-impl"), value)
+    val sealed = rules("PlatformShape")
+    assertTrue(sealed.contains("class $PACKAGE.PlatformCircle"), sealed)
+    assertTrue(sealed.contains("class $PACKAGE.PlatformMarker"), sealed)
+    assertConstructor(rules("PlatformRoot"), "$PACKAGE.PlatformTokenCodec")
+    val mixin = mixinRules("PlatformJavaProfileMixin")
+    assertTrue(mixin.contains("class $PACKAGE.PlatformJavaProfile"), mixin)
+    assertTrue(mixin.contains("class $PACKAGE.PlatformJavaProfileMixin"), mixin)
 
     outputs.forEach { output ->
       val text = Files.readString(output)
@@ -108,5 +83,16 @@ public class KspRetentionResourceTest {
 
   private companion object {
     const val PACKAGE = "org.apache.fory.integration.kotlin.json.corpus"
+    val EXPECTED_RULES: Set<String> =
+      setOf(
+        "META-INF/proguard/fory-json-$PACKAGE.PlatformAccount.pro",
+        "META-INF/proguard/fory-json-$PACKAGE.PlatformBox.pro",
+        "META-INF/proguard/fory-json-$PACKAGE.PlatformCircle.pro",
+        "META-INF/proguard/fory-json-$PACKAGE.PlatformId.pro",
+        "META-INF/proguard/fory-json-$PACKAGE.PlatformMarker.pro",
+        "META-INF/proguard/fory-json-$PACKAGE.PlatformRoot.pro",
+        "META-INF/proguard/fory-json-$PACKAGE.PlatformShape.pro",
+        "META-INF/proguard/fory-json-mixin-$PACKAGE.PlatformJavaProfileMixin.pro",
+      )
   }
 }

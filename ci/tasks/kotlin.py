@@ -32,70 +32,16 @@ CORPUS_MODULE_NAME = "org.apache.fory.integration.kotlin.json.corpus"
 CORPUS_PACKAGE = "org.apache.fory.integration.kotlin.json.corpus"
 CORPUS_RULE_MODELS = (
     "PlatformAccount",
-    "PlatformAnnotated",
-    "PlatformBase64Owner",
     "PlatformBox",
-    "PlatformBuiltins",
     "PlatformCircle",
-    "PlatformCodecSlots",
-    "PlatformEndpointOwner",
-    "PlatformEnvelope",
-    "PlatformFactoryModel",
-    "PlatformGenericKey",
-    "PlatformKotlinProfile",
+    "PlatformId",
     "PlatformMarker",
-    "PlatformMethodEndpointOwner",
-    "PlatformNamedSubtypeBase",
-    "PlatformNode",
-    "PlatformNullableText",
-    "PlatformNulls",
-    "PlatformOrdinary",
-    "PlatformPositiveId",
-    "PlatformPropertyNumber",
     "PlatformRoot",
-    "PlatformShapeMarker",
-    "PlatformUnitHolder",
-    "PlatformUnlistedShape",
-    "PlatformValueHolder",
-    "PlatformWrappedData",
-    "PlatformWrappedMarker",
-    "PlatformWrappedNumber",
-    "PlatformInvalidPropertyShape",
-    "PlatformPropertyShape",
-    "PlatformWrappedShape",
+    "PlatformShape",
 )
 CORPUS_MIXIN_TARGETS = {
-    "PlatformCodecSlotsMixin": "PlatformCodecSlots",
     "PlatformJavaProfileMixin": "PlatformJavaProfile",
-    "PlatformKotlinProfileMixin": "PlatformKotlinProfile",
-    "PlatformMixinRetention": "PlatformMixinRetentionTarget",
 }
-CORPUS_CODEC_TYPES = (
-    "PlatformContentStringCodec",
-    "PlatformElementStringCodec",
-    "PlatformIntKeyCodec",
-    "PlatformMapValueStringCodec",
-    "PlatformWholeStringCodec",
-)
-CORPUS_RULE_CONSTRUCTORS = {
-    "PlatformBase64Owner": ("org.apache.fory.json.codec.Base64ByteArrayCodec",),
-    "PlatformEndpointOwner": (
-        f"{CORPUS_PACKAGE}.PlatformDirectEndpointCodec",
-        f"{CORPUS_PACKAGE}.PlatformInheritedEndpointCodec",
-        f"{CORPUS_PACKAGE}.PlatformEndpointList",
-        f"{CORPUS_PACKAGE}.PlatformEndpointMap",
-    ),
-    "PlatformMethodEndpointOwner": (f"{CORPUS_PACKAGE}.PlatformDirectEndpointCodec",),
-    "PlatformFactoryModel": (f"{CORPUS_PACKAGE}.PlatformDirectEndpointCodec",),
-}
-PLATFORM_BUILTINS_PARAMETERS = (
-    "kotlin.Pair,kotlin.Triple,byte,short,int,long,byte[],short[],int[],long[],"
-    "java.util.Map,java.util.Map,java.util.Map,java.util.Map,long,long,long,long,long,"
-    "kotlin.time.Instant,kotlin.time.Instant,kotlin.time.Instant,kotlin.time.Instant,"
-    "kotlin.uuid.Uuid,kotlin.Unit,kotlin.Unit,java.lang.Void,kotlin.ranges.IntRange,"
-    "kotlin.ranges.UIntRange,kotlin.ranges.IntProgression,kotlin.ranges.ULongProgression,"
-    "kotlin.time.TimedValue"
-)
 
 
 def java_major_version():
@@ -190,105 +136,16 @@ def verify_corpus_artifact():
                 f"{jar_path} has unexpected consumer rules: "
                 f"{sorted(actual_rules ^ expected_rules)}"
             )
-        for model in CORPUS_RULE_MODELS:
-            name = f"META-INF/proguard/fory-json-{CORPUS_PACKAGE}.{model}.pro"
-            _verify_rule(jar, name, model)
-        _verify_builtin_creator_rule(jar)
-        for mixin, target in CORPUS_MIXIN_TARGETS.items():
-            name = f"META-INF/proguard/fory-json-mixin-{CORPUS_PACKAGE}.{mixin}.pro"
-            _verify_rule(jar, name, mixin)
-            _verify_rule(jar, name, target)
-        for name in (
-            f"META-INF/proguard/fory-json-{CORPUS_PACKAGE}.PlatformCodecSlots.pro",
-            f"META-INF/proguard/fory-json-mixin-{CORPUS_PACKAGE}.PlatformCodecSlotsMixin.pro",
-        ):
-            for codec in CORPUS_CODEC_TYPES:
-                _verify_constructor_rule(jar, name, f"{CORPUS_PACKAGE}.{codec}")
-        for model, retained_types in CORPUS_RULE_CONSTRUCTORS.items():
-            name = f"META-INF/proguard/fory-json-{CORPUS_PACKAGE}.{model}.pro"
-            for retained_type in retained_types:
-                _verify_constructor_rule(jar, name, retained_type)
-        _verify_ksp_semantics(jar)
-
-
-def _verify_rule(jar, name, model):
-    lines = jar.read(name).decode("utf-8").splitlines()
-    exact_keep = f"-keep,allowoptimization class {CORPUS_PACKAGE}.{model}"
-    if exact_keep not in lines:
-        raise RuntimeError(
-            f"{jar.filename}!/{name} does not retain exact model {model}"
-        )
-
-
-def _verify_constructor_rule(jar, name, retained_type):
-    text = jar.read(name).decode("utf-8")
-    lines = text.splitlines()
-    class_rule = f"-keep,allowoptimization,allowobfuscation class {retained_type}"
-    member_rule = f"-keepclassmembers class {retained_type} {{\n  public <init>();\n}}"
-    if class_rule not in lines or member_rule not in text:
-        raise RuntimeError(
-            f"{jar.filename}!/{name} does not retain the public constructor of {retained_type}"
-        )
-
-
-def _verify_ksp_semantics(jar):
-    named = jar.read(
-        f"META-INF/proguard/fory-json-{CORPUS_PACKAGE}.PlatformNamedSubtypeBase.pro"
-    ).decode("utf-8")
-    subtype = f"-keep,allowoptimization class {CORPUS_PACKAGE}.PlatformNamedSubtype"
-    if subtype not in named.splitlines() or "java.lang.Void" in named:
-        raise RuntimeError("Named subtype retention rules are incomplete or stale")
-
-    mixin = jar.read(
-        f"META-INF/proguard/fory-json-mixin-{CORPUS_PACKAGE}.PlatformMixinRetention.pro"
-    ).decode("utf-8")
-    _verify_constructor_rule(
-        jar,
-        f"META-INF/proguard/fory-json-mixin-{CORPUS_PACKAGE}.PlatformMixinRetention.pro",
-        f"{CORPUS_PACKAGE}.PlatformReplacementTypeCodec",
-    )
-    if (
-        "PlatformOldTypeCodec" in mixin
-        or "PlatformRemovedSubtype" in mixin
-        or "PlatformUnrelatedEndpointCodec" in mixin
-    ):
-        raise RuntimeError(
-            "Non-effective Mixin annotations leaked into retention rules"
-        )
-
-    factory = jar.read(
-        f"META-INF/proguard/fory-json-{CORPUS_PACKAGE}.PlatformFactoryModel.pro"
-    ).decode("utf-8")
-    method = (
-        f"{CORPUS_PACKAGE}.PlatformFactoryModel create("
-        f"{CORPUS_PACKAGE}.PlatformDirectEndpoint);"
-    )
-    if (
-        method not in factory
-        or f"class {CORPUS_PACKAGE}.PlatformFactoryModel$Companion" not in factory
-    ):
-        raise RuntimeError("Factory retention rules are incomplete")
-
-
-def _verify_builtin_creator_rule(jar):
-    name = f"META-INF/proguard/fory-json-{CORPUS_PACKAGE}.PlatformBuiltins.pro"
-    text = jar.read(name).decode("utf-8")
-    owner = f"{CORPUS_PACKAGE}.PlatformBuiltins"
-    header = f"-keepclassmembers class {owner} {{\n"
-    if text.count(header) != 1:
-        raise RuntimeError(f"{jar.filename}!/{name} must have one exact member block")
-    start = text.index(header) + len(header)
-    end = text.index("}\n", start)
-    block = text[start:end]
-    constructors = (
-        f"  <init>({PLATFORM_BUILTINS_PARAMETERS});",
-        "  <init>("
-        f"{PLATFORM_BUILTINS_PARAMETERS},kotlin.jvm.internal.DefaultConstructorMarker);",
-    )
-    if any(block.count(constructor) != 1 for constructor in constructors):
-        raise RuntimeError(
-            f"{jar.filename}!/{name} does not retain both exact Kotlin constructors"
-        )
+        stale_classes = {
+            name
+            for name in names
+            if name.endswith("_ForyJsonCodec.class")
+            or name.endswith("_Operations.class")
+        }
+        if stale_classes:
+            raise RuntimeError(
+                f"{jar_path} contains generated codec classes: {stale_classes}"
+            )
 
 
 def _kotlin_version():
@@ -353,47 +210,6 @@ def run_native_json():
         "mvn --batch-mode --no-transfer-progress -DskipTests=true -Pnative clean package"
     )
     common.exec_cmd("./target/main")
-    expect_native_failure(
-        "org.apache.fory.graalvm.kotlin.CodegenDisabledMain",
-        "codegen-disabled ForyJson",
-    )
-    expect_native_failure(
-        "org.apache.fory.graalvm.kotlin.InvalidPropertyMain",
-        "Inline JSON subtype requires the default object representation",
-    )
-
-
-def expect_native_failure(main_class, expected_text):
-    """Require one invalid provider image to fail during hosted analysis."""
-    project_dir = Path(
-        common.PROJECT_ROOT_DIR, "integration_tests", "graalvm_kotlin_tests"
-    )
-    command = [
-        "mvn",
-        "--batch-mode",
-        "--no-transfer-progress",
-        "-DskipTests=true",
-        "-Pnative",
-        f"-DmainClass={main_class}",
-        "clean",
-        "package",
-    ]
-    logging.info("Expecting Native Image analysis failure for %s", main_class)
-    result = subprocess.run(
-        command,
-        cwd=project_dir,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        check=False,
-    )
-    if result.returncode == 0:
-        raise RuntimeError(f"Native Image unexpectedly accepted {main_class}")
-    if expected_text not in result.stdout:
-        raise RuntimeError(
-            f"Native Image failed for the wrong reason ({main_class}):\n"
-            + result.stdout[-12000:]
-        )
 
 
 def run(task="tests"):

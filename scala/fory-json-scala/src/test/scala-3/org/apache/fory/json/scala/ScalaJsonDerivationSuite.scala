@@ -80,7 +80,11 @@ final class PendingFactory extends JsonCodecFactory {
 
   override def factoryKey(): String = getClass.getName
 
-  override def create(typeRef: TypeRef[_], resolver: JsonTypeResolver): JsonValueCodec[_] = {
+  override def create(
+      typeRef: TypeRef[_],
+      resolver: JsonTypeResolver,
+      runtimeType: Boolean
+  ): JsonValueCodec[_] = {
     if (first.getAndSet(false))
       throw new ForyJsonException("First child resolution fails")
     new PendingCodec
@@ -105,7 +109,11 @@ final class StatefulFactory extends JsonCodecFactory {
 
   override def factoryKey(): String = getClass.getName
 
-  override def create(typeRef: TypeRef[_], resolver: JsonTypeResolver): JsonValueCodec[_] = {
+  override def create(
+      typeRef: TypeRef[_],
+      resolver: JsonTypeResolver,
+      runtimeType: Boolean
+  ): JsonValueCodec[_] = {
     if (first.getAndSet(false))
       throw new ForyJsonException("First stateful child resolution fails")
     new StatefulCodec

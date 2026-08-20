@@ -31,7 +31,11 @@ import org.apache.fory.reflect.TypeRef
 import org.apache.fory.type.Types
 
 internal object KotlinJsonCodecFactory : JsonCodecFactory {
-  override fun create(type: TypeRef<*>, resolver: JsonTypeResolver): JsonValueCodec<*>? {
+  override fun create(
+    type: TypeRef<*>,
+    resolver: JsonTypeResolver,
+    runtimeType: Boolean,
+  ): JsonValueCodec<*>? {
     val rawType = type.rawType
     val semanticId = type.typeExtMeta?.typeId() ?: 0
     if (semanticId in Types.UINT8..Types.UINT64 && semanticId != Types.VAR_UINT32) {

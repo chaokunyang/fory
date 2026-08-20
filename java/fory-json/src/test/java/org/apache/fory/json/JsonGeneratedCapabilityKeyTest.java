@@ -99,7 +99,7 @@ public class JsonGeneratedCapabilityKeyTest {
         ForyJson.builder()
             .registerCodec(
                 FixedValue.class,
-                (type, resolver) ->
+                (type, resolver, runtimeType) ->
                     resolver.createObjectCodec(
                         type, JsonObjectModel.fixedInstance(FixedValue.INSTANCE)))
             .withAsyncCompilation(false)

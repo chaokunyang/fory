@@ -30,7 +30,11 @@ import org.apache.fory.serializer.GraphMemoryEstimates
 import scala.collection.immutable.NumericRange
 
 private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
-  override def create(typeRef: TypeRef[_], resolver: JsonTypeResolver): JsonValueCodec[_] = {
+  override def create(
+      typeRef: TypeRef[_],
+      resolver: JsonTypeResolver,
+      runtimeType: Boolean
+  ): JsonValueCodec[_] = {
     val rawType = typeRef.getRawType
     val name = rawType.getName
     val enumerationCodec = ScalaEnumerationTypes.createCodec(typeRef)
@@ -41,17 +45,17 @@ private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
       return new ScalaRangeCodec(name.endsWith("$Exclusive"))
     }
     if (classOf[NumericRange[_]].isAssignableFrom(rawType)) {
-      return new ScalaNumericRangeCodec(name.endsWith("$Exclusive"))
+      return new ScalaNumericRangeCodec(name.endsWith("$Exclusive"), runtimeType)
     }
     if (rawType == classOf[Option[_]] || name == "scala.Some") {
-      return new ScalaOptionCodec(name == "scala.Some")
+      return new ScalaOptionCodec(name == "scala.Some", runtimeType)
     }
     if (name == "scala.None$") {
       return ScalaNoneCodec
     }
     if (rawType == classOf[Either[_, _]] || name == "scala.util.Left" || name == "scala.util.Right") {
       val branch = if (name == "scala.util.Left") 1 else if (name == "scala.util.Right") 2 else 0
-      return new ScalaEitherCodec(branch)
+      return new ScalaEitherCodec(branch, runtimeType)
     }
     if (rawType == classOf[BigInt]) return ScalaBigIntCodec
     if (rawType == classOf[BigDecimal]) return ScalaBigDecimalCodec
@@ -69,29 +73,31 @@ private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
       return new ScalaBitSetCodec(true)
     }
     val tupleArity = ScalaTupleCodec.arity(rawType)
-    if (tupleArity >= 1) return new ScalaTupleCodec(tupleArity, rawType)
+    if (tupleArity >= 1) return new ScalaTupleCodec(tupleArity, rawType, runtimeType)
     if (name == "scala.Tuple$package$EmptyTuple$") return new ScalaEmptyTupleCodec(rawType)
 
     if (classOf[scala.collection.Map[_, _]].isAssignableFrom(rawType)) {
-      val selection = mapKind(rawType, resolver.resolvingRuntimeType())
+      val selection = mapKind(rawType, runtimeType)
       if (selection == null)
         throw ScalaTypeSupport.unsupported(typeRef, "collection family requires an exact codec")
       return new ScalaMapCodec(
         selection._1,
-        GraphMemoryEstimates.shallowObjectBytes(selection._2)
+        GraphMemoryEstimates.shallowObjectBytes(selection._2),
+        runtimeType
       )
     }
     if (classOf[List[_]].isAssignableFrom(rawType) || name == "scala.collection.immutable.Nil$") {
-      requireDeclaredClass(typeRef, resolver)
-      return new ScalaListCodec(name.endsWith("$colon$colon"), name.endsWith("Nil$"))
+      requireDeclaredClass(typeRef, runtimeType)
+      return new ScalaListCodec(name.endsWith("$colon$colon"), name.endsWith("Nil$"), runtimeType)
     }
     if (classOf[scala.collection.Iterable[_]].isAssignableFrom(rawType)) {
-      val selection = iterableKind(rawType, resolver.resolvingRuntimeType())
+      val selection = iterableKind(rawType, runtimeType)
       if (selection == null)
         throw ScalaTypeSupport.unsupported(typeRef, "collection family requires an exact codec")
       return new ScalaIterableCodec(
         selection._1,
-        GraphMemoryEstimates.shallowObjectBytes(selection._2)
+        GraphMemoryEstimates.shallowObjectBytes(selection._2),
+        runtimeType
       )
     }
 
@@ -99,14 +105,14 @@ private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
     val enumRoot = ScalaEnumCodec.enumRoot(rawType)
     if (
       enumFamily != null && enumRoot == null &&
-      (enumFamily == rawType || resolver.resolvingRuntimeType())
+      (enumFamily == rawType || runtimeType)
     ) {
       val derivedCodec = ScalaDerivedCodec.find(enumFamily)
       if (derivedCodec != null) {
-        return derivedCodec.create(TypeRef.of(enumFamily), resolver)
+        return derivedCodec.create(TypeRef.of(enumFamily), resolver, runtimeType)
       }
     }
-    if (enumRoot != null && (enumRoot == rawType || resolver.resolvingRuntimeType())) {
+    if (enumRoot != null && (enumRoot == rawType || runtimeType)) {
       return ScalaEnumCodec.create(enumRoot, typeRef)
     }
     if (enumFamily != null) {
@@ -117,7 +123,7 @@ private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
     }
     val singleton = ScalaObjectModels.singletonCodec(typeRef, resolver)
     if (singleton != null) return singleton
-    val valueClass = ScalaValueClassCodec.create(rawType)
+    val valueClass = ScalaValueClassCodec.create(rawType, runtimeType)
     if (valueClass != null) return valueClass
     if (ScalaObjectModels.isCaseClass(rawType)) {
       return ScalaObjectModels.caseClassCodec(typeRef, resolver)
@@ -128,9 +134,9 @@ private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
     null
   }
 
-  private def requireDeclaredClass(typeRef: TypeRef[_], resolver: JsonTypeResolver): Unit = {
+  private def requireDeclaredClass(typeRef: TypeRef[_], runtimeType: Boolean): Unit = {
     val rawType = typeRef.getRawType
-    if (!resolver.resolvingRuntimeType() && !Modifier.isPublic(rawType.getModifiers)) {
+    if (!runtimeType && !Modifier.isPublic(rawType.getModifiers)) {
       throw ScalaTypeSupport.unsupported(typeRef, "non-public implementation is write-only")
     }
   }

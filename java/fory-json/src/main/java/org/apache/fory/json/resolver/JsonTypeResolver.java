@@ -117,8 +117,11 @@ public final class JsonTypeResolver {
   private final IdentityMap<JsonTypeInfo, CollectionCodec<?>> collectionCodecs;
   private final IdentityMap<JsonTypeInfo, Class<?>> subtypeTypeRoots;
   private final IdentityHashMap<Class<?>, TypeRef<?>> activeGenericBindings;
+  // A runtime composite publishes its shell before binding children. Keep that exact shell visible
+  // through an arbitrarily deep declared child graph so a reverse edge can close the cycle without
+  // authorizing the runtime-only binding as a later declared schema.
+  private JsonTypeInfo activeRuntimeTypeInfo;
   private int resolutionDepth;
-  private Class<?> runtimeResolutionType;
   private Class<?> subtypeResolutionBase;
   private boolean isolateSubtypeResolution;
 
@@ -326,11 +329,11 @@ public final class JsonTypeResolver {
     Class<?> rawType = CodecUtils.rawType(declaredType, fallback);
     Object key = resolutionTypeKey(declaredType, rawType);
     JsonTypeInfo typeInfo = typeInfos.get(key);
-    if (typeInfo == null && declaredType == rawType && runtimeResolutionType == rawType) {
-      // A dynamic root stays write-only, but its composite shell must still be visible to its own
-      // child binding. Do not publish that shell in typeInfos: a later declared read must resolve
-      // and validate an independent declared-type codec.
-      typeInfo = runtimeTypeInfos.get(rawType);
+    if (typeInfo == null
+        && declaredType == rawType
+        && activeRuntimeTypeInfo != null
+        && activeRuntimeTypeInfo.rawType() == rawType) {
+      typeInfo = activeRuntimeTypeInfo;
     }
     if (typeInfo != null) {
       return typeInfo;
@@ -354,8 +357,11 @@ public final class JsonTypeResolver {
     Class<?> rawType = declaredType.getRawType();
     Object key = resolutionTypeKey(declaredType);
     JsonTypeInfo typeInfo = typeInfos.get(key);
-    if (typeInfo == null && declaredType.getType() == rawType && runtimeResolutionType == rawType) {
-      typeInfo = runtimeTypeInfos.get(rawType);
+    if (typeInfo == null
+        && declaredType.getType() == rawType
+        && activeRuntimeTypeInfo != null
+        && activeRuntimeTypeInfo.rawType() == rawType) {
+      typeInfo = activeRuntimeTypeInfo;
     }
     if (typeInfo != null) {
       return typeInfo;
@@ -897,13 +903,7 @@ public final class JsonTypeResolver {
   }
 
   private JsonTypeInfo resolveRuntimeTypeInfo(Class<?> runtimeType) {
-    Class<?> previousRuntimeType = runtimeResolutionType;
-    runtimeResolutionType = runtimeType;
-    try {
-      return resolveRuntimeTypeInfo0(runtimeType);
-    } finally {
-      runtimeResolutionType = previousRuntimeType;
-    }
+    return resolveRuntimeTypeInfo0(runtimeType);
   }
 
   private JsonTypeInfo resolveRuntimeTypeInfo0(Class<?> runtimeType) {
@@ -936,7 +936,7 @@ public final class JsonTypeResolver {
       return typeInfo;
     }
     TypeRef<?> typeRef = TypeRef.of(runtimeType);
-    JsonValueCodec<?> codec = sharedRegistry.createCodec(runtimeType, typeRef, this);
+    JsonValueCodec<?> codec = sharedRegistry.createRuntimeCodec(runtimeType, this);
     if (codec == null) {
       codec = getObjectCodec(typeRef);
     }
@@ -967,16 +967,16 @@ public final class JsonTypeResolver {
         runtimeTypeInfos.put(runtimeType, typeInfo);
       }
       registerTypeInfoOwner(typeInfo, codec);
-      resolveCodecTypes(codec, typeRef);
+      JsonTypeInfo previousRuntimeTypeInfo = activeRuntimeTypeInfo;
+      activeRuntimeTypeInfo = typeInfo;
+      try {
+        resolveCodecTypes(codec, typeRef);
+      } finally {
+        activeRuntimeTypeInfo = previousRuntimeTypeInfo;
+      }
     }
     runtimeTypeInfos.put(runtimeType, typeInfo);
     return typeInfo;
-  }
-
-  /** Returns whether the current cold lookup was initiated for a dynamic runtime write type. */
-  @Internal
-  public boolean resolvingRuntimeType() {
-    return runtimeResolutionType != null;
   }
 
   /**
@@ -2609,7 +2609,8 @@ public final class JsonTypeResolver {
   private JsonTypeInfo buildTypeInfo(
       Class<?> rawType, TypeRef<?> typeRef, Object key, JsonCodecFactory childFactory) {
     sharedRegistry.checkSecure(rawType);
-    JsonValueCodec<?> codec = sharedRegistry.createCodec(rawType, typeRef, this, childFactory);
+    JsonValueCodec<?> codec =
+        sharedRegistry.createCodec(rawType, typeRef, this, childFactory, false);
     if (codec == null) {
       return buildObjectTypeInfo(typeRef, key);
     }

@@ -90,7 +90,11 @@ private[scala] final class DerivedScalaJsonCodec[T](
 
   override def handledRuntimeClasses(): JList[Class[_]] = handled
 
-  override def create(typeRef: TypeRef[_], resolver: JsonTypeResolver): JsonValueCodec[_] = {
+  override def create(
+      typeRef: TypeRef[_],
+      resolver: JsonTypeResolver,
+      runtimeType: Boolean
+  ): JsonValueCodec[_] = {
     val rawType = typeRef.getRawType
     if (rawType == rootType) {
       return new ClosedSubtypeCodec(

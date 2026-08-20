@@ -29,7 +29,7 @@ import org.apache.fory.json.writer.{StringJsonWriter, Utf8JsonWriter}
 import org.apache.fory.reflect.TypeRef
 import org.apache.fory.serializer.GraphMemoryEstimates
 
-private[scala] final class ScalaOptionCodec(someOnly: Boolean)
+private[scala] final class ScalaOptionCodec(someOnly: Boolean, runtimeType: Boolean)
     extends CompositeJsonCodec[Option[Any]] {
   private var elementInfo: JsonTypeInfo = _
 
@@ -38,7 +38,7 @@ private[scala] final class ScalaOptionCodec(someOnly: Boolean)
       typeRef,
       1,
       if (someOnly) "Some" else "Option",
-      resolver.resolvingRuntimeType()
+      runtimeType
     )
     val elementType = arguments(0)
     elementInfo = resolver.getTypeInfo(elementType, ScalaTypeSupport.rawType(elementType))
@@ -113,7 +113,7 @@ private[scala] object ScalaNoneCodec extends org.apache.fory.json.codec.Abstract
   }
 }
 
-private[scala] final class ScalaEitherCodec(branch: Int)
+private[scala] final class ScalaEitherCodec(branch: Int, runtimeType: Boolean)
     extends CompositeJsonCodec[Either[Any, Any]] {
   private var leftInfo: JsonTypeInfo = _
   private var rightInfo: JsonTypeInfo = _
@@ -127,7 +127,7 @@ private[scala] final class ScalaEitherCodec(branch: Int)
         case 2 => "Right"
         case _ => "Either"
       },
-      resolver.resolvingRuntimeType()
+      runtimeType
     )
     leftInfo = resolver.getTypeInfo(arguments(0), ScalaTypeSupport.rawType(arguments(0)))
     rightInfo = resolver.getTypeInfo(arguments(1), ScalaTypeSupport.rawType(arguments(1)))

@@ -31,7 +31,7 @@ import org.apache.fory.serializer.GraphMemoryEstimates
 import scala.collection.immutable.NumericRange
 import scala.math.Integral
 
-private[scala] final class ScalaNumericRangeCodec(exclusive: Boolean)
+private[scala] final class ScalaNumericRangeCodec(exclusive: Boolean, runtimeType: Boolean)
     extends CompositeJsonCodec[NumericRange[Any]] {
   private val ownerBytes = GraphMemoryEstimates.shallowObjectBytes(
     if (exclusive) classOf[NumericRange.Exclusive[_]] else classOf[NumericRange.Inclusive[_]]
@@ -57,7 +57,7 @@ private[scala] final class ScalaNumericRangeCodec(exclusive: Boolean)
       resolver: JsonTypeResolver,
       childCodecs: JsonCodec
   ): Unit = {
-    if (resolver.resolvingRuntimeType() && !typeRef.getType.isInstanceOf[java.lang.reflect.ParameterizedType]) {
+    if (runtimeType && !typeRef.getType.isInstanceOf[java.lang.reflect.ParameterizedType]) {
       arithmetic = null
       elementInfo = resolver.getTypeInfo(classOf[Object], classOf[Object])
       return

@@ -76,7 +76,7 @@ public class JsonCreatorTest extends ForyJsonTestModels {
         newJsonBuilder()
             .registerCodec(
                 NullCarrier.class,
-                (type, resolver) ->
+                (type, resolver, runtimeType) ->
                     new DeferredNullCarrierCodec(resolver.getTypeInfo(String.class, String.class)))
             .build();
     JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
@@ -101,7 +101,7 @@ public class JsonCreatorTest extends ForyJsonTestModels {
         newJsonBuilder()
             .registerCodec(
                 LanguageList.class,
-                (type, resolver) ->
+                (type, resolver, runtimeType) ->
                     resolver.createObjectCodec(
                         type, languageModel(listCreator, "source", listGetter)))
             .build();
@@ -115,7 +115,7 @@ public class JsonCreatorTest extends ForyJsonTestModels {
         newJsonBuilder()
             .registerCodec(
                 LanguageParameter.class,
-                (type, resolver) ->
+                (type, resolver, runtimeType) ->
                     resolver.createObjectCodec(
                         type, languageModel(parameterCreator, "source", parameterGetter)))
             .build();
@@ -131,7 +131,7 @@ public class JsonCreatorTest extends ForyJsonTestModels {
         newJsonBuilder()
             .registerCodec(
                 LanguageFactory.class,
-                (type, resolver) ->
+                (type, resolver, runtimeType) ->
                     resolver.createObjectCodec(
                         type, languageModel(factoryCreator, "source", factoryGetter)))
             .build();
@@ -146,7 +146,7 @@ public class JsonCreatorTest extends ForyJsonTestModels {
             .registerMixin(LanguageMixin.class)
             .registerCodec(
                 LanguageMixinTarget.class,
-                (type, resolver) ->
+                (type, resolver, runtimeType) ->
                     resolver.createObjectCodec(
                         type, languageModel(mixinCreator, "source", mixinGetter)))
             .build();
@@ -162,7 +162,7 @@ public class JsonCreatorTest extends ForyJsonTestModels {
         newJsonBuilder()
             .registerCodec(
                 LanguageInvocation.class,
-                (type, resolver) ->
+                (type, resolver, runtimeType) ->
                     resolver.createObjectCodec(
                         type,
                         languageModel(

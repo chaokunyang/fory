@@ -25,6 +25,9 @@ import static org.testng.Assert.assertThrows;
 
 import java.lang.reflect.Constructor;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -100,7 +103,7 @@ public class JsonModuleTest {
   @Test
   public void semanticPrimitiveUsesModuleCodec() {
     JsonCodecFactory factory =
-        (type, resolver) ->
+        (type, resolver, runtimeType) ->
             type.getRawType() == int.class
                     && type.getTypeExtMeta() != null
                     && type.getTypeExtMeta().typeId() == Types.UINT32
@@ -129,7 +132,7 @@ public class JsonModuleTest {
   @Test
   public void languageModelOwnsAnnotatedType() {
     JsonCodecFactory factory =
-        (type, resolver) ->
+        (type, resolver, runtimeType) ->
             type.getRawType() == ModuleObject.class
                 ? resolver.createObjectCodec(
                     type, JsonObjectModel.fixedInstance(ModuleObject.INSTANCE))
@@ -148,7 +151,7 @@ public class JsonModuleTest {
   public void hostedFactoryDefersRawSemanticType() throws Exception {
     AtomicInteger rawAttempts = new AtomicInteger();
     JsonCodecFactory factory =
-        (type, resolver) -> {
+        (type, resolver, runtimeType) -> {
           if (type.getRawType() != SemanticLeaf.class) {
             return null;
           }
@@ -201,7 +204,7 @@ public class JsonModuleTest {
     AtomicBoolean fail = new AtomicBoolean(true);
     AtomicInteger creations = new AtomicInteger();
     JsonCodecFactory factory =
-        (type, resolver) -> {
+        (type, resolver, runtimeType) -> {
           if (type.getRawType() != RecursiveValue.class) {
             return null;
           }
@@ -221,12 +224,14 @@ public class JsonModuleTest {
   public void runtimeCompositeRollsBack() {
     AtomicBoolean fail = new AtomicBoolean(true);
     AtomicInteger creations = new AtomicInteger();
+    List<Boolean> runtimeTypes = new ArrayList<>();
     JsonCodecFactory factory =
-        (type, resolver) -> {
+        (type, resolver, runtimeType) -> {
           if (type.getRawType() != RecursiveValue.class) {
             return null;
           }
           creations.incrementAndGet();
+          runtimeTypes.add(runtimeType);
           return new RecursiveCodec(fail);
         };
     ForyJson json =
@@ -244,6 +249,39 @@ public class JsonModuleTest {
     RecursiveValue decoded = json.fromJson("{\"next\":{\"next\":null}}", RecursiveValue.class);
     assertEquals(json.toJson(decoded), "{\"next\":{\"next\":null}}");
     assertEquals(creations.get(), 3);
+    assertEquals(runtimeTypes, Arrays.asList(true, true, false));
+  }
+
+  @Test
+  public void runtimeCompositeReverseRecursion() {
+    List<Class<?>> creations = new ArrayList<>();
+    List<Boolean> runtimeTypes = new ArrayList<>();
+    JsonCodecFactory factory =
+        (type, resolver, runtimeType) -> {
+          Class<?> rawType = type.getRawType();
+          Class<?> child =
+              rawType == RuntimeLayerA.class
+                  ? RuntimeLayerB.class
+                  : rawType == RuntimeLayerB.class
+                      ? RuntimeLayerC.class
+                      : rawType == RuntimeLayerC.class ? RuntimeLayerA.class : null;
+          if (child == null) {
+            return null;
+          }
+          creations.add(rawType);
+          runtimeTypes.add(runtimeType);
+          return new RuntimeLayerCodec(child);
+        };
+    ForyJson json =
+        ForyJson.builder()
+            .withModule(context -> context.registerCodecFactory(factory))
+            .withCodegen(false)
+            .build();
+
+    assertEquals(json.toJson(new RuntimeLayerA()), "null");
+    assertEquals(
+        creations, Arrays.asList(RuntimeLayerA.class, RuntimeLayerB.class, RuntimeLayerC.class));
+    assertEquals(runtimeTypes, Arrays.asList(true, false, false));
   }
 
   private static final class KeyedModule implements ForyJsonModule {
@@ -283,7 +321,8 @@ public class JsonModuleTest {
       context.registerCodecFactory(
           new JsonCodecFactory() {
             @Override
-            public JsonValueCodec<?> create(TypeRef<?> type, JsonTypeResolver resolver) {
+            public JsonValueCodec<?> create(
+                TypeRef<?> type, JsonTypeResolver resolver, boolean runtimeType) {
               if (type.getRawType() != Family.class) {
                 return null;
               }
@@ -438,6 +477,31 @@ public class JsonModuleTest {
     }
   }
 
+  private static final class RuntimeLayerCodec extends AbstractJsonValueCodec<Object>
+      implements CompositeJsonCodec<Object> {
+    private final Class<?> child;
+
+    private RuntimeLayerCodec(Class<?> child) {
+      this.child = child;
+    }
+
+    @Override
+    public void resolveTypes(TypeRef<?> type, JsonTypeResolver resolver) {
+      resolver.getTypeInfo(child, child);
+    }
+
+    @Override
+    public void write(JsonWriter writer, Object value) {
+      writer.writeNull();
+    }
+
+    @Override
+    public Object read(JsonReader reader) {
+      reader.readNull();
+      return null;
+    }
+  }
+
   private static final class Text {
     private final String value;
 
@@ -470,4 +534,10 @@ public class JsonModuleTest {
 
     private ModuleObject() {}
   }
+
+  private static final class RuntimeLayerA {}
+
+  private static final class RuntimeLayerB {}
+
+  private static final class RuntimeLayerC {}
 }

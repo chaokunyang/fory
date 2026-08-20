@@ -1098,26 +1098,31 @@ public final class JsonSharedRegistry {
 
   public JsonValueCodec<?> createCodec(
       Class<?> rawType, TypeRef<?> typeRef, JsonTypeResolver localResolver) {
-    return createCodec(rawType, typeRef, localResolver, null);
+    return createCodec(rawType, typeRef, localResolver, null, false);
+  }
+
+  JsonValueCodec<?> createRuntimeCodec(Class<?> rawType, JsonTypeResolver localResolver) {
+    return createCodec(rawType, TypeRef.of(rawType), localResolver, null, true);
   }
 
   JsonValueCodec<?> createCodec(
       Class<?> rawType,
       TypeRef<?> typeRef,
       JsonTypeResolver localResolver,
-      JsonCodecFactory childFactory) {
+      JsonCodecFactory childFactory,
+      boolean runtimeType) {
     JsonValueCodec<?> customCodec = customCodec(rawType);
     if (customCodec != null) {
       return customCodec;
     }
     FactoryBinding exactFactory = customCodecs.getFactory(rawType);
     if (exactFactory != null) {
-      return createExactCodec(rawType, typeRef, exactFactory, localResolver);
+      return createExactCodec(rawType, typeRef, exactFactory, localResolver, runtimeType);
     }
     if (childFactory != null) {
       // A parent-derived subtype is only the default model. Exact application registration above
       // must remain authoritative, including when the closed parent selected this child first.
-      JsonValueCodec<?> childCodec = childFactory.create(typeRef, localResolver);
+      JsonValueCodec<?> childCodec = childFactory.create(typeRef, localResolver, false);
       if (!(childCodec instanceof ObjectCodec) || ((ObjectCodec<?>) childCodec).type() != rawType) {
         throw new ForyJsonException(
             "Closed JSON subtype factory did not create the exact ObjectCodec for "
@@ -1145,7 +1150,7 @@ public final class JsonSharedRegistry {
     if (semanticToken) {
       // The exact JVM carrier codec cannot erase an explicit semantic type. The installed module
       // owns that representation even when the semantic value uses a primitive carrier.
-      JsonValueCodec<?> codec = createModuleCodec(typeRef, localResolver);
+      JsonValueCodec<?> codec = createModuleCodec(typeRef, localResolver, runtimeType);
       if (codec == null) {
         throw new ForyJsonException("No installed JSON module owns semantic type " + typeRef);
       }
@@ -1201,7 +1206,7 @@ public final class JsonSharedRegistry {
     if (Path.class.isAssignableFrom(rawType)) {
       return ScalarCodecs.PathCodec.INSTANCE;
     }
-    codec = createModuleCodec(typeRef, localResolver);
+    codec = createModuleCodec(typeRef, localResolver, runtimeType);
     if (codec != null) {
       return codec;
     }
@@ -1218,10 +1223,14 @@ public final class JsonSharedRegistry {
   }
 
   private JsonValueCodec<?> createExactCodec(
-      Class<?> target, TypeRef<?> typeRef, FactoryBinding binding, JsonTypeResolver localResolver) {
+      Class<?> target,
+      TypeRef<?> typeRef,
+      FactoryBinding binding,
+      JsonTypeResolver localResolver,
+      boolean runtimeType) {
     JsonValueCodec<?> codec;
     try {
-      codec = binding.factory().create(typeRef, localResolver);
+      codec = binding.factory().create(typeRef, localResolver, runtimeType);
     } catch (UnsupportedJsonTypeException e) {
       throw new ForyJsonException("Exact JSON codec factory rejected " + target.getTypeName(), e);
     }
@@ -1241,7 +1250,8 @@ public final class JsonSharedRegistry {
     return binding.target;
   }
 
-  private JsonValueCodec<?> createModuleCodec(TypeRef<?> typeRef, JsonTypeResolver localResolver) {
+  private JsonValueCodec<?> createModuleCodec(
+      TypeRef<?> typeRef, JsonTypeResolver localResolver, boolean runtimeType) {
     JsonValueCodec<?> selected = null;
     UnsupportedJsonTypeException unsupported = null;
     ArrayList<String> claims = null;
@@ -1249,7 +1259,7 @@ public final class JsonSharedRegistry {
       JsonValueCodec<?> codec = null;
       UnsupportedJsonTypeException rejected = null;
       try {
-        codec = codecFactories[i].create(typeRef, localResolver);
+        codec = codecFactories[i].create(typeRef, localResolver, runtimeType);
       } catch (UnsupportedJsonTypeException e) {
         rejected = e;
       }

@@ -137,7 +137,7 @@ public class JsonSubTypesTest extends ForyJsonTestModels {
     AtomicBoolean fail = new AtomicBoolean(true);
     AtomicInteger exactAttempts = new AtomicInteger();
     JsonCodecFactory factory =
-        (type, resolver) -> {
+        (type, resolver, runtimeType) -> {
           if (type.getRawType() != SemanticValue.class) {
             return null;
           }
@@ -176,7 +176,7 @@ public class JsonSubTypesTest extends ForyJsonTestModels {
   @Test
   public void fixedObjectSubtype() {
     JsonCodecFactory factory =
-        (type, resolver) ->
+        (type, resolver, runtimeType) ->
             resolver.createObjectCodec(type, JsonObjectModel.fixedInstance(FixedValue.INSTANCE));
     ForyJson json = newJsonBuilder().registerCodec(FixedValue.class, factory).build();
 
@@ -196,7 +196,7 @@ public class JsonSubTypesTest extends ForyJsonTestModels {
         newJsonBuilder()
             .registerCodec(
                 InheritedFixed.class,
-                (type, resolver) ->
+                (type, resolver, runtimeType) ->
                     resolver.createObjectCodec(
                         type, JsonObjectModel.fixedInstance(InheritedFixed.INSTANCE)))
             .build();
@@ -206,7 +206,7 @@ public class JsonSubTypesTest extends ForyJsonTestModels {
         newJsonBuilder()
             .registerCodec(
                 IgnoredFixed.class,
-                (type, resolver) ->
+                (type, resolver, runtimeType) ->
                     resolver.createObjectCodec(
                         type, JsonObjectModel.fixedInstance(IgnoredFixed.INSTANCE)))
             .build();
@@ -218,7 +218,7 @@ public class JsonSubTypesTest extends ForyJsonTestModels {
         newJsonBuilder()
             .registerCodec(
                 CompilerFixed.class,
-                (type, resolver) ->
+                (type, resolver, runtimeType) ->
                     resolver.createObjectCodec(
                         type,
                         JsonObjectModel.fixedInstance(

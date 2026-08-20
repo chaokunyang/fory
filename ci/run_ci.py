@@ -343,7 +343,7 @@ def parse_args():
     )
     kotlin_parser.add_argument(
         "--task",
-        choices=("tests", "install", "install-kotlin", "native-json"),
+        choices=("tests", "install-json", "install-kotlin", "native-json"),
         default="tests",
         help="Kotlin CI task to execute",
     )

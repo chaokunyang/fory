@@ -24,10 +24,9 @@ packages exact consumer rules through its standard resource output; the fixture
 adds no application-specific transform or processor option.
 
 ```bash
-python ./ci/run_ci.py kotlin --task install
+python ./ci/run_ci.py kotlin --task install-json
 cd integration_tests/android_tests
-gradle --no-daemon verifyKotlinJsonRules
-gradle --no-daemon -PforyTestBuildType=debug connectedCheck
+gradle --no-daemon -PforyTestBuildType=debug verifyKotlinJsonRules connectedCheck
 gradle --no-daemon -PforyTestBuildType=release connectedCheck
 ```
 

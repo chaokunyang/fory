@@ -64,6 +64,7 @@ public class KspRetentionResourceTest {
     assertConstructor(mixin, "$PACKAGE.PlatformReplacementTypeCodec")
     assertFalse(mixin.contains("PlatformOldTypeCodec"), mixin)
     assertFalse(mixin.contains("PlatformRemovedSubtype"), mixin)
+    assertFalse(mixin.contains("PlatformUnrelatedEndpointCodec"), mixin)
 
     val factory = rules("PlatformFactoryModel")
     assertTrue(

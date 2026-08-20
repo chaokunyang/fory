@@ -79,7 +79,7 @@ internal data class AndroidKotlinDefaults(
 
 internal object AndroidKotlinJsonScenarios {
     @JvmStatic
-    fun generatedModels() {
+    fun metadataSurvivesMinification() {
         val json =
             ForyJsonKotlin.builder()
                 .withModule(PlatformJsonModule)

@@ -313,7 +313,7 @@ abstract class JsonWriterCodegen {
     addWriterFields(ctx, properties, prefixFields);
     ctx.addField(ObjectCodec.class, "owner");
     if (any.writeGetter() != null) {
-      addAnyGetterMethod(ctx, type, any);
+      addAnyGetterMethod(builder, type, any);
     }
     boolean storesAnyWriter = storesAnyWriter(any);
     if (storesAnyWriter) {
@@ -422,7 +422,7 @@ abstract class JsonWriterCodegen {
       ctx.addImports(ObjectCodec.class, Map.class);
       ctx.addField(ObjectCodec.class, "owner");
       if (any.writeGetter() != null) {
-        addAnyGetterMethod(ctx, type, any);
+        addAnyGetterMethod(builder, type, any);
       }
       if (storesAnyWriter(any)) {
         addAnyWriterField(ctx, any);
@@ -744,15 +744,24 @@ abstract class JsonWriterCodegen {
     }
   }
 
-  private void addAnyGetterMethod(CodegenContext ctx, Class<?> type, AnyInfo any) {
-    String methodName = any.writeGetter().getName();
+  private void addAnyGetterMethod(JsonGeneratedCodecBuilder builder, Class<?> type, AnyInfo any) {
+    CodegenContext ctx = builder.context();
+    Method getter = any.writeGetter();
+    String methodName = getter.getName();
+    String invocation = "object." + methodName + "()";
+    if (!DirectMethodCodegen.sourceNameable(getter)) {
+      String bridgeName = DirectMethodCodegen.getterName(getter);
+      builder.addDirectMethod(
+          bridgeName, getter.getReturnType(), getter.getDeclaringClass(), "object");
+      invocation = "this." + bridgeName + "(object)";
+    }
     ctx.addMethod(
         "private final",
         "getAnyMap",
         "try {\n"
-            + "  return object."
-            + methodName
-            + "();\n"
+            + "  return "
+            + invocation
+            + ";\n"
             + "} catch (Throwable e) {\n"
             + "  if (e instanceof Error) {\n"
             + "    throw (Error) e;\n"

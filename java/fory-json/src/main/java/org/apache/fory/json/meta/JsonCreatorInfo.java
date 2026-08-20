@@ -44,8 +44,9 @@ import org.apache.fory.platform.internal._JDKAccess;
  * <p>Record canonical constructors, property-based {@code JsonCreator} constructors, and
  * property-based {@code JsonCreator} factories share this owner. The separate complete-string
  * {@code JsonValue} representation owns its value creator in its value codec. The interpreted path
- * allocates exactly one fixed-size argument array per object. Generated JIT readers consume the
- * same field metadata and executable but invoke it directly with typed locals.
+ * allocates one fixed-size construction workspace per object. Kotlin compiler defaults may add a
+ * temporary exact invocation array and mask array; generated JIT readers instead consume the same
+ * field metadata and executable with typed locals and primitive masks.
  */
 @Internal
 public final class JsonCreatorInfo {
@@ -345,7 +346,7 @@ public final class JsonCreatorInfo {
   public void resolveTypes(JsonTypeResolver resolver) {
     for (JsonCreatorFieldInfo field : fields) {
       field.resolveType(resolver);
-      if (field.materializesNullCarrier()) {
+      if (field.argumentIndex() < defaults.length && field.materializesNullCarrier()) {
         if (nullCarriers == null) {
           nullCarriers = new boolean[defaults.length];
         }
@@ -685,11 +686,14 @@ public final class JsonCreatorInfo {
       executable.setAccessible(true);
       return null;
     }
+    Class<?>[] parameterTypes = executable.getParameterTypes();
+    if (logicalCount == parameterTypes.length && workspaceSize == parameterTypes.length) {
+      return creatorHandle(executable);
+    }
     MethodHandle target =
         GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
             ? nativeCreatorHandles(executable).target
             : creatorTarget(executable);
-    Class<?>[] parameterTypes = executable.getParameterTypes();
     if (parameterTypes.length == logicalCount + 1 && !parameterTypes[logicalCount].isPrimitive()) {
       target = MethodHandles.insertArguments(target, logicalCount, new Object[] {null});
       parameterTypes = Arrays.copyOf(parameterTypes, logicalCount);

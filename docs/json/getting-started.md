@@ -24,25 +24,41 @@ license: |
 Fory JSON supports Java 8 and later on standard JDKs, GraalVM native images, and Android. Java
 records are supported on Java 17 and later.
 
-Fory JSON is available from Maven Central.
+Released Fory JSON artifacts are available from Maven Central, and development snapshots are
+available from the Apache snapshot repository. The repository declarations below support either
+form. Keep every Fory module on the same version shown in its coordinates.
 
 Maven:
 
 ```xml
+<repositories>
+  <repository>
+    <id>apache-snapshots</id>
+    <url>https://repository.apache.org/snapshots/</url>
+    <releases><enabled>false</enabled></releases>
+    <snapshots><enabled>true</enabled></snapshots>
+  </repository>
+</repositories>
+
 <dependency>
   <groupId>org.apache.fory</groupId>
   <artifactId>fory-json</artifactId>
-  <version>1.6.1</version>
+  <version>1.7.0-SNAPSHOT</version>
 </dependency>
 ```
 
 Gradle:
 
 ```kotlin
-implementation("org.apache.fory:fory-json:1.6.1")
-```
+repositories {
+  maven("https://repository.apache.org/snapshots/") {
+    mavenContent { snapshotsOnly() }
+  }
+  mavenCentral()
+}
 
-Use the same version for every Fory module in one application.
+implementation("org.apache.fory:fory-json:1.7.0-SNAPSHOT")
+```
 
 ### Kotlin
 

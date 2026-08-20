@@ -92,7 +92,7 @@ internal object KotlinProgressionCodecs {
     }
 
     private fun read(reader: JsonReader): CharProgression? {
-      if (reader.tryReadNull()) return null
+      if (reader.tryReadNullToken()) return null
       reader.enterDepth()
       reader.expectNextToken('{')
       var first = 0.toChar()
@@ -149,7 +149,7 @@ internal object KotlinProgressionCodecs {
     }
 
     private fun read(reader: JsonReader): IntProgression? {
-      if (reader.tryReadNull()) return null
+      if (reader.tryReadNullToken()) return null
       reader.enterDepth()
       reader.expectNextToken('{')
       var first = 0
@@ -206,7 +206,7 @@ internal object KotlinProgressionCodecs {
     }
 
     private fun read(reader: JsonReader): LongProgression? {
-      if (reader.tryReadNull()) return null
+      if (reader.tryReadNullToken()) return null
       reader.enterDepth()
       reader.expectNextToken('{')
       var first = 0L
@@ -263,7 +263,7 @@ internal object KotlinProgressionCodecs {
     }
 
     private fun read(reader: JsonReader): UIntProgression? {
-      if (reader.tryReadNull()) return null
+      if (reader.tryReadNullToken()) return null
       reader.enterDepth()
       reader.expectNextToken('{')
       var first = 0u
@@ -320,7 +320,7 @@ internal object KotlinProgressionCodecs {
     }
 
     private fun read(reader: JsonReader): ULongProgression? {
-      if (reader.tryReadNull()) return null
+      if (reader.tryReadNullToken()) return null
       reader.enterDepth()
       reader.expectNextToken('{')
       var first = 0uL

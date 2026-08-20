@@ -23,16 +23,21 @@ import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertSame;
 
+import java.lang.reflect.Constructor;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import org.apache.fory.json.annotation.JsonSubTypes;
+import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.codec.JsonObjectModel;
 import org.apache.fory.json.codec.ObjectCodec;
+import org.apache.fory.json.resolver.JsonSharedRegistry;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.type.Types;
 import org.testng.annotations.Test;
 
@@ -109,11 +114,13 @@ public class JsonGeneratedCapabilityKeyTest {
     assertSame(json.fromJson(json.toJson(value), FixedContainer.class).value, FixedValue.INSTANCE);
 
     String input = "{\"value\":{\"kind\":\"fixed\"}}";
-    assertSame(
-        ((FixedContainer)
-                typeInfo.latin1Reader().readLatin1(JsonTestSupport.newLatin1Reader(input)))
-            .value,
-        FixedValue.INSTANCE);
+    if (StringSerializer.isBytesBackedString()) {
+      assertSame(
+          ((FixedContainer)
+                  typeInfo.latin1Reader().readLatin1(JsonTestSupport.newLatin1Reader(input)))
+              .value,
+          FixedValue.INSTANCE);
+    }
     assertSame(
         ((FixedContainer) typeInfo.utf16Reader().readUtf16(JsonTestSupport.newUtf16Reader(input)))
             .value,
@@ -126,6 +133,20 @@ public class JsonGeneratedCapabilityKeyTest {
                         JsonTestSupport.newUtf8Reader(input.getBytes(StandardCharsets.UTF_8))))
             .value,
         FixedValue.INSTANCE);
+  }
+
+  @Test
+  public void hostedModelNeedsNoCompanion() throws Exception {
+    ForyJson json = ForyJson.builder().withAsyncCompilation(false).build();
+    Constructor<JsonSharedRegistry> constructor =
+        JsonSharedRegistry.class.getDeclaredConstructor(
+            JsonConfig.class, ExecutorService.class, boolean.class);
+    constructor.setAccessible(true);
+    JsonSharedRegistry registry = constructor.newInstance(json.config(), null, true);
+    JsonTypeInfo typeInfo =
+        new JsonTypeResolver(registry)
+            .getTypeInfo(HostedAnnotatedModel.class, HostedAnnotatedModel.class);
+    assertSame(typeInfo.rawType(), HostedAnnotatedModel.class);
   }
 
   private static JsonTypeResolver resolver() {
@@ -191,5 +212,12 @@ public class JsonGeneratedCapabilityKeyTest {
     public FixedBase value;
 
     public FixedContainer() {}
+  }
+
+  @JsonType
+  public static final class HostedAnnotatedModel {
+    public int value;
+
+    public HostedAnnotatedModel() {}
   }
 }

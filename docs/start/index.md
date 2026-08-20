@@ -38,7 +38,7 @@ packages. For source downloads, see the Apache Fory™
 
 ## Choose a Language
 
-Each language page provides a release-pinned installation snippet, a minimal
+Each language page provides a version-pinned installation snippet, a minimal
 round trip for an application project, and the next capability-specific steps:
 
 | Language              | Setup                                  |

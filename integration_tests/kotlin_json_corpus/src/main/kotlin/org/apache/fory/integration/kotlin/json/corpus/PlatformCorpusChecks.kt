@@ -142,10 +142,6 @@ public object PlatformCorpusChecks {
       KotlinJsonCorpus.nullableNothingType(),
     )
     verifyMixinCases(json)
-
-    val manifest = KotlinJsonCorpus.manifest(json)
-    check(manifest.schemaVersion == 1)
-    check(manifest.cases.map { it.id }.toSet() == expectedCases)
   }
 
   @JvmStatic
@@ -278,29 +274,4 @@ public object PlatformCorpusChecks {
       // Every rejected vector must fail as a controlled root operation.
     }
   }
-
-  private val expectedCases: Set<String> =
-    setOf(
-      "root",
-      "account-default",
-      "generic-envelope",
-      "recursive-generic",
-      "custom-module",
-      "singleton",
-      "property-marker",
-      "wrapped-data",
-      "wrapped-marker",
-      "unit-root",
-      "nothing-root",
-      "unreached-generic",
-      "nothing-non-null",
-      "value-nullability",
-      "sealed-authorization",
-      "property-scalar",
-      "raw-products",
-      "unreconstructible-models",
-      "executable-reflection",
-      "lazy-cursors",
-      "abstract-time-state",
-    )
 }

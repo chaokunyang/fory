@@ -62,6 +62,7 @@ import org.apache.fory.json.codec.JsonObjectModel
 import org.apache.fory.json.meta.JsonCreatorDeclaration
 import org.apache.fory.meta.TypeExtMeta
 import org.apache.fory.reflect.TypeRef
+import org.apache.fory.type.TypeUtils
 import org.apache.fory.type.Types
 
 /** Strict cold-path translation from Kotlin class metadata to the standard JSON object model. */
@@ -639,7 +640,7 @@ internal object KotlinMetadataModels {
   )
 }
 
-/** The single owner of strict Kotlin metadata substitution, JVM carriers, and JSON type tokens. */
+/** Single owner of strict Kotlin metadata decoding, substitution, and JSON type tokens. */
 internal object KotlinMetadataTypes {
   fun constructorDescriptor(constructor: Constructor<*>): String =
     descriptor(constructor.parameterTypes, Void.TYPE)
@@ -750,13 +751,13 @@ internal object KotlinMetadataTypes {
     val unsignedCarrier = unsignedCarrier(semanticId)
     val rawType =
       if (component != null) {
-        ReflectArray.newInstance(box(component.rawType), 0).javaClass
+        ReflectArray.newInstance(TypeUtils.boxedType(component.rawType), 0).javaClass
       } else if (!typeArgument && (!nullable || isUnsignedArray(semanticId))) {
         // A direct nullable unsigned-array member still has a nullable primitive-array JVM
         // carrier. Only generic/container occurrences use the boxed Kotlin wrapper class.
         unsignedCarrier ?: logicalClass
       } else {
-        box(logicalClass)
+        TypeUtils.boxedType(logicalClass)
       }
     val metadata = TypeExtMeta.of(semanticId, nullable, false, false, false)
     return when {
@@ -887,20 +888,6 @@ internal object KotlinMetadataTypes {
       if (packageEnd < 0) "" else metadataName.substring(0, packageEnd).replace('/', '.') + "."
     return packageName + metadataName.substring(packageEnd + 1).replace('.', '$')
   }
-
-  fun box(type: Class<*>): Class<*> =
-    when (type) {
-      java.lang.Boolean.TYPE -> Boolean::class.javaObjectType
-      java.lang.Byte.TYPE -> Byte::class.javaObjectType
-      java.lang.Short.TYPE -> Short::class.javaObjectType
-      java.lang.Integer.TYPE -> Int::class.javaObjectType
-      java.lang.Long.TYPE -> Long::class.javaObjectType
-      java.lang.Float.TYPE -> Float::class.javaObjectType
-      java.lang.Double.TYPE -> Double::class.javaObjectType
-      java.lang.Character.TYPE -> Char::class.javaObjectType
-      java.lang.Void.TYPE -> Void::class.java
-      else -> type
-    }
 
   private fun semanticTypeId(name: String): Int =
     when (name) {

@@ -405,6 +405,8 @@ public class TypeRefTest extends ForyTestBase {
         TypeRef.of(String.class, TypeExtMeta.of(Types.UNKNOWN, false, false, true, true));
     assertNotEquals(plain.getTypeKey(), wrapped.getTypeKey());
     assertNotEquals(plain.getTypeKey(), covariant.getTypeKey());
+    assertNotEquals(plain.getTypeKey(), both.getTypeKey());
+    assertNotEquals(wrapped.getTypeKey(), covariant.getTypeKey());
     assertNotEquals(wrapped.getTypeKey(), both.getTypeKey());
     assertNotEquals(covariant.getTypeKey(), both.getTypeKey());
   }
@@ -443,7 +445,7 @@ public class TypeRefTest extends ForyTestBase {
   }
 
   @Test
-  public void testTypeUseMetadataKeepsNullableOwnership() throws Exception {
+  public void typeUseMetadataKeepsNullableOwner() throws Exception {
     Field nicknameField = TypeUseMetadataStruct.class.getDeclaredField("nickname");
     TypeRef<?> nicknameType = TypeRef.ofTypeUse(nicknameField.getAnnotatedType());
     TypeExtMeta nicknameMeta = nicknameType.getTypeExtMeta();

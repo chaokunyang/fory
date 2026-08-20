@@ -850,9 +850,9 @@ public final class ForyJson {
    *
    * <p>The resolver is constructed first and retained by all five readers and writers. Codecs
    * obtain dynamic child bindings from the active reader or writer instead of receiving a resolver
-   * through every capability call. Three state-local last-root caches independently cover runtime
-   * classes, declared classes, and exact {@link TypeRef} tokens; each avoids resolver lookup only
-   * on an identity hit.
+   * through every capability call. The runtime-class cache and declared-token cache each avoid
+   * resolver lookup only on an identity hit; the declared cache also retains the resolved raw type
+   * used by typed-root write validation.
    */
   private static final class JsonState {
     private final JsonTypeResolver typeResolver;
@@ -864,10 +864,12 @@ public final class ForyJson {
     private byte[] charBackedUtf16Bytes;
     private Class<?> lastRuntimeRootType;
     private JsonTypeInfo lastRuntimeRootInfo;
-    private Class<?> lastDeclaredRootType;
+    // Keep Class and TypeRef roots in one declared-token cache. Separate caches give C2 competing
+    // guards that can be folded into primitive-array loops and destabilize otherwise direct signed
+    // array code; the retained raw type also avoids structural TypeRef traversal on typed writes.
+    private Object lastDeclaredRootType;
+    private Class<?> lastDeclaredRootRawType;
     private JsonTypeInfo lastDeclaredRootInfo;
-    private TypeRef<?> lastRootType;
-    private JsonTypeInfo lastRootInfo;
 
     private JsonState(JsonConfig config, JsonSharedRegistry sharedRegistry) {
       typeResolver = new JsonTypeResolver(sharedRegistry);
@@ -940,34 +942,36 @@ public final class ForyJson {
 
     private JsonTypeInfo declaredRootTypeInfo(Class<?> type) {
       JsonTypeInfo typeInfo = lastDeclaredRootInfo;
-      if (lastDeclaredRootType == type && typeInfo != null) {
+      if (lastDeclaredRootType == type && lastDeclaredRootRawType == type && typeInfo != null) {
         return typeInfo;
       }
       // Keep Class roots on the resolver's identity-key path. Converting here to TypeRef would
       // allocate on every alternating-root state-cache miss even when the schema is already bound.
       typeInfo = typeResolver.getTypeInfo(type, type);
       lastDeclaredRootType = type;
+      lastDeclaredRootRawType = type;
       lastDeclaredRootInfo = typeInfo;
       return typeInfo;
     }
 
     private JsonTypeInfo declaredRootTypeInfo(TypeRef<?> type) {
-      JsonTypeInfo typeInfo = lastRootInfo;
-      if (lastRootType == type && typeInfo != null) {
+      JsonTypeInfo typeInfo = lastDeclaredRootInfo;
+      if (lastDeclaredRootType == type && typeInfo != null) {
         return typeInfo;
       }
       typeInfo = typeResolver.getTypeInfo(type);
-      lastRootType = type;
-      lastRootInfo = typeInfo;
+      lastDeclaredRootType = type;
+      lastDeclaredRootRawType = typeInfo.rawType();
+      lastDeclaredRootInfo = typeInfo;
       return typeInfo;
     }
 
     private JsonTypeInfo declaredWriteTypeInfo(Object value, TypeRef<?> type) {
-      JsonTypeInfo typeInfo = lastRootInfo;
-      if (lastRootType == type && typeInfo != null) {
+      JsonTypeInfo typeInfo = lastDeclaredRootInfo;
+      if (lastDeclaredRootType == type && typeInfo != null) {
         // The exact-root cache already owns the canonical raw type. Recomputing it from TypeRef on
         // every typed write repeats structural type traversal in the root hot path.
-        validateWriteValue(value, type, typeInfo.rawType());
+        validateWriteValue(value, type, lastDeclaredRootRawType);
         return typeInfo;
       }
       validateWriteValue(value, type);

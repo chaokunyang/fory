@@ -35,47 +35,6 @@ import org.apache.fory.type.Types
 /** Width- and carrier-specialized codecs for Kotlin unsigned scalars. */
 @OptIn(ExperimentalUnsignedTypes::class)
 internal object KotlinUnsignedCodecs {
-  private val readUByteCarrierMethod: Method =
-    KotlinUnsignedCodecs::class.java.getMethod("readUByteRaw", JsonReader::class.java)
-  private val writeUByteCarrierMethod: Method =
-    KotlinUnsignedCodecs::class
-      .java
-      .getMethod(
-        "writeUByteRaw",
-        JsonWriter::class.java,
-        java.lang.Byte.TYPE,
-      )
-  private val readUShortCarrierMethod: Method =
-    KotlinUnsignedCodecs::class.java.getMethod("readUShortRaw", JsonReader::class.java)
-  private val writeUShortCarrierMethod: Method =
-    KotlinUnsignedCodecs::class
-      .java
-      .getMethod(
-        "writeUShortRaw",
-        JsonWriter::class.java,
-        java.lang.Short.TYPE,
-      )
-  private val readUIntCarrierMethod: Method =
-    KotlinUnsignedCodecs::class.java.getMethod("readUIntRaw", JsonReader::class.java)
-  private val writeUIntCarrierMethod: Method =
-    KotlinUnsignedCodecs::class
-      .java
-      .getMethod(
-        "writeUIntRaw",
-        JsonWriter::class.java,
-        java.lang.Integer.TYPE,
-      )
-  private val readULongCarrierMethod: Method =
-    KotlinUnsignedCodecs::class.java.getMethod("readULongRaw", JsonReader::class.java)
-  private val writeULongCarrierMethod: Method =
-    KotlinUnsignedCodecs::class
-      .java
-      .getMethod(
-        "writeULongRaw",
-        JsonWriter::class.java,
-        java.lang.Long.TYPE,
-      )
-
   fun scalar(typeId: Int, boxedResult: Boolean, nullable: Boolean): JsonValueCodec<Any?> =
     when (typeId) {
       Types.UINT8 ->
@@ -159,12 +118,21 @@ internal object KotlinUnsignedCodecs {
     }
 
     private fun read(reader: JsonReader): Any? {
-      if (reader.tryReadNull()) return readNull(nullable)
+      if (reader.tryReadNullToken()) return readNull(nullable)
       return readUByteRaw(reader).toUByte()
     }
   }
 
   private object UByteCarrierCodec : JsonValueCodec<Any?>, DirectUnboxedValueCodec {
+    private object Methods {
+      val read: Method =
+        KotlinUnsignedCodecs::class.java.getMethod("readUByteRaw", JsonReader::class.java)
+      val write: Method =
+        KotlinUnsignedCodecs::class
+          .java
+          .getMethod("writeUByteRaw", JsonWriter::class.java, java.lang.Byte.TYPE)
+    }
+
     override fun writeString(writer: StringJsonWriter, value: Any?) =
       writeStringCarrier(writer, value ?: rejectNull())
 
@@ -191,9 +159,9 @@ internal object KotlinUnsignedCodecs {
     override fun writeUtf8Carrier(writer: Utf8JsonWriter, carrier: Any) =
       writeUByteRaw(writer, carrier as Byte)
 
-    override fun readCarrierMethod(): Method = readUByteCarrierMethod
+    override fun readCarrierMethod(): Method = Methods.read
 
-    override fun writeCarrierMethod(): Method = writeUByteCarrierMethod
+    override fun writeCarrierMethod(): Method = Methods.write
   }
 
   private class UShortCodec(private val nullable: Boolean) : JsonValueCodec<Any?> {
@@ -221,12 +189,21 @@ internal object KotlinUnsignedCodecs {
     }
 
     private fun read(reader: JsonReader): Any? {
-      if (reader.tryReadNull()) return readNull(nullable)
+      if (reader.tryReadNullToken()) return readNull(nullable)
       return readUShortRaw(reader).toUShort()
     }
   }
 
   private object UShortCarrierCodec : JsonValueCodec<Any?>, DirectUnboxedValueCodec {
+    private object Methods {
+      val read: Method =
+        KotlinUnsignedCodecs::class.java.getMethod("readUShortRaw", JsonReader::class.java)
+      val write: Method =
+        KotlinUnsignedCodecs::class
+          .java
+          .getMethod("writeUShortRaw", JsonWriter::class.java, java.lang.Short.TYPE)
+    }
+
     override fun writeString(writer: StringJsonWriter, value: Any?) =
       writeStringCarrier(writer, value ?: rejectNull())
 
@@ -253,9 +230,9 @@ internal object KotlinUnsignedCodecs {
     override fun writeUtf8Carrier(writer: Utf8JsonWriter, carrier: Any) =
       writeUShortRaw(writer, carrier as Short)
 
-    override fun readCarrierMethod(): Method = readUShortCarrierMethod
+    override fun readCarrierMethod(): Method = Methods.read
 
-    override fun writeCarrierMethod(): Method = writeUShortCarrierMethod
+    override fun writeCarrierMethod(): Method = Methods.write
   }
 
   private class UIntCodec(private val nullable: Boolean) : JsonValueCodec<Any?> {
@@ -283,12 +260,21 @@ internal object KotlinUnsignedCodecs {
     }
 
     private fun read(reader: JsonReader): Any? {
-      if (reader.tryReadNull()) return readNull(nullable)
+      if (reader.tryReadNullToken()) return readNull(nullable)
       return readUIntRaw(reader).toUInt()
     }
   }
 
   private object UIntCarrierCodec : JsonValueCodec<Any?>, DirectUnboxedValueCodec {
+    private object Methods {
+      val read: Method =
+        KotlinUnsignedCodecs::class.java.getMethod("readUIntRaw", JsonReader::class.java)
+      val write: Method =
+        KotlinUnsignedCodecs::class
+          .java
+          .getMethod("writeUIntRaw", JsonWriter::class.java, java.lang.Integer.TYPE)
+    }
+
     override fun writeString(writer: StringJsonWriter, value: Any?) =
       writeStringCarrier(writer, value ?: rejectNull())
 
@@ -315,9 +301,9 @@ internal object KotlinUnsignedCodecs {
     override fun writeUtf8Carrier(writer: Utf8JsonWriter, carrier: Any) =
       writeUIntRaw(writer, carrier as Int)
 
-    override fun readCarrierMethod(): Method = readUIntCarrierMethod
+    override fun readCarrierMethod(): Method = Methods.read
 
-    override fun writeCarrierMethod(): Method = writeUIntCarrierMethod
+    override fun writeCarrierMethod(): Method = Methods.write
   }
 
   private class ULongCodec(private val nullable: Boolean) : JsonValueCodec<Any?> {
@@ -345,12 +331,21 @@ internal object KotlinUnsignedCodecs {
     }
 
     private fun read(reader: JsonReader): Any? {
-      if (reader.tryReadNull()) return readNull(nullable)
+      if (reader.tryReadNullToken()) return readNull(nullable)
       return readULongRaw(reader).toULong()
     }
   }
 
   private object ULongCarrierCodec : JsonValueCodec<Any?>, DirectUnboxedValueCodec {
+    private object Methods {
+      val read: Method =
+        KotlinUnsignedCodecs::class.java.getMethod("readULongRaw", JsonReader::class.java)
+      val write: Method =
+        KotlinUnsignedCodecs::class
+          .java
+          .getMethod("writeULongRaw", JsonWriter::class.java, java.lang.Long.TYPE)
+    }
+
     override fun writeString(writer: StringJsonWriter, value: Any?) =
       writeStringCarrier(writer, value ?: rejectNull())
 
@@ -377,9 +372,9 @@ internal object KotlinUnsignedCodecs {
     override fun writeUtf8Carrier(writer: Utf8JsonWriter, carrier: Any) =
       writeULongRaw(writer, carrier as Long)
 
-    override fun readCarrierMethod(): Method = readULongCarrierMethod
+    override fun readCarrierMethod(): Method = Methods.read
 
-    override fun writeCarrierMethod(): Method = writeULongCarrierMethod
+    override fun writeCarrierMethod(): Method = Methods.write
   }
 
   private fun writeNull(writer: JsonWriter, nullable: Boolean) {

@@ -1063,7 +1063,13 @@ public abstract class JsonReader {
       lsb = (lsb << 48) | parseHexGroup(value, fourth + 1, value.length(), 12);
       return new UUID(msb, lsb);
     } catch (RuntimeException e) {
-      throw invalidStringValue("java.util.UUID", e);
+      try {
+        // UUID.fromString historically accepts some noncanonical group widths. Keep the canonical
+        // path allocation-free, but preserve that public compatibility on the cold fallback.
+        return UUID.fromString(value.toString());
+      } catch (RuntimeException fallback) {
+        throw invalidStringValue("java.util.UUID", fallback);
+      }
     }
   }
 
@@ -2542,14 +2548,61 @@ public abstract class JsonReader {
   /** Reads an unsigned 64-bit decimal JSON member name without materializing a String. */
   public long readFieldNameUnsignedLong() {
     skipWhitespace();
+    int quotePosition = position;
     if (position >= length() || charAt(position++) != '"') {
       throw error("Expected unsigned integer field name");
     }
-    long value = readUnsignedDigits();
-    if (position >= length() || charAt(position++) != '"') {
-      throw error("Invalid unsigned integer field name");
+    if (position >= length()) {
+      return readDecodedUnsignedFieldName(quotePosition);
     }
-    return value;
+    char first = charAt(position);
+    if (first == '0') {
+      position++;
+      if (position < length() && charAt(position) == '"') {
+        position++;
+        return 0;
+      }
+      return readDecodedUnsignedFieldName(quotePosition);
+    }
+    if (first < '1' || first > '9') {
+      return readDecodedUnsignedFieldName(quotePosition);
+    }
+    long value = 0;
+    long maxDiv10 = 1_844_674_407_370_955_161L;
+    while (position < length()) {
+      char ch = charAt(position);
+      if (ch < '0' || ch > '9') {
+        if (ch == '"') {
+          position++;
+          return value;
+        }
+        return readDecodedUnsignedFieldName(quotePosition);
+      }
+      int digit = ch - '0';
+      int comparison = Long.compareUnsigned(value, maxDiv10);
+      if (comparison > 0 || comparison == 0 && digit > 5) {
+        return throwUnsignedFieldNameOverflow();
+      }
+      value = value * 10 + digit;
+      position++;
+    }
+    return readDecodedUnsignedFieldName(quotePosition);
+  }
+
+  private long readDecodedUnsignedFieldName(int quotePosition) {
+    // Canonical ASCII digits stay allocation-free. Escapes and other forms accepted by the
+    // decoded member-name contract restore the opening quote and use the ordinary String parser.
+    position = quotePosition;
+    try {
+      return Long.parseUnsignedLong(readString());
+    } catch (NumberFormatException e) {
+      throw new ForyJsonException(
+          "Invalid unsigned long field name at JSON position " + position, e);
+    }
+  }
+
+  private long throwUnsignedFieldNameOverflow() {
+    throw error("Unsigned long field name overflow");
   }
 
   public JsonFieldInfo readField(JsonFieldTable table) {

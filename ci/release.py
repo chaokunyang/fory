@@ -59,6 +59,20 @@ MAVEN_SNAPSHOT_CMD = (
     "mvn -T10 clean deploy --no-transfer-progress -DskipTests "
     "-Dgpg.skip=true -Psnapshot-publication"
 )
+KOTLIN_RELEASE_PACKAGE_CMD = (
+    "mvn -T10 clean package --no-transfer-progress -DskipTests -Papache-release"
+)
+KOTLIN_RELEASE_DEPLOY_CMD = (
+    "mvn -T10 deploy --no-transfer-progress -DskipTests -Papache-release"
+)
+KOTLIN_SNAPSHOT_PACKAGE_CMD = (
+    "mvn -T10 clean package --no-transfer-progress -DskipTests "
+    "-Dgpg.skip=true -Psnapshot-publication"
+)
+KOTLIN_SNAPSHOT_DEPLOY_CMD = (
+    "mvn -T10 deploy --no-transfer-progress -DskipTests "
+    "-Dgpg.skip=true -Psnapshot-publication"
+)
 SCALA_RELEASE_COMMANDS = (
     "sbt clean",
     "sbt 'project fory-scala' +publishSigned",
@@ -237,7 +251,6 @@ def publish_jvm(languages="all", mode="release"):
             _verify_fory_core_mr_jar()
         elif lang == "kotlin":
             _publish_kotlin(mode)
-            verify_kotlin_artifacts()
         elif lang == "scala":
             _publish_scala(mode)
         else:
@@ -290,8 +303,15 @@ def _publish_java(mode="release"):
 
 
 def _publish_kotlin(mode="release"):
-    command = MAVEN_RELEASE_CMD if mode == "release" else MAVEN_SNAPSHOT_CMD
-    _run_release_cmd(command, "kotlin")
+    if mode == "release":
+        package_command = KOTLIN_RELEASE_PACKAGE_CMD
+        deploy_command = KOTLIN_RELEASE_DEPLOY_CMD
+    else:
+        package_command = KOTLIN_SNAPSHOT_PACKAGE_CMD
+        deploy_command = KOTLIN_SNAPSHOT_DEPLOY_CMD
+    _run_release_cmd(package_command, "kotlin")
+    verify_kotlin_artifacts()
+    _run_release_cmd(deploy_command, "kotlin")
 
 
 def _publish_scala(mode="release"):
@@ -877,6 +897,8 @@ def bump_kotlin_version(new_version):
         ("kotlin/fory-json-kotlin", "README.md"),
         ("kotlin/fory-json-kotlin-ksp", "README.md"),
         ("docs/json", "kotlin.md"),
+        ("docs/json", "getting-started.md"),
+        ("docs/start", "kotlin.md"),
     ]:
         _bump_version(path, file, new_version, _update_release_doc_lines)
 

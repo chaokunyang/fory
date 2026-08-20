@@ -50,17 +50,6 @@ internal object KotlinTemporalCodecs {
   private const val MAX_INSTANT_SECOND = 31_556_889_864_403_199L
   // Kotlin Duration 2.3 uses this millisecond boundary as both saturating limit and infinity.
   private const val MAX_DURATION_MILLIS = Long.MAX_VALUE / 2
-  private val readDurationCarrierMethod: Method =
-    KotlinTemporalCodecs::class.java.getMethod("readDurationRaw", JsonReader::class.java)
-  private val writeDurationCarrierMethod: Method =
-    KotlinTemporalCodecs::class
-      .java
-      .getMethod(
-        "writeDurationRaw",
-        JsonWriter::class.java,
-        java.lang.Long.TYPE,
-      )
-
   /** Returns whether this family owns the exact Kotlin class instead of metadata fallback. */
   fun supports(rawType: Class<*>): Boolean =
     rawType == Duration::class.java || rawType == Instant::class.java || rawType == Uuid::class.java
@@ -90,6 +79,15 @@ internal object KotlinTemporalCodecs {
   fun newTimedValue(value: Any?, duration: Duration): TimedValue<Any?> = TimedValue(value, duration)
 
   private object DurationCodec : JsonValueCodec<Duration>, DirectUnboxedValueCodec {
+    private object Methods {
+      val read: Method =
+        KotlinTemporalCodecs::class.java.getMethod("readDurationRaw", JsonReader::class.java)
+      val write: Method =
+        KotlinTemporalCodecs::class
+          .java
+          .getMethod("writeDurationRaw", JsonWriter::class.java, java.lang.Long.TYPE)
+    }
+
     override fun writeString(writer: StringJsonWriter, value: Duration?) = write(writer, value)
 
     override fun writeUtf8(writer: Utf8JsonWriter, value: Duration?) = write(writer, value)
@@ -117,9 +115,9 @@ internal object KotlinTemporalCodecs {
     override fun writeUtf8Carrier(writer: Utf8JsonWriter, carrier: Any) =
       KotlinTemporalAccess.writeDurationCarrier(writer, carrier)
 
-    override fun readCarrierMethod(): Method = readDurationCarrierMethod
+    override fun readCarrierMethod(): Method = Methods.read
 
-    override fun writeCarrierMethod(): Method = writeDurationCarrierMethod
+    override fun writeCarrierMethod(): Method = Methods.write
 
     private fun write(writer: JsonWriter, value: Duration?) {
       if (value == null) {

@@ -20,6 +20,7 @@
 package org.apache.fory.graalvm.kotlin;
 
 import java.util.List;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.integration.kotlin.json.corpus.KotlinJsonCorpus;
 import org.apache.fory.integration.kotlin.json.corpus.PlatformAccount;
 import org.apache.fory.integration.kotlin.json.corpus.PlatformCodecSlotsMixin;
@@ -70,7 +71,9 @@ public final class Main {
         "An unreached exact collection binding parsed input");
 
     ForyJson withoutKotlin = ForyJson.builder().withAsyncCompilation(false).build();
-    expectFailure(
+    // Without the Kotlin module, core has no language-model authority. An ordinary controlled
+    // construction failure is sufficient; provider-selected language configurations stay strict.
+    expectControlledFailure(
         () ->
             withoutKotlin.fromJson(
                 KotlinJsonCorpus.caseJson("account-default"), KotlinJsonCorpus.accountType()),
@@ -97,10 +100,10 @@ public final class Main {
         "A failed Native capability lookup polluted the selected configuration");
   }
 
-  private static void expectFailure(Runnable operation, String message) {
+  private static void expectControlledFailure(Runnable operation, String message) {
     try {
       operation.run();
-    } catch (ForyJsonException expected) {
+    } catch (ForyException expected) {
       return;
     }
     throw new AssertionError(message);

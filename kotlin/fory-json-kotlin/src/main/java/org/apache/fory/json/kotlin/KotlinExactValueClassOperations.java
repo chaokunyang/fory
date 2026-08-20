@@ -27,56 +27,55 @@ import org.apache.fory.json.reader.JsonReader;
 final class KotlinExactValueClassOperations {
   private KotlinExactValueClassOperations() {}
 
-  static KotlinValueClassOperations create(
+  static KotlinValueClassOperations createCodec(
+      Class<?> owner, Class<?> carrier, MethodHandle construct, MethodHandle unbox) {
+    if (carrier == boolean.class) {
+      return new BooleanOperations(owner, construct, unbox);
+    } else if (carrier == byte.class) {
+      return new ByteOperations(owner, construct, unbox);
+    } else if (carrier == short.class) {
+      return new ShortOperations(owner, construct, unbox);
+    } else if (carrier == int.class) {
+      return new IntOperations(owner, construct, unbox);
+    } else if (carrier == long.class) {
+      return new LongOperations(owner, construct, unbox);
+    } else if (carrier == float.class) {
+      return new FloatOperations(owner, construct, unbox);
+    } else if (carrier == double.class) {
+      return new DoubleOperations(owner, construct, unbox);
+    } else if (carrier == char.class) {
+      return new CharOperations(owner, construct, unbox);
+    }
+    return new ReferenceOperations(owner, construct, unbox);
+  }
+
+  static KotlinValueClassOperations createMapKey(
       Class<?> owner,
       Class<?> carrier,
       MethodHandle construct,
       MethodHandle constructUncharged,
-      MethodHandle unbox,
-      KotlinUnboxedValueClassOperations unboxedOperations) {
-    if (carrier == boolean.class) {
-      return new BooleanOperations(owner, construct, constructUncharged, unbox, unboxedOperations);
-    } else if (carrier == byte.class) {
-      return new ByteOperations(owner, construct, constructUncharged, unbox, unboxedOperations);
+      MethodHandle unbox) {
+    if (carrier == byte.class) {
+      return new ByteMapKeyOperations(owner, construct, constructUncharged, unbox);
     } else if (carrier == short.class) {
-      return new ShortOperations(owner, construct, constructUncharged, unbox, unboxedOperations);
+      return new ShortMapKeyOperations(owner, construct, constructUncharged, unbox);
     } else if (carrier == int.class) {
-      return new IntOperations(owner, construct, constructUncharged, unbox, unboxedOperations);
+      return new IntMapKeyOperations(owner, construct, constructUncharged, unbox);
     } else if (carrier == long.class) {
-      return new LongOperations(owner, construct, constructUncharged, unbox, unboxedOperations);
-    } else if (carrier == float.class) {
-      return new FloatOperations(owner, construct, constructUncharged, unbox, unboxedOperations);
-    } else if (carrier == double.class) {
-      return new DoubleOperations(owner, construct, constructUncharged, unbox, unboxedOperations);
-    } else if (carrier == char.class) {
-      return new CharOperations(owner, construct, constructUncharged, unbox, unboxedOperations);
+      return new LongMapKeyOperations(owner, construct, constructUncharged, unbox);
     }
-    return new ReferenceOperations(owner, construct, constructUncharged, unbox, unboxedOperations);
+    return new ReferenceMapKeyOperations(owner, construct, constructUncharged, unbox);
   }
 
   private abstract static class Operations implements KotlinValueClassOperations {
     final Class<?> owner;
     final MethodHandle construct;
-    final MethodHandle constructUncharged;
     final MethodHandle unbox;
-    final KotlinUnboxedValueClassOperations unboxedOperations;
 
-    Operations(
-        Class<?> owner,
-        MethodHandle construct,
-        MethodHandle constructUncharged,
-        MethodHandle unbox,
-        KotlinUnboxedValueClassOperations unboxedOperations) {
+    Operations(Class<?> owner, MethodHandle construct, MethodHandle unbox) {
       this.owner = owner;
       this.construct = construct;
-      this.constructUncharged = constructUncharged;
       this.unbox = unbox;
-      this.unboxedOperations = unboxedOperations;
-    }
-
-    @Override
-    public final KotlinUnboxedValueClassOperations unboxedOperations() {
-      return unboxedOperations;
     }
 
     final ForyJsonException failure(String operation, Throwable cause) {
@@ -93,28 +92,14 @@ final class KotlinExactValueClassOperations {
 
   private static final class BooleanOperations extends Operations
       implements KotlinBooleanValueClassOperations<Object> {
-    BooleanOperations(
-        Class<?> owner,
-        MethodHandle construct,
-        MethodHandle uncharged,
-        MethodHandle unbox,
-        KotlinUnboxedValueClassOperations unboxedOperations) {
-      super(owner, construct, uncharged, unbox, unboxedOperations);
+    BooleanOperations(Class<?> owner, MethodHandle construct, MethodHandle unbox) {
+      super(owner, construct, unbox);
     }
 
     @Override
     public Object constructBoolean(JsonReader reader, boolean value) {
       try {
         return (Object) construct.invokeExact(reader, value);
-      } catch (Throwable cause) {
-        throw failure("construct", cause);
-      }
-    }
-
-    @Override
-    public Object constructBooleanUncharged(boolean value) {
-      try {
-        return (Object) constructUncharged.invokeExact(value);
       } catch (Throwable cause) {
         throw failure("construct", cause);
       }
@@ -130,30 +115,16 @@ final class KotlinExactValueClassOperations {
     }
   }
 
-  private static final class ByteOperations extends Operations
+  private static class ByteOperations extends Operations
       implements KotlinByteValueClassOperations<Object> {
-    ByteOperations(
-        Class<?> owner,
-        MethodHandle construct,
-        MethodHandle uncharged,
-        MethodHandle unbox,
-        KotlinUnboxedValueClassOperations unboxedOperations) {
-      super(owner, construct, uncharged, unbox, unboxedOperations);
+    ByteOperations(Class<?> owner, MethodHandle construct, MethodHandle unbox) {
+      super(owner, construct, unbox);
     }
 
     @Override
     public Object constructByte(JsonReader reader, byte value) {
       try {
         return (Object) construct.invokeExact(reader, value);
-      } catch (Throwable cause) {
-        throw failure("construct", cause);
-      }
-    }
-
-    @Override
-    public Object constructByteUncharged(byte value) {
-      try {
-        return (Object) constructUncharged.invokeExact(value);
       } catch (Throwable cause) {
         throw failure("construct", cause);
       }
@@ -169,30 +140,16 @@ final class KotlinExactValueClassOperations {
     }
   }
 
-  private static final class ShortOperations extends Operations
+  private static class ShortOperations extends Operations
       implements KotlinShortValueClassOperations<Object> {
-    ShortOperations(
-        Class<?> owner,
-        MethodHandle construct,
-        MethodHandle uncharged,
-        MethodHandle unbox,
-        KotlinUnboxedValueClassOperations unboxedOperations) {
-      super(owner, construct, uncharged, unbox, unboxedOperations);
+    ShortOperations(Class<?> owner, MethodHandle construct, MethodHandle unbox) {
+      super(owner, construct, unbox);
     }
 
     @Override
     public Object constructShort(JsonReader reader, short value) {
       try {
         return (Object) construct.invokeExact(reader, value);
-      } catch (Throwable cause) {
-        throw failure("construct", cause);
-      }
-    }
-
-    @Override
-    public Object constructShortUncharged(short value) {
-      try {
-        return (Object) constructUncharged.invokeExact(value);
       } catch (Throwable cause) {
         throw failure("construct", cause);
       }
@@ -208,30 +165,16 @@ final class KotlinExactValueClassOperations {
     }
   }
 
-  private static final class IntOperations extends Operations
+  private static class IntOperations extends Operations
       implements KotlinIntValueClassOperations<Object> {
-    IntOperations(
-        Class<?> owner,
-        MethodHandle construct,
-        MethodHandle uncharged,
-        MethodHandle unbox,
-        KotlinUnboxedValueClassOperations unboxedOperations) {
-      super(owner, construct, uncharged, unbox, unboxedOperations);
+    IntOperations(Class<?> owner, MethodHandle construct, MethodHandle unbox) {
+      super(owner, construct, unbox);
     }
 
     @Override
     public Object constructInt(JsonReader reader, int value) {
       try {
         return (Object) construct.invokeExact(reader, value);
-      } catch (Throwable cause) {
-        throw failure("construct", cause);
-      }
-    }
-
-    @Override
-    public Object constructIntUncharged(int value) {
-      try {
-        return (Object) constructUncharged.invokeExact(value);
       } catch (Throwable cause) {
         throw failure("construct", cause);
       }
@@ -247,30 +190,16 @@ final class KotlinExactValueClassOperations {
     }
   }
 
-  private static final class LongOperations extends Operations
+  private static class LongOperations extends Operations
       implements KotlinLongValueClassOperations<Object> {
-    LongOperations(
-        Class<?> owner,
-        MethodHandle construct,
-        MethodHandle uncharged,
-        MethodHandle unbox,
-        KotlinUnboxedValueClassOperations unboxedOperations) {
-      super(owner, construct, uncharged, unbox, unboxedOperations);
+    LongOperations(Class<?> owner, MethodHandle construct, MethodHandle unbox) {
+      super(owner, construct, unbox);
     }
 
     @Override
     public Object constructLong(JsonReader reader, long value) {
       try {
         return (Object) construct.invokeExact(reader, value);
-      } catch (Throwable cause) {
-        throw failure("construct", cause);
-      }
-    }
-
-    @Override
-    public Object constructLongUncharged(long value) {
-      try {
-        return (Object) constructUncharged.invokeExact(value);
       } catch (Throwable cause) {
         throw failure("construct", cause);
       }
@@ -288,28 +217,14 @@ final class KotlinExactValueClassOperations {
 
   private static final class FloatOperations extends Operations
       implements KotlinFloatValueClassOperations<Object> {
-    FloatOperations(
-        Class<?> owner,
-        MethodHandle construct,
-        MethodHandle uncharged,
-        MethodHandle unbox,
-        KotlinUnboxedValueClassOperations unboxedOperations) {
-      super(owner, construct, uncharged, unbox, unboxedOperations);
+    FloatOperations(Class<?> owner, MethodHandle construct, MethodHandle unbox) {
+      super(owner, construct, unbox);
     }
 
     @Override
     public Object constructFloat(JsonReader reader, float value) {
       try {
         return (Object) construct.invokeExact(reader, value);
-      } catch (Throwable cause) {
-        throw failure("construct", cause);
-      }
-    }
-
-    @Override
-    public Object constructFloatUncharged(float value) {
-      try {
-        return (Object) constructUncharged.invokeExact(value);
       } catch (Throwable cause) {
         throw failure("construct", cause);
       }
@@ -327,28 +242,14 @@ final class KotlinExactValueClassOperations {
 
   private static final class DoubleOperations extends Operations
       implements KotlinDoubleValueClassOperations<Object> {
-    DoubleOperations(
-        Class<?> owner,
-        MethodHandle construct,
-        MethodHandle uncharged,
-        MethodHandle unbox,
-        KotlinUnboxedValueClassOperations unboxedOperations) {
-      super(owner, construct, uncharged, unbox, unboxedOperations);
+    DoubleOperations(Class<?> owner, MethodHandle construct, MethodHandle unbox) {
+      super(owner, construct, unbox);
     }
 
     @Override
     public Object constructDouble(JsonReader reader, double value) {
       try {
         return (Object) construct.invokeExact(reader, value);
-      } catch (Throwable cause) {
-        throw failure("construct", cause);
-      }
-    }
-
-    @Override
-    public Object constructDoubleUncharged(double value) {
-      try {
-        return (Object) constructUncharged.invokeExact(value);
       } catch (Throwable cause) {
         throw failure("construct", cause);
       }
@@ -366,28 +267,14 @@ final class KotlinExactValueClassOperations {
 
   private static final class CharOperations extends Operations
       implements KotlinCharValueClassOperations<Object> {
-    CharOperations(
-        Class<?> owner,
-        MethodHandle construct,
-        MethodHandle uncharged,
-        MethodHandle unbox,
-        KotlinUnboxedValueClassOperations unboxedOperations) {
-      super(owner, construct, uncharged, unbox, unboxedOperations);
+    CharOperations(Class<?> owner, MethodHandle construct, MethodHandle unbox) {
+      super(owner, construct, unbox);
     }
 
     @Override
     public Object constructChar(JsonReader reader, char value) {
       try {
         return (Object) construct.invokeExact(reader, value);
-      } catch (Throwable cause) {
-        throw failure("construct", cause);
-      }
-    }
-
-    @Override
-    public Object constructCharUncharged(char value) {
-      try {
-        return (Object) constructUncharged.invokeExact(value);
       } catch (Throwable cause) {
         throw failure("construct", cause);
       }
@@ -403,19 +290,13 @@ final class KotlinExactValueClassOperations {
     }
   }
 
-  private static final class ReferenceOperations extends Operations
-      implements KotlinReferenceValueClassOperations<Object> {
-    ReferenceOperations(
-        Class<?> owner,
-        MethodHandle construct,
-        MethodHandle uncharged,
-        MethodHandle unbox,
-        KotlinUnboxedValueClassOperations unboxedOperations) {
-      super(owner, construct, uncharged, unbox, unboxedOperations);
+  private static class ReferenceOperations extends Operations implements BoxedValueClassOperations {
+    ReferenceOperations(Class<?> owner, MethodHandle construct, MethodHandle unbox) {
+      super(owner, construct, unbox);
     }
 
     @Override
-    public Object constructValue(JsonReader reader, Object value) {
+    public Object construct(JsonReader reader, Object value) {
       try {
         return (Object) construct.invokeExact(reader, value);
       } catch (Throwable cause) {
@@ -424,20 +305,111 @@ final class KotlinExactValueClassOperations {
     }
 
     @Override
-    public Object constructValueUncharged(Object value) {
-      try {
-        return (Object) constructUncharged.invokeExact(value);
-      } catch (Throwable cause) {
-        throw failure("construct", cause);
-      }
-    }
-
-    @Override
-    public Object unboxValue(Object value) {
+    public Object unbox(Object value) {
       try {
         return (Object) unbox.invokeExact(value);
       } catch (Throwable cause) {
         throw failure("unbox", cause);
+      }
+    }
+  }
+
+  private static final class ByteMapKeyOperations extends ByteOperations
+      implements KotlinByteMapKeyOperations<Object> {
+    private final MethodHandle uncharged;
+
+    ByteMapKeyOperations(
+        Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox) {
+      super(owner, construct, unbox);
+      this.uncharged = uncharged;
+    }
+
+    @Override
+    public Object constructByteUncharged(byte value) {
+      try {
+        return (Object) uncharged.invokeExact(value);
+      } catch (Throwable cause) {
+        throw failure("construct", cause);
+      }
+    }
+  }
+
+  private static final class ShortMapKeyOperations extends ShortOperations
+      implements KotlinShortMapKeyOperations<Object> {
+    private final MethodHandle uncharged;
+
+    ShortMapKeyOperations(
+        Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox) {
+      super(owner, construct, unbox);
+      this.uncharged = uncharged;
+    }
+
+    @Override
+    public Object constructShortUncharged(short value) {
+      try {
+        return (Object) uncharged.invokeExact(value);
+      } catch (Throwable cause) {
+        throw failure("construct", cause);
+      }
+    }
+  }
+
+  private static final class IntMapKeyOperations extends IntOperations
+      implements KotlinIntMapKeyOperations<Object> {
+    private final MethodHandle uncharged;
+
+    IntMapKeyOperations(
+        Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox) {
+      super(owner, construct, unbox);
+      this.uncharged = uncharged;
+    }
+
+    @Override
+    public Object constructIntUncharged(int value) {
+      try {
+        return (Object) uncharged.invokeExact(value);
+      } catch (Throwable cause) {
+        throw failure("construct", cause);
+      }
+    }
+  }
+
+  private static final class LongMapKeyOperations extends LongOperations
+      implements KotlinLongMapKeyOperations<Object> {
+    private final MethodHandle uncharged;
+
+    LongMapKeyOperations(
+        Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox) {
+      super(owner, construct, unbox);
+      this.uncharged = uncharged;
+    }
+
+    @Override
+    public Object constructLongUncharged(long value) {
+      try {
+        return (Object) uncharged.invokeExact(value);
+      } catch (Throwable cause) {
+        throw failure("construct", cause);
+      }
+    }
+  }
+
+  private static final class ReferenceMapKeyOperations extends ReferenceOperations
+      implements UnchargedBoxedOperations {
+    private final MethodHandle uncharged;
+
+    ReferenceMapKeyOperations(
+        Class<?> owner, MethodHandle construct, MethodHandle uncharged, MethodHandle unbox) {
+      super(owner, construct, unbox);
+      this.uncharged = uncharged;
+    }
+
+    @Override
+    public Object constructUncharged(Object value) {
+      try {
+        return (Object) uncharged.invokeExact(value);
+      } catch (Throwable cause) {
+        throw failure("construct", cause);
       }
     }
   }

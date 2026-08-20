@@ -21,10 +21,10 @@
   public static void generatedMixin();
 }
 
-# Instrumentation invokes these application entry points across the target/test APK boundary.
-# Kotlin model retention is intentionally owned only by KSP's exact consumer rules.
+# Instrumentation invokes this entry point across the target/test APK boundary. KSP's exact
+# consumer rules alone retain the Kotlin metadata and members used at runtime.
 -keep,allowoptimization class org.apache.fory.android.AndroidKotlinJsonScenarios {
-  public static void generatedModels();
+  public static void metadataSurvivesMinification();
 }
 
 # The release androidTest APK omits the Kotlin runtime shared with the separately minified target

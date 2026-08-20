@@ -31,17 +31,28 @@ import org.apache.fory.platform.internal._JDKAccess
 
 /** Immutable operations that implement one exact value-class layer chain. */
 internal interface KotlinValueClassOperations {
-  fun unboxedOperations(): KotlinUnboxedValueClassOperations
-
   companion object {
-    fun create(model: KotlinReflectiveValueClass): KotlinValueClassOperations =
+    fun create(model: KotlinReflectiveValueClass): KotlinValueClassOperationState =
+      if (AndroidSupport.IS_ANDROID) {
+        val operations = KotlinReflectionValueClassOperations(model)
+        KotlinValueClassOperationState(operations, operations)
+      } else {
+        KotlinMethodHandleValueClassOperations.createCodec(model)
+      }
+
+    fun createMapKey(model: KotlinReflectiveValueClass): KotlinValueClassOperations =
       if (AndroidSupport.IS_ANDROID) {
         KotlinReflectionValueClassOperations(model)
       } else {
-        KotlinMethodHandleValueClassOperations.create(model)
+        KotlinMethodHandleValueClassOperations.createMapKey(model)
       }
   }
 }
+
+internal class KotlinValueClassOperationState(
+  val operations: KotlinValueClassOperations,
+  val unboxed: KotlinUnboxedValueClassOperations,
+)
 
 /** Interpreted and direct-codegen operations for one unboxed parent occurrence. */
 internal interface KotlinUnboxedValueClassOperations {
@@ -59,47 +70,51 @@ internal interface KotlinUnboxedValueClassOperations {
 internal interface KotlinBooleanValueClassOperations<T : Any> : KotlinValueClassOperations {
   fun constructBoolean(reader: JsonReader, value: Boolean): T
 
-  fun constructBooleanUncharged(value: Boolean): T
-
   fun unboxBoolean(value: T): Boolean
 }
 
 internal interface KotlinByteValueClassOperations<T : Any> : KotlinValueClassOperations {
   fun constructByte(reader: JsonReader, value: Byte): T
 
-  fun constructByteUncharged(value: Byte): T
-
   fun unboxByte(value: T): Byte
+}
+
+internal interface KotlinByteMapKeyOperations<T : Any> : KotlinByteValueClassOperations<T> {
+  fun constructByteUncharged(value: Byte): T
 }
 
 internal interface KotlinShortValueClassOperations<T : Any> : KotlinValueClassOperations {
   fun constructShort(reader: JsonReader, value: Short): T
 
-  fun constructShortUncharged(value: Short): T
-
   fun unboxShort(value: T): Short
+}
+
+internal interface KotlinShortMapKeyOperations<T : Any> : KotlinShortValueClassOperations<T> {
+  fun constructShortUncharged(value: Short): T
 }
 
 internal interface KotlinIntValueClassOperations<T : Any> : KotlinValueClassOperations {
   fun constructInt(reader: JsonReader, value: Int): T
 
-  fun constructIntUncharged(value: Int): T
-
   fun unboxInt(value: T): Int
+}
+
+internal interface KotlinIntMapKeyOperations<T : Any> : KotlinIntValueClassOperations<T> {
+  fun constructIntUncharged(value: Int): T
 }
 
 internal interface KotlinLongValueClassOperations<T : Any> : KotlinValueClassOperations {
   fun constructLong(reader: JsonReader, value: Long): T
 
-  fun constructLongUncharged(value: Long): T
-
   fun unboxLong(value: T): Long
+}
+
+internal interface KotlinLongMapKeyOperations<T : Any> : KotlinLongValueClassOperations<T> {
+  fun constructLongUncharged(value: Long): T
 }
 
 internal interface KotlinFloatValueClassOperations<T : Any> : KotlinValueClassOperations {
   fun constructFloat(reader: JsonReader, value: Float): T
-
-  fun constructFloatUncharged(value: Float): T
 
   fun unboxFloat(value: T): Float
 }
@@ -107,31 +122,19 @@ internal interface KotlinFloatValueClassOperations<T : Any> : KotlinValueClassOp
 internal interface KotlinDoubleValueClassOperations<T : Any> : KotlinValueClassOperations {
   fun constructDouble(reader: JsonReader, value: Double): T
 
-  fun constructDoubleUncharged(value: Double): T
-
   fun unboxDouble(value: T): Double
 }
 
 internal interface KotlinCharValueClassOperations<T : Any> : KotlinValueClassOperations {
   fun constructChar(reader: JsonReader, value: Char): T
 
-  fun constructCharUncharged(value: Char): T
-
   fun unboxChar(value: T): Char
-}
-
-internal interface KotlinReferenceValueClassOperations<T : Any> : KotlinValueClassOperations {
-  fun constructValue(reader: JsonReader, value: Any?): T
-
-  fun constructValueUncharged(value: Any?): T
-
-  fun unboxValue(value: T): Any?
 }
 
 /** Android interpreted owner for the same exact methods validated by value-class metadata. */
 private class KotlinReflectionValueClassOperations(
   private val model: KotlinReflectiveValueClass,
-) : KotlinValueClassOperations, KotlinUnboxedValueClassOperations, BoxedValueClassOperations {
+) : KotlinValueClassOperations, KotlinUnboxedValueClassOperations, UnchargedBoxedOperations {
   init {
     try {
       model.constructors.forEach { it.isAccessible = true }
@@ -142,18 +145,16 @@ private class KotlinReflectionValueClassOperations(
     }
   }
 
-  override fun unboxedOperations(): KotlinUnboxedValueClassOperations = this
-
   override fun construct(reader: JsonReader, value: Any?): Any =
     constructValue(reader, value, true)!!
 
   override fun constructUncharged(value: Any?): Any = constructValue(null, value, true)!!
 
   override fun unbox(value: Any): Any? {
-    var current: Any? = invoke(model.unboxes[0], value)
+    var current: Any? = invoke0(model.unboxes[0], value)
     for (index in 1 until model.shape.layers.size) {
       if (model.shape.layers[index - 1].carrierClass == model.shape.layers[index].ownerClass) {
-        current = invoke(model.unboxes[index], current)
+        current = invoke0(model.unboxes[index], current)
       }
     }
     return current
@@ -166,42 +167,49 @@ private class KotlinReflectionValueClassOperations(
     var current = carrier
     for (index in 1 until model.shape.layers.size) {
       if (model.shape.layers[index - 1].carrierClass == model.shape.layers[index].ownerClass) {
-        current = invoke(model.unboxes[index], current)
+        current = invoke0(model.unboxes[index], current)
       }
     }
     return current
   }
 
-  override fun constructMethods(): Array<Method> = model.carrierConstructMethods.clone()
+  override fun constructMethods(): Array<Method> = model.carrierMethods().construct
 
-  override fun constructBoxBytes(): IntArray = model.carrierConstructBoxBytes.clone()
+  override fun constructBoxBytes(): IntArray = model.carrierMethods().boxBytes
 
-  override fun extractMethods(): Array<Method> = model.carrierExtractMethods.clone()
+  override fun extractMethods(): Array<Method> = model.carrierMethods().extract
 
   private fun constructValue(reader: JsonReader?, terminal: Any?, boxOuter: Boolean): Any? {
     val layers = model.shape.layers
     var index = layers.lastIndex
-    var current = invoke(model.constructors[index], null, terminal)
+    var current = invoke1(model.constructors[index], null, terminal)
     while (index > 0) {
       val inner = layers[index]
       val outer = layers[index - 1]
       if (outer.carrierClass == inner.ownerClass) {
         if (reader != null) reader.reserveGraphMemory(inner.shallowBytes)
-        current = invoke(model.boxes[index], null, current)
+        current = invoke1(model.boxes[index], null, current)
       }
       index--
-      current = invoke(model.constructors[index], null, current)
+      current = invoke1(model.constructors[index], null, current)
     }
     if (boxOuter) {
       if (reader != null) reader.reserveGraphMemory(layers[0].shallowBytes)
-      current = invoke(model.boxes[0], null, current)
+      current = invoke1(model.boxes[0], null, current)
     }
     return current
   }
 
-  private fun invoke(method: Method, receiver: Any?, vararg arguments: Any?): Any? =
+  private fun invoke0(method: Method, receiver: Any?): Any? =
     try {
-      method.invoke(receiver, *arguments)
+      method.invoke(receiver)
+    } catch (cause: Throwable) {
+      throw failure(method.name, cause)
+    }
+
+  private fun invoke1(method: Method, receiver: Any?, argument: Any?): Any? =
+    try {
+      method.invoke(receiver, argument)
     } catch (cause: Throwable) {
       throw failure(method.name, cause)
     }
@@ -227,7 +235,33 @@ private object KotlinMethodHandleValueClassOperations {
       MethodType.methodType(Void.TYPE, JsonReader::class.java, Int::class.javaPrimitiveType),
     )
 
-  fun create(model: KotlinReflectiveValueClass): KotlinValueClassOperations {
+  fun createCodec(model: KotlinReflectiveValueClass): KotlinValueClassOperationState {
+    val constructors = bind(model.shape, model.constructors, "constructor-impl")
+    val boxes = bind(model.shape, model.boxes, "box-impl")
+    val unboxes = bind(model.shape, model.unboxes, "unbox-impl")
+    val charged = buildConstruct(model.shape, constructors, boxes, true)
+    val unbox = buildUnbox(model.shape, unboxes)
+    val carrier = model.shape.layers.last().carrierClass
+    val invocationCarrier = if (carrier.isPrimitive) carrier else Any::class.java
+    val unboxed = createUnboxed(model, constructors, boxes, unboxes)
+    return KotlinValueClassOperationState(
+      KotlinExactValueClassOperations.createCodec(
+        model.shape.ownerClass,
+        carrier,
+        charged.asType(
+          MethodType.methodType(
+            Any::class.java,
+            JsonReader::class.java,
+            invocationCarrier,
+          ),
+        ),
+        unbox.asType(MethodType.methodType(invocationCarrier, Any::class.java)),
+      ),
+      unboxed,
+    )
+  }
+
+  fun createMapKey(model: KotlinReflectiveValueClass): KotlinValueClassOperations {
     val constructors = bind(model.shape, model.constructors, "constructor-impl")
     val boxes = bind(model.shape, model.boxes, "box-impl")
     val unboxes = bind(model.shape, model.unboxes, "unbox-impl")
@@ -236,20 +270,14 @@ private object KotlinMethodHandleValueClassOperations {
     val unbox = buildUnbox(model.shape, unboxes)
     val carrier = model.shape.layers.last().carrierClass
     val invocationCarrier = if (carrier.isPrimitive) carrier else Any::class.java
-    val unboxed = createUnboxed(model, constructors, boxes, unboxes)
-    return KotlinExactValueClassOperations.create(
+    return KotlinExactValueClassOperations.createMapKey(
       model.shape.ownerClass,
       carrier,
       charged.asType(
-        MethodType.methodType(
-          Any::class.java,
-          JsonReader::class.java,
-          invocationCarrier,
-        ),
+        MethodType.methodType(Any::class.java, JsonReader::class.java, invocationCarrier),
       ),
       uncharged.asType(MethodType.methodType(Any::class.java, invocationCarrier)),
       unbox.asType(MethodType.methodType(invocationCarrier, Any::class.java)),
-      unboxed,
     )
   }
 
@@ -273,14 +301,15 @@ private object KotlinMethodHandleValueClassOperations {
     val extract =
       buildCarrierExtract(shape, unboxes)
         .asType(MethodType.methodType(Any::class.java, Any::class.java))
+    val methods = model.carrierMethods()
     return KotlinExactUnboxedValueOperations.create(
       shape.ownerClass,
       carrier,
       construct,
       extract,
-      model.carrierConstructMethods,
-      model.carrierConstructBoxBytes,
-      model.carrierExtractMethods,
+      methods.construct,
+      methods.boxBytes,
+      methods.extract,
     )
   }
 

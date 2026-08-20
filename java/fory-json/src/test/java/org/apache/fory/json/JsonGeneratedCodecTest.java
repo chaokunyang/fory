@@ -48,7 +48,6 @@ import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
-import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.testng.annotations.Test;
 
 public class JsonGeneratedCodecTest extends ForyJsonTestModels {
@@ -365,20 +364,12 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
     assertEquals(utf16Fallback.id, 10L);
     assertEquals(utf8.id, 11L);
     assertEquals(utf8Fallback.id, 12L);
-
-    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
-    resolver.getObjectCodec(JsonCreatorTest.User.class);
-    JsonTypeInfo typeInfo =
-        resolver.getTypeInfo(JsonCreatorTest.User.class, JsonCreatorTest.User.class);
-    assertTrue(
-        Arrays.stream(typeInfo.latin1Reader().getClass().getDeclaredMethods())
-            .anyMatch(method -> method.getName().startsWith("readLatin1Slow")));
-    assertTrue(
-        Arrays.stream(typeInfo.utf16Reader().getClass().getDeclaredMethods())
-            .anyMatch(method -> method.getName().startsWith("readUtf16Slow")));
-    assertTrue(
-        Arrays.stream(typeInfo.utf8Reader().getClass().getDeclaredMethods())
-            .anyMatch(method -> method.getName().startsWith("readUtf8Slow")));
+    assertEquals(latin1.name, "alice");
+    assertEquals(latin1Fallback.name, "bob");
+    assertEquals(utf16.name, "你好");
+    assertEquals(utf16Fallback.name, "你好");
+    assertEquals(utf8.name, "carol");
+    assertEquals(utf8Fallback.name, "dave");
   }
 
   @Test(dataProvider = "enableCodegen")

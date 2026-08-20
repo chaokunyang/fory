@@ -13,6 +13,13 @@ plugins {
   kotlin("jvm") version "2.3.20"
 }
 
+repositories {
+  maven("https://repository.apache.org/snapshots/") {
+    mavenContent { snapshotsOnly() }
+  }
+  mavenCentral()
+}
+
 dependencies {
   implementation("org.apache.fory:fory-json-kotlin:1.7.0-SNAPSHOT")
 }
@@ -33,9 +40,8 @@ dependencies {
 }
 ```
 
-Annotate application models with `@JsonType`, or define source-owned `@JsonMixin` declarations, so
-KSP can package their exact retention rules. KSP owns a Mixin request when either its source or its
-exact target is Kotlin. The processor does not replace runtime metadata mapping.
+For the required `@JsonType` or exact Mixin declarations and rule packaging, follow the
+[Kotlin JSON installation guide](../../docs/json/kotlin.md#installation).
 
 ## Usage
 
@@ -79,10 +85,9 @@ contravariant projections are not complete schemas and are rejected.
 ## Platforms
 
 The module supports Kotlin/JVM on HotSpot, GraalVM Native Image, and Android API 26 or later.
-Standard JVM and Android builds read the model's Kotlin metadata. Android builds that enable R8 or
-ProGuard must package the exact KSP-generated retention rules instead of broad keep rules. GraalVM
-builds use the Fory JSON provider workflow and must not add reflection configuration for application
-models.
+Standard JVM and Android builds read the model's Kotlin metadata. See the platform setup in the
+[Kotlin JSON guide](../../docs/json/kotlin.md#graalvm-and-android) for Android shrinking and GraalVM
+Native Image.
 
 Kotlin/Native, Kotlin/JS, and Kotlin/Wasm are not supported by this JVM module.
 

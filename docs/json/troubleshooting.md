@@ -38,7 +38,7 @@ license: |
 | Kotlin null or missing member fails        | Check the exact `jsonTypeRef`, constructor default, and nullable occurrence; null does not request a compiler default                               |
 | Raw/star/projected Kotlin generic fails    | Supply a complete `jsonTypeRef<T>()`; `in` and star projections cannot reconstruct one exact schema                                                 |
 | Unsupported Kotlin metadata                | Compile the model with a supported Kotlin 2.3 compiler and ensure its validated JVM members match the metadata                                      |
-| Kotlin model fails after Android shrinking | Apply KSP, annotate the source model or exact Mixin, and verify that the generated exact retention rules are packaged                               |
+| Kotlin model fails after Android shrinking | Apply KSP; for an exact Mixin, use it when either its source or target is Kotlin, and verify that the generated rules are packaged                  |
 | Kotlin model is absent in Native Image     | Install `ForyJsonKotlin` from a reachable `ForyJsonProvider`, enable code generation, and make the exact binding reachable from that configuration  |
 
 Fory JSON mapping, syntax, codec, depth, graph-memory, validator, and output failures use

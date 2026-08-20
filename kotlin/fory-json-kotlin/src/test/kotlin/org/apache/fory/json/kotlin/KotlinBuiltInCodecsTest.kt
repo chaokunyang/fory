@@ -208,6 +208,42 @@ class KotlinBuiltInCodecsTest {
     }
     val mismatched = TypeRef.of(String::class.java, TypeExtMeta.of(Types.UINT32, false, false))
     assertFailsWith<ForyJsonException> { KotlinMapKeyCodecs.keyCodec(mismatched) }
+    val malformed =
+      listOf(
+        jsonTypeRef<UByte>() to listOf("x", "-1", "256"),
+        jsonTypeRef<UShort>() to listOf("x", "-1", "65536"),
+        jsonTypeRef<UInt>() to listOf("x", "-1", "4294967296"),
+        jsonTypeRef<ULong>() to listOf("x", "-1", "18446744073709551616"),
+      )
+    for ((type, names) in malformed) {
+      val codec = KotlinMapKeyCodecs.keyCodec(type)!!
+      names.forEach { name -> assertFailsWith<ForyJsonException> { codec.fromName(name) } }
+    }
+
+    assertEscapedMapKey(
+      jsonTypeRef<Map<UByte, String>>(),
+      UByte.MAX_VALUE,
+      "255",
+      "256",
+    )
+    assertEscapedMapKey(
+      jsonTypeRef<Map<UShort, String>>(),
+      UShort.MAX_VALUE,
+      "65535",
+      "65536",
+    )
+    assertEscapedMapKey(
+      jsonTypeRef<Map<UInt, String>>(),
+      UInt.MAX_VALUE,
+      "4294967295",
+      "4294967296",
+    )
+    assertEscapedMapKey(
+      jsonTypeRef<Map<ULong, String>>(),
+      ULong.MAX_VALUE,
+      "18446744073709551615",
+      "18446744073709551616",
+    )
   }
 
   @Test

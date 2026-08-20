@@ -217,25 +217,18 @@ public final class JsonCodegen {
   private DirectInvocation[] writerInvocations(ObjectCodec<?> codec) {
     LinkedHashMap<String, DirectInvocation> invocations = new LinkedHashMap<>();
     for (JsonFieldInfo field : codec.writeFields()) {
-      Method getter = field.writeGetter();
-      if (getter != null && !DirectMethodCodegen.sourceNameable(getter)) {
-        addInvocation(invocations, DirectMethodCodegen.getterInvocation(getter));
+      addWriteInvocations(invocations, field);
+    }
+    JsonUnwrappedInfo unwrapped = codec.unwrappedInfo();
+    if (unwrapped != null) {
+      for (JsonFieldInfo field : unwrapped.writeFields()) {
+        addWriteInvocations(invocations, field);
       }
-      if (field.writeDirectUnboxedValueCodec() != null) {
-        addInvocation(
-            invocations,
-            DirectMethodCodegen.valueOperationInvocation(
-                field.writeDirectUnboxedValueCodec().writeCarrierMethod()));
-      } else if (field.writeTransparentUnboxedValueCodec() != null) {
-        for (Method method : field.writeTransparentUnboxedValueCodec().extractMethods()) {
-          addInvocation(invocations, DirectMethodCodegen.valueOperationInvocation(method));
-        }
-        UnboxedValueCodec terminal = field.writeTypeInfo().unboxedValueCodec();
-        if (terminal instanceof DirectUnboxedValueCodec) {
-          addInvocation(
-              invocations,
-              DirectMethodCodegen.valueOperationInvocation(
-                  ((DirectUnboxedValueCodec) terminal).writeCarrierMethod()));
+      for (JsonUnwrappedInfo.Group group : unwrapped.groups()) {
+        JsonFieldAccessor accessor = group.declaration().writeAccessor();
+        Method getter = accessor == null ? null : accessor.getter();
+        if (getter != null && !DirectMethodCodegen.sourceNameable(getter)) {
+          addInvocation(invocations, DirectMethodCodegen.getterInvocation(getter));
         }
       }
     }
@@ -248,23 +241,91 @@ public final class JsonCodegen {
     return invocations.values().toArray(new DirectInvocation[0]);
   }
 
+  private static void addWriteInvocations(
+      Map<String, DirectInvocation> invocations, JsonFieldInfo field) {
+    Method getter = field.writeGetter();
+    if (getter != null && !DirectMethodCodegen.sourceNameable(getter)) {
+      addInvocation(invocations, DirectMethodCodegen.getterInvocation(getter));
+    }
+    if (field.writeDirectUnboxedValueCodec() != null) {
+      addInvocation(
+          invocations,
+          DirectMethodCodegen.valueOperationInvocation(
+              field.writeDirectUnboxedValueCodec().writeCarrierMethod()));
+    } else if (field.writeTransparentUnboxedValueCodec() != null) {
+      for (Method method : field.writeTransparentUnboxedValueCodec().extractMethods()) {
+        addInvocation(invocations, DirectMethodCodegen.valueOperationInvocation(method));
+      }
+      UnboxedValueCodec terminal = field.writeTypeInfo().unboxedValueCodec();
+      if (terminal instanceof DirectUnboxedValueCodec) {
+        addInvocation(
+            invocations,
+            DirectMethodCodegen.valueOperationInvocation(
+                ((DirectUnboxedValueCodec) terminal).writeCarrierMethod()));
+      }
+    }
+  }
+
   private DirectInvocation[] readerInvocations(ObjectCodec<?> codec) {
     LinkedHashMap<String, DirectInvocation> invocations = new LinkedHashMap<>();
     for (JsonFieldInfo field : codec.readFields()) {
-      Method setter = field.readSetter();
-      if (setter != null && !DirectMethodCodegen.sourceNameable(setter)) {
-        addInvocation(invocations, DirectMethodCodegen.setterInvocation(setter));
-      }
-      addReadValueInvocations(
-          invocations,
-          field.readDirectUnboxedValueCodec(),
-          field.readTransparentUnboxedValueCodec());
+      addReadInvocations(invocations, field);
     }
     JsonCreatorInfo creator = codec.creatorInfo();
+    addCreatorInvocations(invocations, creator);
+    JsonUnwrappedInfo unwrapped = codec.unwrappedInfo();
+    if (unwrapped != null) {
+      for (JsonUnwrappedInfo.ReadRoute route : unwrapped.readRoutes()) {
+        JsonFieldInfo field = route.field();
+        if (field != null) {
+          addReadInvocations(invocations, field);
+        } else {
+          JsonCreatorFieldInfo creatorField = route.creatorField();
+          addReadValueInvocations(
+              invocations,
+              creatorField.directUnboxedValueCodec(),
+              creatorField.transparentUnboxedValueCodec());
+        }
+      }
+      for (JsonUnwrappedInfo.Group group : unwrapped.groups()) {
+        JsonFieldAccessor accessor = group.declaration().readAccessor();
+        Method setter = accessor == null ? null : accessor.setter();
+        if (setter != null && !DirectMethodCodegen.sourceNameable(setter)) {
+          addInvocation(invocations, DirectMethodCodegen.setterInvocation(setter));
+        }
+        if (group.declaration().readEnabled()) {
+          addCreatorInvocations(invocations, group.childCodec().creatorInfo());
+        }
+      }
+    }
+    AnyInfo any = codec.anyInfo();
+    if (any != null
+        && any.readSetter() != null
+        && !DirectMethodCodegen.sourceNameable(any.readSetter())) {
+      addInvocation(invocations, DirectMethodCodegen.anySetterInvocation(any.readSetter()));
+    }
+    return invocations.values().toArray(new DirectInvocation[0]);
+  }
+
+  private static void addReadInvocations(
+      Map<String, DirectInvocation> invocations, JsonFieldInfo field) {
+    Method setter = field.readSetter();
+    if (setter != null && !DirectMethodCodegen.sourceNameable(setter)) {
+      addInvocation(invocations, DirectMethodCodegen.setterInvocation(setter));
+    }
+    addReadValueInvocations(
+        invocations, field.readDirectUnboxedValueCodec(), field.readTransparentUnboxedValueCodec());
+  }
+
+  private static void addCreatorInvocations(
+      Map<String, DirectInvocation> invocations, JsonCreatorInfo creator) {
     if (creator != null && !creator.fixedInstance()) {
       for (JsonCreatorFieldInfo field : creator.fields()) {
         addReadValueInvocations(
             invocations, field.directUnboxedValueCodec(), field.transparentUnboxedValueCodec());
+      }
+      for (JsonFieldInfo field : creator.deferredFields()) {
+        addReadInvocations(invocations, field);
       }
       if (DirectMethodCodegen.requiresFullCreatorBridge(creator)) {
         addInvocation(invocations, DirectMethodCodegen.fullCreatorInvocation(creator));
@@ -273,7 +334,6 @@ public final class JsonCodegen {
         addInvocation(invocations, DirectMethodCodegen.defaultCreatorInvocation(creator));
       }
     }
-    return invocations.values().toArray(new DirectInvocation[0]);
   }
 
   private static void addReadValueInvocations(

@@ -34,8 +34,9 @@ import java.lang.annotation.Target;
  * The companion provides direct member access and creator invocation on the JVM and Android. The
  * Kotlin Symbol Processing (KSP) processor emits exact retention rules only; the installed Kotlin
  * module supplies the metadata-backed object model used by interpreted and generated execution.
- * GraalVM Native Image discovers this annotation directly and does not use annotation-processor
- * output.
+ * GraalVM Native Image discovers this annotation directly and does not require annotation-processor
+ * output. Hosted analysis snapshots a Java companion when one is available, but reflection
+ * reachability and hosted-generated capabilities remain sufficient without it.
  *
  * <p>A concrete Java subtype listed only by a class-literal {@link JsonSubTypes} entry receives
  * retention metadata but needs its own direct {@code JsonType} annotation to receive a Java

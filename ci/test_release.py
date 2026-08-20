@@ -83,8 +83,11 @@ class ScalaReleaseTest(unittest.TestCase):
             run_release_cmd.call_args_list,
         )
 
+    @mock.patch.object(release, "verify_kotlin_artifacts")
     @mock.patch.object(release, "_run_release_cmd")
-    def test_snapshot_has_no_signing_or_staging(self, run_release_cmd):
+    def test_snapshot_has_no_signing_or_staging(
+        self, run_release_cmd, verify_kotlin_artifacts
+    ):
         release._publish_java("snapshot")
         release._publish_kotlin("snapshot")
         release._publish_scala("snapshot")
@@ -92,11 +95,58 @@ class ScalaReleaseTest(unittest.TestCase):
         commands = [call.args[0] for call in run_release_cmd.call_args_list]
         self.assertIn("-Dgpg.skip=true", commands[0])
         self.assertIn("-Dgpg.skip=true", commands[1])
+        self.assertIn("-Dgpg.skip=true", commands[2])
         self.assertIn("-Psnapshot-publication", commands[0])
         self.assertIn("-Psnapshot-publication", commands[1])
+        self.assertIn("-Psnapshot-publication", commands[2])
         self.assertFalse(any("publishSigned" in command for command in commands))
         self.assertFalse(any("sonatypePrepare" in command for command in commands))
         self.assertFalse(any("sonatypeBundleUpload" in command for command in commands))
+        verify_kotlin_artifacts.assert_called_once_with()
+
+    @mock.patch.object(release, "verify_kotlin_artifacts")
+    @mock.patch.object(release, "_run_release_cmd")
+    def test_kotlin_verification_precedes_deploy(
+        self, run_release_cmd, verify_kotlin_artifacts
+    ):
+        for mode, package_command, deploy_command in (
+            (
+                "snapshot",
+                release.KOTLIN_SNAPSHOT_PACKAGE_CMD,
+                release.KOTLIN_SNAPSHOT_DEPLOY_CMD,
+            ),
+            (
+                "release",
+                release.KOTLIN_RELEASE_PACKAGE_CMD,
+                release.KOTLIN_RELEASE_DEPLOY_CMD,
+            ),
+        ):
+            with self.subTest(mode=mode):
+                events = []
+                run_release_cmd.side_effect = lambda command, _path: events.append(
+                    command
+                )
+                verify_kotlin_artifacts.side_effect = lambda: events.append("verify")
+
+                release._publish_kotlin(mode)
+
+                self.assertEqual(events, [package_command, "verify", deploy_command])
+
+    @mock.patch.object(
+        release,
+        "verify_kotlin_artifacts",
+        side_effect=RuntimeError("invalid artifacts"),
+    )
+    @mock.patch.object(release, "_run_release_cmd")
+    def test_kotlin_failure_blocks_deploy(
+        self, run_release_cmd, _verify_kotlin_artifacts
+    ):
+        with self.assertRaisesRegex(RuntimeError, "invalid artifacts"):
+            release._publish_kotlin("snapshot")
+
+        run_release_cmd.assert_called_once_with(
+            release.KOTLIN_SNAPSHOT_PACKAGE_CMD, "kotlin"
+        )
 
 
 class JvmPublicationTest(unittest.TestCase):
@@ -136,7 +186,6 @@ class JvmPublicationTest(unittest.TestCase):
         self.assertEqual("nexus-user", release.os.environ["SONATYPE_USERNAME"])
         self.assertEqual("nexus-password", release.os.environ["SONATYPE_PASSWORD"])
 
-    @mock.patch.object(release, "verify_kotlin_artifacts")
     @mock.patch.object(release, "_verify_fory_core_mr_jar")
     @mock.patch.object(release, "_publish_scala")
     @mock.patch.object(release, "_publish_kotlin")
@@ -151,7 +200,6 @@ class JvmPublicationTest(unittest.TestCase):
         publish_kotlin,
         publish_scala,
         verify_core,
-        verify_kotlin,
     ):
         release.publish_jvm(mode="snapshot")
 
@@ -160,7 +208,6 @@ class JvmPublicationTest(unittest.TestCase):
         publish_java.assert_called_once_with("snapshot")
         publish_kotlin.assert_called_once_with("snapshot")
         publish_scala.assert_called_once_with("snapshot")
-        verify_kotlin.assert_called_once_with()
         verify_core.assert_called_once_with()
 
 
@@ -215,6 +262,8 @@ class KotlinVersionTest(unittest.TestCase):
             ("kotlin/fory-json-kotlin", "README.md"),
             ("kotlin/fory-json-kotlin-ksp", "README.md"),
             ("docs/json", "kotlin.md"),
+            ("docs/json", "getting-started.md"),
+            ("docs/start", "kotlin.md"),
         }
         self.assertEqual(expected_paths, paths)
         self.assertEqual(len(expected_paths), len(bump_version.call_args_list))

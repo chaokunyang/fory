@@ -21,6 +21,7 @@ package org.apache.fory.json.codec;
 
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.JsonCodecFactory;
 import org.apache.fory.json.annotation.JsonSubTypes.Inclusion;
 import org.apache.fory.json.meta.JsonCreatorFieldInfo;
 import org.apache.fory.json.meta.JsonCreatorInfo;
@@ -54,7 +55,7 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
   private final Class<?> baseType;
   private final JsonSubTypesInfo definition;
   private final TypeRef<?> declaredType;
-  private final ObjectCodec<?>[] exactChildCodecs;
+  private final JsonCodecFactory childFactory;
   private final JsonTypeInfo[] children;
   private final ObjectCodec<Object>[] objectCodecs;
   private JsonFieldTable[] inlineReadTables;
@@ -76,32 +77,18 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
     this(baseType, definition, declaredType, null);
   }
 
-  /** Creates an unresolved dispatcher with exact resolver-local object codecs for its children. */
+  /** Creates an unresolved dispatcher with a cold default factory for its children. */
   @Internal
   public ClosedSubtypeCodec(
       Class<?> baseType,
       JsonSubTypesInfo definition,
       TypeRef<?> declaredType,
-      ObjectCodec<?>[] exactChildCodecs) {
+      JsonCodecFactory childFactory) {
     this.baseType = baseType;
     this.definition = definition;
     this.declaredType = declaredType;
+    this.childFactory = childFactory;
     children = new JsonTypeInfo[definition.classes.length];
-    if (exactChildCodecs != null) {
-      if (exactChildCodecs.length != children.length) {
-        throw new IllegalArgumentException("Exact subtype codec count does not match definition");
-      }
-      this.exactChildCodecs = exactChildCodecs.clone();
-      for (int i = 0; i < children.length; i++) {
-        ObjectCodec<?> codec = this.exactChildCodecs[i];
-        if (codec != null && codec.type() != definition.classes[i]) {
-          throw new IllegalArgumentException(
-              "Exact subtype codec does not own " + definition.classes[i].getName());
-        }
-      }
-    } else {
-      this.exactChildCodecs = null;
-    }
     objectCodecs =
         definition.inclusion == Inclusion.PROPERTY
             ? (ObjectCodec<Object>[]) new ObjectCodec<?>[children.length]
@@ -129,11 +116,7 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
       Class<?> subtype = definition.classes[i];
       TypeRef<?> childType = rootType.getSubtype(subtype);
       JsonTypeInfo child =
-          resolver.getSubtypeTypeInfo(
-              baseType,
-              childType,
-              declaredType != null,
-              exactChildCodecs == null ? null : exactChildCodecs[i]);
+          resolver.getSubtypeTypeInfo(baseType, childType, declaredType != null, childFactory);
       if (definition.inclusion == Inclusion.PROPERTY) {
         ObjectCodec<?> objectCodec = resolver.canonicalObjectCodec(child);
         if (objectCodec == null) {

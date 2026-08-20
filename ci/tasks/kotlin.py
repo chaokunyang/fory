@@ -33,16 +33,19 @@ CORPUS_PACKAGE = "org.apache.fory.integration.kotlin.json.corpus"
 CORPUS_RULE_MODELS = (
     "PlatformAccount",
     "PlatformAnnotated",
+    "PlatformBase64Owner",
     "PlatformBox",
     "PlatformBuiltins",
-    "PlatformCase",
-    "PlatformCaseManifest",
     "PlatformCircle",
     "PlatformCodecSlots",
+    "PlatformEndpointOwner",
     "PlatformEnvelope",
+    "PlatformFactoryModel",
     "PlatformGenericKey",
     "PlatformKotlinProfile",
     "PlatformMarker",
+    "PlatformMethodEndpointOwner",
+    "PlatformNamedSubtypeBase",
     "PlatformNode",
     "PlatformNullableText",
     "PlatformNulls",
@@ -65,6 +68,7 @@ CORPUS_MIXIN_TARGETS = {
     "PlatformCodecSlotsMixin": "PlatformCodecSlots",
     "PlatformJavaProfileMixin": "PlatformJavaProfile",
     "PlatformKotlinProfileMixin": "PlatformKotlinProfile",
+    "PlatformMixinRetention": "PlatformMixinRetentionTarget",
 }
 CORPUS_CODEC_TYPES = (
     "PlatformContentStringCodec",
@@ -73,6 +77,17 @@ CORPUS_CODEC_TYPES = (
     "PlatformMapValueStringCodec",
     "PlatformWholeStringCodec",
 )
+CORPUS_RULE_CONSTRUCTORS = {
+    "PlatformBase64Owner": ("org.apache.fory.json.codec.Base64ByteArrayCodec",),
+    "PlatformEndpointOwner": (
+        f"{CORPUS_PACKAGE}.PlatformDirectEndpointCodec",
+        f"{CORPUS_PACKAGE}.PlatformInheritedEndpointCodec",
+        f"{CORPUS_PACKAGE}.PlatformEndpointList",
+        f"{CORPUS_PACKAGE}.PlatformEndpointMap",
+    ),
+    "PlatformMethodEndpointOwner": (f"{CORPUS_PACKAGE}.PlatformDirectEndpointCodec",),
+    "PlatformFactoryModel": (f"{CORPUS_PACKAGE}.PlatformDirectEndpointCodec",),
+}
 PLATFORM_BUILTINS_PARAMETERS = (
     "kotlin.Pair,kotlin.Triple,byte,short,int,long,byte[],short[],int[],long[],"
     "java.util.Map,java.util.Map,java.util.Map,java.util.Map,long,long,long,long,long,"
@@ -100,7 +115,10 @@ def java_major_version():
 def install_java_json(include_jpms=False):
     """Install the Java artifacts consumed by Kotlin JSON modules."""
     modules = "fory-json,fory-annotation-processor"
-    test_option = "-Dmaven.test.skip=true"
+    major = java_major_version()
+    # JDK25+ activates multi-release verifiers whose test-owned main classes and source JAR inputs
+    # must exist even when this installation does not run tests.
+    test_option = "-DskipTests" if major >= 25 else "-Dmaven.test.skip=true"
     if include_jpms:
         modules = (
             "fory-json,fory-format,fory-test-core,fory-testsuite,"
@@ -108,11 +126,13 @@ def install_java_json(include_jpms=False):
         )
         # The JDK25 multi-release verifier is test-owned and must still compile.
         test_option = "-DskipTests"
+    install_options = [test_option, "-Dmaven.javadoc.skip=true"]
+    if major < 25:
+        install_options.append("-Dmaven.source.skip=true")
     common.cd_project_subdir("java")
     common.exec_cmd(
         "mvn -T16 --batch-mode --no-transfer-progress "
-        f"-pl {modules} -am install {test_option} "
-        "-Dmaven.javadoc.skip=true -Dmaven.source.skip=true"
+        f"-pl {modules} -am install {' '.join(install_options)}"
     )
 
 
@@ -157,9 +177,6 @@ def verify_corpus_artifact():
         expected_module = f"Automatic-Module-Name: {CORPUS_MODULE_NAME}"
         if expected_module not in manifest:
             raise RuntimeError(f"{jar_path} is missing {expected_module}")
-        case_manifest = f"{CORPUS_PACKAGE.replace('.', '/')}/cases.json"
-        if case_manifest not in names:
-            raise RuntimeError(f"{jar_path} is missing {case_manifest}")
         missing = sorted(expected_rules - names)
         if missing:
             raise RuntimeError(f"{jar_path} is missing consumer rules: {missing}")
@@ -186,7 +203,12 @@ def verify_corpus_artifact():
             f"META-INF/proguard/fory-json-mixin-{CORPUS_PACKAGE}.PlatformCodecSlotsMixin.pro",
         ):
             for codec in CORPUS_CODEC_TYPES:
-                _verify_codec_rule(jar, name, codec)
+                _verify_constructor_rule(jar, name, f"{CORPUS_PACKAGE}.{codec}")
+        for model, retained_types in CORPUS_RULE_CONSTRUCTORS.items():
+            name = f"META-INF/proguard/fory-json-{CORPUS_PACKAGE}.{model}.pro"
+            for retained_type in retained_types:
+                _verify_constructor_rule(jar, name, retained_type)
+        _verify_ksp_semantics(jar)
 
 
 def _verify_rule(jar, name, model):
@@ -198,16 +220,54 @@ def _verify_rule(jar, name, model):
         )
 
 
-def _verify_codec_rule(jar, name, codec):
+def _verify_constructor_rule(jar, name, retained_type):
     text = jar.read(name).decode("utf-8")
     lines = text.splitlines()
-    codec_type = f"{CORPUS_PACKAGE}.{codec}"
-    class_rule = f"-keep,allowoptimization,allowobfuscation class {codec_type}"
-    member_rule = f"-keepclassmembers class {codec_type} {{\n  public <init>();\n}}"
+    class_rule = f"-keep,allowoptimization,allowobfuscation class {retained_type}"
+    member_rule = f"-keepclassmembers class {retained_type} {{\n  public <init>();\n}}"
     if class_rule not in lines or member_rule not in text:
         raise RuntimeError(
-            f"{jar.filename}!/{name} does not retain the public constructor of {codec}"
+            f"{jar.filename}!/{name} does not retain the public constructor of {retained_type}"
         )
+
+
+def _verify_ksp_semantics(jar):
+    named = jar.read(
+        f"META-INF/proguard/fory-json-{CORPUS_PACKAGE}.PlatformNamedSubtypeBase.pro"
+    ).decode("utf-8")
+    subtype = f"-keep,allowoptimization class {CORPUS_PACKAGE}.PlatformNamedSubtype"
+    if subtype not in named.splitlines() or "java.lang.Void" in named:
+        raise RuntimeError("Named subtype retention rules are incomplete or stale")
+
+    mixin = jar.read(
+        f"META-INF/proguard/fory-json-mixin-{CORPUS_PACKAGE}.PlatformMixinRetention.pro"
+    ).decode("utf-8")
+    _verify_constructor_rule(
+        jar,
+        f"META-INF/proguard/fory-json-mixin-{CORPUS_PACKAGE}.PlatformMixinRetention.pro",
+        f"{CORPUS_PACKAGE}.PlatformReplacementTypeCodec",
+    )
+    if (
+        "PlatformOldTypeCodec" in mixin
+        or "PlatformRemovedSubtype" in mixin
+        or "PlatformUnrelatedEndpointCodec" in mixin
+    ):
+        raise RuntimeError(
+            "Non-effective Mixin annotations leaked into retention rules"
+        )
+
+    factory = jar.read(
+        f"META-INF/proguard/fory-json-{CORPUS_PACKAGE}.PlatformFactoryModel.pro"
+    ).decode("utf-8")
+    method = (
+        f"{CORPUS_PACKAGE}.PlatformFactoryModel create("
+        f"{CORPUS_PACKAGE}.PlatformDirectEndpoint);"
+    )
+    if (
+        method not in factory
+        or f"class {CORPUS_PACKAGE}.PlatformFactoryModel$Companion" not in factory
+    ):
+        raise RuntimeError("Factory retention rules are incomplete")
 
 
 def _verify_builtin_creator_rule(jar):

@@ -40,17 +40,19 @@ import org.apache.fory.reflect.TypeRef
 internal object KotlinValueClassCodecs {
   fun create(type: TypeRef<*>): CompositeJsonCodec<Any?> {
     val model = KotlinValueClassMetadata.inspect(type)
-    return create(model.shape, KotlinValueClassOperations.create(model))
+    val state = KotlinValueClassOperations.create(model)
+    return create(model.shape, state.operations, state.unboxed)
   }
 
   private fun create(
     shape: KotlinValueClassShape,
     operations: KotlinValueClassOperations,
+    unboxed: KotlinUnboxedValueClassOperations,
   ): CompositeJsonCodec<Any?> =
     when {
-      shape.outerNullable -> NullableOuterCodec(shape, operations)
-      shape.underlyingNullable -> NullableUnderlyingCodec(shape, operations)
-      else -> NonNullCodec(shape, operations)
+      shape.outerNullable -> NullableOuterCodec(shape, operations, unboxed)
+      shape.underlyingNullable -> NullableUnderlyingCodec(shape, operations, unboxed)
+      else -> NonNullCodec(shape, operations, unboxed)
     }
 
   fun createMap(type: TypeRef<*>, resolver: JsonTypeResolver): JsonValueCodec<*> {
@@ -61,7 +63,7 @@ internal object KotlinValueClassCodecs {
     val keyType = arguments[0]
     val keyCodec = mapKeyCodec(keyType, resolver)
     val valueInfo = resolver.getTypeInfo(arguments[1])
-    return MapCodec.create(type.rawType, keyType.rawType, valueInfo, keyCodec)
+    return MapCodec.createUncheckedKeyCodec(type.rawType, keyType.rawType, valueInfo, keyCodec)
   }
 
   fun mapKeyCodec(type: TypeRef<*>, resolver: JsonTypeResolver): MapKeyCodec {
@@ -72,7 +74,7 @@ internal object KotlinValueClassCodecs {
     resolver.checkMapKeySecure(shape.terminalType.rawType)
     return KotlinValueClassMapKeys.create(
       shape,
-      KotlinValueClassOperations.create(model),
+      KotlinValueClassOperations.createMapKey(model),
       terminalMapKey(shape.terminalType),
     )
   }
@@ -114,10 +116,10 @@ internal interface KotlinValueClassCapability {
 private abstract class KotlinValueClassCodec(
   protected val shape: KotlinValueClassShape,
   private val operations: KotlinValueClassOperations,
+  private val unboxedOperations: KotlinUnboxedValueClassOperations,
 ) : CompositeJsonCodec<Any?>, TransparentUnboxedValueCodec {
   private var capability: KotlinValueClassCapability = UnresolvedValueClassCapability
   private var terminalTypeInfo: JsonTypeInfo? = null
-  private val unboxedOperations: KotlinUnboxedValueClassOperations = operations.unboxedOperations()
 
   final override fun resolveTypes(type: TypeRef<*>, resolver: JsonTypeResolver) {
     if (type != shape.ownerType) {
@@ -184,7 +186,8 @@ private abstract class KotlinValueClassCodec(
 private class NullableOuterCodec(
   shape: KotlinValueClassShape,
   operations: KotlinValueClassOperations,
-) : KotlinValueClassCodec(shape, operations) {
+  unboxed: KotlinUnboxedValueClassOperations,
+) : KotlinValueClassCodec(shape, operations, unboxed) {
   override fun writeString(writer: StringJsonWriter, value: Any?) {
     if (value == null) writer.writeNull() else writeStringValue(writer, value)
   }
@@ -206,7 +209,8 @@ private class NullableOuterCodec(
 private class NullableUnderlyingCodec(
   shape: KotlinValueClassShape,
   operations: KotlinValueClassOperations,
-) : KotlinValueClassCodec(shape, operations), TransparentNullCodec {
+  unboxed: KotlinUnboxedValueClassOperations,
+) : KotlinValueClassCodec(shape, operations, unboxed), TransparentNullCodec {
   override fun writeString(writer: StringJsonWriter, value: Any?) =
     writeStringValue(writer, nonNull(value))
 
@@ -223,7 +227,8 @@ private class NullableUnderlyingCodec(
 private class NonNullCodec(
   shape: KotlinValueClassShape,
   operations: KotlinValueClassOperations,
-) : KotlinValueClassCodec(shape, operations) {
+  unboxed: KotlinUnboxedValueClassOperations,
+) : KotlinValueClassCodec(shape, operations, unboxed) {
   override fun writeString(writer: StringJsonWriter, value: Any?) =
     writeStringValue(writer, nonNull(value))
 
@@ -287,9 +292,11 @@ internal class GenericValueClassCapability(
 internal interface BoxedValueClassOperations {
   fun construct(reader: JsonReader, value: Any?): Any
 
-  fun constructUncharged(value: Any?): Any
-
   fun unbox(value: Any): Any?
+}
+
+internal interface UnchargedBoxedOperations : BoxedValueClassOperations {
+  fun constructUncharged(value: Any?): Any
 }
 
 internal fun boxedOperations(operations: KotlinValueClassOperations): BoxedValueClassOperations =
@@ -303,7 +310,6 @@ internal fun boxedOperations(operations: KotlinValueClassOperations): BoxedValue
     is KotlinFloatValueClassOperations<*> -> FloatBoxedOperations(operations.cast())
     is KotlinDoubleValueClassOperations<*> -> DoubleBoxedOperations(operations.cast())
     is KotlinCharValueClassOperations<*> -> CharBoxedOperations(operations.cast())
-    is KotlinReferenceValueClassOperations<*> -> ReferenceBoxedOperations(operations.cast())
     else ->
       throw ForyJsonException("Unknown Kotlin value-class operations ${operations.javaClass.name}")
   }
@@ -316,9 +322,6 @@ private class BooleanBoxedOperations(
   override fun construct(reader: JsonReader, value: Any?): Any =
     delegate.constructBoolean(reader, value as Boolean)
 
-  override fun constructUncharged(value: Any?): Any =
-    delegate.constructBooleanUncharged(value as Boolean)
-
   override fun unbox(value: Any): Any = delegate.unboxBoolean(value)
 }
 
@@ -327,9 +330,6 @@ private class ByteBoxedOperations(
 ) : BoxedValueClassOperations {
   override fun construct(reader: JsonReader, value: Any?): Any =
     delegate.constructByte(reader, (value as Number).toByte())
-
-  override fun constructUncharged(value: Any?): Any =
-    delegate.constructByteUncharged((value as Number).toByte())
 
   override fun unbox(value: Any): Any = delegate.unboxByte(value)
 }
@@ -340,9 +340,6 @@ private class ShortBoxedOperations(
   override fun construct(reader: JsonReader, value: Any?): Any =
     delegate.constructShort(reader, (value as Number).toShort())
 
-  override fun constructUncharged(value: Any?): Any =
-    delegate.constructShortUncharged((value as Number).toShort())
-
   override fun unbox(value: Any): Any = delegate.unboxShort(value)
 }
 
@@ -351,9 +348,6 @@ private class IntBoxedOperations(
 ) : BoxedValueClassOperations {
   override fun construct(reader: JsonReader, value: Any?): Any =
     delegate.constructInt(reader, (value as Number).toInt())
-
-  override fun constructUncharged(value: Any?): Any =
-    delegate.constructIntUncharged((value as Number).toInt())
 
   override fun unbox(value: Any): Any = delegate.unboxInt(value)
 }
@@ -364,9 +358,6 @@ private class LongBoxedOperations(
   override fun construct(reader: JsonReader, value: Any?): Any =
     delegate.constructLong(reader, (value as Number).toLong())
 
-  override fun constructUncharged(value: Any?): Any =
-    delegate.constructLongUncharged((value as Number).toLong())
-
   override fun unbox(value: Any): Any = delegate.unboxLong(value)
 }
 
@@ -375,9 +366,6 @@ private class FloatBoxedOperations(
 ) : BoxedValueClassOperations {
   override fun construct(reader: JsonReader, value: Any?): Any =
     delegate.constructFloat(reader, (value as Number).toFloat())
-
-  override fun constructUncharged(value: Any?): Any =
-    delegate.constructFloatUncharged((value as Number).toFloat())
 
   override fun unbox(value: Any): Any = delegate.unboxFloat(value)
 }
@@ -388,9 +376,6 @@ private class DoubleBoxedOperations(
   override fun construct(reader: JsonReader, value: Any?): Any =
     delegate.constructDouble(reader, (value as Number).toDouble())
 
-  override fun constructUncharged(value: Any?): Any =
-    delegate.constructDoubleUncharged((value as Number).toDouble())
-
   override fun unbox(value: Any): Any = delegate.unboxDouble(value)
 }
 
@@ -400,18 +385,5 @@ private class CharBoxedOperations(
   override fun construct(reader: JsonReader, value: Any?): Any =
     delegate.constructChar(reader, value as Char)
 
-  override fun constructUncharged(value: Any?): Any = delegate.constructCharUncharged(value as Char)
-
   override fun unbox(value: Any): Any = delegate.unboxChar(value)
-}
-
-private class ReferenceBoxedOperations(
-  private val delegate: KotlinReferenceValueClassOperations<Any>,
-) : BoxedValueClassOperations {
-  override fun construct(reader: JsonReader, value: Any?): Any =
-    delegate.constructValue(reader, value)
-
-  override fun constructUncharged(value: Any?): Any = delegate.constructValueUncharged(value)
-
-  override fun unbox(value: Any): Any? = delegate.unboxValue(value)
 }

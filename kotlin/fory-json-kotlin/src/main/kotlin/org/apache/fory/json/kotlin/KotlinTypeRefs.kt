@@ -29,6 +29,7 @@ import kotlin.reflect.typeOf
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.meta.TypeExtMeta
 import org.apache.fory.reflect.TypeRef
+import org.apache.fory.type.TypeUtils
 import org.apache.fory.type.Types
 
 /** Returns a structural Fory JSON type token which preserves Kotlin nullability and value types. */
@@ -69,7 +70,7 @@ internal object KotlinTypeRefs {
       }
     val actualRaw =
       if (component != null) {
-        ReflectArray.newInstance(KotlinMetadataTypes.box(component.rawType), 0).javaClass
+        ReflectArray.newInstance(TypeUtils.boxedType(component.rawType), 0).javaClass
       } else {
         raw
       }
@@ -95,7 +96,7 @@ internal object KotlinTypeRefs {
     TypeRef.of(type as Class<Any>, metadata)
 
   private fun carrier(type: Class<*>, boxed: Boolean): Class<*> =
-    if (!boxed || !type.isPrimitive) type else KotlinMetadataTypes.box(type)
+    if (!boxed || !type.isPrimitive) type else TypeUtils.boxedType(type)
 
   private fun typeMetadata(type: KClass<*>, nullable: Boolean, covariant: Boolean): TypeExtMeta =
     TypeExtMeta.of(semanticTypeId(type), nullable, false, false, covariant)

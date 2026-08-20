@@ -68,11 +68,15 @@ import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import org.apache.fory.json.codec.ArrayCodec;
+import org.apache.fory.json.codec.MapCodec;
+import org.apache.fory.json.codec.MapKeyCodec;
 import org.apache.fory.json.data.FastContainers;
 import org.apache.fory.json.data.Kind;
 import org.apache.fory.json.data.MapKeyFields;
 import org.apache.fory.json.data.Nested;
 import org.apache.fory.json.data.TokenValues;
+import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.type.Types;
 import org.testng.annotations.Factory;
@@ -90,6 +94,35 @@ public class JsonContainerTest extends ForyJsonTestModels {
     assertEquals(
         json.toJson(new Nested()),
         "{\"kind\":\"FAST\",\"names\":[\"a\",\"b\"],\"scores\":{\"one\":1,\"two\":2}}");
+  }
+
+  @Test
+  public void factoryOwnedMapKeyCodecIsDirect() {
+    ForyJson json = newJson();
+    JsonTypeInfo valueTypeInfo =
+        JsonTestSupport.currentTypeResolver(json).getTypeInfo(String.class, String.class);
+    MapKeyCodec keyCodec =
+        new MapKeyCodec() {
+          @Override
+          public String toName(Object key) {
+            return (String) key;
+          }
+
+          @Override
+          public Object fromName(String name) {
+            return name;
+          }
+
+          @Override
+          public Object readName(JsonReader reader) {
+            return reader.readFieldName();
+          }
+        };
+    MapCodec<?> codec =
+        MapCodec.createUncheckedKeyCodec(HashMap.class, Integer.class, valueTypeInfo, keyCodec);
+    Map<?, ?> value =
+        codec.readUtf8(newUtf8Reader("{\"direct\":\"value\"}".getBytes(StandardCharsets.UTF_8)));
+    assertEquals(value, Collections.singletonMap("direct", "value"));
   }
 
   @Test

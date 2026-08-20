@@ -43,7 +43,7 @@ internal object KotlinMapKeyCodecs {
     }
     resolver.checkMapKeySecure(keyType.rawType)
     val valueTypeInfo = resolver.getTypeInfo(arguments[1])
-    return MapCodec.create(type.rawType, keyClass(typeId), valueTypeInfo, keyCodec)
+    return MapCodec.createUncheckedKeyCodec(type.rawType, keyClass(typeId), valueTypeInfo, keyCodec)
   }
 
   /** Returns the terminal member-name codec for an exact boxed U* or primitive physical carrier. */
@@ -110,44 +110,31 @@ internal object KotlinMapKeyCodecs {
   private object UByteKeyCodec : MapKeyCodec {
     override fun toName(key: Any): String = (key as UByte).toString()
 
-    override fun fromName(name: String): Any =
-      name.toUByteOrNull() ?: throw ForyJsonException("Invalid UByte JSON map key")
+    override fun fromName(name: String): Any = KotlinMapKeyParsing.ubyte(name).toUByte()
 
     override fun writeName(writer: JsonWriter, key: Any) =
       writer.writeUnsignedIntFieldName((key as UByte).toInt())
 
-    override fun readName(reader: JsonReader): Any {
-      val value = reader.readFieldNameUnsignedInt()
-      if (Integer.compareUnsigned(value, UByte.MAX_VALUE.toInt()) > 0) {
-        throw ForyJsonException("UByte map-key overflow")
-      }
-      return value.toUByte()
-    }
+    override fun readName(reader: JsonReader): Any =
+      KotlinMapKeyParsing.checkedUByte(reader.readFieldNameUnsignedInt()).toUByte()
   }
 
   private object UShortKeyCodec : MapKeyCodec {
     override fun toName(key: Any): String = (key as UShort).toString()
 
-    override fun fromName(name: String): Any =
-      name.toUShortOrNull() ?: throw ForyJsonException("Invalid UShort JSON map key")
+    override fun fromName(name: String): Any = KotlinMapKeyParsing.ushort(name).toUShort()
 
     override fun writeName(writer: JsonWriter, key: Any) =
       writer.writeUnsignedIntFieldName((key as UShort).toInt())
 
-    override fun readName(reader: JsonReader): Any {
-      val value = reader.readFieldNameUnsignedInt()
-      if (Integer.compareUnsigned(value, UShort.MAX_VALUE.toInt()) > 0) {
-        throw ForyJsonException("UShort map-key overflow")
-      }
-      return value.toUShort()
-    }
+    override fun readName(reader: JsonReader): Any =
+      KotlinMapKeyParsing.checkedUShort(reader.readFieldNameUnsignedInt()).toUShort()
   }
 
   private object UIntKeyCodec : MapKeyCodec {
     override fun toName(key: Any): String = (key as UInt).toString()
 
-    override fun fromName(name: String): Any =
-      name.toUIntOrNull() ?: throw ForyJsonException("Invalid UInt JSON map key")
+    override fun fromName(name: String): Any = KotlinMapKeyParsing.uint(name).toUInt()
 
     override fun writeName(writer: JsonWriter, key: Any) =
       writer.writeUnsignedIntFieldName((key as UInt).toInt())
@@ -158,12 +145,43 @@ internal object KotlinMapKeyCodecs {
   private object ULongKeyCodec : MapKeyCodec {
     override fun toName(key: Any): String = (key as ULong).toString()
 
-    override fun fromName(name: String): Any =
-      name.toULongOrNull() ?: throw ForyJsonException("Invalid ULong JSON map key")
+    override fun fromName(name: String): Any = KotlinMapKeyParsing.ulong(name).toULong()
 
     override fun writeName(writer: JsonWriter, key: Any) =
       writer.writeUnsignedLongFieldName((key as ULong).toLong())
 
     override fun readName(reader: JsonReader): Any = reader.readFieldNameUnsignedLong().toULong()
   }
+}
+
+/** Shared lexical and width checks for Kotlin integral member names. */
+internal object KotlinMapKeyParsing {
+  fun byte(name: String): Byte = name.toByteOrNull() ?: invalid("Byte", name)
+
+  fun short(name: String): Short = name.toShortOrNull() ?: invalid("Short", name)
+
+  fun int(name: String): Int = name.toIntOrNull() ?: invalid("Int", name)
+
+  fun long(name: String): Long = name.toLongOrNull() ?: invalid("Long", name)
+
+  fun ubyte(name: String): Byte = name.toUByteOrNull()?.toByte() ?: invalid("UByte", name)
+
+  fun ushort(name: String): Short = name.toUShortOrNull()?.toShort() ?: invalid("UShort", name)
+
+  fun uint(name: String): Int = name.toUIntOrNull()?.toInt() ?: invalid("UInt", name)
+
+  fun ulong(name: String): Long = name.toULongOrNull()?.toLong() ?: invalid("ULong", name)
+
+  fun checkedUByte(value: Int): Byte {
+    if (Integer.compareUnsigned(value, UByte.MAX_VALUE.toInt()) > 0) invalid("UByte", value)
+    return value.toByte()
+  }
+
+  fun checkedUShort(value: Int): Short {
+    if (Integer.compareUnsigned(value, UShort.MAX_VALUE.toInt()) > 0) invalid("UShort", value)
+    return value.toShort()
+  }
+
+  private fun invalid(type: String, value: Any): Nothing =
+    throw ForyJsonException("Invalid $type JSON map key: $value")
 }

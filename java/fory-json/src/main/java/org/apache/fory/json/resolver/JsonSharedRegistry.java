@@ -673,16 +673,12 @@ public final class JsonSharedRegistry {
   private GeneratedJsonCodec<?> generatedCodec(TypeRef<?> type, boolean requireCompanion) {
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && !hostedCodegen) {
       Configuration configuration = nativeConfiguration();
-      GeneratedJsonCodec<?> codec = configuration == null ? null : configuration.sourceCodec(type);
-      if (codec == null && requireCompanion) {
-        Class<?> rawType = type.getRawType();
-        if (rawType.getDeclaredAnnotation(JsonType.class) != null) {
-          throw missingGeneratedCodec(rawType, mixinType(rawType), "JSON object model");
-        }
-      }
-      return codec;
+      // Native hosted analysis owns reflection reachability and generated capabilities. A Java
+      // annotation-processor companion is an optional faster operation source, not a prerequisite.
+      return configuration == null ? null : configuration.sourceCodec(type);
     }
-    GeneratedJsonCodec<?> codec = generatedCodec(type.getRawType(), requireCompanion);
+    GeneratedJsonCodec<?> codec =
+        generatedCodec(type.getRawType(), requireCompanion && !hostedCodegen);
     if (codec != null && hostedCodegen) {
       GeneratedJsonCodec<?> previous = generatedCodecCapabilities.putIfAbsent(type, codec);
       if (previous != null && previous != codec) {
@@ -993,22 +989,21 @@ public final class JsonSharedRegistry {
     if (creatorFactory != null && creatorFactory.isEmpty()) {
       throw invalidGeneratedCodec(type, "creator factory name must not be empty");
     }
-    // Non-Record language models can lower one logical creator to an accessibility/default bridge
-    // that has no public source-level executable with the generated logical carrier list. The
-    // resolver-local ObjectCodecBuilder owns validation once its exact language model is known.
-    if (!record) {
-      return null;
-    }
     Executable creator;
     if (creatorFactory == null) {
       Constructor<?> constructor;
       try {
         constructor = type.getDeclaredConstructor(creatorTypes);
       } catch (NoSuchMethodException e) {
+        if (!record) {
+          // A language object model may lower its logical creator to a different accessibility or
+          // default bridge. ObjectCodecBuilder validates that exact model once it is available.
+          return null;
+        }
         throw invalidGeneratedCodec(type, "creator constructor signature does not exist");
       }
-      if (!record) {
-        validateGeneratedExecutable(type, constructor);
+      if (!record && !validGeneratedExecutable(constructor)) {
+        return null;
       }
       creator = constructor;
     } else {
@@ -1016,7 +1011,13 @@ public final class JsonSharedRegistry {
       try {
         factory = type.getDeclaredMethod(creatorFactory, creatorTypes);
       } catch (NoSuchMethodException e) {
+        if (!record) {
+          return null;
+        }
         throw invalidGeneratedCodec(type, "creator factory signature does not exist");
+      }
+      if (!record && !validGeneratedExecutable(factory)) {
+        return null;
       }
       validateGeneratedExecutable(type, factory);
       if (!Modifier.isStatic(factory.getModifiers()) || factory.getReturnType() != type) {
@@ -1032,15 +1033,18 @@ public final class JsonSharedRegistry {
   }
 
   private static void validateGeneratedExecutable(Class<?> type, Executable creator) {
-    int modifiers = creator.getModifiers();
-    if (!Modifier.isPublic(modifiers)
-        || creator.isSynthetic()
-        || creator.isVarArgs()
-        || creator.getParameterCount() == 0
-        || creator.getTypeParameters().length != 0
-        || creator instanceof Method && ((Method) creator).isBridge()) {
+    if (!validGeneratedExecutable(creator)) {
       throw invalidGeneratedCodec(type, "creator executable has an invalid shape");
     }
+  }
+
+  private static boolean validGeneratedExecutable(Executable creator) {
+    return Modifier.isPublic(creator.getModifiers())
+        && !creator.isSynthetic()
+        && !creator.isVarArgs()
+        && creator.getParameterCount() != 0
+        && creator.getTypeParameters().length == 0
+        && (!(creator instanceof Method) || !((Method) creator).isBridge());
   }
 
   private static void validateGeneratedRecordAccessors(
@@ -1092,24 +1096,16 @@ public final class JsonSharedRegistry {
         + "_ForyJsonCodec";
   }
 
-  JsonValueCodec<?> createSubtypeCodec(
-      Class<?> rawType,
-      TypeRef<?> typeRef,
-      JsonTypeResolver localResolver,
-      ObjectCodec<?> selectedCodec) {
-    return createCodec(rawType, typeRef, localResolver, selectedCodec);
-  }
-
   public JsonValueCodec<?> createCodec(
       Class<?> rawType, TypeRef<?> typeRef, JsonTypeResolver localResolver) {
     return createCodec(rawType, typeRef, localResolver, null);
   }
 
-  private JsonValueCodec<?> createCodec(
+  JsonValueCodec<?> createCodec(
       Class<?> rawType,
       TypeRef<?> typeRef,
       JsonTypeResolver localResolver,
-      ObjectCodec<?> selectedCodec) {
+      JsonCodecFactory childFactory) {
     JsonValueCodec<?> customCodec = customCodec(rawType);
     if (customCodec != null) {
       return customCodec;
@@ -1118,8 +1114,16 @@ public final class JsonSharedRegistry {
     if (exactFactory != null) {
       return createExactCodec(rawType, typeRef, exactFactory, localResolver);
     }
-    if (selectedCodec != null) {
-      return selectedCodec;
+    if (childFactory != null) {
+      // A parent-derived subtype is only the default model. Exact application registration above
+      // must remain authoritative, including when the closed parent selected this child first.
+      JsonValueCodec<?> childCodec = childFactory.create(typeRef, localResolver);
+      if (!(childCodec instanceof ObjectCodec) || ((ObjectCodec<?>) childCodec).type() != rawType) {
+        throw new ForyJsonException(
+            "Closed JSON subtype factory did not create the exact ObjectCodec for "
+                + rawType.getName());
+      }
+      return childCodec;
     }
     if (typeRef.getTypeExtMeta() != null
         && (rawType == OptionalInt.class

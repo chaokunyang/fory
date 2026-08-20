@@ -31,7 +31,20 @@ import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonProperty;
+import org.apache.fory.json.codec.AbstractJsonValueCodec;
 import org.apache.fory.json.codec.JsonObjectModel;
+import org.apache.fory.json.codec.TransparentNullCodec;
+import org.apache.fory.json.codec.TransparentUnboxedValueCodec;
+import org.apache.fory.json.meta.JsonCreatorFieldInfo;
+import org.apache.fory.json.meta.JsonCreatorInfo;
+import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.reader.Latin1JsonReader;
+import org.apache.fory.json.reader.Utf16JsonReader;
+import org.apache.fory.json.reader.Utf8JsonReader;
+import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.json.writer.JsonWriter;
+import org.apache.fory.json.writer.StringJsonWriter;
+import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.reflect.TypeRef;
 import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
@@ -55,6 +68,29 @@ public class JsonCreatorTest extends ForyJsonTestModels {
         json.fromJson("{\"name\":\"你好\",\"id\":9}".getBytes(StandardCharsets.UTF_8), User.class);
     assertEquals(utf8.id, 9L);
     assertEquals(utf8.name, "你好");
+  }
+
+  @Test
+  public void deferredTransparentNullCarrierResolution() throws Exception {
+    ForyJson json =
+        newJsonBuilder()
+            .registerCodec(
+                NullCarrier.class,
+                (type, resolver) ->
+                    new DeferredNullCarrierCodec(resolver.getTypeInfo(String.class, String.class)))
+            .build();
+    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
+    JsonCreatorFieldInfo deferred =
+        new JsonCreatorFieldInfo(
+            "deferred", 1, TypeRef.of(NullCarrier.class), String.class, null, null, null, true);
+    JsonCreatorInfo creator =
+        new JsonCreatorInfo(
+            DeferredCarrierOwner.class,
+            DeferredCarrierOwner.class.getConstructor(String.class),
+            new JsonCreatorFieldInfo[] {deferred},
+            new Object[1],
+            null);
+    creator.resolveTypes(resolver);
   }
 
   @Test
@@ -596,6 +632,92 @@ public class JsonCreatorTest extends ForyJsonTestModels {
   }
 
   public static final class InvocationMarker {}
+
+  public static final class NullCarrier {}
+
+  public static final class DeferredCarrierOwner {
+    public DeferredCarrierOwner(String value) {}
+  }
+
+  private static final class DeferredNullCarrierCodec extends AbstractJsonValueCodec<NullCarrier>
+      implements TransparentUnboxedValueCodec, TransparentNullCodec {
+    private final org.apache.fory.json.resolver.JsonTypeInfo valueTypeInfo;
+
+    private DeferredNullCarrierCodec(org.apache.fory.json.resolver.JsonTypeInfo valueTypeInfo) {
+      this.valueTypeInfo = valueTypeInfo;
+    }
+
+    @Override
+    public org.apache.fory.json.resolver.JsonTypeInfo valueTypeInfo() {
+      return valueTypeInfo;
+    }
+
+    @Override
+    public Object constructCarrier(JsonReader reader, Object value) {
+      return value;
+    }
+
+    @Override
+    public Object extractValue(Object carrier) {
+      return carrier;
+    }
+
+    @Override
+    public Method[] constructMethods() {
+      return new Method[0];
+    }
+
+    @Override
+    public int[] constructBoxBytes() {
+      return new int[0];
+    }
+
+    @Override
+    public Method[] extractMethods() {
+      return new Method[0];
+    }
+
+    @Override
+    public void write(JsonWriter writer, NullCarrier value) {
+      writer.writeNull();
+    }
+
+    @Override
+    public NullCarrier read(JsonReader reader) {
+      reader.tryReadNull();
+      return new NullCarrier();
+    }
+
+    @Override
+    public Class<?> carrierType() {
+      return String.class;
+    }
+
+    @Override
+    public Object readLatin1Carrier(Latin1JsonReader reader) {
+      return null;
+    }
+
+    @Override
+    public Object readUtf16Carrier(Utf16JsonReader reader) {
+      return null;
+    }
+
+    @Override
+    public Object readUtf8Carrier(Utf8JsonReader reader) {
+      return null;
+    }
+
+    @Override
+    public void writeStringCarrier(StringJsonWriter writer, Object carrier) {
+      writer.writeNull();
+    }
+
+    @Override
+    public void writeUtf8Carrier(Utf8JsonWriter writer, Object carrier) {
+      writer.writeNull();
+    }
+  }
 
   public static final class LanguageInvocation {
     private final String output;

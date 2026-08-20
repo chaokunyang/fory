@@ -99,7 +99,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", required=True)
     parser.add_argument("--output-dir", required=True)
-    return parser.parse_args()
+    parser.add_argument("--revision-samples")
+    parser.add_argument("--revision-summary")
+    args = parser.parse_args()
+    if bool(args.revision_samples) != bool(args.revision_summary):
+        parser.error(
+            "--revision-samples and --revision-summary must be supplied together"
+        )
+    return args
 
 
 def read_samples(path: Path) -> list[dict[str, str]]:
@@ -181,6 +188,28 @@ def median_mad(values: Iterable[float]) -> Aggregate:
     median = statistics.median(samples)
     mad = statistics.median(abs(value - median) for value in samples)
     return Aggregate(median, mad, len(samples))
+
+
+def read_revision_summary(path: Path) -> dict[str, dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as source:
+        rows = list(csv.DictReader(source))
+    by_operation = {}
+    for row in rows:
+        operation = row.get("operation", "")
+        if operation not in OPERATIONS or operation in by_operation:
+            raise ValueError(f"Unexpected revision summary operation: {operation}")
+        ratio = float(row.get("median_current_comparison_ratio", ""))
+        mad = float(row.get("mad", ""))
+        paired_rounds = int(row.get("paired_rounds", ""))
+        if not math.isfinite(ratio) or ratio <= 0:
+            raise ValueError(f"Invalid revision ratio for {operation}: {ratio}")
+        if not math.isfinite(mad) or mad < 0 or paired_rounds <= 0:
+            raise ValueError(f"Invalid revision summary for {operation}")
+        by_operation[operation] = row
+    missing = [operation for operation in OPERATIONS if operation not in by_operation]
+    if missing:
+        raise ValueError("Missing revision summary operations: " + ", ".join(missing))
+    return by_operation
 
 
 def aggregate_absolute(
@@ -343,6 +372,7 @@ def render_report(
     ratios: Mapping[tuple[str, str], Aggregate],
     excluded_count: int,
     output: Path,
+    revision_summary: Mapping[str, Mapping[str, str]] | None = None,
 ) -> None:
     lines = [
         "# Kotlin JSON Benchmark Report\n\n",
@@ -408,12 +438,41 @@ def render_report(
                 f"{result.mad:.3f} | {percent(result.median)} | {result.count} |\n"
             )
         lines.append("\n")
+    if revision_summary is not None:
+        lines.extend(
+            [
+                "## Fory revision comparison\n\n",
+                "These ratios use adjacent current/comparison Fory launches with the same benchmark "
+                "surface. Values above 1 mean the current revision had higher throughput.\n\n",
+                "| Operation | Median current/comparison ratio | MAD | Paired rounds |\n",
+                "| --- | ---: | ---: | ---: |\n",
+            ]
+        )
+        for operation in OPERATIONS:
+            row = revision_summary[operation]
+            lines.append(
+                f"| {operation.replace('_', ' ').title()} | "
+                f"{float(row['median_current_comparison_ratio']):.3f}× | "
+                f"{float(row['mad']):.3f} | {int(row['paired_rounds'])} |\n"
+            )
+        lines.append("\n")
+    lines.append("## Raw data\n\n")
     lines.extend(
         [
-            "## Raw data\n\n",
             "- [Per-launch JMH samples](data/jmh_samples.csv)\n",
-            "- [Absolute and paired aggregates](data/summary.csv)\n\n",
-            "The local run directory retains the JMH JSON and process logs referenced by the raw "
+            "- [Absolute and paired aggregates](data/summary.csv)\n",
+        ]
+    )
+    if revision_summary is not None:
+        lines.extend(
+            [
+                "- [Per-launch Fory revision samples](data/revision_samples.csv)\n",
+                "- [Fory revision ratios](data/revision_summary.csv)\n",
+            ]
+        )
+    lines.extend(
+        [
+            "\nThe local run directory retains the JMH JSON and process logs referenced by the raw "
             "rows. Checked-in results are evidence for the recorded environment, not a guarantee "
             "for another workload or machine.\n",
         ]
@@ -422,7 +481,14 @@ def render_report(
     format_markdown_with_prettier(output)
 
 
-def generate(samples: Path, output_dir: Path) -> None:
+def generate(
+    samples: Path,
+    output_dir: Path,
+    revision_samples: Path | None = None,
+    revision_summary_path: Path | None = None,
+) -> None:
+    if (revision_samples is None) != (revision_summary_path is None):
+        raise ValueError("Revision samples and summary must be supplied together")
     rows = read_samples(samples)
     included = included_samples(rows)
     metadata = validate_settings(included)
@@ -434,6 +500,13 @@ def generate(samples: Path, output_dir: Path) -> None:
     published_samples = data_dir / "jmh_samples.csv"
     published_samples.write_bytes(samples.read_bytes())
     write_summary(absolute, ratios, data_dir / "summary.csv")
+    revision_summary = None
+    if revision_samples is not None and revision_summary_path is not None:
+        revision_summary = read_revision_summary(revision_summary_path)
+        (data_dir / "revision_samples.csv").write_bytes(revision_samples.read_bytes())
+        (data_dir / "revision_summary.csv").write_bytes(
+            revision_summary_path.read_bytes()
+        )
     for operation in OPERATIONS:
         render_chart(operation, absolute, output_dir / CHART_NAMES[operation])
     render_report(
@@ -442,12 +515,18 @@ def generate(samples: Path, output_dir: Path) -> None:
         ratios,
         len(rows) - len(included),
         output_dir / "README.md",
+        revision_summary,
     )
 
 
 def main() -> None:
     args = parse_args()
-    generate(Path(args.samples), Path(args.output_dir))
+    generate(
+        Path(args.samples),
+        Path(args.output_dir),
+        Path(args.revision_samples) if args.revision_samples else None,
+        Path(args.revision_summary) if args.revision_summary else None,
+    )
 
 
 if __name__ == "__main__":

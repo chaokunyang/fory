@@ -501,15 +501,33 @@ public class JaninoUtils {
 
   private static String typeDescriptor(Class<?> type) {
     if (type.isPrimitive()) {
-      if (type == void.class) return "V";
-      if (type == boolean.class) return "Z";
-      if (type == byte.class) return "B";
-      if (type == char.class) return "C";
-      if (type == short.class) return "S";
-      if (type == int.class) return "I";
-      if (type == long.class) return "J";
-      if (type == float.class) return "F";
-      if (type == double.class) return "D";
+      if (type == void.class) {
+        return "V";
+      }
+      if (type == boolean.class) {
+        return "Z";
+      }
+      if (type == byte.class) {
+        return "B";
+      }
+      if (type == char.class) {
+        return "C";
+      }
+      if (type == short.class) {
+        return "S";
+      }
+      if (type == int.class) {
+        return "I";
+      }
+      if (type == long.class) {
+        return "J";
+      }
+      if (type == float.class) {
+        return "F";
+      }
+      if (type == double.class) {
+        return "D";
+      }
       throw new AssertionError(type);
     }
     if (type.isArray()) {

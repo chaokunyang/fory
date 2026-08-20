@@ -217,6 +217,13 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
     return genericMapCodec(factory, defaultKeyCodec(keyRawType), valueTypeInfo);
   }
 
+  /** Creates a map for an exact factory-owned key codec whose result type is already validated. */
+  @Internal
+  public static MapCodec<?> createUncheckedKeyCodec(
+      Class<?> rawType, Class<?> keyRawType, JsonTypeInfo valueTypeInfo, MapKeyCodec keyCodec) {
+    return genericMapCodec(mapFactory(rawType, keyRawType), keyCodec, valueTypeInfo);
+  }
+
   private static GenericMapCodec genericMapCodec(
       MapFactory factory, MapKeyCodec keyCodec, JsonTypeInfo valueTypeInfo) {
     return valueTypeInfo.rejectsNull()

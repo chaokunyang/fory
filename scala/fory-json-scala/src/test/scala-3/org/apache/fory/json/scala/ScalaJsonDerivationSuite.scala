@@ -35,6 +35,12 @@ enum Result derives ScalaJsonCodec {
   case Pending
 }
 
+enum StatefulResult derives ScalaJsonCodec {
+  case Item(value: () => Int)
+}
+
+final case class StatefulEnvelope(value: StatefulResult)
+
 enum ExternalResult {
   case Ok(value: String)
   case Error(code: Int)
@@ -73,6 +79,31 @@ final class PendingFactory extends JsonCodecFactory {
     if (first.getAndSet(false))
       throw new ForyJsonException("First child resolution fails")
     new PendingCodec
+  }
+}
+
+final class StatefulCodec extends AbstractJsonValueCodec[StatefulResult] {
+  override def write(writer: JsonWriter, value: StatefulResult): Unit = {
+    value match {
+      case StatefulResult.Item(state) => writer.writeInt(state())
+    }
+  }
+
+  override def read(reader: JsonReader): StatefulResult = {
+    val state = reader.readInt()
+    StatefulResult.Item(() => state)
+  }
+}
+
+final class StatefulFactory extends JsonCodecFactory {
+  private val first = new AtomicBoolean(true)
+
+  override def factoryKey(): String = getClass.getName
+
+  override def create(typeRef: TypeRef[_], resolver: JsonTypeResolver): JsonValueCodec[_] = {
+    if (first.getAndSet(false))
+      throw new ForyJsonException("First stateful child resolution fails")
+    new StatefulCodec
   }
 }
 
@@ -130,6 +161,44 @@ class ScalaJsonDerivationSuite extends AnyFunSuite {
       json.fromJson("{\"Pending\":\"pending\"}", classOf[Result])
     )
     assert(json.fromJson("{\"Pending\":\"pending\"}", classOf[Result]) eq Result.Pending)
+  }
+
+  test("derived stateful child uses exact codec") {
+    val item = StatefulResult.Item(() => 7)
+    val itemClass = item.getClass.asInstanceOf[Class[StatefulResult]]
+    val unsupported = ForyJsonScala.builder().withCodegen(false).build()
+    assertThrows[ForyJsonException](
+      unsupported.toJson(item, classOf[StatefulResult])
+    )
+
+    val json = ForyJsonScala
+      .builder()
+      .registerCodec(itemClass, new StatefulCodec)
+      .withCodegen(false)
+      .build()
+    assert(json.toJson(item, itemClass) == "7")
+    assert(statefulValue(json.fromJson("7", itemClass)) == 7)
+    assert(json.toJson(item, classOf[StatefulResult]) == "{\"Item\":7}")
+    assert(statefulValue(json.fromJson("{\"Item\":7}", classOf[StatefulResult])) == 7)
+    val envelope = StatefulEnvelope(item)
+    assert(
+      statefulValue(json.fromJson(json.toJson(envelope), classOf[StatefulEnvelope]).value) == 7
+    )
+
+    val retry = ForyJsonScala
+      .builder()
+      .registerCodec(itemClass, new StatefulFactory)
+      .withCodegen(false)
+      .withConcurrencyLevel(1)
+      .build()
+    assertThrows[ForyJsonException](
+      retry.fromJson("{\"Item\":7}", classOf[StatefulResult])
+    )
+    assert(statefulValue(retry.fromJson("{\"Item\":7}", classOf[StatefulResult])) == 7)
+  }
+
+  private def statefulValue(value: StatefulResult): Int = value match {
+    case StatefulResult.Item(state) => state()
   }
 
   test("third-party enum uses builder registration") {

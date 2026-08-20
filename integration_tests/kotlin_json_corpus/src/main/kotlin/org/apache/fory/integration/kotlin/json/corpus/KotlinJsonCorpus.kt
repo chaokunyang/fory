@@ -20,7 +20,6 @@
 package org.apache.fory.integration.kotlin.json.corpus
 
 import java.nio.charset.StandardCharsets
-import org.apache.fory.json.ForyJson
 import org.apache.fory.json.kotlin.jsonTypeRef
 import org.apache.fory.reflect.TypeRef
 
@@ -31,8 +30,6 @@ public object KotlinJsonCorpus {
   @JvmStatic public fun accountType(): TypeRef<PlatformAccount> = jsonTypeRef()
 
   @JvmStatic public fun envelopeType(): TypeRef<PlatformEnvelope> = jsonTypeRef()
-
-  @JvmStatic public fun envelopeValue(): PlatformEnvelope = platformRootValue().envelope
 
   @JvmStatic public fun boxType(): TypeRef<PlatformBox<String>> = jsonTypeRef()
 
@@ -46,10 +43,6 @@ public object KotlinJsonCorpus {
 
   @JvmStatic public fun tokenType(): TypeRef<PlatformToken> = jsonTypeRef()
 
-  @JvmStatic public fun builtinsType(): TypeRef<PlatformBuiltins> = jsonTypeRef()
-
-  @JvmStatic public fun valueHolderType(): TypeRef<PlatformValueHolder> = jsonTypeRef()
-
   @JvmStatic public fun propertyShapeType(): TypeRef<PlatformPropertyShape> = jsonTypeRef()
 
   @JvmStatic public fun wrappedShapeType(): TypeRef<PlatformWrappedShape> = jsonTypeRef()
@@ -57,17 +50,11 @@ public object KotlinJsonCorpus {
   @JvmStatic
   public fun invalidPropertyShapeType(): TypeRef<PlatformInvalidPropertyShape> = jsonTypeRef()
 
-  @JvmStatic public fun manifestType(): TypeRef<PlatformCaseManifest> = jsonTypeRef()
-
   @JvmStatic public fun nullableUnitType(): TypeRef<Unit?> = jsonTypeRef()
 
   @JvmStatic public fun nullableNothingType(): TypeRef<Nothing?> = jsonTypeRef()
 
   @JvmStatic public fun caseJson(id: String): String = resourceText("cases/$id.json")
-
-  @JvmStatic
-  public fun manifest(json: ForyJson): PlatformCaseManifest =
-    json.fromJson(resourceText("cases.json"), manifestType())
 
   private fun resourceText(path: String): String {
     val stream =

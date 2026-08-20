@@ -32,11 +32,19 @@ java -version
 
 ## Object Serialization
 
-Add the Fory Kotlin library to the application module:
+The repositories below resolve release coordinates from Maven Central and `-SNAPSHOT` coordinates
+from the Apache snapshot repository. Keep every Fory module on the same version:
 
 ```kotlin title="build.gradle.kts"
+repositories {
+  maven("https://repository.apache.org/snapshots/") {
+    mavenContent { snapshotsOnly() }
+  }
+  mavenCentral()
+}
+
 dependencies {
-  implementation("org.apache.fory:fory-kotlin:1.6.1")
+  implementation("org.apache.fory:fory-kotlin:1.7.0-SNAPSHOT")
 }
 ```
 

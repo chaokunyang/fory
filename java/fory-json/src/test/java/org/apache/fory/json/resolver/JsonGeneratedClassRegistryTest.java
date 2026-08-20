@@ -22,6 +22,7 @@ package org.apache.fory.json.resolver;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotEquals;
 import static org.testng.Assert.assertSame;
+import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.expectThrows;
 
 import java.util.Collections;
@@ -30,6 +31,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.apache.fory.json.annotation.JsonCreator;
+import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
 import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.meta.TypeExtMeta;
@@ -59,10 +62,13 @@ public class JsonGeneratedClassRegistryTest {
     TypeRef<?> type = TypeRef.of(String.class);
     Map<TypeRef<?>, GeneratedJsonCodec<?>> codecs = new HashMap<>();
     Set<Class<?>> added = new LinkedHashSet<>();
+    SourceCodec first = new SourceCodec();
+    SourceCodec second = new SourceCodec();
     JsonGeneratedClassRegistry.mergeSourceCodecs(
-        Collections.singletonMap(type, new SourceCodec()), codecs, added);
+        Collections.singletonMap(type, first), codecs, added);
     JsonGeneratedClassRegistry.mergeSourceCodecs(
-        Collections.singletonMap(type, new SourceCodec()), codecs, added);
+        Collections.singletonMap(type, second), codecs, added);
+    assertSame(codecs.get(type), first);
     assertEquals(codecs.get(type).getClass(), SourceCodec.class);
     assertEquals(added, Collections.singleton(SourceCodec.class));
     expectThrows(
@@ -70,6 +76,13 @@ public class JsonGeneratedClassRegistryTest {
         () ->
             JsonGeneratedClassRegistry.mergeSourceCodecs(
                 Collections.singletonMap(type, new OtherSourceCodec()), codecs, added));
+  }
+
+  @Test
+  public void validateGeneratedNonRecordCreator() throws Exception {
+    CreatorCodec codec = new CreatorCodec();
+    JsonSharedRegistry.validateGeneratedCodec(CreatorValue.class, codec);
+    assertTrue(codec.matchesCreator(CreatorValue.class.getConstructor(String.class)));
   }
 
   @Test
@@ -125,4 +138,40 @@ public class JsonGeneratedClassRegistryTest {
   }
 
   private static final class OtherSourceCodec extends SourceCodec {}
+
+  public static final class CreatorValue {
+    @JsonValue public final String value;
+
+    @JsonCreator
+    public CreatorValue(String value) {
+      this.value = value;
+    }
+  }
+
+  private static final class CreatorCodec extends GeneratedJsonCodec<CreatorValue> {
+    @Override
+    public Class<CreatorValue> type() {
+      return CreatorValue.class;
+    }
+
+    @Override
+    public JsonFieldAccessor[] fieldAccessors() {
+      return new JsonFieldAccessor[0];
+    }
+
+    @Override
+    public String[] creatorParameterNames() {
+      return new String[] {"value"};
+    }
+
+    @Override
+    public Class<?>[] creatorParameterTypes() {
+      return new Class<?>[] {String.class};
+    }
+
+    @Override
+    public CreatorValue newInstance(Object[] arguments) {
+      return new CreatorValue((String) arguments[0]);
+    }
+  }
 }

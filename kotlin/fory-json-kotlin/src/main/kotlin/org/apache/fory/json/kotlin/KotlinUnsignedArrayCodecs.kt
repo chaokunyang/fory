@@ -27,7 +27,6 @@ import org.apache.fory.json.reader.Utf16JsonReader
 import org.apache.fory.json.reader.Utf8JsonReader
 import org.apache.fory.json.writer.StringJsonWriter
 import org.apache.fory.json.writer.Utf8JsonWriter
-import org.apache.fory.reflect.TypeRef
 import org.apache.fory.serializer.GraphMemoryEstimates
 import org.apache.fory.type.Types
 
@@ -41,25 +40,24 @@ import org.apache.fory.type.Types
  */
 @OptIn(ExperimentalUnsignedTypes::class)
 internal object KotlinUnsignedArrayCodecs {
-  fun create(type: TypeRef<*>): JsonValueCodec<*>? {
-    val typeId = type.typeExtMeta?.typeId() ?: Types.UNKNOWN
-    val codec =
-      when {
-        type.rawType == UByteArray::class.java && typeId == Types.UINT8_ARRAY -> UByteArrayCodec
-        type.rawType == UShortArray::class.java && typeId == Types.UINT16_ARRAY -> UShortArrayCodec
-        type.rawType == UIntArray::class.java && typeId == Types.UINT32_ARRAY -> UIntArrayCodec
-        type.rawType == ULongArray::class.java && typeId == Types.UINT64_ARRAY -> ULongArrayCodec
-        else -> null
-      }
-    if (
-      codec == null &&
-        (type.rawType == UByteArray::class.java ||
-          type.rawType == UShortArray::class.java ||
-          type.rawType == UIntArray::class.java ||
-          type.rawType == ULongArray::class.java)
-    ) {
+  fun create(rawType: Class<*>, typeId: Int): JsonValueCodec<*>? =
+    when (rawType) {
+      UByteArray::class.java -> requireType(rawType, typeId, Types.UINT8_ARRAY, UByteArrayCodec)
+      UShortArray::class.java -> requireType(rawType, typeId, Types.UINT16_ARRAY, UShortArrayCodec)
+      UIntArray::class.java -> requireType(rawType, typeId, Types.UINT32_ARRAY, UIntArrayCodec)
+      ULongArray::class.java -> requireType(rawType, typeId, Types.UINT64_ARRAY, ULongArrayCodec)
+      else -> null
+    }
+
+  private fun requireType(
+    rawType: Class<*>,
+    actual: Int,
+    expected: Int,
+    codec: JsonValueCodec<*>,
+  ): JsonValueCodec<*> {
+    if (actual != expected) {
       throw ForyJsonException(
-        "Kotlin unsigned-array carrier ${type.rawType.name} does not match semantic type id $typeId",
+        "Kotlin unsigned-array carrier ${rawType.name} does not match semantic type id $actual",
       )
     }
     return codec

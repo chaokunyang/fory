@@ -11,6 +11,13 @@ plugins {
   id("com.google.devtools.ksp") version "2.3.8"
 }
 
+repositories {
+  maven("https://repository.apache.org/snapshots/") {
+    mavenContent { snapshotsOnly() }
+  }
+  mavenCentral()
+}
+
 dependencies {
   implementation("org.apache.fory:fory-json-kotlin:1.7.0-SNAPSHOT")
   ksp("org.apache.fory:fory-json-kotlin-ksp:1.7.0-SNAPSHOT")

@@ -148,6 +148,19 @@ final class DirectMethodCodegen {
         1);
   }
 
+  static DirectInvocation anySetterInvocation(Method setter) {
+    Class<?>[] targetParameters = setter.getParameterTypes();
+    Class<?>[] bridgeParameters = new Class<?>[targetParameters.length + 1];
+    bridgeParameters[0] = setter.getDeclaringClass();
+    System.arraycopy(targetParameters, 0, bridgeParameters, 1, targetParameters.length);
+    int[] arguments = new int[targetParameters.length];
+    for (int i = 0; i < arguments.length; i++) {
+      arguments[i] = i + 1;
+    }
+    return DirectInvocation.method(
+        setterName(setter), void.class, bridgeParameters, setter, 0, arguments);
+  }
+
   static DirectInvocation valueOperationInvocation(Method method) {
     Class<?>[] targetParameters = method.getParameterTypes();
     if (Modifier.isStatic(method.getModifiers())) {

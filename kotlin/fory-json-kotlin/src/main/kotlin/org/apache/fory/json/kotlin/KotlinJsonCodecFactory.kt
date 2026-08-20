@@ -34,12 +34,7 @@ internal object KotlinJsonCodecFactory : JsonCodecFactory {
   override fun create(type: TypeRef<*>, resolver: JsonTypeResolver): JsonValueCodec<*>? {
     val rawType = type.rawType
     val semanticId = type.typeExtMeta?.typeId() ?: 0
-    if (
-      semanticId in Types.UINT8..Types.UINT64 &&
-        semanticId != Types.VAR_UINT32 &&
-        semanticId != Types.VAR_UINT64 &&
-        semanticId != Types.TAGGED_UINT64
-    ) {
+    if (semanticId in Types.UINT8..Types.UINT64 && semanticId != Types.VAR_UINT32) {
       return KotlinUnsignedCodecs.scalar(
         semanticId,
         !rawType.isPrimitive,
@@ -47,7 +42,7 @@ internal object KotlinJsonCodecFactory : JsonCodecFactory {
       )
     }
     if (semanticId in Types.UINT8_ARRAY..Types.UINT64_ARRAY) {
-      KotlinUnsignedArrayCodecs.create(type)?.let {
+      KotlinUnsignedArrayCodecs.create(rawType, semanticId)?.let {
         return it
       }
       return ArrayCodec.createUnsignedPrimitive(rawType, semanticId)

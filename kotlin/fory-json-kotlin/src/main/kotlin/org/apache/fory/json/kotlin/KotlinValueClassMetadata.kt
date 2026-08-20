@@ -34,6 +34,7 @@ import kotlin.metadata.visibility
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.reflect.TypeRef
 import org.apache.fory.serializer.GraphMemoryEstimates
+import org.apache.fory.type.TypeUtils
 
 /** Immutable cold metadata for one exact, possibly nested, value-class occurrence. */
 internal class KotlinValueClassShape(
@@ -48,7 +49,7 @@ internal class KotlinValueClassShape(
   val underlyingNullable: Boolean = nullable(layers.first().underlyingType)
 
   init {
-    if (layers.isEmpty() || layers.first().occurrenceType != ownerType) {
+    if (layers.first().occurrenceType != ownerType) {
       throw ForyJsonException("Invalid Kotlin value-class layer sequence for $ownerType")
     }
     if (outerNullable && underlyingNullable) {
@@ -98,7 +99,7 @@ internal class KotlinValueClassShape(
           if (layer.carrierClass != terminalClass) {
             invalidLayer(layer, "primitive carrier does not match the terminal type")
           }
-        } else if (!layer.carrierClass.isAssignableFrom(KotlinMetadataTypes.box(terminalClass))) {
+        } else if (!layer.carrierClass.isAssignableFrom(TypeUtils.boxedType(terminalClass))) {
           invalidLayer(layer, "reference carrier does not accept the terminal type")
         }
       }
@@ -128,11 +129,7 @@ internal class KotlinReflectiveValueClass(
   val boxes: List<Method>,
   val unboxes: List<Method>,
 ) {
-  val carrierConstructMethods: Array<Method>
-  val carrierConstructBoxBytes: IntArray
-  val carrierExtractMethods: Array<Method>
-
-  init {
+  fun carrierMethods(): KotlinCarrierMethods {
     // A lowered parent already stores the outer carrier. Generated code must run every
     // constructor-impl but materialize only inner wrappers required by the next layer's JVM ABI;
     // the reverse list likewise omits the outer unbox-impl.
@@ -152,18 +149,25 @@ internal class KotlinReflectiveValueClass(
       constructMethods += constructors[index]
       constructBytes += 0
     }
-    carrierConstructMethods = constructMethods.toTypedArray()
-    carrierConstructBoxBytes = constructBytes.toIntArray()
-
     val extractMethods = ArrayList<Method>(shape.layers.size - 1)
     for (innerIndex in 1 until shape.layers.size) {
       if (shape.layers[innerIndex - 1].carrierClass == shape.layers[innerIndex].ownerClass) {
         extractMethods += unboxes[innerIndex]
       }
     }
-    carrierExtractMethods = extractMethods.toTypedArray()
+    return KotlinCarrierMethods(
+      constructMethods.toTypedArray(),
+      constructBytes.toIntArray(),
+      extractMethods.toTypedArray(),
+    )
   }
 }
+
+internal class KotlinCarrierMethods(
+  val construct: Array<Method>,
+  val boxBytes: IntArray,
+  val extract: Array<Method>,
+)
 
 private class ReflectedLayer(
   val shape: KotlinValueClassLayer,

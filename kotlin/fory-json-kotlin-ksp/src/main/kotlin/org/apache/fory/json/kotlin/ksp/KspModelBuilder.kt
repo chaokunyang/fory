@@ -647,7 +647,10 @@ internal class KspModelBuilder(
   private fun hasEffectiveJsonAnnotation(
     target: KSFunctionDeclaration,
     mixin: KSClassDeclaration,
-  ): Boolean = effectiveAnnotations(target, mixin).any()
+  ): Boolean =
+    effectiveAnnotations(target, mixin).any {
+      annotationName(it).startsWith(JSON_ANNOTATION_PACKAGE)
+    }
 
   private fun matchingMixinFunction(
     target: KSFunctionDeclaration,

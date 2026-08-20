@@ -49,21 +49,6 @@ public data class PlatformRoot(
   public val token: PlatformToken,
 )
 
-@JsonType
-public data class PlatformCase(
-  public val id: String,
-  public val type: String,
-  public val resource: String,
-  public val outcome: String,
-  public val platforms: List<String>,
-)
-
-@JsonType
-public data class PlatformCaseManifest(
-  public val schemaVersion: Int,
-  public val cases: List<PlatformCase>,
-)
-
 internal fun platformRootValue(): PlatformRoot {
   val account = PlatformAccount(25, "platform", null)
   return PlatformRoot(

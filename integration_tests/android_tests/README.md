@@ -5,8 +5,8 @@ This project runs Android API 26+ instrumented tests for Java `fory-core`, Java
 the release-minified suite. API 36 runs the release-minified suite. Release
 coverage verifies static serializers, processor-generated Fory JSON execution
 for mutable Java classes, `JsonCreator` classes, object-mapped and `JsonValue`
-desugared Records, Kotlin immutable/default/value/object/sealed models, generated
-retention rules, generated validator invocation and failure propagation, and
+desugared Records, runtime Kotlin metadata and exact KSP retention through R8
+minification, generated validator invocation and failure propagation, and
 exact target-Mixin behavior. Mixin coverage registers the source at runtime
 after R8 minification so broad application keep rules cannot hide missing
 processor output.

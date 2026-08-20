@@ -24,7 +24,7 @@ import java.util.{ArrayList, Collections, HashSet, List => JList}
 
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.annotation.JsonSubTypes.Inclusion
-import org.apache.fory.json.codec.{ClosedSubtypeCodec, JsonSubTypesInfo, JsonValueCodec, ObjectCodec}
+import org.apache.fory.json.codec.{ClosedSubtypeCodec, JsonSubTypesInfo, JsonValueCodec}
 import org.apache.fory.json.resolver.JsonTypeResolver
 import org.apache.fory.json.scala.ScalaJsonCodec
 import org.apache.fory.reflect.TypeRef
@@ -85,24 +85,21 @@ private[scala] final class DerivedScalaJsonCodec[T](
   override def handledRuntimeClasses(): JList[Class[_]] = handled
 
   override def create(typeRef: TypeRef[_], resolver: JsonTypeResolver): JsonValueCodec[_] = {
-    if (typeRef.getRawType != rootType)
-      throw new ForyJsonException(s"Derived Scala enum codec expected ${rootType.getName}")
-    val childCodecs = new Array[ObjectCodec[_]](classes.length)
-    var index = 0
-    while (index < classes.length) {
-      val childType = typeRef.getSubtype(classes(index))
-      val singleton = singletons(index)
-      childCodecs(index) =
-        if (singleton == null) ScalaObjectModels.caseClassCodec(childType, resolver)
-        else ScalaObjectModels.fixedCodec(childType, resolver, singleton)
-      index += 1
+    val rawType = typeRef.getRawType
+    if (rawType == rootType) {
+      return new ClosedSubtypeCodec(
+        rootType,
+        new JsonSubTypesInfo(Inclusion.WRAPPER_OBJECT, "", classes.clone(), names.clone()),
+        typeRef,
+        this
+      )
     }
-    new ClosedSubtypeCodec(
-      rootType,
-      new JsonSubTypesInfo(Inclusion.WRAPPER_OBJECT, "", classes.clone(), names.clone()),
-      typeRef,
-      childCodecs
-    )
+    val index = classes.indexOf(rawType)
+    if (index < 0)
+      throw new ForyJsonException(s"Derived Scala enum codec expected ${rootType.getName}")
+    val singleton = singletons(index)
+    if (singleton == null) ScalaObjectModels.caseClassCodec(typeRef, resolver)
+    else ScalaObjectModels.fixedCodec(typeRef, resolver, singleton)
   }
 
   private def append(builder: StringBuilder, value: String): Unit =

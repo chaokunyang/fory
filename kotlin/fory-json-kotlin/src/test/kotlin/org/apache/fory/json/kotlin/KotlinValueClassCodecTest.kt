@@ -57,6 +57,14 @@ internal data class PrimitiveValueHolder(internal val id: PositiveId)
 
 @JvmInline internal value class UnsignedId(internal val value: UInt)
 
+@JvmInline internal value class UByteKeyValue(internal val value: UByte)
+
+@JvmInline internal value class UShortKeyValue(internal val value: UShort)
+
+@JvmInline internal value class UIntKeyValue(internal val value: UInt)
+
+@JvmInline internal value class ULongKeyValue(internal val value: ULong)
+
 internal data class UnsignedValueHolder(internal val id: UnsignedId)
 
 @JvmInline internal value class RecursiveValueId(internal val value: Long)
@@ -254,6 +262,49 @@ class KotlinValueClassCodecTest {
       unsigned,
       json.fromJson("{\"4294967295\":\"maximum\"}", unsignedType),
     )
+    assertEscapedMapKey(
+      jsonTypeRef<Map<GenericKey<UByte>, String>>(),
+      GenericKey(UByte.MAX_VALUE),
+      "255",
+      "256",
+    )
+    assertEscapedMapKey(
+      jsonTypeRef<Map<GenericKey<UShort>, String>>(),
+      GenericKey(UShort.MAX_VALUE),
+      "65535",
+      "65536",
+    )
+    assertEscapedMapKey(unsignedType, GenericKey(UInt.MAX_VALUE), "4294967295", "4294967296")
+    assertEscapedMapKey(
+      jsonTypeRef<Map<GenericKey<ULong>, String>>(),
+      GenericKey(ULong.MAX_VALUE),
+      "18446744073709551615",
+      "18446744073709551616",
+    )
+    assertEscapedMapKey(
+      jsonTypeRef<Map<UByteKeyValue, String>>(),
+      UByteKeyValue(UByte.MAX_VALUE),
+      "255",
+      "256",
+    )
+    assertEscapedMapKey(
+      jsonTypeRef<Map<UShortKeyValue, String>>(),
+      UShortKeyValue(UShort.MAX_VALUE),
+      "65535",
+      "65536",
+    )
+    assertEscapedMapKey(
+      jsonTypeRef<Map<UIntKeyValue, String>>(),
+      UIntKeyValue(UInt.MAX_VALUE),
+      "4294967295",
+      "4294967296",
+    )
+    assertEscapedMapKey(
+      jsonTypeRef<Map<ULongKeyValue, String>>(),
+      ULongKeyValue(ULong.MAX_VALUE),
+      "18446744073709551615",
+      "18446744073709551616",
+    )
   }
 
   @Test
@@ -311,6 +362,17 @@ class KotlinValueClassCodecTest {
       )
       assertNoValueBoxing(name, refs, valueOwner)
     }
+  }
+
+  @Test
+  fun asynchronousPublication() {
+    val json = newKotlinJson(KotlinJsonTestMode.ASYNCHRONOUS)
+    val type = jsonTypeRef<PrimitiveValueHolder>()
+    val value = PrimitiveValueHolder(PositiveId(43))
+    val text = json.toJson(value, type)
+    assertTrue(awaitAsyncCodegen(json))
+    assertEquals(value, json.fromJson(text, type))
+    assertTrue(generatedClassBytes(json, "PrimitiveValueHolder").isNotEmpty())
   }
 
   @Test

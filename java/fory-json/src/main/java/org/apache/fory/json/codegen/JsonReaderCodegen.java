@@ -294,7 +294,7 @@ abstract class JsonReaderCodegen {
       addFinalAnyMapMethod(ctx);
     }
     if (any.readSetter() != null) {
-      addAnySetterMethod(ctx, type, any);
+      addAnySetterMethod(builder, type, any);
     }
     addReaderFields(ctx, type, properties);
     addAnyReaderConstructor(ctx, readerConstructorExpression(type, properties), storesAnyReader);
@@ -369,7 +369,7 @@ abstract class JsonReaderCodegen {
       addFinalAnyMapMethod(ctx);
     }
     if (any != null && any.readSetter() != null) {
-      addAnySetterMethod(ctx, type, any);
+      addAnySetterMethod(builder, type, any);
     }
     if (rootCreator == null) {
       addReaderFields(ctx, type, directFields);
@@ -435,7 +435,7 @@ abstract class JsonReaderCodegen {
         groups,
         directCount,
         rootArray);
-    addUnwrappedCreatorMethods(ctx, type, rootCreator, groups);
+    addUnwrappedCreatorMethods(builder, type, rootCreator, groups);
     addUnwrappedGroupMethods(ctx, builder, type, groups, rootArray);
     ctx.clearExprState();
     Expression root = unwrappedRootWorkspace(builder, rootCreator != null);
@@ -558,7 +558,8 @@ abstract class JsonReaderCodegen {
         "map");
   }
 
-  private void addAnySetterMethod(CodegenContext ctx, Class<?> type, AnyInfo any) {
+  private void addAnySetterMethod(JsonGeneratedCodecBuilder builder, Class<?> type, AnyInfo any) {
+    CodegenContext ctx = builder.context();
     Method setter = any.readSetter();
     Class<?> valueType = setter.getParameterTypes()[1];
     String methodName = setter.getName();
@@ -573,16 +574,28 @@ abstract class JsonReaderCodegen {
         valueType.isPrimitive()
             ? "if (value == null) {\n  throw owner.nullPrimitiveAnyValue();\n}\n"
             : "";
+    String invocation = "object." + methodName + "(name, " + value + ")";
+    if (!DirectMethodCodegen.sourceNameable(setter)) {
+      String bridgeName = DirectMethodCodegen.setterName(setter);
+      builder.addDirectMethod(
+          bridgeName,
+          void.class,
+          setter.getDeclaringClass(),
+          "object",
+          String.class,
+          "name",
+          valueType,
+          "value");
+      invocation = "this." + bridgeName + "(object, name, " + value + ")";
+    }
     ctx.addMethod(
         "private final",
         "callAnySetter",
         nullCheck
             + "try {\n"
-            + "  object."
-            + methodName
-            + "(name, "
-            + value
-            + ");\n"
+            + "  "
+            + invocation
+            + ";\n"
             + "} catch (Throwable e) {\n"
             + "  if (e instanceof Error) {\n"
             + "    throw (Error) e;\n"
@@ -837,28 +850,12 @@ abstract class JsonReaderCodegen {
       maskedInvocation.append(", m").append(i);
     }
     String typeName = ctx.type(type);
-    String expression;
-    boolean fullBridge = DirectMethodCodegen.requiresFullCreatorBridge(creatorInfo);
-    if (fullBridge) {
-      String fullName = DirectMethodCodegen.fullCreatorName(creatorInfo.invocationExecutable());
-      builder.addDirectMethod(fullName, type, creatorParameters(parameterTypes));
-      expression = "this." + fullName + "(" + invocation + ")";
-    } else {
-      expression =
-          executable instanceof Constructor
-              ? "new " + typeName + "(" + invocation + ")"
-              : typeName + "." + ((Method) executable).getName() + "(" + invocation + ")";
-    }
+    String expression = creatorInvocation(builder, type, creatorInfo, invocation.toString());
     StringBuilder body = new StringBuilder();
     body.append(typeName).append(" value;\ntry {\n");
     if (maskCount == 0) {
       body.append("  value = ").append(expression).append(";\n");
     } else {
-      String defaultName = DirectMethodCodegen.defaultCreatorName(creatorInfo.defaultConstructor());
-      Class<?>[] bridgeParameters =
-          Arrays.copyOf(parameterTypes, parameterTypes.length + maskCount);
-      Arrays.fill(bridgeParameters, parameterTypes.length, bridgeParameters.length, int.class);
-      builder.addDirectMethod(defaultName, type, creatorParameters(bridgeParameters));
       body.append("  if ((");
       for (int i = 0; i < maskCount; i++) {
         if (i != 0) {
@@ -869,11 +866,9 @@ abstract class JsonReaderCodegen {
       body.append(") == 0) {\n")
           .append("    value = ")
           .append(expression)
-          .append(";\n  } else {\n    value = this.")
-          .append(defaultName)
-          .append('(')
-          .append(maskedInvocation)
-          .append(");\n  }\n");
+          .append(";\n  } else {\n    value = ")
+          .append(defaultCreatorInvocation(builder, type, creatorInfo, maskedInvocation.toString()))
+          .append(";\n  }\n");
     }
     body.append("} catch (Throwable e) {\n  throw owner.creatorFailure(e);\n}\n");
     if (executable instanceof Method) {
@@ -884,6 +879,30 @@ abstract class JsonReaderCodegen {
     }
     body.append("return value;");
     ctx.addMethod("private final", "createValue", body.toString(), type, parameters);
+  }
+
+  private String creatorInvocation(
+      JsonGeneratedCodecBuilder builder, Class<?> type, JsonCreatorInfo creator, String arguments) {
+    Executable executable = creator.executable();
+    if (DirectMethodCodegen.requiresFullCreatorBridge(creator)) {
+      String name = DirectMethodCodegen.fullCreatorName(creator.invocationExecutable());
+      builder.addDirectMethod(name, type, creatorParameters(executable.getParameterTypes()));
+      return "this." + name + "(" + arguments + ")";
+    }
+    String typeName = builder.context().type(type);
+    return executable instanceof Constructor
+        ? "new " + typeName + "(" + arguments + ")"
+        : typeName + "." + ((Method) executable).getName() + "(" + arguments + ")";
+  }
+
+  private String defaultCreatorInvocation(
+      JsonGeneratedCodecBuilder builder, Class<?> type, JsonCreatorInfo creator, String arguments) {
+    Class<?>[] logical = creator.executable().getParameterTypes();
+    Class<?>[] parameters = Arrays.copyOf(logical, logical.length + creator.defaultMaskCount());
+    Arrays.fill(parameters, logical.length, parameters.length, int.class);
+    String name = DirectMethodCodegen.defaultCreatorName(creator.defaultConstructor());
+    builder.addDirectMethod(name, type, creatorParameters(parameters));
+    return "this." + name + "(" + arguments + ")";
   }
 
   private static Object[] creatorParameters(Class<?>[] parameterTypes) {
@@ -1355,17 +1374,20 @@ abstract class JsonReaderCodegen {
   }
 
   private void addUnwrappedCreatorMethods(
-      CodegenContext ctx, Class<?> rootType, JsonCreatorInfo rootCreator, Group[] groups) {
+      JsonGeneratedCodecBuilder builder,
+      Class<?> rootType,
+      JsonCreatorInfo rootCreator,
+      Group[] groups) {
     if (rootCreator != null) {
       addWorkspaceCreatorMethod(
-          ctx, rootType, rootCreator, unwrappedCreatorMethod(-1), "owner", "this.creator");
+          builder, rootType, rootCreator, unwrappedCreatorMethod(-1), "owner", "this.creator");
     }
     for (int i = 0; i < groups.length; i++) {
       ObjectCodec<?> child = groups[i].childCodec();
       JsonCreatorInfo creator = child.creatorInfo();
       if (creator != null) {
         addWorkspaceCreatorMethod(
-            ctx,
+            builder,
             child.type(),
             creator,
             unwrappedCreatorMethod(i),
@@ -1376,12 +1398,13 @@ abstract class JsonReaderCodegen {
   }
 
   private void addWorkspaceCreatorMethod(
-      CodegenContext ctx,
+      JsonGeneratedCodecBuilder builder,
       Class<?> type,
       JsonCreatorInfo creator,
       String methodName,
       String codecExpression,
       String creatorExpression) {
+    CodegenContext ctx = builder.context();
     Executable executable = creator.executable();
     Class<?>[] parameterTypes = executable.getParameterTypes();
     StringBuilder invocation = new StringBuilder();
@@ -1399,18 +1422,36 @@ abstract class JsonReaderCodegen {
           .append(i)
           .append("])");
     }
+    int maskCount = creator.defaultMaskCount();
+    StringBuilder maskedInvocation = new StringBuilder(invocation);
+    for (int i = 0; i < maskCount; i++) {
+      maskedInvocation.append(", m").append(i);
+    }
     String typeName = ctx.type(type);
-    String expression =
-        executable instanceof Constructor
-            ? "new " + typeName + "(" + invocation + ")"
-            : typeName + "." + ((Method) executable).getName() + "(" + invocation + ")";
+    String expression = creatorInvocation(builder, type, creator, invocation.toString());
     StringBuilder body = new StringBuilder();
+    for (int i = 0; i < maskCount; i++) {
+      body.append("int m").append(i).append(" = 0;\n");
+    }
     appendWorkspaceDefaults(ctx, body, creator, creatorExpression, parameterTypes);
-    body.append(typeName)
-        .append(" value;\ntry {\n  value = ")
-        .append(expression)
-        .append(";\n")
-        .append("} catch (Throwable e) {\n  throw ")
+    body.append(typeName).append(" value;\ntry {\n");
+    if (maskCount == 0) {
+      body.append("  value = ").append(expression).append(";\n");
+    } else {
+      body.append("  if ((");
+      for (int i = 0; i < maskCount; i++) {
+        if (i != 0) {
+          body.append(" | ");
+        }
+        body.append('m').append(i);
+      }
+      body.append(") == 0) {\n    value = ")
+          .append(expression)
+          .append(";\n  } else {\n    value = ")
+          .append(defaultCreatorInvocation(builder, type, creator, maskedInvocation.toString()))
+          .append(";\n  }\n");
+    }
+    body.append("} catch (Throwable e) {\n  throw ")
         .append(codecExpression)
         .append(".creatorFailure(e);\n}\n");
     if (executable instanceof Method) {
@@ -1439,11 +1480,24 @@ abstract class JsonReaderCodegen {
           .append(i)
           .append("])) {\n  ");
       if (method == null) {
-        body.append("throw ")
-            .append(creatorExpression)
-            .append(".missingArgument(")
-            .append(i)
-            .append(");\n");
+        int maskBit = creator.defaultMaskBit(i);
+        if (maskBit < 0) {
+          body.append("throw ")
+              .append(creatorExpression)
+              .append(".missingArgument(")
+              .append(i)
+              .append(");\n");
+        } else {
+          body.append("arguments[")
+              .append(i)
+              .append("] = ")
+              .append(workspaceDefault(parameterTypes[i]))
+              .append(";\n  m")
+              .append(maskBit >>> 5)
+              .append(" |= ")
+              .append(1 << (maskBit & 31))
+              .append(";\n");
+        }
       } else {
         body.append("arguments[")
             .append(i)
@@ -1486,6 +1540,34 @@ abstract class JsonReaderCodegen {
           .append(i)
           .append(");\n}\n");
     }
+  }
+
+  private static String workspaceDefault(Class<?> type) {
+    if (!type.isPrimitive()) {
+      return "null";
+    }
+    if (type == boolean.class) {
+      return "false";
+    }
+    if (type == char.class) {
+      return "(char) 0";
+    }
+    if (type == byte.class) {
+      return "(byte) 0";
+    }
+    if (type == short.class) {
+      return "(short) 0";
+    }
+    if (type == long.class) {
+      return "0L";
+    }
+    if (type == float.class) {
+      return "0F";
+    }
+    if (type == double.class) {
+      return "0D";
+    }
+    return "0";
   }
 
   private String unwrappedCreatorMethod(int groupIndex) {

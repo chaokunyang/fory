@@ -39,6 +39,8 @@ from typing import Any, Iterable, Mapping
 import benchmark_report
 
 BENCHMARK_CLASS = "org.apache.fory.benchmark.json.MediaContentBenchmark"
+BENCHMARK_PROVENANCE_ENTRY = "META-INF/fory-kotlin-json-benchmark.properties"
+SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 
 def load_versions() -> dict[str, str]:
@@ -190,6 +192,11 @@ def parse_args() -> argparse.Namespace:
             "--comparison-classpath-file, --comparison-jmh-jar, and "
             "--comparison-commit must be supplied together"
         )
+    if args.skip_build:
+        if not args.jmh_jar or not args.classpath_file:
+            parser.error("--skip-build requires --jmh-jar and --classpath-file")
+    elif args.jmh_jar or args.classpath_file:
+        parser.error("--jmh-jar and --classpath-file require --skip-build")
     if args.session_id and re.fullmatch(r"[A-Za-z0-9_.-]+", args.session_id) is None:
         parser.error(
             "--session-id may contain only letters, digits, dot, underscore, and hyphen"
@@ -292,6 +299,48 @@ def classpath_identity(path: Path) -> tuple[str, str]:
         digest.update(value.encode())
         digest.update(b"\n")
     return fory[0], digest.hexdigest()
+
+
+def jar_provenance(path: Path) -> tuple[str, str]:
+    with zipfile.ZipFile(path) as jar:
+        try:
+            text = jar.read(BENCHMARK_PROVENANCE_ENTRY).decode("utf-8")
+        except KeyError as error:
+            raise ValueError(
+                f"Benchmark JMH JAR is missing {BENCHMARK_PROVENANCE_ENTRY}: {path}"
+            ) from error
+    values = {}
+    for line in text.splitlines():
+        key, separator, value = line.partition("=")
+        if not separator or not key or key in values:
+            raise ValueError(f"Invalid benchmark provenance in {path}: {line!r}")
+        values[key] = value
+    expected_keys = {
+        "formatVersion",
+        "foryArtifactSha256",
+        "dependencySetSha256",
+    }
+    if values.keys() != expected_keys or values["formatVersion"] != "1":
+        raise ValueError(f"Unsupported benchmark provenance in {path}")
+    for key in ("foryArtifactSha256", "dependencySetSha256"):
+        if SHA256_PATTERN.fullmatch(values[key]) is None:
+            raise ValueError(f"Invalid {key} in benchmark provenance: {path}")
+    return values["foryArtifactSha256"], values["dependencySetSha256"]
+
+
+def validate_jar_provenance(
+    jar: Path,
+    classpath: Path,
+    expected_identity: tuple[str, str] | None = None,
+) -> tuple[str, str]:
+    identity = expected_identity or classpath_identity(classpath)
+    embedded = jar_provenance(jar)
+    if embedded != identity:
+        raise ValueError(
+            f"Benchmark JMH JAR provenance does not match {classpath}: "
+            f"embedded={embedded}, classpath={identity}"
+        )
+    return identity
 
 
 def validate_isolated_artifacts(
@@ -650,19 +699,19 @@ def main() -> None:
             f"Refusing to overwrite retained benchmark samples: {sample_path}"
         )
     revision_path = output_dir / "revision_samples.csv"
+    revision_summary_path = output_dir / "revision_summary.csv"
     if not args.prepare_only and args.comparison_jmh_jar and revision_path.exists():
         raise ValueError(
             f"Refusing to overwrite retained revision samples: {revision_path}"
         )
 
     if args.skip_build:
-        if not args.jmh_jar or not args.classpath_file:
-            raise ValueError("--skip-build requires --jmh-jar and --classpath-file")
         jar = Path(args.jmh_jar)
         classpath = Path(args.classpath_file)
     else:
         jar, classpath = prepare(benchmark_dir, output_dir)
 
+    current_identity = validate_jar_provenance(jar, classpath)
     if args.prepare_only:
         print(f"Prepared {jar}")
         return
@@ -676,8 +725,15 @@ def main() -> None:
             comparison_hash,
             comparison_dependency_hash,
         ) = validate_isolated_artifacts(classpath, Path(args.comparison_classpath_file))
+        if (fory_hash, dependency_hash) != current_identity:
+            raise AssertionError("Current benchmark identity changed during validation")
+        validate_jar_provenance(
+            Path(args.comparison_jmh_jar),
+            Path(args.comparison_classpath_file),
+            (comparison_hash, comparison_dependency_hash),
+        )
     else:
-        fory_hash, dependency_hash = classpath_identity(classpath)
+        fory_hash, dependency_hash = current_identity
 
     source_commit = git_commit(root)
     common: dict[str, object] = {
@@ -779,7 +835,7 @@ def main() -> None:
                 f"{len(revision_failures)} Fory revision processes failed; "
                 f"retained samples in {revision_path}"
             )
-        write_revision_summary(revision_rows, output_dir / "revision_summary.csv")
+        write_revision_summary(revision_rows, revision_summary_path)
         rows.extend(revision_rows)
     unknown_exclusions = set(exclusions) - {str(row["run_id"]) for row in rows}
     if unknown_exclusions:
@@ -787,7 +843,12 @@ def main() -> None:
             "Exclusions did not match a launch: "
             + ", ".join(sorted(unknown_exclusions))
         )
-    benchmark_report.generate(sample_path, output_dir / "report")
+    benchmark_report.generate(
+        sample_path,
+        output_dir / "report",
+        revision_path if retained_comparison_jar is not None else None,
+        revision_summary_path if retained_comparison_jar is not None else None,
+    )
     print(f"Kotlin JSON benchmark report: {output_dir / 'report' / 'README.md'}")
 
 

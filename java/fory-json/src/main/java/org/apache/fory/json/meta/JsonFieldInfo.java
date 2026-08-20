@@ -92,15 +92,12 @@ public final class JsonFieldInfo {
   private final Field readField;
   private final Method readSetter;
   private final TypeRef<?> writeTypeRef;
-  private final Type writeType;
   private final Class<?> writeRawType;
   private final TypeRef<?> readTypeRef;
-  private final Type readType;
   private final Class<?> readRawType;
   private final JsonCodec codecAnnotation;
   private final Class<? extends JsonValueCodec<?>> valueCodecClass;
   private final JsonFormat formatAnnotation;
-  private final boolean selectedCodec;
   private final boolean writeUnboxedRequired;
   private final boolean readUnboxedRequired;
   private JsonFieldKind writeKind;
@@ -149,7 +146,6 @@ public final class JsonFieldInfo {
   private int readIndexAndWriteNull;
   private JsonTypeInfo writeTypeInfo;
   private JsonTypeInfo readTypeInfo;
-  private JsonTypeInfo writeOccurrenceTypeInfo;
   private JsonTypeInfo readOccurrenceTypeInfo;
   private UnboxedValueCodec writeUnboxedValueCodec;
   private UnboxedValueCodec readUnboxedValueCodec;
@@ -193,7 +189,6 @@ public final class JsonFieldInfo {
             : resolvedObjectModelType == null
                 ? resolveTypeRef(ownerType, writeType(writeField, writeGetter))
                 : resolvedObjectModelType;
-    writeType = writeTypeRef == null ? null : writeTypeRef.getType();
     this.writeRawType =
         writeTypeRef == null
             ? null
@@ -204,13 +199,11 @@ public final class JsonFieldInfo {
             : resolvedObjectModelType == null
                 ? resolveTypeRef(ownerType, readType(readField, readSetter))
                 : resolvedObjectModelType;
-    readType = readTypeRef == null ? null : readTypeRef.getType();
     this.readRawType =
         readTypeRef == null ? null : readUnboxedRequired ? readFallback : readTypeRef.getRawType();
     this.codecAnnotation = codecAnnotation;
     this.valueCodecClass = valueCodecClass;
     this.formatAnnotation = formatAnnotation;
-    selectedCodec = codecAnnotation != null || valueCodecClass != null || formatAnnotation != null;
     this.writeAccessor = writeAccessor;
     this.readAccessor = readAccessor;
     writeKind = writeRawType == null ? null : kind(writeRawType);
@@ -223,9 +216,11 @@ public final class JsonFieldInfo {
                 : (rawValue ? KIND_RAW_STRING : kindId(writeKind));
     readPrimitiveKindId = primitiveKindId(readRawType, readKind);
     readCarrierKindId = readRawType == null ? 0 : primitiveKindId(readRawType, kind(readRawType));
+    Type resolvedWriteType = writeTypeRef == null ? null : writeTypeRef.getType();
     Type writeElementType =
-        writeKind == JsonFieldKind.COLLECTION ? CodecUtils.elementType(writeType) : null;
-    writeMapValueType = writeKind == JsonFieldKind.MAP ? CodecUtils.mapValueType(writeType) : null;
+        writeKind == JsonFieldKind.COLLECTION ? CodecUtils.elementType(resolvedWriteType) : null;
+    writeMapValueType =
+        writeKind == JsonFieldKind.MAP ? CodecUtils.mapValueType(resolvedWriteType) : null;
     writeArrayComponentType =
         writeKind == JsonFieldKind.ARRAY ? writeRawType.getComponentType() : null;
     writeElementRawType = writeElementType == null ? null : knownRawType(writeElementType);
@@ -443,7 +438,7 @@ public final class JsonFieldInfo {
   }
 
   public Type writeType() {
-    return writeType;
+    return writeTypeRef == null ? null : writeTypeRef.getType();
   }
 
   private static Type writeType(Field field, Method getter) {
@@ -484,7 +479,7 @@ public final class JsonFieldInfo {
   }
 
   public Type readType() {
-    return readType;
+    return readTypeRef == null ? null : readTypeRef.getType();
   }
 
   private static Type readType(Field field, Method setter) {
@@ -545,6 +540,8 @@ public final class JsonFieldInfo {
 
   public void resolveTypes(JsonTypeResolver typeResolver) {
     TypeRef<?> codecType = writeTypeRef == null ? readTypeRef : writeTypeRef;
+    boolean selectedCodec =
+        codecAnnotation != null || valueCodecClass != null || formatAnnotation != null;
     if (selectedCodec && (writeUnboxedRequired || readUnboxedRequired)) {
       throw new ForyJsonException(
           "JSON property "
@@ -562,6 +559,7 @@ public final class JsonFieldInfo {
                     : null;
     boolean rawString = writeKindId == KIND_RAW_STRING;
     if (writeRawType != null) {
+      JsonTypeInfo writeOccurrenceTypeInfo;
       if (writeUnboxedRequired) {
         JsonTypeInfo canonical = typeResolver.getTypeInfo(writeTypeRef);
         writeUnboxedValueCodec = requireUnboxed(canonical, writeRawType, "write");

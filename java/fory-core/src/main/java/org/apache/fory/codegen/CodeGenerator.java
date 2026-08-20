@@ -109,6 +109,13 @@ public class CodeGenerator {
     classLoaderLock = new Object();
   }
 
+  /** Compiles one unit and installs its verified direct invocation bridges before publication. */
+  @Internal
+  public ClassLoader compileDirect(CompileUnit unit, JaninoUtils.DirectInvocation... invocations) {
+    return compile(
+        Arrays.asList(unit), compileState -> compileState.lock.lock(), unit, invocations);
+  }
+
   /**
    * Compile code, return as a new classloader. If the class of a compilation unit already exists in
    * previous classloader, skip the corresponding compilation unit.
@@ -121,13 +128,6 @@ public class CodeGenerator {
 
   public ClassLoader compile(List<CompileUnit> units, CompileCallback callback) {
     return compile(units, callback, null, null);
-  }
-
-  /** Compiles one unit and installs its verified direct invocation bridges before publication. */
-  @Internal
-  public ClassLoader compileDirect(CompileUnit unit, JaninoUtils.DirectInvocation... invocations) {
-    return compile(
-        Arrays.asList(unit), compileState -> compileState.lock.lock(), unit, invocations);
   }
 
   private ClassLoader compile(

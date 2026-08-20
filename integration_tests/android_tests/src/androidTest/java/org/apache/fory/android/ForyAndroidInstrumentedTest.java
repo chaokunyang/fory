@@ -86,8 +86,8 @@ public class ForyAndroidInstrumentedTest {
   }
 
   @Test
-  public void generatedKotlinJsonModels() {
-    AndroidKotlinJsonScenarios.generatedModels();
+  public void kotlinJsonMetadataSurvivesMinification() {
+    AndroidKotlinJsonScenarios.metadataSurvivesMinification();
   }
 
   @Test

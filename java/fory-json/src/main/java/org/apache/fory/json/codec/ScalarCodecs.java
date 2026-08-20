@@ -2668,8 +2668,7 @@ public final class ScalarCodecs {
     }
   }
 
-  public static class AtomicReferenceCodec
-      implements JsonValueCodec<AtomicReference<?>>, TransparentNullCodec {
+  public static class AtomicReferenceCodec implements JsonValueCodec<AtomicReference<?>> {
     static final int SHALLOW_BYTES = GraphMemoryEstimates.shallowObjectBytes(AtomicReference.class);
 
     private final JsonTypeInfo valueTypeInfo;
@@ -2707,6 +2706,9 @@ public final class ScalarCodecs {
               "Nullable AtomicReference with transparent-null content has ambiguous JSON null");
         }
         return new TransparentAtomicReferenceCodec(referenceType, valueTypeInfo);
+      }
+      if (metadata == null || valueTypeInfo.nullable()) {
+        return new NullMaterializingAtomicReferenceCodec(referenceType, valueTypeInfo);
       }
       return new AtomicReferenceCodec(referenceType, valueTypeInfo);
     }
@@ -2811,7 +2813,16 @@ public final class ScalarCodecs {
     }
   }
 
-  private static final class TransparentAtomicReferenceCodec extends AtomicReferenceCodec {
+  private static final class NullMaterializingAtomicReferenceCodec extends AtomicReferenceCodec
+      implements TransparentNullCodec {
+    private NullMaterializingAtomicReferenceCodec(
+        TypeRef<?> referenceType, JsonTypeInfo valueTypeInfo) {
+      super(referenceType, valueTypeInfo);
+    }
+  }
+
+  private static final class TransparentAtomicReferenceCodec extends AtomicReferenceCodec
+      implements TransparentNullCodec {
     private final JsonTypeInfo valueTypeInfo;
 
     private TransparentAtomicReferenceCodec(TypeRef<?> referenceType, JsonTypeInfo valueTypeInfo) {

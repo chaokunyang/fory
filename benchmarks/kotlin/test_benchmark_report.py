@@ -98,6 +98,19 @@ class KotlinJsonBenchmarkTest(unittest.TestCase):
             writer.writeheader()
             writer.writerows(rows)
 
+    def write_provenance_jar(
+        self,
+        path: Path,
+        identity: tuple[str, str],
+    ) -> None:
+        with zipfile.ZipFile(path, "w") as target:
+            target.writestr(
+                run_json_benchmark.BENCHMARK_PROVENANCE_ENTRY,
+                "formatVersion=1\n"
+                f"foryArtifactSha256={identity[0]}\n"
+                f"dependencySetSha256={identity[1]}\n",
+            )
+
     def test_round_has_sixteen_isolated_cases(self) -> None:
         paired_cases = []
         for round_index in range(6):
@@ -154,6 +167,18 @@ class KotlinJsonBenchmarkTest(unittest.TestCase):
             ["run_json_benchmark.py", "--rounds", "3"],
         ):
             self.assertEqual(run_json_benchmark.parse_args().rounds, 3)
+
+    def test_external_jars_require_skip(self) -> None:
+        with (
+            mock.patch.object(
+                sys,
+                "argv",
+                ["run_json_benchmark.py", "--jmh-jar", "benchmarks.jar"],
+            ),
+            mock.patch("sys.stderr", new=io.StringIO()),
+            self.assertRaises(SystemExit),
+        ):
+            run_json_benchmark.parse_args()
 
     def test_revision_round_order(self) -> None:
         first = run_json_benchmark.revision_schedule(0)
@@ -359,6 +384,36 @@ class KotlinJsonBenchmarkTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "separate"):
                 run_json_benchmark.validate_isolated_artifacts(current, current)
 
+    def test_jmh_jar_matches_classpath(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifact = root / "fory-json-kotlin-1.7.0-SNAPSHOT.jar"
+            artifact.write_bytes(b"runtime")
+            benchmark = root / "fory-kotlin-json-benchmarks.jar"
+            benchmark.write_bytes(b"benchmark")
+            classpath = root / "classpath.txt"
+            classpath.write_text(f"{artifact}\n{benchmark}\n", encoding="utf-8")
+            identity = run_json_benchmark.classpath_identity(classpath)
+            jmh = root / "benchmarks-jmh.jar"
+            self.write_provenance_jar(jmh, identity)
+
+            self.assertEqual(
+                run_json_benchmark.validate_jar_provenance(jmh, classpath),
+                identity,
+            )
+
+            artifact.write_bytes(b"different runtime")
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                run_json_benchmark.validate_jar_provenance(jmh, classpath)
+
+    def test_jmh_jar_requires_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            jar = Path(directory) / "benchmarks-jmh.jar"
+            with zipfile.ZipFile(jar, "w") as target:
+                target.writestr("placeholder", "value")
+            with self.assertRaisesRegex(ValueError, "is missing"):
+                run_json_benchmark.jar_provenance(jar)
+
     def test_revision_surface_must_be_identical(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -396,6 +451,59 @@ class KotlinJsonBenchmarkTest(unittest.TestCase):
             self.assertIn("Median Fory/comparator ratio", readme)
             self.assertTrue((report / "data" / "jmh_samples.csv").is_file())
             self.assertTrue((report / "data" / "summary.csv").is_file())
+
+    def test_report_includes_revision_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            samples = root / "samples.csv"
+            revision_samples = root / "revision_samples.csv"
+            revision_summary = root / "revision_summary.csv"
+            report = root / "report"
+            self.write_rows(samples, self.sample_rows())
+            revision_samples.write_text(
+                "run_id,variant\nrun-1,current\n", encoding="utf-8"
+            )
+            with revision_summary.open("w", newline="", encoding="utf-8") as target:
+                writer = csv.DictWriter(
+                    target,
+                    fieldnames=(
+                        "operation",
+                        "median_current_comparison_ratio",
+                        "mad",
+                        "paired_rounds",
+                    ),
+                )
+                writer.writeheader()
+                for index, operation in enumerate(benchmark_report.OPERATIONS):
+                    writer.writerow(
+                        {
+                            "operation": operation,
+                            "median_current_comparison_ratio": 1.1 + index / 10,
+                            "mad": 0.01,
+                            "paired_rounds": 6,
+                        }
+                    )
+
+            benchmark_report.generate(
+                samples,
+                report,
+                revision_samples,
+                revision_summary,
+            )
+
+            readme = (report / "README.md").read_text(encoding="utf-8")
+            self.assertIn("Fory revision comparison", readme)
+            self.assertIn("1.100×", readme)
+            self.assertIn("data/revision_samples.csv", readme)
+            self.assertIn("data/revision_summary.csv", readme)
+            self.assertEqual(
+                (report / "data" / "revision_samples.csv").read_bytes(),
+                revision_samples.read_bytes(),
+            )
+            self.assertEqual(
+                (report / "data" / "revision_summary.csv").read_bytes(),
+                revision_summary.read_bytes(),
+            )
 
 
 if __name__ == "__main__":

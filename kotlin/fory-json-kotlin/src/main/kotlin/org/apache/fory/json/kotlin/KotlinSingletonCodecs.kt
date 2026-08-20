@@ -81,7 +81,7 @@ internal object KotlinSingletonCodecs {
     override fun readUtf8(reader: Utf8JsonReader): Unit? = read(reader)
 
     private fun read(reader: JsonReader): Unit? {
-      if (reader.tryReadNull()) return null
+      if (reader.tryReadNullToken()) return null
       readEmptyObject(reader)
       return Unit
     }

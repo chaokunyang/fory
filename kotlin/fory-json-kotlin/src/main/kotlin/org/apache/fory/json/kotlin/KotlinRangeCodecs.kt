@@ -88,7 +88,7 @@ internal object KotlinRangeCodecs {
     }
 
     private fun read(reader: JsonReader): CharRange? {
-      if (reader.tryReadNull()) return null
+      if (reader.tryReadNullToken()) return null
       reader.enterDepth()
       reader.expectNextToken('{')
       var start = 0.toChar()
@@ -138,7 +138,7 @@ internal object KotlinRangeCodecs {
     }
 
     private fun read(reader: JsonReader): IntRange? {
-      if (reader.tryReadNull()) return null
+      if (reader.tryReadNullToken()) return null
       reader.enterDepth()
       reader.expectNextToken('{')
       var start = 0
@@ -188,7 +188,7 @@ internal object KotlinRangeCodecs {
     }
 
     private fun read(reader: JsonReader): LongRange? {
-      if (reader.tryReadNull()) return null
+      if (reader.tryReadNullToken()) return null
       reader.enterDepth()
       reader.expectNextToken('{')
       var start = 0L
@@ -238,7 +238,7 @@ internal object KotlinRangeCodecs {
     }
 
     private fun read(reader: JsonReader): UIntRange? {
-      if (reader.tryReadNull()) return null
+      if (reader.tryReadNullToken()) return null
       reader.enterDepth()
       reader.expectNextToken('{')
       var start = 0u
@@ -288,7 +288,7 @@ internal object KotlinRangeCodecs {
     }
 
     private fun read(reader: JsonReader): ULongRange? {
-      if (reader.tryReadNull()) return null
+      if (reader.tryReadNullToken()) return null
       reader.enterDepth()
       reader.expectNextToken('{')
       var start = 0uL

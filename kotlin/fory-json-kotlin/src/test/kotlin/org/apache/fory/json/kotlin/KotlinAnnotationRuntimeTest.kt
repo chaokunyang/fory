@@ -33,6 +33,7 @@ import org.apache.fory.json.annotation.JsonCreator
 import org.apache.fory.json.annotation.JsonIgnore
 import org.apache.fory.json.annotation.JsonMixin
 import org.apache.fory.json.annotation.JsonProperty
+import org.apache.fory.json.annotation.JsonUnwrapped
 import org.apache.fory.json.codec.AbstractJsonValueCodec
 import org.apache.fory.json.codec.MapKeyCodec
 import org.apache.fory.json.reader.JsonReader
@@ -70,6 +71,19 @@ class TaggedIntKeyCodec : MapKeyCodec {
 }
 
 @JvmInline value class ExplicitCreatorId(val value: Int)
+
+@JvmInline internal value class FlattenedCount(val value: Int)
+
+internal data class FlattenedLeaf(val id: FlattenedCount, val label: String = "leaf")
+
+internal data class FlattenedMiddle(
+  @get:JsonUnwrapped(prefix = "leaf_") val leaf: FlattenedLeaf,
+)
+
+internal data class FlattenedRoot(
+  @get:JsonUnwrapped(prefix = "middle_") val middle: FlattenedMiddle,
+  val tag: String = "root",
+)
 
 class KotlinAnnotationRuntimeTest {
   data class UseSiteModel(
@@ -334,5 +348,48 @@ class KotlinAnnotationRuntimeTest {
       assertEquals(expected, json.fromJson(json.toJson(expected, type), type))
       assertEquals(expected, json.fromJson(json.toJsonBytes(expected, type), type))
     }
+  }
+
+  @Test
+  fun unwrappedDefaultsAndValueClass() {
+    val type = jsonTypeRef<FlattenedRoot>()
+    val defaulted = FlattenedRoot(FlattenedMiddle(FlattenedLeaf(FlattenedCount(17))))
+    val utf16 = FlattenedRoot(FlattenedMiddle(FlattenedLeaf(FlattenedCount(17), "雪")))
+    forEachJsonMode { json ->
+      assertEquals(defaulted, json.fromJson("{\"middle_leaf_id\":17}", type))
+      assertEquals(
+        defaulted,
+        json.fromJson("{\"middle_leaf_id\":17}".toByteArray(), type),
+      )
+      assertEquals(
+        utf16,
+        json.fromJson("{\"middle_leaf_id\":17,\"middle_leaf_label\":\"雪\"}", type),
+      )
+      assertEquals(defaulted, json.fromJson(json.toJson(defaulted, type), type))
+      assertEquals(utf16, json.fromJson(json.toJsonBytes(utf16, type), type))
+    }
+
+    val generated = newKotlinJson(KotlinJsonTestMode.SYNCHRONOUS)
+    generated.toJson(defaulted, type)
+    generated.toJsonBytes(defaulted, type)
+    generated.fromJson("{\"middle_leaf_id\":17}", type)
+    generated.fromJson("{\"middle_leaf_id\":17,\"middle_leaf_label\":\"雪\"}", type)
+    generated.fromJson("{\"middle_leaf_id\":17}".toByteArray(), type)
+    val classes = generatedClassBytes(generated, "FlattenedRoot")
+    assertEquals(3, classes.count { it.key.contains("ReaderForyJsonCodec") })
+    assertEquals(2, classes.count { it.key.contains("WriterForyJsonCodec") })
+    val leafOwner = FlattenedLeaf::class.java.name.replace('.', '/')
+    val countOwner = FlattenedCount::class.java.name.replace('.', '/')
+    val refs = classes.values.flatMap(::generatedMethodRefs)
+    assertTrue(
+      refs.any { it.owner == leafOwner && it.name.startsWith("getId-") && it.descriptor == "()I" },
+      refs.toString(),
+    )
+    assertTrue(
+      refs.any {
+        it.owner == countOwner && it.name == "constructor-impl" && it.descriptor == "(I)I"
+      },
+      refs.toString(),
+    )
   }
 }

@@ -43,46 +43,51 @@ internal object KotlinValueClassMapKeys {
     if (shape.layers.last().carrierClass != Any::class.java) {
       when (typeId) {
         Types.UINT8 ->
-          operations.typed<KotlinByteValueClassOperations<Any>>()?.let {
+          operations.typed<KotlinByteMapKeyOperations<Any>>()?.let {
             return UByteKey(it)
           }
         Types.UINT16 ->
-          operations.typed<KotlinShortValueClassOperations<Any>>()?.let {
+          operations.typed<KotlinShortMapKeyOperations<Any>>()?.let {
             return UShortKey(it)
           }
         Types.UINT32 ->
-          operations.typed<KotlinIntValueClassOperations<Any>>()?.let {
+          operations.typed<KotlinIntMapKeyOperations<Any>>()?.let {
             return UIntKey(it)
           }
         Types.UINT64 ->
-          operations.typed<KotlinLongValueClassOperations<Any>>()?.let {
+          operations.typed<KotlinLongMapKeyOperations<Any>>()?.let {
             return ULongKey(it)
           }
       }
       when (rawType) {
         Byte::class.javaPrimitiveType,
         Byte::class.javaObjectType ->
-          operations.typed<KotlinByteValueClassOperations<Any>>()?.let {
+          operations.typed<KotlinByteMapKeyOperations<Any>>()?.let {
             return ByteKey(it)
           }
         Short::class.javaPrimitiveType,
         Short::class.javaObjectType ->
-          operations.typed<KotlinShortValueClassOperations<Any>>()?.let {
+          operations.typed<KotlinShortMapKeyOperations<Any>>()?.let {
             return ShortKey(it)
           }
         Int::class.javaPrimitiveType,
         Int::class.javaObjectType ->
-          operations.typed<KotlinIntValueClassOperations<Any>>()?.let {
+          operations.typed<KotlinIntMapKeyOperations<Any>>()?.let {
             return IntKey(it)
           }
         Long::class.javaPrimitiveType,
         Long::class.javaObjectType ->
-          operations.typed<KotlinLongValueClassOperations<Any>>()?.let {
+          operations.typed<KotlinLongMapKeyOperations<Any>>()?.let {
             return LongKey(it)
           }
       }
     }
-    return ReferenceKey(boxedOperations(operations), terminal)
+    val boxed =
+      operations as? UnchargedBoxedOperations
+        ?: throw ForyJsonException(
+          "Kotlin value-class map-key operations cannot construct ${shape.ownerClass.name}",
+        )
+    return ReferenceKey(boxed, terminal)
   }
 
   @Suppress("UNCHECKED_CAST")
@@ -91,7 +96,7 @@ internal object KotlinValueClassMapKeys {
 }
 
 private class ReferenceKey(
-  private val operations: BoxedValueClassOperations,
+  private val operations: UnchargedBoxedOperations,
   private val terminal: MapKeyCodec,
 ) : MapKeyCodec {
   override fun toName(key: Any): String = terminal.toName(operations.unbox(key))
@@ -106,12 +111,12 @@ private class ReferenceKey(
 }
 
 private class ByteKey(
-  private val operations: KotlinByteValueClassOperations<Any>,
+  private val operations: KotlinByteMapKeyOperations<Any>,
 ) : MapKeyCodec {
   override fun toName(key: Any): String = operations.unboxByte(key).toString()
 
   override fun fromName(name: String): Any =
-    operations.constructByteUncharged(JsonCreatorFieldInfo.checkedByte(name.toInt()))
+    operations.constructByteUncharged(KotlinMapKeyParsing.byte(name))
 
   override fun writeName(writer: JsonWriter, key: Any) =
     writer.writeIntFieldName(operations.unboxByte(key).toInt())
@@ -121,12 +126,12 @@ private class ByteKey(
 }
 
 private class ShortKey(
-  private val operations: KotlinShortValueClassOperations<Any>,
+  private val operations: KotlinShortMapKeyOperations<Any>,
 ) : MapKeyCodec {
   override fun toName(key: Any): String = operations.unboxShort(key).toString()
 
   override fun fromName(name: String): Any =
-    operations.constructShortUncharged(JsonCreatorFieldInfo.checkedShort(name.toInt()))
+    operations.constructShortUncharged(KotlinMapKeyParsing.short(name))
 
   override fun writeName(writer: JsonWriter, key: Any) =
     writer.writeIntFieldName(operations.unboxShort(key).toInt())
@@ -136,11 +141,12 @@ private class ShortKey(
 }
 
 private class IntKey(
-  private val operations: KotlinIntValueClassOperations<Any>,
+  private val operations: KotlinIntMapKeyOperations<Any>,
 ) : MapKeyCodec {
   override fun toName(key: Any): String = operations.unboxInt(key).toString()
 
-  override fun fromName(name: String): Any = operations.constructIntUncharged(name.toInt())
+  override fun fromName(name: String): Any =
+    operations.constructIntUncharged(KotlinMapKeyParsing.int(name))
 
   override fun writeName(writer: JsonWriter, key: Any) =
     writer.writeIntFieldName(operations.unboxInt(key))
@@ -150,11 +156,12 @@ private class IntKey(
 }
 
 private class LongKey(
-  private val operations: KotlinLongValueClassOperations<Any>,
+  private val operations: KotlinLongMapKeyOperations<Any>,
 ) : MapKeyCodec {
   override fun toName(key: Any): String = operations.unboxLong(key).toString()
 
-  override fun fromName(name: String): Any = operations.constructLongUncharged(name.toLong())
+  override fun fromName(name: String): Any =
+    operations.constructLongUncharged(KotlinMapKeyParsing.long(name))
 
   override fun writeName(writer: JsonWriter, key: Any) =
     writer.writeLongFieldName(operations.unboxLong(key))
@@ -164,56 +171,48 @@ private class LongKey(
 }
 
 private class UByteKey(
-  private val operations: KotlinByteValueClassOperations<Any>,
+  private val operations: KotlinByteMapKeyOperations<Any>,
 ) : MapKeyCodec {
   override fun toName(key: Any): String = (operations.unboxByte(key).toInt() and 0xff).toString()
 
   override fun fromName(name: String): Any =
-    operations.constructByteUncharged(checked(name.toUInt().toInt()))
+    operations.constructByteUncharged(KotlinMapKeyParsing.ubyte(name))
 
   override fun writeName(writer: JsonWriter, key: Any) =
     writer.writeUnsignedIntFieldName(operations.unboxByte(key).toInt() and 0xff)
 
   override fun readName(reader: JsonReader): Any =
-    operations.constructByte(reader, checked(reader.readFieldNameUnsignedInt()))
-
-  private fun checked(value: Int): Byte {
-    if (Integer.compareUnsigned(value, UByte.MAX_VALUE.toInt()) > 0) {
-      throw ForyJsonException("UByte map-key overflow")
-    }
-    return value.toByte()
-  }
+    operations.constructByte(
+      reader,
+      KotlinMapKeyParsing.checkedUByte(reader.readFieldNameUnsignedInt()),
+    )
 }
 
 private class UShortKey(
-  private val operations: KotlinShortValueClassOperations<Any>,
+  private val operations: KotlinShortMapKeyOperations<Any>,
 ) : MapKeyCodec {
   override fun toName(key: Any): String = (operations.unboxShort(key).toInt() and 0xffff).toString()
 
   override fun fromName(name: String): Any =
-    operations.constructShortUncharged(checked(name.toUInt().toInt()))
+    operations.constructShortUncharged(KotlinMapKeyParsing.ushort(name))
 
   override fun writeName(writer: JsonWriter, key: Any) =
     writer.writeUnsignedIntFieldName(operations.unboxShort(key).toInt() and 0xffff)
 
   override fun readName(reader: JsonReader): Any =
-    operations.constructShort(reader, checked(reader.readFieldNameUnsignedInt()))
-
-  private fun checked(value: Int): Short {
-    if (Integer.compareUnsigned(value, UShort.MAX_VALUE.toInt()) > 0) {
-      throw ForyJsonException("UShort map-key overflow")
-    }
-    return value.toShort()
-  }
+    operations.constructShort(
+      reader,
+      KotlinMapKeyParsing.checkedUShort(reader.readFieldNameUnsignedInt()),
+    )
 }
 
 private class UIntKey(
-  private val operations: KotlinIntValueClassOperations<Any>,
+  private val operations: KotlinIntMapKeyOperations<Any>,
 ) : MapKeyCodec {
   override fun toName(key: Any): String = Integer.toUnsignedString(operations.unboxInt(key))
 
   override fun fromName(name: String): Any =
-    operations.constructIntUncharged(Integer.parseUnsignedInt(name))
+    operations.constructIntUncharged(KotlinMapKeyParsing.uint(name))
 
   override fun writeName(writer: JsonWriter, key: Any) =
     writer.writeUnsignedIntFieldName(operations.unboxInt(key))
@@ -223,12 +222,12 @@ private class UIntKey(
 }
 
 private class ULongKey(
-  private val operations: KotlinLongValueClassOperations<Any>,
+  private val operations: KotlinLongMapKeyOperations<Any>,
 ) : MapKeyCodec {
   override fun toName(key: Any): String = java.lang.Long.toUnsignedString(operations.unboxLong(key))
 
   override fun fromName(name: String): Any =
-    operations.constructLongUncharged(java.lang.Long.parseUnsignedLong(name))
+    operations.constructLongUncharged(KotlinMapKeyParsing.ulong(name))
 
   override fun writeName(writer: JsonWriter, key: Any) =
     writer.writeUnsignedLongFieldName(operations.unboxLong(key))

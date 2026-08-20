@@ -66,6 +66,7 @@ import java.time.chrono.MinguoDate;
 import java.time.chrono.ThaiBuddhistDate;
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,8 +95,10 @@ import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.StringSerializer;
+import org.apache.fory.type.Types;
 import org.testng.annotations.Test;
 
 public class JsonScalarTest extends ForyJsonTestModels {
@@ -582,6 +585,27 @@ public class JsonScalarTest extends ForyJsonTestModels {
     AtomicReference<String> nullValue =
         json.fromJson("null", new TypeRef<AtomicReference<String>>() {});
     assertEquals(nullValue.get(), null);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void optionalNonNullAtomicReference() {
+    TypeExtMeta nonNull = TypeExtMeta.of(Types.UNKNOWN, false, false, false, false);
+    TypeRef<?> stringType = TypeRef.of(String.class, nonNull);
+    TypeRef<?> atomicType =
+        TypeRef.ofDeclaredTypeArguments(
+            AtomicReference.class, nonNull, Collections.singletonList(stringType), null);
+    TypeRef<Optional<AtomicReference<String>>> optionalType =
+        (TypeRef<Optional<AtomicReference<String>>>)
+            (TypeRef<?>)
+                TypeRef.ofDeclaredTypeArguments(
+                    Optional.class, nonNull, Collections.singletonList(atomicType), null);
+    ForyJson json = newJson();
+    Optional<AtomicReference<String>> value = json.fromJson("\"value\"", optionalType);
+    assertTrue(value.isPresent());
+    assertEquals(value.get().get(), "value");
+    assertEquals(json.toJson(value, optionalType), "\"value\"");
+    assertEquals(json.fromJson("null", optionalType), Optional.empty());
   }
 
   @Test(dataProvider = "enableCodegen")
@@ -1143,11 +1167,27 @@ public class JsonScalarTest extends ForyJsonTestModels {
         UUID.fromString("123e4567-e89b-12d3-a456-426614174000"));
     assertEquals(json.fromJson("\"1-1-1-1-1\"", UUID.class), UUID.fromString("1-1-1-1-1"));
     assertEquals(
+        json.fromJson("\"123456789-1-1-1-1\"", UUID.class), UUID.fromString("123456789-1-1-1-1"));
+    assertEquals(
         json.fromJson("\"2024-02-03T04:05:06.123\\u005a\"", Instant.class),
         Instant.parse("2024-02-03T04:05:06.123Z"));
     assertEquals(
         json.fromJson("\"PT1H1M1.123\\u0053\"", Duration.class),
         Duration.ofSeconds(3661, 123_000_000));
+  }
+
+  @Test
+  public void rejectUnsignedFieldNameOverflow() {
+    String overflow = "\"18446744073709551616\"";
+    if (StringSerializer.isBytesBackedString()) {
+      assertThrows(
+          ForyJsonException.class,
+          () -> newLatin1Reader(latin1Bytes(overflow)).readFieldNameUnsignedLong());
+    }
+    assertThrows(ForyJsonException.class, () -> utf16Reader(overflow).readFieldNameUnsignedLong());
+    assertThrows(
+        ForyJsonException.class,
+        () -> newUtf8Reader(overflow.getBytes(StandardCharsets.UTF_8)).readFieldNameUnsignedLong());
   }
 
   @Test

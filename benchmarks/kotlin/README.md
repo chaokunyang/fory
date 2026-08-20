@@ -68,16 +68,19 @@ computes each ratio inside its round before calculating the median and median ab
 The round count must be a multiple of three; the six-round default gives every comparator one AB
 and one BA adjacency for each operation.
 
-Use `--prepare-only` for CI correctness and source-generation checks without performance timing.
+Use `--prepare-only` for CI correctness and Moshi adapter-generation checks without performance
+timing.
 When comparing two Fory revisions at the same Maven coordinate, resolve each revision from a
 separate Maven repository and build one JMH JAR from each isolated classpath. Supply the second JMH
 JAR and generated classpath manifest with `--comparison-jmh-jar` and
 `--comparison-classpath-file`, plus its commit with `--comparison-commit`. The runner rejects a
-shared Fory artifact path, verifies that the immutable model, fixture, benchmark methods, and JMH
-case list are identical, records both artifact and dependency-set hashes plus the executed JMH JAR
-hash for every launch, and alternates current/comparison Fory launches in adjacent AB/BA pairs. If
-the comparison revision lacks this exact module, API, or benchmark surface, do not report a
-revision ratio.
+shared Fory artifact path and requires each JMH JAR's embedded build provenance to match the exact
+runtime classpath manifest supplied with it. It also verifies that the immutable model, fixture,
+benchmark methods, and JMH case list are identical, records both artifact and dependency-set hashes
+plus the executed JMH JAR hash for every launch, and alternates current/comparison Fory launches in
+adjacent AB/BA pairs. The generated report publishes the per-launch revision samples and the four
+current/comparison operation ratios. If the comparison revision lacks this exact module, API, or
+benchmark surface, do not report a revision ratio.
 
 Excluded runs are retained. Use `--session-id` when predeclaring deterministic run IDs, then supply
 a CSV with `run_id,reason` columns through `--exclusions`; the raw sample remains present with

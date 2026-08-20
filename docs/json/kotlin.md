@@ -33,6 +33,13 @@ plugins {
   kotlin("jvm") version "2.3.20"
 }
 
+repositories {
+  maven("https://repository.apache.org/snapshots/") {
+    mavenContent { snapshotsOnly() }
+  }
+  mavenCentral()
+}
+
 dependencies {
   implementation("org.apache.fory:fory-json-kotlin:1.7.0-SNAPSHOT")
 }
@@ -52,10 +59,10 @@ dependencies {
 }
 ```
 
-Annotate every Kotlin model that needs exact minification retention with `@JsonType`. For a
-third-party target, annotate a source-owned exact `@JsonMixin` instead. The processor emits only
-the exact R8 and ProGuard rules for those declarations; it does not generate codecs or change the
-JSON mapping.
+Annotate every Kotlin source model that needs exact minification retention with `@JsonType`. For a
+third-party target, declare an exact `@JsonMixin` in application source instead. Use Kotlin KSP for
+a Mixin when either the Mixin or its exact target is Kotlin. The processor emits only the exact R8
+and ProGuard rules for those declarations; it does not generate codecs or change the JSON mapping.
 
 ## Quick start
 
@@ -190,18 +197,10 @@ data class Profile(
 )
 ```
 
-Supported physical sites are `@field:`, `@get:`, `@set:`, selected constructor `@param:`, and the
-documented parameter annotations on `@setparam:`. `@property:` is not supported because Fory JSON
-annotations do not target Kotlin-only property metadata. `@setparam:JsonProperty` is rejected;
-property naming belongs on the field, accessor, or selected constructor parameter. Bare and
-`@all:` annotations are honored only where they produce one of the supported JVM sites.
-
-Repeated `JsonProperty` members merge only when explicit values agree. `JsonIgnore` directions
-merge monotonically. Repeated `JsonCodec` declarations must be identical. A `@set:JsonCodec` is a
-supported setter declaration; it does not need to be rewritten as `@setparam:`.
-
-See [Annotations](annotations.md) for the complete mapping and [Custom Codecs](custom-codecs.md)
-for complete-value, element, content, key, and map-value codecs.
+Use explicit JVM use-site targets as shown so behavior does not depend on Kotlin's default-target
+policy. See [Annotations](annotations.md#kotlin-use-site-targets) for the complete supported-target
+and conflict rules, and [Custom Codecs](custom-codecs.md) for complete-value, element, content, key,
+and map-value codecs.
 
 ## Generics and collections
 
@@ -334,12 +333,7 @@ side effects.
 
 See [Security](security.md) before decoding untrusted input.
 
-## KSP, GraalVM, and Android
-
-KSP is optional except in Android builds where R8 or ProGuard can rename or remove model members.
-For those builds, `@JsonType` and source-owned exact Mixins ask KSP to emit exact retention rules.
-KSP owns a Mixin request when either the Mixin source or its exact target is Kotlin. It does not
-generate a Kotlin codec or select a different JSON schema.
+## GraalVM and Android
 
 On GraalVM Native Image, use the existing `@ForyJsonProvider` workflow, install
 `ForyJsonKotlin`, and enable code generation in the returned configuration. Annotate each reachable
@@ -348,29 +342,19 @@ target. Fory reads the Kotlin metadata and prepares generated codecs while build
 Only exact generic bindings reachable through provider-selected concrete roots are available. Do
 not add reflection configuration or package-wide opens.
 
-On Android, use API 26 or later. The runtime reads Kotlin metadata in both debug and release builds.
-If a release build enables R8 or ProGuard, apply KSP to the application module and mark every
-required source model with `@JsonType` or provide a source-owned exact Mixin. Package the generated
-retention rules and do not add package-wide keep rules. Runtime JSON code generation remains
-disabled.
+On Android, use API 26 or later. The runtime reads Kotlin metadata in both debug and release builds,
+and runtime JSON code generation remains disabled. Follow the [installation](#installation) above
+and the [Android guide](android.md) when R8 or ProGuard is enabled.
 
 Kotlin/Native, Kotlin/JS, and Kotlin/Wasm are not supported by this JVM module.
 
-See [GraalVM Native Image](graalvm.md), [Android](android.md), and
-[Troubleshooting](troubleshooting.md) for platform diagnostics.
+See [GraalVM Native Image](graalvm.md) and [Android](android.md) for complete platform setup.
 
 ## Troubleshooting
 
-| Symptom                                     | Action                                                                                                                                        |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| unsupported Kotlin metadata                 | Compile the model with the supported Kotlin 2.3 compiler and verify that packaged JVM members match the model                                 |
-| missing member or JSON null fails           | Check the exact occurrence in `jsonTypeRef<T>()`; absence may use a declared default, while null requires a nullable declaration              |
-| raw, star, or projected generic fails       | Supply one complete declared type; `in` and star projections do not define reconstructible schemas                                            |
-| model fails only after Android minification | Apply KSP, mark the source with `@JsonType` or an exact Mixin, and verify that its generated retention rules are packaged                     |
-| model is unavailable in Native Image        | Return a codegen-enabled `ForyJsonKotlin` configuration from a reachable provider and make the exact model binding reachable from that config |
-
-The general [Troubleshooting](troubleshooting.md) page covers syntax, limits, custom codecs,
-subtypes, and root-operation failures shared with Java and Scala.
+See [Troubleshooting](troubleshooting.md) for Kotlin metadata, nullability, generic binding,
+Android shrinking, Native Image, syntax, limits, custom codecs, subtypes, and root-operation
+failures.
 
 The source-aligned four-library benchmark methodology and publication status are in the
 [Kotlin JSON benchmark report](../benchmarks/json/kotlin/README.md). No Kotlin result is inferred

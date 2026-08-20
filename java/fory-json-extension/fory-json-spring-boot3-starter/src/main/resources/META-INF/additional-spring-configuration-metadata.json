@@ -1,0 +1,10 @@
+{
+  "properties": [
+    {
+      "name": "fory.json.max-input-bytes",
+      "type": "java.lang.Integer",
+      "description": "Maximum size in bytes of one Spring MVC request body decoded by Fory JSON.",
+      "defaultValue": 67108864
+    }
+  ]
+}

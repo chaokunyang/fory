@@ -150,6 +150,15 @@
       </modules>
     </profile>
     <profile>
+      <id>jdk17-and-higher</id>
+      <activation>
+        <jdk>[17,]</jdk>
+      </activation>
+      <modules>
+        <module>fory-json-extension</module>
+      </modules>
+    </profile>
+    <profile>
       <id>jdk21-and-higher</id>
       <activation>
         <jdk>[21,]</jdk>

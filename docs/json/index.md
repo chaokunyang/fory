@@ -31,19 +31,20 @@ reference identity, circular graphs, or Fory's binary-only features.
 
 ## Documentation map
 
-| Goal                                                            | Page                                  |
-| --------------------------------------------------------------- | ------------------------------------- |
-| First runnable JSON round trip                                  | [Getting Started](getting-started.md) |
-| Understand Java object mapping and configuration                | [Object Mapping](object-mapping.md)   |
-| Configure properties, creators, values, validators, and mixins  | [Annotations](annotations.md)         |
-| Extend complete values, children, and map keys                  | [Custom Codecs](custom-codecs.md)     |
-| Package and distribute reusable JSON extensions                 | [Modules](modules.md)                 |
-| Use data classes, Kotlin nullability, defaults, and value types | [Kotlin](kotlin.md)                   |
-| Use case classes, Scala collections, and Scala enums            | [Scala](scala.md)                     |
-| Deploy on Android                                               | [Android](android.md)                 |
-| Build a GraalVM native image                                    | [GraalVM Native Image](graalvm.md)    |
-| Decode input safely                                             | [Security](security.md)               |
-| Diagnose failures                                               | [Troubleshooting](troubleshooting.md) |
+| Goal                                                            | Page                                     |
+| --------------------------------------------------------------- | ---------------------------------------- |
+| First runnable JSON round trip                                  | [Getting Started](getting-started.md)    |
+| Understand Java object mapping and configuration                | [Object Mapping](object-mapping.md)      |
+| Configure properties, creators, values, validators, and mixins  | [Annotations](annotations.md)            |
+| Extend complete values, children, and map keys                  | [Custom Codecs](custom-codecs.md)        |
+| Package and distribute reusable JSON extensions                 | [Modules](modules.md)                    |
+| Use Fory JSON with Spring MVC and Spring WebFlux                | [Spring and Spring Boot](spring-boot.md) |
+| Use data classes, Kotlin nullability, defaults, and value types | [Kotlin](kotlin.md)                      |
+| Use case classes, Scala collections, and Scala enums            | [Scala](scala.md)                        |
+| Deploy on Android                                               | [Android](android.md)                    |
+| Build a GraalVM native image                                    | [GraalVM Native Image](graalvm.md)       |
+| Decode input safely                                             | [Security](security.md)                  |
+| Diagnose failures                                               | [Troubleshooting](troubleshooting.md)    |
 
 ## Performance
 

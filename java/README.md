@@ -58,6 +58,7 @@ Keep all Fory modules in one application on the same version.
 - `fory-core` and `fory-json` support Java 8 and later; Java records require
   Java 17 or later.
 - `fory-format` targets Java 11 and later.
+- Fory JSON Spring adapters and Spring Boot starters require Java 17 or later.
 - `fory-core` and `fory-json` run on standard JDKs, GraalVM native images, and
   Android. Optional SIMD array acceleration in `fory-core` uses the Java Vector
   API on Java 16 and later.
@@ -75,13 +76,17 @@ Keep all Fory modules in one application on the same version.
 
 ## Modules
 
-| Module                               | Description                                   | Maven Artifact                    |
-| ------------------------------------ | --------------------------------------------- | --------------------------------- |
-| **fory-core**                        | Binary native and xlang serialization         | `org.apache.fory:fory-core`       |
-| **fory-format**                      | Row format and Apache Arrow support           | `org.apache.fory:fory-format`     |
-| [**fory-json**](fory-json/README.md) | High-performance JSON serialization framework | `org.apache.fory:fory-json`       |
-| **fory-extensions**                  | Protobuf support and metadata compression     | `org.apache.fory:fory-extensions` |
-| **fory-test-core**                   | Testing utilities and data generators         | `org.apache.fory:fory-test-core`  |
+| Module                                                            | Description                                   | Maven Artifact                                   |
+| ----------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------ |
+| **fory-core**                                                     | Binary native and xlang serialization         | `org.apache.fory:fory-core`                      |
+| **fory-format**                                                   | Row format and Apache Arrow support           | `org.apache.fory:fory-format`                    |
+| [**fory-json**](fory-json/README.md)                              | High-performance JSON serialization framework | `org.apache.fory:fory-json`                      |
+| [**fory-json-spring**](../docs/json/spring-boot.md)               | Spring 7 MVC and WebFlux adapter              | `org.apache.fory:fory-json-spring`               |
+| [**fory-json-spring6**](../docs/json/spring-boot.md)              | Spring 6.2 MVC and WebFlux adapter            | `org.apache.fory:fory-json-spring6`              |
+| [**fory-json-spring-boot-starter**](../docs/json/spring-boot.md)  | Spring Boot 4 MVC and WebFlux starter         | `org.apache.fory:fory-json-spring-boot-starter`  |
+| [**fory-json-spring-boot3-starter**](../docs/json/spring-boot.md) | Spring Boot 3.5 MVC and WebFlux starter       | `org.apache.fory:fory-json-spring-boot3-starter` |
+| **fory-extensions**                                               | Protobuf support and metadata compression     | `org.apache.fory:fory-extensions`                |
+| **fory-test-core**                                                | Testing utilities and data generators         | `org.apache.fory:fory-test-core`                 |
 
 ## Installation
 

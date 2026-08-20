@@ -57,7 +57,7 @@ MAVEN_RELEASE_CMD = (
 )
 MAVEN_SNAPSHOT_CMD = (
     "mvn -T10 clean deploy --no-transfer-progress -DskipTests "
-    "-Dgpg.skip=true -Psnapshot-publication"
+    "-Dgpg.skip=true -DretryFailedDeploymentCount=3 -Psnapshot-publication"
 )
 KOTLIN_RELEASE_PACKAGE_CMD = (
     "mvn -T10 clean package --no-transfer-progress -DskipTests -Papache-release"
@@ -71,7 +71,7 @@ KOTLIN_SNAPSHOT_PACKAGE_CMD = (
 )
 KOTLIN_SNAPSHOT_DEPLOY_CMD = (
     "mvn -T10 deploy --no-transfer-progress -DskipTests "
-    "-Dgpg.skip=true -Psnapshot-publication"
+    "-Dgpg.skip=true -DretryFailedDeploymentCount=3 -Psnapshot-publication"
 )
 SCALA_RELEASE_COMMANDS = (
     "sbt clean",

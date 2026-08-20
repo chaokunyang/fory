@@ -330,7 +330,7 @@ public final class JsonTypeResolver {
     Object key = resolutionTypeKey(declaredType, rawType);
     JsonTypeInfo typeInfo = typeInfos.get(key);
     if (typeInfo == null
-        && declaredType == rawType
+        && key == rawType
         && activeRuntimeTypeInfo != null
         && activeRuntimeTypeInfo.rawType() == rawType) {
       typeInfo = activeRuntimeTypeInfo;
@@ -358,7 +358,7 @@ public final class JsonTypeResolver {
     Object key = resolutionTypeKey(declaredType);
     JsonTypeInfo typeInfo = typeInfos.get(key);
     if (typeInfo == null
-        && declaredType.getType() == rawType
+        && key == rawType
         && activeRuntimeTypeInfo != null
         && activeRuntimeTypeInfo.rawType() == rawType) {
       typeInfo = activeRuntimeTypeInfo;

@@ -259,13 +259,16 @@ public class JsonModuleTest {
     JsonCodecFactory factory =
         (type, resolver, runtimeType) -> {
           Class<?> rawType = type.getRawType();
+          boolean exactLayer = rawType == RuntimeLayerA.class && type.hasTypeExtMeta();
           Class<?> child =
-              rawType == RuntimeLayerA.class
-                  ? RuntimeLayerB.class
-                  : rawType == RuntimeLayerB.class
-                      ? RuntimeLayerC.class
-                      : rawType == RuntimeLayerC.class ? RuntimeLayerA.class : null;
-          if (child == null) {
+              exactLayer
+                  ? null
+                  : rawType == RuntimeLayerA.class
+                      ? RuntimeLayerB.class
+                      : rawType == RuntimeLayerB.class
+                          ? RuntimeLayerC.class
+                          : rawType == RuntimeLayerC.class ? RuntimeLayerA.class : null;
+          if (child == null && !exactLayer) {
             return null;
           }
           creations.add(rawType);
@@ -280,8 +283,10 @@ public class JsonModuleTest {
 
     assertEquals(json.toJson(new RuntimeLayerA()), "null");
     assertEquals(
-        creations, Arrays.asList(RuntimeLayerA.class, RuntimeLayerB.class, RuntimeLayerC.class));
-    assertEquals(runtimeTypes, Arrays.asList(true, false, false));
+        creations,
+        Arrays.asList(
+            RuntimeLayerA.class, RuntimeLayerB.class, RuntimeLayerC.class, RuntimeLayerA.class));
+    assertEquals(runtimeTypes, Arrays.asList(true, false, false, false));
   }
 
   private static final class KeyedModule implements ForyJsonModule {
@@ -487,7 +492,15 @@ public class JsonModuleTest {
 
     @Override
     public void resolveTypes(TypeRef<?> type, JsonTypeResolver resolver) {
+      if (child == null) {
+        return;
+      }
       resolver.getTypeInfo(child, child);
+      if (child == RuntimeLayerA.class) {
+        resolver.getTypeInfo(
+            TypeRef.of(
+                RuntimeLayerA.class, TypeExtMeta.of(Types.UNKNOWN, false, true, false, false)));
+      }
     }
 
     @Override

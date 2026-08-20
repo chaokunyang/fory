@@ -104,17 +104,6 @@ final class SpringJsonSupport {
   }
 
   @SuppressWarnings({"rawtypes", "unchecked"})
-  static Object read(ForyJson foryJson, String json, Type type) {
-    if (ProblemDetail.class.equals(TypeRef.of(type).getRawType())) {
-      return readProblemDetail(foryJson.fromJson(json, Object.class));
-    }
-    if (type instanceof Class<?> rawType) {
-      return foryJson.fromJson(json, rawType);
-    }
-    return foryJson.fromJson(json, TypeRef.of(type));
-  }
-
-  @SuppressWarnings({"rawtypes", "unchecked"})
   static byte[] write(ForyJson foryJson, Object value, Type type) {
     if (value instanceof ProblemDetail problemDetail) {
       return foryJson.toJsonBytes(problemDetailValues(problemDetail), PROBLEM_DETAIL_MAP_TYPE);
@@ -133,10 +122,11 @@ final class SpringJsonSupport {
       throw new IllegalArgumentException("Expected a JSON object for ProblemDetail");
     }
     Object statusValue = values.remove("status");
-    if (!(statusValue instanceof Number status)) {
+    if (statusValue != null && !(statusValue instanceof Number)) {
       throw new IllegalArgumentException("ProblemDetail status must be a number");
     }
-    ProblemDetail problemDetail = ProblemDetail.forStatus(status.intValue());
+    int status = statusValue == null ? 0 : ((Number) statusValue).intValue();
+    ProblemDetail problemDetail = ProblemDetail.forStatus(status);
     setUri(values.remove("type"), problemDetail::setType, "type");
     setString(values.remove("title"), problemDetail::setTitle, "title");
     setString(values.remove("detail"), problemDetail::setDetail, "detail");

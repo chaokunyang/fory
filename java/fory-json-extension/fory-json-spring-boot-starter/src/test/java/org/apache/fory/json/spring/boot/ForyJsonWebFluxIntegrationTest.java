@@ -33,6 +33,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -104,6 +105,18 @@ class ForyJsonWebFluxIntegrationTest {
         .isEqualTo("{\"fory_name\":\"one\"}\n{\"fory_name\":\"two\"}\n");
   }
 
+  @Test
+  void rejectsMalformedProblemDetailArray() {
+    webTestClient
+        .post()
+        .uri("/webflux/problems")
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .bodyValue("[{\"status\":\"bad\"}]".getBytes(StandardCharsets.UTF_8))
+        .exchange()
+        .expectStatus()
+        .isBadRequest();
+  }
+
   @SpringBootConfiguration
   @EnableAutoConfiguration
   @Import(WebFluxController.class)
@@ -127,6 +140,14 @@ class ForyJsonWebFluxIntegrationTest {
     @GetMapping(value = "/webflux/ndjson", produces = MediaType.APPLICATION_NDJSON_VALUE)
     Flux<Payload> ndjson() {
       return Flux.just(new Payload("one"), new Payload("two"));
+    }
+
+    @PostMapping(
+        value = "/webflux/problems",
+        consumes = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+        produces = MediaType.APPLICATION_JSON_VALUE)
+    Mono<Long> problems(@RequestBody Flux<ProblemDetail> problems) {
+      return problems.count();
     }
   }
 

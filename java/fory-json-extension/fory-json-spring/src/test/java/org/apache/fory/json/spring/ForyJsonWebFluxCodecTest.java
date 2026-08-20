@@ -197,6 +197,15 @@ public class ForyJsonWebFluxCodecTest {
         .expectError(DataBufferLimitException.class)
         .verify();
     assertFalse(buffer.isAllocated());
+
+    ForyJsonDecoder ndjsonDecoder = new ForyJsonDecoder(JSON, 16);
+    PooledDataBuffer ndjson = pooled("{\"id\":1,\"name\":\"你好\"}\n");
+    StepVerifier.create(
+            ndjsonDecoder.decode(
+                Mono.just((DataBuffer) ndjson), USER_TYPE, MediaType.APPLICATION_NDJSON, Map.of()))
+        .expectError(DataBufferLimitException.class)
+        .verify();
+    assertFalse(ndjson.isAllocated());
   }
 
   @Test
@@ -270,6 +279,41 @@ public class ForyJsonWebFluxCodecTest {
         .assertNext(value -> assertEquals(((ProblemDetail) value).getStatus(), 400))
         .assertNext(value -> assertEquals(((ProblemDetail) value).getStatus(), 400))
         .verifyComplete();
+  }
+
+  @Test
+  public void decodesProblemDetailWithoutStatus() {
+    ForyJsonDecoder decoder = new ForyJsonDecoder(JSON);
+    ResolvableType type = ResolvableType.forClass(ProblemDetail.class);
+    String json = "{\"detail\":\"failed\"}";
+
+    StepVerifier.create(
+            decoder.decodeToMono(buffers(json), type, MediaType.APPLICATION_PROBLEM_JSON, Map.of()))
+        .assertNext(value -> assertEquals(((ProblemDetail) value).getStatus(), 0))
+        .verifyComplete();
+    StepVerifier.create(
+            decoder.decode(
+                buffers("[" + json + "]"), type, MediaType.APPLICATION_PROBLEM_JSON, Map.of()))
+        .assertNext(value -> assertEquals(((ProblemDetail) value).getStatus(), 0))
+        .verifyComplete();
+    StepVerifier.create(
+            decoder.decode(buffers(json + "\n"), type, MediaType.APPLICATION_NDJSON, Map.of()))
+        .assertNext(value -> assertEquals(((ProblemDetail) value).getStatus(), 0))
+        .verifyComplete();
+  }
+
+  @Test
+  public void wrapsProblemDetailArrayErrors() {
+    ForyJsonDecoder decoder = new ForyJsonDecoder(JSON);
+    ResolvableType type = ResolvableType.forClass(ProblemDetail.class);
+    StepVerifier.create(
+            decoder.decode(
+                buffers("[{\"status\":\"bad\"}]"),
+                type,
+                MediaType.APPLICATION_PROBLEM_JSON,
+                Map.of()))
+        .expectError(DecodingException.class)
+        .verify();
   }
 
   private static Flux<DataBuffer> buffers(String... chunks) {

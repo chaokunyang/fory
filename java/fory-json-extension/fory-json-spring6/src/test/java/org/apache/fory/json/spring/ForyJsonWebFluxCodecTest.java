@@ -32,6 +32,7 @@ import org.apache.fory.json.ForyJson;
 import org.apache.fory.json.JsonObject;
 import org.apache.fory.reflect.TypeRef;
 import org.springframework.core.ResolvableType;
+import org.springframework.core.codec.DecodingException;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferFactory;
 import org.springframework.core.io.buffer.DataBufferLimitException;
@@ -148,22 +149,53 @@ public class ForyJsonWebFluxCodecTest {
   @Test
   public void testProblemDetailEncoding() {
     ForyJsonEncoder encoder = new ForyJsonEncoder(foryJson);
+    ForyJsonDecoder decoder = new ForyJsonDecoder(foryJson);
+    ResolvableType type = ResolvableType.forClass(ProblemDetail.class);
     ProblemDetail detail = ProblemDetail.forStatus(400);
     detail.setDetail("Invalid request");
     detail.setProperty("field", "name");
 
-    String json =
-        encode(
-            encoder,
-            Mono.just(detail),
-            ResolvableType.forClass(ProblemDetail.class),
-            MediaType.APPLICATION_PROBLEM_JSON);
+    String json = encode(encoder, Mono.just(detail), type, MediaType.APPLICATION_PROBLEM_JSON);
 
     JsonObject values = (JsonObject) foryJson.fromJson(json, Object.class);
     assertEquals(((Number) values.get("status")).intValue(), 400);
     assertEquals(values.get("detail"), "Invalid request");
     assertEquals(values.get("field"), "name");
     assertFalse(values.containsKey("properties"));
+
+    String withoutStatus = "{\"detail\":\"failed\"}";
+    StepVerifier.create(
+            decoder.decodeToMono(
+                Mono.just(buffer(withoutStatus)),
+                type,
+                MediaType.APPLICATION_PROBLEM_JSON,
+                Collections.emptyMap()))
+        .assertNext(value -> assertEquals(((ProblemDetail) value).getStatus(), 0))
+        .verifyComplete();
+    StepVerifier.create(
+            decoder.decode(
+                Mono.just(buffer("[" + withoutStatus + "]")),
+                type,
+                MediaType.APPLICATION_PROBLEM_JSON,
+                Collections.emptyMap()))
+        .assertNext(value -> assertEquals(((ProblemDetail) value).getStatus(), 0))
+        .verifyComplete();
+    StepVerifier.create(
+            decoder.decode(
+                Mono.just(buffer(withoutStatus + "\n")),
+                type,
+                MediaType.APPLICATION_NDJSON,
+                Collections.emptyMap()))
+        .assertNext(value -> assertEquals(((ProblemDetail) value).getStatus(), 0))
+        .verifyComplete();
+    StepVerifier.create(
+            decoder.decode(
+                Mono.just(buffer("[{\"status\":\"bad\"}]")),
+                type,
+                MediaType.APPLICATION_PROBLEM_JSON,
+                Collections.emptyMap()))
+        .expectError(DecodingException.class)
+        .verify();
   }
 
   @Test
@@ -182,6 +214,15 @@ public class ForyJsonWebFluxCodecTest {
             decoder.decode(
                 Flux.just(buffer("123"), buffer("45\n")),
                 ResolvableType.forClass(Integer.class),
+                MediaType.APPLICATION_NDJSON,
+                Collections.emptyMap()))
+        .expectError(DataBufferLimitException.class)
+        .verify();
+
+    StepVerifier.create(
+            decoder.decode(
+                Mono.just(buffer("{\"name\":\"你好\",\"age\":1}\n")),
+                userType,
                 MediaType.APPLICATION_NDJSON,
                 Collections.emptyMap()))
         .expectError(DataBufferLimitException.class)

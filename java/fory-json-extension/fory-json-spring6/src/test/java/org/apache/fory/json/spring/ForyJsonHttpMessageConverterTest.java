@@ -72,7 +72,7 @@ public class ForyJsonHttpMessageConverterTest {
   }
 
   @Test
-  public void testMediaTypesAndSpringOwnedValues() {
+  public void testMediaTypesAndSpringOwnedValues() throws Exception {
     ForyJsonHttpMessageConverter converter = new ForyJsonHttpMessageConverter(foryJson);
     MediaType vendorJson = MediaType.valueOf("application/vnd.example+json");
     assertTrue(converter.canRead(ResolvableType.forClass(User.class), vendorJson));
@@ -98,6 +98,21 @@ public class ForyJsonHttpMessageConverterTest {
         converter.canRead(
             ResolvableType.forClass(User.class),
             MediaType.parseMediaType("application/json;charset=UTF-16")));
+    assertFalse(
+        converter.canWrite(
+            ResolvableType.forClass(Object.class), String.class, MediaType.APPLICATION_JSON));
+    ResolvableType wildcardType = ResolvableType.forType(new TypeRef<List<?>>() {}.getType());
+    assertFalse(converter.canWrite(wildcardType, List.class, MediaType.APPLICATION_JSON));
+
+    MediaType profiled = MediaType.parseMediaType("application/vnd.example+json;profile=example");
+    MockHttpOutputMessage output = new MockHttpOutputMessage();
+    converter.write(
+        new User("Alice", 31),
+        ResolvableType.forClass(User.class),
+        profiled,
+        output,
+        Collections.emptyMap());
+    assertEquals(output.getHeaders().getContentType().getParameter("profile"), "example");
   }
 
   @Test
@@ -163,6 +178,16 @@ public class ForyJsonHttpMessageConverterTest {
     assertEquals(decoded.getDetail(), detail.getDetail());
     assertEquals(decoded.getInstance(), detail.getInstance());
     assertEquals(decoded.getProperties(), detail.getProperties());
+
+    ProblemDetail withoutStatus =
+        (ProblemDetail)
+            converter.read(
+                ResolvableType.forClass(ProblemDetail.class),
+                new MockHttpInputMessage(
+                    "{\"detail\":\"failed\"}".getBytes(StandardCharsets.UTF_8)),
+                Collections.emptyMap());
+    assertEquals(withoutStatus.getStatus(), 0);
+    assertEquals(withoutStatus.getDetail(), "failed");
   }
 
   @Test

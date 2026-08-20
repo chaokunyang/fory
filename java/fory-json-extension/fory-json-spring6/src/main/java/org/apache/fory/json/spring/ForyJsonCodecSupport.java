@@ -115,10 +115,11 @@ final class ForyJsonCodecSupport {
       throw new IllegalArgumentException("Expected a JSON object for ProblemDetail");
     }
     Object statusValue = values.remove("status");
-    if (!(statusValue instanceof Number status)) {
+    if (statusValue != null && !(statusValue instanceof Number)) {
       throw new IllegalArgumentException("ProblemDetail status must be a number");
     }
-    ProblemDetail problemDetail = ProblemDetail.forStatus(status.intValue());
+    int status = statusValue == null ? 0 : ((Number) statusValue).intValue();
+    ProblemDetail problemDetail = ProblemDetail.forStatus(status);
     setUri(values.remove("type"), problemDetail::setType, "type");
     setString(values.remove("title"), problemDetail::setTitle, "title");
     setString(values.remove("detail"), problemDetail::setDetail, "detail");

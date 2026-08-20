@@ -29,6 +29,9 @@ Select one complete version line and keep every Fory artifact on the same versio
 starter includes its matching Spring adapter, so a Boot application does not add the adapter
 separately.
 
+The examples below use development snapshots. Configure the Apache snapshot repository first as
+shown in [Getting Started](getting-started.md#requirements-and-installation).
+
 | Version line  | Spring Framework | Direct Spring artifact              | Spring Boot | Starter artifact                                 |
 | ------------- | ---------------- | ----------------------------------- | ----------- | ------------------------------------------------ |
 | Current       | 7.x              | `org.apache.fory:fory-json-spring`  | 4.x         | `org.apache.fory:fory-json-spring-boot-starter`  |

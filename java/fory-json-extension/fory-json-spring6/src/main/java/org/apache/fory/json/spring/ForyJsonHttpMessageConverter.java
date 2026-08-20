@@ -97,9 +97,8 @@ public final class ForyJsonHttpMessageConverter implements SmartHttpMessageConve
 
   @Override
   public boolean canWrite(ResolvableType type, Class<?> valueClass, MediaType mediaType) {
-    Class<?> candidate = type.resolve(valueClass);
-    return candidate != null
-        && ForyJsonCodecSupport.supportsClass(candidate)
+    return ForyJsonCodecSupport.supportsClass(valueClass)
+        && (type == ResolvableType.NONE || ForyJsonCodecSupport.supportsType(type))
         && supportsMediaType(mediaType);
   }
 
@@ -118,10 +117,7 @@ public final class ForyJsonHttpMessageConverter implements SmartHttpMessageConve
       throw new HttpMessageNotWritableException("Could not write Fory JSON", e);
     }
     MediaType selected = contentType == null ? APPLICATION_JSON_UTF8 : contentType;
-    outputMessage
-        .getHeaders()
-        .setContentType(
-            new MediaType(selected.getType(), selected.getSubtype(), StandardCharsets.UTF_8));
+    outputMessage.getHeaders().setContentType(new MediaType(selected, StandardCharsets.UTF_8));
     outputMessage.getHeaders().setContentLength(bytes.length);
     outputMessage.getBody().write(bytes);
   }

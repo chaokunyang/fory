@@ -133,7 +133,7 @@ public final class ForyJsonDecoder extends AbstractDataBufferDecoder<Object> {
           throw new DecodingException("Expected a JSON array");
         }
         return Flux.fromStream(() -> values.stream().filter(Objects::nonNull))
-            .map(ForyJsonCodecSupport::readProblemDetail);
+            .map(this::readProblemDetail);
       }
       ResolvableType listType = ResolvableType.forClassWithGenerics(List.class, elementType);
       Object decoded = foryJson.fromJson(bytes, TypeRef.of(listType.getType()));
@@ -153,6 +153,14 @@ public final class ForyJsonDecoder extends AbstractDataBufferDecoder<Object> {
       return ForyJsonCodecSupport.read(foryJson, bytes, elementType);
     } catch (RuntimeException e) {
       throw new DecodingException("Could not read Fory JSON", e);
+    }
+  }
+
+  private ProblemDetail readProblemDetail(Object value) {
+    try {
+      return ForyJsonCodecSupport.readProblemDetail(value);
+    } catch (RuntimeException e) {
+      throw new DecodingException("Fory JSON ProblemDetail decoding error", e);
     }
   }
 

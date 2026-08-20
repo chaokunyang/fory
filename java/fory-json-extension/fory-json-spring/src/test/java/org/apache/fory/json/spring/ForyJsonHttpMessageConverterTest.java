@@ -180,6 +180,12 @@ public class ForyJsonHttpMessageConverterTest {
     assertEquals(decoded.getDetail(), "Invalid value");
     assertEquals(decoded.getInstance(), URI.create("/orders/7"));
     assertEquals(decoded.getProperties().get("field"), "quantity");
+
+    ProblemDetail withoutStatus =
+        (ProblemDetail)
+            converter.read(ProblemDetail.class, new TestInputMessage("{\"detail\":\"failed\"}"));
+    assertEquals(withoutStatus.getStatus(), 0);
+    assertEquals(withoutStatus.getDetail(), "failed");
   }
 
   public static final class User {

@@ -103,7 +103,15 @@ public final class ForyJsonDecoder extends AbstractDataBufferDecoder<Object>
           .filter(line -> !line.trim().isEmpty())
           .<Object>handle(
               (line, sink) -> {
-                Object value = read(line, elementType.getType());
+                byte[] bytes = line.getBytes(StandardCharsets.UTF_8);
+                int limit = getMaxInMemorySize();
+                if (limit >= 0 && bytes.length > limit) {
+                  sink.error(
+                      new DataBufferLimitException(
+                          "Exceeded limit on max bytes to buffer: " + limit));
+                  return;
+                }
+                Object value = read(bytes, elementType.getType());
                 if (value != null) {
                   sink.next(value);
                 }
@@ -117,7 +125,7 @@ public final class ForyJsonDecoder extends AbstractDataBufferDecoder<Object>
                   return Flux.error(new DecodingException("Expected a JSON array"));
                 }
                 return Flux.fromStream(() -> values.stream().filter(Objects::nonNull))
-                    .map(SpringJsonSupport::readProblemDetail);
+                    .map(this::readProblemDetail);
               });
     }
     ResolvableType listType = ResolvableType.forClassWithGenerics(List.class, elementType);
@@ -171,11 +179,11 @@ public final class ForyJsonDecoder extends AbstractDataBufferDecoder<Object>
     }
   }
 
-  private Object read(String json, Type type) {
+  private ProblemDetail readProblemDetail(Object value) {
     try {
-      return SpringJsonSupport.read(foryJson, json, type);
+      return SpringJsonSupport.readProblemDetail(value);
     } catch (RuntimeException e) {
-      throw new DecodingException("Fory JSON decoding error", e);
+      throw new DecodingException("Fory JSON ProblemDetail decoding error", e);
     }
   }
 

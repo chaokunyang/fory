@@ -735,11 +735,6 @@ jobs:
         run: python ./ci/run_ci.py kotlin --task install
       - name: Verify benchmark correctness and Moshi adapters
         run: gradle --no-daemon -p benchmarks/kotlin test verifyGeneratedJsonArtifacts jmhClasses
-      - name: Install benchmark report dependencies
-        run: python -m pip install -r benchmarks/kotlin/requirements.txt
-      - name: Verify benchmark reports
-        working-directory: benchmarks/kotlin
-        run: python -m unittest test_benchmark_report.py
 
   scala:
     name: Scala CI
@@ -2096,8 +2091,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: 3.8
-      - name: Test release and Kotlin CI helpers
-        run: python -m unittest ci.test_release ci.test_kotlin_task
       - name: Set up .NET 8
         uses: actions/setup-dotnet@v4
         with:

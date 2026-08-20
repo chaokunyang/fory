@@ -210,8 +210,11 @@ Use complete declared types:
 import org.apache.fory.json.kotlin.jsonTypeRef
 
 val accountsType = jsonTypeRef<List<Account?>>()
-val accounts = json.fromJson("[null,{\"id\":7,\"name\":\"Alice\"}]", accountsType)
+val accounts = json.fromJson("""[null,{"id":7,"name":"Alice"}]""", accountsType)
 ```
+
+Kotlin raw strings can be passed directly to `fromJson`; JSON double quotes do not need backslash
+escaping.
 
 Raw generic types, `in` projections, and star projections are rejected for typed restoration. An
 `out X` projection is accepted only when it normalizes to one exact final or closed readable

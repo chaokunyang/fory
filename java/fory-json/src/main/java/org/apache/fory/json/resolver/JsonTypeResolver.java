@@ -916,10 +916,6 @@ public final class JsonTypeResolver {
   }
 
   private JsonTypeInfo resolveRuntimeTypeInfo(Class<?> runtimeType) {
-    return resolveRuntimeTypeInfo0(runtimeType);
-  }
-
-  private JsonTypeInfo resolveRuntimeTypeInfo0(Class<?> runtimeType) {
     JsonTypeInfo typeInfo = customTypeInfo(runtimeType, runtimeType);
     if (typeInfo != null) {
       runtimeTypeInfos.put(runtimeType, typeInfo);

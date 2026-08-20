@@ -835,16 +835,6 @@ public final class JsonFieldInfo {
     throw new ForyJsonException("JSON property " + name + " is not nullable");
   }
 
-  /** Returns the cold-bound read-side null action for generated specialization. */
-  public boolean rejectsNullRead() {
-    return readOccurrenceTypeInfo.rejectsNull();
-  }
-
-  /** Returns whether generated readers must materialize an outer null for this occurrence. */
-  public boolean nullableRead() {
-    return readOccurrenceTypeInfo.nullable();
-  }
-
   /** Returns constructor-workspace metadata for this deferred mutable property. */
   public JsonCreatorFieldInfo asCreatorField(int argumentIndex) {
     return new JsonCreatorFieldInfo(

@@ -205,24 +205,9 @@ public final class JsonCreatorFieldInfo {
     return true;
   }
 
-  /** Returns the cold-bound read-side null action for generated specialization. */
-  public boolean rejectsNullRead() {
-    return occurrenceTypeInfo.rejectsNull();
-  }
-
-  /** Returns whether generated readers must materialize an outer null for this occurrence. */
-  public boolean nullableRead() {
-    return occurrenceTypeInfo.nullable();
-  }
-
   /** Returns whether a present JSON null materializes a non-null logical value in this carrier. */
   public boolean materializesNullCarrier() {
     return unboxedValueCodec != null && occurrenceTypeInfo.transparentNull();
-  }
-
-  /** Returns whether this creator slot is bound to an exact unboxed carrier operation. */
-  public boolean unboxedValue() {
-    return unboxedValueCodec != null;
   }
 
   /** Returns the cold-bound unboxed carrier operation. */

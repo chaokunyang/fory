@@ -289,6 +289,32 @@ public class JsonModuleTest {
     assertEquals(runtimeTypes, Arrays.asList(true, false, false, false));
   }
 
+  @Test
+  public void runtimeObjectModelStaysWriteOnly() {
+    List<Boolean> runtimeTypes = new ArrayList<>();
+    JsonCodecFactory factory =
+        (type, resolver, runtimeType) -> {
+          if (type.getRawType() != RuntimeFixedValue.class) {
+            return null;
+          }
+          runtimeTypes.add(runtimeType);
+          return resolver.createObjectCodec(
+              type,
+              JsonObjectModel.fixedInstance(
+                  runtimeType ? RuntimeFixedValue.RUNTIME : RuntimeFixedValue.DECLARED));
+        };
+    ForyJson json =
+        ForyJson.builder()
+            .withModule(context -> context.registerCodecFactory(factory))
+            .withConcurrencyLevel(1)
+            .withCodegen(false)
+            .build();
+
+    assertEquals(json.toJson(RuntimeFixedValue.RUNTIME), "{}");
+    assertSame(json.fromJson("{}", RuntimeFixedValue.class), RuntimeFixedValue.DECLARED);
+    assertEquals(runtimeTypes, Arrays.asList(true, false));
+  }
+
   private static final class KeyedModule implements ForyJsonModule {
     private final String key;
 
@@ -553,4 +579,11 @@ public class JsonModuleTest {
   private static final class RuntimeLayerB {}
 
   private static final class RuntimeLayerC {}
+
+  private static final class RuntimeFixedValue {
+    private static final RuntimeFixedValue RUNTIME = new RuntimeFixedValue();
+    private static final RuntimeFixedValue DECLARED = new RuntimeFixedValue();
+
+    private RuntimeFixedValue() {}
+  }
 }

@@ -958,14 +958,9 @@ public final class JsonTypeResolver {
     typeInfo = typeInfos.get(runtimeType);
     if (typeInfo == null) {
       typeInfo = newTypeInfo(runtimeType, runtimeType, codec);
-      if (codec instanceof ObjectCodec) {
-        objectCodecs.put(runtimeType, (ObjectCodec<?>) codec);
-        publishTypeInfo(runtimeType, typeInfo);
-      } else {
-        // Composite runtime codecs need the same publish-before-bind lifecycle as ObjectCodec,
-        // without turning a dynamic write binding into a declared read schema.
-        runtimeTypeInfos.put(runtimeType, typeInfo);
-      }
+      // A dynamic write binding must never authorize a declared read schema. Publish every
+      // runtime codec only in the runtime cache; activeRuntimeTypeInfo closes recursive binding.
+      runtimeTypeInfos.put(runtimeType, typeInfo);
       registerTypeInfoOwner(typeInfo, codec);
       JsonTypeInfo previousRuntimeTypeInfo = activeRuntimeTypeInfo;
       activeRuntimeTypeInfo = typeInfo;

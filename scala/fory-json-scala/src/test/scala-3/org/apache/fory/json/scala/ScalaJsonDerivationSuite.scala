@@ -19,7 +19,13 @@
 
 package org.apache.fory.json.scala
 
-import org.apache.fory.json.ForyJsonException
+import java.util.concurrent.atomic.AtomicBoolean
+
+import org.apache.fory.json.{ForyJsonException, JsonCodecFactory}
+import org.apache.fory.json.codec.{AbstractJsonValueCodec, JsonValueCodec}
+import org.apache.fory.json.reader.JsonReader
+import org.apache.fory.json.resolver.JsonTypeResolver
+import org.apache.fory.json.writer.JsonWriter
 import org.scalatest.funsuite.AnyFunSuite
 import org.apache.fory.reflect.TypeRef
 
@@ -28,6 +34,17 @@ enum Result derives ScalaJsonCodec {
   case Error(code: Int)
   case Pending
 }
+
+enum SharedSingletons derives ScalaJsonCodec {
+  case First, Second
+  case Item(value: Int)
+}
+
+enum StatefulResult derives ScalaJsonCodec {
+  case Item(value: () => Int)
+}
+
+final case class StatefulEnvelope(value: StatefulResult)
 
 enum ExternalResult {
   case Ok(value: String)
@@ -42,6 +59,65 @@ enum DisplayColor {
   case Red, Blue
 
   override def toString: String = "display"
+}
+
+final class PendingCodec extends AbstractJsonValueCodec[Result] {
+  override def write(writer: JsonWriter, value: Result): Unit = {
+    if (value != Result.Pending)
+      throw new ForyJsonException("Expected Result.Pending")
+    writer.writeString("pending")
+  }
+
+  override def read(reader: JsonReader): Result = {
+    if (reader.readString() != "pending")
+      throw new ForyJsonException("Expected pending")
+    Result.Pending
+  }
+}
+
+final class PendingFactory extends JsonCodecFactory {
+  private val first = new AtomicBoolean(true)
+
+  override def factoryKey(): String = getClass.getName
+
+  override def create(
+      typeRef: TypeRef[_],
+      resolver: JsonTypeResolver,
+      runtimeType: Boolean
+  ): JsonValueCodec[_] = {
+    if (first.getAndSet(false))
+      throw new ForyJsonException("First child resolution fails")
+    new PendingCodec
+  }
+}
+
+final class StatefulCodec extends AbstractJsonValueCodec[StatefulResult] {
+  override def write(writer: JsonWriter, value: StatefulResult): Unit = {
+    value match {
+      case StatefulResult.Item(state) => writer.writeInt(state())
+    }
+  }
+
+  override def read(reader: JsonReader): StatefulResult = {
+    val state = reader.readInt()
+    StatefulResult.Item(() => state)
+  }
+}
+
+final class StatefulFactory extends JsonCodecFactory {
+  private val first = new AtomicBoolean(true)
+
+  override def factoryKey(): String = getClass.getName
+
+  override def create(
+      typeRef: TypeRef[_],
+      resolver: JsonTypeResolver,
+      runtimeType: Boolean
+  ): JsonValueCodec[_] = {
+    if (first.getAndSet(false))
+      throw new ForyJsonException("First stateful child resolution fails")
+    new StatefulCodec
+  }
 }
 
 class ScalaJsonDerivationSuite extends AnyFunSuite {
@@ -64,9 +140,96 @@ class ScalaJsonDerivationSuite extends AnyFunSuite {
     assertThrows[ForyJsonException](
       json.fromJson("{\"value\":\"raw\"}", classOf[Result.Ok])
     )
+    val pendingClass = Result.Pending.getClass.asInstanceOf[Class[Result]]
+    assertThrows[ForyJsonException](json.fromJson("{}", pendingClass))
     assert(json.fromJson(json.toJson(ok), classOf[Result]) == ok)
     assert(json.fromJson(json.toJson(error), classOf[Result]) == error)
     assert(json.fromJson(json.toJson(pending), classOf[Result]) == pending)
+    assert(json.fromJson("{\"Pending\":{}}", classOf[Result]) eq Result.Pending)
+    assertThrows[ForyJsonException](
+      json.fromJson("{\"Pending\":{\"extra\":1}}", classOf[Result])
+    )
+  }
+
+  test("derived enum shares singleton classes") {
+    val values = Seq[SharedSingletons](
+      SharedSingletons.First,
+      SharedSingletons.Second,
+      SharedSingletons.Item(3)
+    )
+    val runtimes = Seq(
+      ForyJsonScala.builder().withCodegen(false).build(),
+      ForyJsonScala.builder().withAsyncCompilation(false).build()
+    )
+    runtimes.foreach { json =>
+      values.foreach { value =>
+        val text = json.toJson(value, classOf[SharedSingletons])
+        assert(json.fromJson(text, classOf[SharedSingletons]) == value)
+      }
+    }
+  }
+
+  test("derived child honors exact codec") {
+    val pendingClass = Result.Pending.getClass.asInstanceOf[Class[Result]]
+    val json =
+      ForyJsonScala.builder().registerCodec(pendingClass, new PendingCodec).withCodegen(false).build()
+
+    assert(json.toJson(Result.Pending, classOf[Result]) == "{\"Pending\":\"pending\"}")
+    assert(json.fromJson("{\"Pending\":\"pending\"}", classOf[Result]) eq Result.Pending)
+    assert(json.toJson(Result.Pending, pendingClass) == "\"pending\"")
+  }
+
+  test("derived child rollback") {
+    val pendingClass = Result.Pending.getClass.asInstanceOf[Class[Result]]
+    val json = ForyJsonScala
+      .builder()
+      .registerCodec(pendingClass, new PendingFactory)
+      .withCodegen(false)
+      .withConcurrencyLevel(1)
+      .build()
+
+    assertThrows[ForyJsonException](
+      json.fromJson("{\"Pending\":\"pending\"}", classOf[Result])
+    )
+    assert(json.fromJson("{\"Pending\":\"pending\"}", classOf[Result]) eq Result.Pending)
+  }
+
+  test("derived stateful child uses exact codec") {
+    val item = StatefulResult.Item(() => 7)
+    val itemClass = item.getClass.asInstanceOf[Class[StatefulResult]]
+    val unsupported = ForyJsonScala.builder().withCodegen(false).build()
+    assertThrows[ForyJsonException](
+      unsupported.toJson(item, classOf[StatefulResult])
+    )
+
+    val json = ForyJsonScala
+      .builder()
+      .registerCodec(itemClass, new StatefulCodec)
+      .withCodegen(false)
+      .build()
+    assert(json.toJson(item, itemClass) == "7")
+    assert(statefulValue(json.fromJson("7", itemClass)) == 7)
+    assert(json.toJson(item, classOf[StatefulResult]) == "{\"Item\":7}")
+    assert(statefulValue(json.fromJson("{\"Item\":7}", classOf[StatefulResult])) == 7)
+    val envelope = StatefulEnvelope(item)
+    assert(
+      statefulValue(json.fromJson(json.toJson(envelope), classOf[StatefulEnvelope]).value) == 7
+    )
+
+    val retry = ForyJsonScala
+      .builder()
+      .registerCodec(itemClass, new StatefulFactory)
+      .withCodegen(false)
+      .withConcurrencyLevel(1)
+      .build()
+    assertThrows[ForyJsonException](
+      retry.fromJson("{\"Item\":7}", classOf[StatefulResult])
+    )
+    assert(statefulValue(retry.fromJson("{\"Item\":7}", classOf[StatefulResult])) == 7)
+  }
+
+  private def statefulValue(value: StatefulResult): Int = value match {
+    case StatefulResult.Item(state) => state()
   }
 
   test("third-party enum uses builder registration") {

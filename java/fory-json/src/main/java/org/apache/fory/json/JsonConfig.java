@@ -26,9 +26,6 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.codegen.JsonCodegenKey;
 import org.apache.fory.json.resolver.CodecRegistry;
@@ -37,10 +34,10 @@ import org.apache.fory.json.resolver.CodecRegistry;
  * Build configuration used to create all pooled states of one {@link ForyJson} instance.
  *
  * <p>Scalar settings and the codec registry are snapshotted at construction; the JSON runtime never
- * observes later builder mutation. {@link #getCodegenHash()} identifies only settings that can
- * change generated source; runtime-only settings such as depth, graph memory, and asynchronous
- * scheduling do not fragment generated class names. Concurrency, per-reader field-name cache, and
- * retained writer-buffer limits are also runtime-only and do not fragment generated class names.
+ * observes later builder mutation. {@link JsonCodegenKey} identifies only settings that can change
+ * generated source; runtime-only settings such as depth, graph memory, and asynchronous scheduling
+ * do not fragment generated class names. Concurrency, per-reader field-name cache, and retained
+ * writer-buffer limits are also runtime-only and do not fragment generated class names.
  */
 public final class JsonConfig {
   private static final int MAX_CACHED_FIELD_NAMES = 1 << 29;
@@ -63,7 +60,6 @@ public final class JsonConfig {
   private final JsonTypeChecker typeChecker;
   private final JsonTypeCheckContext typeCheckContext;
   private final JsonCodegenKey codegenKey;
-  private transient int codegenHash;
 
   JsonConfig(
       boolean writeNullFields,
@@ -245,21 +241,6 @@ public final class JsonConfig {
 
   private static void appendIdentity(StringBuilder builder, String value) {
     builder.append(value.length()).append(':').append(value);
-  }
-
-  private static final AtomicInteger COUNTER = new AtomicInteger(0);
-
-  // Equal generated source inputs share one map entry, following core generated-code naming model.
-  // This process-wide map retains only immutable configuration text and integers, never user
-  // classes, codec instances, class loaders, or generated classes.
-  private static final ConcurrentMap<JsonCodegenKey, Integer> CODEGEN_ID_MAP =
-      new ConcurrentHashMap<>();
-
-  public int getCodegenHash() {
-    if (codegenHash == 0) {
-      codegenHash = CODEGEN_ID_MAP.computeIfAbsent(codegenKey, key -> COUNTER.incrementAndGet());
-    }
-    return codegenHash;
   }
 
   /** Returns the immutable generated-source identity for this configuration. */

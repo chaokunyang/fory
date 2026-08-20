@@ -62,8 +62,14 @@ private[scala] final class DerivedScalaJsonCodec[T](
       if (singleton != null && singleton.getClass != caseClass)
         throw new IllegalArgumentException(s"Invalid derived Scala enum singleton $name")
       if (classSet.add(caseClass)) result.add(caseClass)
-      else if (singleton == null)
-        throw new IllegalArgumentException(s"Duplicate derived Scala enum case ${caseClass.getName}")
+      else {
+        var prior = 0
+        while (classes(prior) != caseClass) prior += 1
+        if (singleton == null || singletons(prior) == null)
+          throw new IllegalArgumentException(
+            s"Duplicate derived Scala enum case ${caseClass.getName}"
+          )
+      }
       index += 1
     }
     Collections.unmodifiableList(result)
@@ -84,15 +90,27 @@ private[scala] final class DerivedScalaJsonCodec[T](
 
   override def handledRuntimeClasses(): JList[Class[_]] = handled
 
-  override def create(typeRef: TypeRef[_], resolver: JsonTypeResolver): JsonValueCodec[_] = {
-    if (typeRef.getRawType != rootType)
+  override def create(
+      typeRef: TypeRef[_],
+      resolver: JsonTypeResolver,
+      runtimeType: Boolean
+  ): JsonValueCodec[_] = {
+    val rawType = typeRef.getRawType
+    if (rawType == rootType) {
+      return new ClosedSubtypeCodec(
+        rootType,
+        new JsonSubTypesInfo(Inclusion.WRAPPER_OBJECT, "", classes.clone(), names.clone()),
+        typeRef,
+        this,
+        singletons.clone()
+      )
+    }
+    val index = classes.indexOf(rawType)
+    if (index < 0)
       throw new ForyJsonException(s"Derived Scala enum codec expected ${rootType.getName}")
-    new ClosedSubtypeCodec(
-      rootType,
-      new JsonSubTypesInfo(Inclusion.WRAPPER_OBJECT, "", classes.clone(), names.clone()),
-      typeRef,
-      singletons.clone()
-    )
+    val singleton = singletons(index)
+    if (singleton == null) ScalaObjectModels.caseClassCodec(typeRef, resolver)
+    else ScalaObjectModels.fixedCodec(typeRef, resolver, singleton)
   }
 
   private def append(builder: StringBuilder, value: String): Unit =

@@ -109,7 +109,10 @@ public class ObjectCodec<T> implements CompositeJsonCodec<T> {
             : new JsonFieldTable(readFields, skippedNames);
     this.instantiator = instantiator;
     this.creatorInfo = creatorInfo;
-    graphMemoryBytes = GraphMemoryEstimates.shallowObjectBytes(type);
+    graphMemoryBytes =
+        creatorInfo != null && creatorInfo.fixedInstance()
+            ? 0
+            : GraphMemoryEstimates.shallowObjectBytes(type);
   }
 
   @Internal
@@ -168,6 +171,29 @@ public class ObjectCodec<T> implements CompositeJsonCodec<T> {
       ObjectInstantiator<?> instantiator,
       JsonValidatorInfo validatorInfo) {
     Class<?> type = ownerType.getRawType();
+    if (creatorInfo != null && creatorInfo.fixedInstance()) {
+      if (validatorInfo != null) {
+        return new ValidatingFixedObjectCodec<>(
+            type,
+            writeFields,
+            readFields,
+            creatorInfo,
+            anyInfo,
+            skippedNames,
+            unwrappedInfo,
+            instantiator,
+            validatorInfo);
+      }
+      return new FixedObjectCodec<>(
+          type,
+          writeFields,
+          readFields,
+          creatorInfo,
+          anyInfo,
+          skippedNames,
+          unwrappedInfo,
+          instantiator);
+    }
     if (ownerType.getType() instanceof Class) {
       if (validatorInfo != null) {
         return new ValidatingObjectCodec<>(
@@ -1279,6 +1305,12 @@ public class ObjectCodec<T> implements CompositeJsonCodec<T> {
     writer.writeObjectEnd();
   }
 
+  /** Returns whether this object codec represents one pre-existing singleton. */
+  @Internal
+  public final boolean fixedInstance() {
+    return creatorInfo != null && creatorInfo.fixedInstance();
+  }
+
   // ClosedSubtypeCodec owns the open object and discriminator for PROPERTY inclusion. Keep this
   // interpreted traversal package-local instead of publishing partial-object writing as a child
   // codec capability; a complete generated writer cannot safely enter an object already in
@@ -1307,6 +1339,17 @@ public class ObjectCodec<T> implements CompositeJsonCodec<T> {
       return;
     }
     writeFixedMembers(writer, value, written);
+  }
+
+  // PROPERTY dispatch already performs one child call. Let a fixed-object child specialize that
+  // call for its identity invariant without adding a singleton branch or hook to ordinary object
+  // writes.
+  void writeSubtypeMembers(StringJsonWriter writer, T value, int written) {
+    writeMembers(writer, value, written);
+  }
+
+  void writeSubtypeMembers(Utf8JsonWriter writer, T value, int written) {
+    writeMembers(writer, value, written);
   }
 
   private int writeUnwrappedMembers(StringJsonWriter writer, Object value, int written) {
@@ -1726,6 +1769,233 @@ public class ObjectCodec<T> implements CompositeJsonCodec<T> {
       } catch (IllegalAccessException e) {
         throw new ForyJsonException("Cannot access @JsonAnySetter " + method, e);
       }
+    }
+  }
+
+  /** Standard object owner for one pre-existing language singleton. */
+  private static class FixedObjectCodec<T> extends ObjectCodec<T> {
+    private final T instance;
+
+    @SuppressWarnings("unchecked")
+    private FixedObjectCodec(
+        Class<?> type,
+        JsonFieldInfo[] writeFields,
+        JsonFieldInfo[] readFields,
+        JsonCreatorInfo creatorInfo,
+        AnyInfo anyInfo,
+        String[] skippedNames,
+        JsonUnwrappedInfo unwrappedInfo,
+        ObjectInstantiator<?> instantiator) {
+      super(
+          type,
+          writeFields,
+          readFields,
+          creatorInfo,
+          anyInfo,
+          skippedNames,
+          unwrappedInfo,
+          instantiator);
+      instance = (T) type.cast(creatorInfo.create(null));
+    }
+
+    @Override
+    public void writeString(StringJsonWriter writer, T value) {
+      if (value == null) {
+        writer.writeNull();
+        return;
+      }
+      requireInstance(value);
+      writer.writeObjectStart();
+      writer.writeObjectEnd();
+    }
+
+    @Override
+    public void writeUtf8(Utf8JsonWriter writer, T value) {
+      if (value == null) {
+        writer.writeNull();
+        return;
+      }
+      requireInstance(value);
+      writer.writeObjectStart();
+      writer.writeObjectEnd();
+    }
+
+    @Override
+    public T readLatin1(Latin1JsonReader reader) {
+      return reader.tryReadNullToken() ? null : readLatin1Object(reader);
+    }
+
+    @Override
+    public T readUtf16(Utf16JsonReader reader) {
+      return reader.tryReadNullToken() ? null : readUtf16Object(reader);
+    }
+
+    @Override
+    public T readUtf8(Utf8JsonReader reader) {
+      return reader.tryReadNullToken() ? null : readUtf8Object(reader);
+    }
+
+    @Override
+    T readLatin1Object(Latin1JsonReader reader) {
+      return readFixedObject(reader);
+    }
+
+    @Override
+    T readLatin1Object(Latin1JsonReader reader, JsonFieldTable table) {
+      return readInlineObject(reader, table);
+    }
+
+    @Override
+    T readUtf16Object(Utf16JsonReader reader) {
+      return readFixedObject(reader);
+    }
+
+    @Override
+    T readUtf16Object(Utf16JsonReader reader, JsonFieldTable table) {
+      return readInlineObject(reader, table);
+    }
+
+    @Override
+    T readUtf8Object(Utf8JsonReader reader) {
+      return readFixedObject(reader);
+    }
+
+    @Override
+    T readUtf8Object(Utf8JsonReader reader, JsonFieldTable table) {
+      return readInlineObject(reader, table);
+    }
+
+    @Override
+    void writeSubtypeMembers(StringJsonWriter writer, T value, int written) {
+      requireInstance(value);
+    }
+
+    @Override
+    void writeSubtypeMembers(Utf8JsonWriter writer, T value, int written) {
+      requireInstance(value);
+    }
+
+    private void requireInstance(T value) {
+      if (value != instance) {
+        throw wrongInstance();
+      }
+    }
+
+    private T readFixedObject(JsonReader reader) {
+      reader.enterDepth();
+      reader.expect('{');
+      if (!reader.consume('}')) {
+        throw nonEmptyObject();
+      }
+      reader.exitDepth();
+      return instance;
+    }
+
+    private T readInlineObject(JsonReader reader, JsonFieldTable table) {
+      reader.enterDepth();
+      reader.expect('{');
+      if (reader.consume('}')) {
+        throw nonEmptyObject();
+      }
+      do {
+        int match = table.match(reader.readFieldNameHash());
+        reader.expect(':');
+        if (match != JsonFieldTable.SKIP) {
+          throw nonEmptyObject();
+        }
+        reader.skipValue();
+      } while (reader.consume(','));
+      reader.expect('}');
+      reader.exitDepth();
+      return instance;
+    }
+
+    private ForyJsonException wrongInstance() {
+      return new ForyJsonException("Expected singleton instance " + type.getName());
+    }
+
+    private ForyJsonException nonEmptyObject() {
+      return new ForyJsonException(
+          "JSON singleton " + type.getName() + " requires an empty object");
+    }
+  }
+
+  /** Fixed object owner whose read capability invokes effective validators. */
+  private static final class ValidatingFixedObjectCodec<T> extends FixedObjectCodec<T> {
+    private final JsonValidatorInfo validatorInfo;
+
+    private ValidatingFixedObjectCodec(
+        Class<?> type,
+        JsonFieldInfo[] writeFields,
+        JsonFieldInfo[] readFields,
+        JsonCreatorInfo creatorInfo,
+        AnyInfo anyInfo,
+        String[] skippedNames,
+        JsonUnwrappedInfo unwrappedInfo,
+        ObjectInstantiator<?> instantiator,
+        JsonValidatorInfo validatorInfo) {
+      super(
+          type,
+          writeFields,
+          readFields,
+          creatorInfo,
+          anyInfo,
+          skippedNames,
+          unwrappedInfo,
+          instantiator);
+      this.validatorInfo = validatorInfo;
+    }
+
+    @Override
+    public boolean hasValidators() {
+      return true;
+    }
+
+    @Override
+    public void validateObject(Object value) {
+      validatorInfo.validate(value);
+    }
+
+    @Override
+    T readLatin1Object(Latin1JsonReader reader) {
+      T object = super.readLatin1Object(reader);
+      validatorInfo.validate(object);
+      return object;
+    }
+
+    @Override
+    T readLatin1Object(Latin1JsonReader reader, JsonFieldTable table) {
+      T object = super.readLatin1Object(reader, table);
+      validatorInfo.validate(object);
+      return object;
+    }
+
+    @Override
+    T readUtf16Object(Utf16JsonReader reader) {
+      T object = super.readUtf16Object(reader);
+      validatorInfo.validate(object);
+      return object;
+    }
+
+    @Override
+    T readUtf16Object(Utf16JsonReader reader, JsonFieldTable table) {
+      T object = super.readUtf16Object(reader, table);
+      validatorInfo.validate(object);
+      return object;
+    }
+
+    @Override
+    T readUtf8Object(Utf8JsonReader reader) {
+      T object = super.readUtf8Object(reader);
+      validatorInfo.validate(object);
+      return object;
+    }
+
+    @Override
+    T readUtf8Object(Utf8JsonReader reader, JsonFieldTable table) {
+      T object = super.readUtf8Object(reader, table);
+      validatorInfo.validate(object);
+      return object;
     }
   }
 

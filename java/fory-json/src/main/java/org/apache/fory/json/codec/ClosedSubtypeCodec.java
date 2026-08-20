@@ -21,6 +21,7 @@ package org.apache.fory.json.codec;
 
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.JsonCodecFactory;
 import org.apache.fory.json.annotation.JsonSubTypes.Inclusion;
 import org.apache.fory.json.meta.JsonCreatorFieldInfo;
 import org.apache.fory.json.meta.JsonCreatorInfo;
@@ -54,18 +55,20 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
   private final Class<?> baseType;
   private final JsonSubTypesInfo definition;
   private final TypeRef<?> declaredType;
-  private final Object[] singletonValues;
+  private final JsonCodecFactory childFactory;
+  private final Object[] fixedInstances;
   private final JsonTypeInfo[] children;
   private final ObjectCodec<Object>[] objectCodecs;
   private JsonFieldTable[] inlineReadTables;
-  private volatile Latin1ReaderCodec<Object>[] inlineLatin1Readers;
-  private volatile Utf16ReaderCodec<Object>[] inlineUtf16Readers;
-  private volatile Utf8ReaderCodec<Object>[] inlineUtf8Readers;
+  private InlineReader[] fixedInlineReaders;
+  private Latin1ReaderCodec<Object>[] inlineLatin1Readers;
+  private Utf16ReaderCodec<Object>[] inlineUtf16Readers;
+  private Utf8ReaderCodec<Object>[] inlineUtf8Readers;
 
   /** Creates an unresolved resolver-local dispatcher shell for a validated subtype definition. */
   @Internal
   public ClosedSubtypeCodec(Class<?> baseType, JsonSubTypesInfo definition) {
-    this(baseType, definition, null);
+    this(baseType, definition, null, null);
   }
 
   /** Creates an unresolved dispatcher with an exact factory-owned declared root type. */
@@ -75,25 +78,37 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
     this(baseType, definition, declaredType, null);
   }
 
-  /** Creates an unresolved dispatcher with parent-owned singleton subtype values. */
+  /** Creates an unresolved dispatcher with a cold default factory for its children. */
   @Internal
   public ClosedSubtypeCodec(
       Class<?> baseType,
       JsonSubTypesInfo definition,
       TypeRef<?> declaredType,
-      Object[] singletonValues) {
+      JsonCodecFactory childFactory) {
+    this(baseType, definition, declaredType, childFactory, null);
+  }
+
+  /** Creates an unresolved dispatcher with parent-owned fixed branch values. */
+  @Internal
+  public ClosedSubtypeCodec(
+      Class<?> baseType,
+      JsonSubTypesInfo definition,
+      TypeRef<?> declaredType,
+      JsonCodecFactory childFactory,
+      Object[] fixedInstances) {
+    if (fixedInstances != null && fixedInstances.length != definition.classes.length) {
+      throw new IllegalArgumentException("Subtype branch metadata does not match the definition");
+    }
     this.baseType = baseType;
     this.definition = definition;
     this.declaredType = declaredType;
-    if (singletonValues != null && singletonValues.length != definition.classes.length) {
-      throw new IllegalArgumentException("Singleton values do not match subtype branches");
-    }
-    this.singletonValues = singletonValues == null ? null : singletonValues.clone();
-    if (singletonValues != null) {
-      for (int i = 0; i < singletonValues.length; i++) {
-        Object value = singletonValues[i];
-        if (value != null && value.getClass() != definition.classes[i]) {
-          throw new IllegalArgumentException("Singleton value does not match subtype branch " + i);
+    this.childFactory = childFactory;
+    this.fixedInstances = fixedInstances == null ? null : fixedInstances.clone();
+    if (fixedInstances != null) {
+      for (int i = 0; i < fixedInstances.length; i++) {
+        Object fixed = fixedInstances[i];
+        if (fixed != null && fixed.getClass() != definition.classes[i]) {
+          throw new IllegalArgumentException("Fixed value does not match subtype branch " + i);
         }
       }
     }
@@ -124,12 +139,18 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
     for (int i = 0; i < children.length; i++) {
       Class<?> subtype = definition.classes[i];
       TypeRef<?> childType = rootType.getSubtype(subtype);
-      Object singleton = singletonValues == null ? null : singletonValues[i];
-      JsonTypeInfo child =
-          singleton == null
-              ? resolver.getSubtypeTypeInfo(
-                  baseType, childType.getType(), subtype, declaredType != null)
-              : resolver.createLeafTypeInfo(childType, new SingletonSubtypeCodec(singleton));
+      int prior = priorBranch(i, subtype);
+      JsonTypeInfo child;
+      if (prior >= 0 && fixedInstances[i] != null) {
+        ObjectCodec<?> priorCodec = resolver.canonicalObjectCodec(children[prior]);
+        child =
+            priorCodec != null && priorCodec.fixedInstance()
+                ? resolver.createSubtypeLeaf(childType, new FixedBranchCodec(fixedInstances[i]))
+                : children[prior];
+      } else {
+        child =
+            resolver.getSubtypeTypeInfo(baseType, childType, declaredType != null, childFactory);
+      }
       if (definition.inclusion == Inclusion.PROPERTY) {
         ObjectCodec<?> objectCodec = resolver.canonicalObjectCodec(child);
         if (objectCodec == null) {
@@ -139,18 +160,24 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
         rejectDiscriminatorCollision(objectCodec, definition.scanInfo.property());
         objectCodecs[i] = (ObjectCodec<Object>) objectCodec;
         ObjectCodec.AnyInfo any = objectCodec.anyInfo();
-        if (any != null && (any.readField() != null || any.readSetter() != null)) {
+        boolean fixed = objectCodec.fixedInstance();
+        if (fixed || any != null && (any.readField() != null || any.readSetter() != null)) {
           if (inlineReadTables == null) {
             inlineReadTables = new JsonFieldTable[children.length];
           }
           JsonFieldTable table =
               objectCodec.readTable().withSkippedName(definition.scanInfo.property());
           inlineReadTables[i] = table;
+          if (fixed) {
+            if (fixedInlineReaders == null) {
+              fixedInlineReaders = new InlineReader[children.length];
+            }
+            fixedInlineReaders[i] = new FixedInlineReader((ObjectCodec<Object>) objectCodec, table);
+          }
           // The subtype scan restores the cursor, so the outer child rereads the discriminator and
           // needs this parent-local skip table. The resolver constructs a complete immutable array
-          // of generated readers for each representation and publishes that array in one volatile
-          // write; never publish its elements independently. Nested child values keep the canonical
-          // table and canonical capability.
+          // under its JIT lock and installs the array as one unit; never publish its elements
+          // independently. Nested child values keep the canonical table and capability.
         }
       }
       children[i] = child;
@@ -168,7 +195,7 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
       writer.writeObjectStart();
       writer.writeRawValue(
           definition.stringSubtypePrefixes[index], definition.stringUtf16SubtypePrefixes[index]);
-      objectCodecs[index].writeMembers(writer, value, 1);
+      objectCodecs[index].writeSubtypeMembers(writer, value, 1);
       writer.writeObjectEnd();
       return;
     }
@@ -197,7 +224,7 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
     if (definition.inclusion == Inclusion.PROPERTY) {
       writer.writeObjectStart();
       writer.writeRawValue(definition.utf8SubtypePrefixes[index]);
-      objectCodecs[index].writeMembers(writer, value, 1);
+      objectCodecs[index].writeSubtypeMembers(writer, value, 1);
       writer.writeObjectEnd();
       return;
     }
@@ -324,24 +351,19 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
 
   private int requireSubtype(Object value) {
     Class<?> runtimeType = value.getClass();
-    Object[] singletons = singletonValues;
-    if (singletons != null) {
-      int classMatch = -1;
-      for (int i = 0; i < singletons.length; i++) {
-        Object singleton = singletons[i];
-        if (singleton != null) {
-          if (value == singleton) {
-            return i;
-          }
-        } else if (definition.classes[i] == runtimeType) {
-          classMatch = i;
-        }
+    int index = -1;
+    for (int i = 0; i < definition.classes.length; i++) {
+      if (definition.classes[i] != runtimeType) {
+        continue;
       }
-      if (classMatch >= 0) {
-        return classMatch;
+      Object fixed = fixedInstances == null ? null : fixedInstances[i];
+      if (fixed == value) {
+        return i;
+      }
+      if (fixed == null && index < 0) {
+        index = i;
       }
     }
-    int index = singletons == null ? definition.classIndex(runtimeType) : -1;
     if (index < 0) {
       throw new ForyJsonException(
           "Runtime type " + runtimeType.getName() + " is not a declared subtype of " + baseType);
@@ -349,23 +371,36 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
     return index;
   }
 
-  private static final class SingletonSubtypeCodec implements JsonValueCodec<Object> {
-    private final Object singleton;
+  private int priorBranch(int index, Class<?> type) {
+    if (fixedInstances == null) {
+      return -1;
+    }
+    for (int i = 0; i < index; i++) {
+      if (definition.classes[i] == type) {
+        return i;
+      }
+    }
+    return -1;
+  }
 
-    private SingletonSubtypeCodec(Object singleton) {
-      this.singleton = singleton;
+  /** Parent-local fixed branch used when multiple discriminators share one runtime class. */
+  private static final class FixedBranchCodec implements JsonValueCodec<Object> {
+    private final Object instance;
+
+    private FixedBranchCodec(Object instance) {
+      this.instance = instance;
     }
 
     @Override
     public void writeString(StringJsonWriter writer, Object value) {
-      requireSingleton(value);
+      requireInstance(value);
       writer.writeObjectStart();
       writer.writeObjectEnd();
     }
 
     @Override
     public void writeUtf8(Utf8JsonWriter writer, Object value) {
-      requireSingleton(value);
+      requireInstance(value);
       writer.writeObjectStart();
       writer.writeObjectEnd();
     }
@@ -373,24 +408,24 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
     @Override
     public Object readLatin1(Latin1JsonReader reader) {
       readEmptyObject(reader);
-      return singleton;
+      return instance;
     }
 
     @Override
     public Object readUtf16(Utf16JsonReader reader) {
       readEmptyObject(reader);
-      return singleton;
+      return instance;
     }
 
     @Override
     public Object readUtf8(Utf8JsonReader reader) {
       readEmptyObject(reader);
-      return singleton;
+      return instance;
     }
 
-    private void requireSingleton(Object value) {
-      if (value != singleton) {
-        throw new ForyJsonException("Expected closed subtype singleton " + singleton);
+    private void requireInstance(Object value) {
+      if (value != instance) {
+        throw new ForyJsonException("Expected closed subtype fixed instance " + instance);
       }
     }
 
@@ -398,7 +433,7 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
       reader.enterDepth();
       reader.expectNextToken('{');
       if (!reader.consumeNextToken('}')) {
-        throw new ForyJsonException("Closed subtype singleton requires an empty JSON object");
+        throw new ForyJsonException("Closed subtype fixed instance requires an empty JSON object");
       }
       reader.exitDepth();
     }
@@ -418,6 +453,17 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
   public JsonFieldTable inlineReadTable(int index) {
     return inlineReadTables == null ? null : inlineReadTables[index];
   }
+
+  /** Returns the table-bound complete reader for a fixed inline branch, if this branch is fixed. */
+  @Internal
+  public InlineReader fixedInlineReader(int index) {
+    return fixedInlineReaders == null ? null : fixedInlineReaders[index];
+  }
+
+  /** Complete parent-table-bound reader capability for one fixed inline branch. */
+  @Internal
+  public interface InlineReader
+      extends Latin1ReaderCodec<Object>, Utf16ReaderCodec<Object>, Utf8ReaderCodec<Object> {}
 
   @Internal
   public Latin1ReaderCodec<Object>[] inlineLatin1Readers() {
@@ -469,6 +515,32 @@ public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
       if (inlineReadTables[i] != null && readers[i] == null) {
         throw new IllegalArgumentException("Missing inline reader for subtype branch " + i);
       }
+    }
+  }
+
+  /** One immutable fixed-body capability shared by all three parent-local reader arrays. */
+  private static final class FixedInlineReader implements InlineReader {
+    private final ObjectCodec<Object> codec;
+    private final JsonFieldTable table;
+
+    private FixedInlineReader(ObjectCodec<Object> codec, JsonFieldTable table) {
+      this.codec = codec;
+      this.table = table;
+    }
+
+    @Override
+    public Object readLatin1(Latin1JsonReader reader) {
+      return codec.readLatin1Object(reader, table);
+    }
+
+    @Override
+    public Object readUtf16(Utf16JsonReader reader) {
+      return codec.readUtf16Object(reader, table);
+    }
+
+    @Override
+    public Object readUtf8(Utf8JsonReader reader) {
+      return codec.readUtf8Object(reader, table);
     }
   }
 

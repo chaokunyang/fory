@@ -86,6 +86,11 @@ public class ForyAndroidInstrumentedTest {
   }
 
   @Test
+  public void kotlinJsonMetadataSurvivesMinification() {
+    AndroidKotlinJsonScenarios.metadataSurvivesMinification();
+  }
+
+  @Test
   public void androidRuntimeDisablesCodegenAndUnsafeCopies() {
     AndroidForyRuntimeScenarios.androidRuntimeDisablesCodegenAndUnsafeCopies();
   }

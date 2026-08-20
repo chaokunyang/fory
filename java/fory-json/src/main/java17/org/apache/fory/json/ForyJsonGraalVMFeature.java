@@ -61,10 +61,13 @@ import org.apache.fory.json.annotation.JsonUnwrapped;
 import org.apache.fory.json.annotation.JsonValidator;
 import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.Base64ByteArrayCodec;
+import org.apache.fory.json.codec.JsonUnwrappedInfo;
 import org.apache.fory.json.codec.ObjectCodec;
+import org.apache.fory.json.codec.ObjectCodec.AnyInfo;
 import org.apache.fory.json.codegen.JsonCodegenKey;
 import org.apache.fory.json.meta.JsonCreatorInfo;
 import org.apache.fory.json.meta.JsonFieldAccessor;
+import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonValidatorInfo;
 import org.apache.fory.json.resolver.CodecRegistry.FactoryBinding;
 import org.apache.fory.json.resolver.JsonGeneratedClassRegistry;
@@ -83,8 +86,7 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
 /** Prepares reachable Fory JSON models and provider-selected codecs for Native Image. */
 final class ForyJsonGraalVMFeature implements Feature {
   private static final String SCALA_DERIVED_CODEC_METHOD = "derived$ScalaJsonCodec";
-  private static final String SCALA_JSON_CODEC_CLASS =
-      "org.apache.fory.json.scala.ScalaJsonCodec";
+  private static final String SCALA_JSON_CODEC_CLASS = "org.apache.fory.json.scala.ScalaJsonCodec";
   private static final String SCALA_JSON_CODEC_FACTORY =
       "org.apache.fory.json.scala.internal.ScalaTypeCodecFactory$";
   private static final String SCALA_ENUMERATION_ANNOTATION =
@@ -110,6 +112,8 @@ final class ForyJsonGraalVMFeature implements Feature {
   private final Set<Class<?>> processedCodecs = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedContainers = ConcurrentHashMap.newKeySet();
   private final Set<Executable> processedCreators = new LinkedHashSet<>();
+  private final Set<ObjectCodec<?>> processedObjectModels =
+      Collections.newSetFromMap(new IdentityHashMap<>());
   // JsonCodegenKey stays loader-free so runtime configurations can reproduce it. Hosted resolvers
   // remain loader-specific, while JsonGeneratedClassRegistry merges their generated capabilities.
   private final Map<JsonCodegenKey, ArrayList<HostedConfiguration>> hostedConfigurations =
@@ -356,14 +360,25 @@ final class ForyJsonGraalVMFeature implements Feature {
         ArrayList<Class<?>> models = new ArrayList<>(selectedModels);
         models.sort(Comparator.comparing(Class::getName));
         for (Class<?> model : models) {
+          // A raw generic Class is not a schema. Hosted capabilities are generated only when a
+          // concrete TypeRef occurrence is reached from a selected non-generic root; eagerly
+          // resolving the raw class would also make unreached bindings available in the image.
+          if (model.getTypeParameters().length != 0) {
+            continue;
+          }
           if (!configuration.processedModels.add(model)) {
             continue;
           }
+          List<ObjectCodec<?>> objectModels;
           try {
-            configuration.resolver.generateHostedCodecs(model);
+            objectModels = configuration.resolver.generateHostedCodecs(model);
           } catch (RuntimeException | LinkageError e) {
             throw new IllegalStateException(
                 "Cannot generate Fory JSON codecs for " + model.getName(), e);
+          }
+          objectModels.sort(Comparator.comparing(codec -> codec.type().getName()));
+          for (ObjectCodec<?> objectModel : objectModels) {
+            registerObjectModel(access, objectModel);
           }
           Set<Class<?>> generatedClasses =
               JsonGeneratedClassRegistry.register(entry.getKey(), configuration.registry);
@@ -375,6 +390,73 @@ final class ForyJsonGraalVMFeature implements Feature {
       }
     }
     return changed;
+  }
+
+  private void registerObjectModel(DuringAnalysisAccess access, ObjectCodec<?> objectModel) {
+    if (!processedObjectModels.add(objectModel)) {
+      return;
+    }
+    JsonCreatorInfo creator = objectModel.creatorInfo();
+    if (creator != null && !creator.fixedInstance()) {
+      registerCreator(creator.executable());
+      registerCreator(creator.invocationExecutable());
+      if (creator.defaultConstructor() != null) {
+        registerCreator(creator.defaultConstructor());
+      }
+      for (int i = 0; i < creator.argumentCount(); i++) {
+        Method defaultMethod = creator.defaultMethod(i);
+        if (defaultMethod != null) {
+          registerCreator(defaultMethod);
+        }
+      }
+    }
+    for (JsonFieldInfo field : objectModel.writeFields()) {
+      registerFieldAccessor(access, field.writeField(), field.writeGetter(), null);
+    }
+    for (JsonFieldInfo field : objectModel.readFields()) {
+      registerFieldAccessor(access, field.readField(), null, field.readSetter());
+    }
+    AnyInfo any = objectModel.anyInfo();
+    if (any != null) {
+      registerFieldAccessor(access, any.writeField(), any.writeGetter(), null);
+      registerFieldAccessor(access, any.readField(), null, any.readSetter());
+      if (any.readSetter() != null) {
+        ObjectCodec.AnyInfo.anySetterHandle(any.readSetter());
+      }
+    }
+    JsonUnwrappedInfo unwrapped = objectModel.unwrappedInfo();
+    if (unwrapped != null) {
+      for (JsonUnwrappedInfo.Declaration declaration : unwrapped.declarations()) {
+        registerFieldAccessor(access, declaration.writeAccessor());
+        registerFieldAccessor(access, declaration.readAccessor());
+      }
+    }
+  }
+
+  private static void registerFieldAccessor(
+      DuringAnalysisAccess access, JsonFieldAccessor accessor) {
+    if (accessor != null) {
+      registerFieldAccessor(access, accessor.field(), accessor.getter(), accessor.setter());
+    }
+  }
+
+  private static void registerFieldAccessor(
+      DuringAnalysisAccess access, Field field, Method getter, Method setter) {
+    if (field != null) {
+      RuntimeReflection.register(field);
+      JsonFieldAccessor.forField(field);
+      if (Runtime.version().feature() <= 24) {
+        access.registerAsUnsafeAccessed(field);
+      }
+    }
+    if (getter != null) {
+      RuntimeReflection.register(getter);
+      JsonFieldAccessor.forGetter(getter);
+    }
+    if (setter != null) {
+      RuntimeReflection.register(setter);
+      JsonFieldAccessor.forSetter(setter);
+    }
   }
 
   private void registerGeneratedClass(Class<?> generatedClass) {

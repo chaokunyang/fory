@@ -199,6 +199,8 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Add comments only when behavior is hard to understand or an algorithm is non-obvious.
 - Do not remove existing code comments unless they are stale, misleading, redundant, or no longer necessary after the change.
 - Only add tests that verify internal behaviors or fix specific bugs; do not create unnecessary tests unless requested.
+- Do not add unit tests for repository scripts. Validate scripts through their owning execution or
+  integration workflow instead of maintaining a parallel script-test suite.
 - Do not add cleanup-sentinel tests that only pin deleted APIs or removed fields.
 - Tests must exercise the actual code you wrote or changed. Do not write tests that pass by exercising a pre-existing code path that produces similar-looking results. Before writing a test, identify the exact new code path (annotation, codegen output, new API) and verify the test would fail if that code path were removed. When the change involves codegen or annotations, the test must use those annotations on real structs, run through the codegen pipeline, and verify the generated output drives the expected runtime behavior.
 - Keep test method names concise. Name the behavior under test without encoding the whole scenario or expected result in the method name.

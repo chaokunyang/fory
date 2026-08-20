@@ -27,7 +27,7 @@ import org.apache.fory.json.writer.{StringJsonWriter, Utf8JsonWriter}
 import org.apache.fory.reflect.TypeRef
 import org.apache.fory.serializer.GraphMemoryEstimates
 
-private[scala] final class ScalaTupleCodec(arity: Int, tupleType: Class[_])
+private[scala] final class ScalaTupleCodec(arity: Int, tupleType: Class[_], runtimeType: Boolean)
     extends CompositeJsonCodec[Product] {
   private var elements: Array[JsonTypeInfo] = _
   private val ownerBytes = GraphMemoryEstimates.shallowObjectBytes(tupleType)
@@ -37,7 +37,7 @@ private[scala] final class ScalaTupleCodec(arity: Int, tupleType: Class[_])
       typeRef,
       arity,
       s"Tuple$arity",
-      resolver.resolvingRuntimeType()
+      runtimeType
     )
     val infos = new Array[JsonTypeInfo](arity)
     var index = 0

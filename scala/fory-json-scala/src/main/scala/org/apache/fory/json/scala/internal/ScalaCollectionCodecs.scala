@@ -32,7 +32,11 @@ import scala.reflect.ClassTag
 
 // Scala List is sealed to Nil and ::, so exact List codecs traverse nodes without
 // runtime-family checks.
-private[scala] final class ScalaListCodec(nonEmptyOnly: Boolean, nilOnly: Boolean)
+private[scala] final class ScalaListCodec(
+    nonEmptyOnly: Boolean,
+    nilOnly: Boolean,
+    runtimeType: Boolean
+)
     extends CompositeJsonCodec[List[Any]] {
   private var elementInfo: JsonTypeInfo = _
 
@@ -44,7 +48,7 @@ private[scala] final class ScalaListCodec(nonEmptyOnly: Boolean, nilOnly: Boolea
         typeRef,
         1,
         "List",
-        resolver.resolvingRuntimeType()
+        runtimeType
       )
       elementInfo = resolver.getTypeInfo(arguments(0), ScalaTypeSupport.rawType(arguments(0)))
     }
@@ -184,7 +188,7 @@ private[scala] final class ScalaListCodec(nonEmptyOnly: Boolean, nilOnly: Boolea
   }
 }
 
-private[scala] final class ScalaIterableCodec(kind: Int, ownerBytes: Int)
+private[scala] final class ScalaIterableCodec(kind: Int, ownerBytes: Int, runtimeType: Boolean)
     extends CompositeJsonCodec[scala.collection.Iterable[Any]] {
   private val resultOwnerBytes =
     if (kind == ScalaCollectionCodecs.ListKind) 0 else ownerBytes
@@ -199,7 +203,7 @@ private[scala] final class ScalaIterableCodec(kind: Int, ownerBytes: Int)
       typeRef,
       1,
       "Scala collection",
-      resolver.resolvingRuntimeType()
+      runtimeType
     )
     elementInfo = resolver.getTypeInfo(arguments(0), ScalaTypeSupport.rawType(arguments(0)))
     if (
@@ -354,7 +358,7 @@ private[scala] final class ScalaIterableCodec(kind: Int, ownerBytes: Int)
   }
 }
 
-private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int)
+private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int, runtimeType: Boolean)
     extends CompositeJsonCodec[scala.collection.Map[Any, Any]] {
   private var keyCodec: MapKeyCodec = _
   private var valueInfo: JsonTypeInfo = _
@@ -365,7 +369,7 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int)
       typeRef,
       if (specializedKey == null) 2 else 1,
       "Scala Map",
-      resolver.resolvingRuntimeType()
+      runtimeType
     )
     val keyType = if (specializedKey == null) arguments(0) else specializedKey
     val keyRawType = ScalaTypeSupport.rawType(keyType)

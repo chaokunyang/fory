@@ -24,10 +24,28 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.fail;
 
+import java.lang.reflect.Executable;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonIgnore;
+import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonProperty;
+import org.apache.fory.json.codec.AbstractJsonValueCodec;
+import org.apache.fory.json.codec.JsonObjectModel;
+import org.apache.fory.json.codec.TransparentNullCodec;
+import org.apache.fory.json.codec.TransparentUnboxedValueCodec;
+import org.apache.fory.json.meta.JsonCreatorFieldInfo;
+import org.apache.fory.json.meta.JsonCreatorInfo;
+import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.reader.Latin1JsonReader;
+import org.apache.fory.json.reader.Utf16JsonReader;
+import org.apache.fory.json.reader.Utf8JsonReader;
+import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.json.writer.JsonWriter;
+import org.apache.fory.json.writer.StringJsonWriter;
+import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.reflect.TypeRef;
 import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
 
@@ -50,6 +68,133 @@ public class JsonCreatorTest extends ForyJsonTestModels {
         json.fromJson("{\"name\":\"你好\",\"id\":9}".getBytes(StandardCharsets.UTF_8), User.class);
     assertEquals(utf8.id, 9L);
     assertEquals(utf8.name, "你好");
+  }
+
+  @Test
+  public void deferredTransparentNullCarrierResolution() throws Exception {
+    ForyJson json =
+        newJsonBuilder()
+            .registerCodec(
+                NullCarrier.class,
+                (type, resolver, runtimeType) ->
+                    new DeferredNullCarrierCodec(resolver.getTypeInfo(String.class, String.class)))
+            .build();
+    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
+    JsonCreatorFieldInfo deferred =
+        new JsonCreatorFieldInfo(
+            "deferred", 1, TypeRef.of(NullCarrier.class), String.class, null, null, null, true);
+    JsonCreatorInfo creator =
+        new JsonCreatorInfo(
+            DeferredCarrierOwner.class,
+            DeferredCarrierOwner.class.getConstructor(String.class),
+            new JsonCreatorFieldInfo[] {deferred},
+            new Object[1],
+            null);
+    creator.resolveTypes(resolver);
+  }
+
+  @Test
+  public void languageModelCreatorMapping() throws Exception {
+    Executable listCreator = LanguageList.class.getConstructor(String.class);
+    Method listGetter = LanguageList.class.getMethod("getOutput");
+    ForyJson listJson =
+        newJsonBuilder()
+            .registerCodec(
+                LanguageList.class,
+                (type, resolver, runtimeType) ->
+                    resolver.createObjectCodec(
+                        type, languageModel(listCreator, "source", listGetter)))
+            .build();
+    LanguageList list = listJson.fromJson("{\"output\":\"list\"}", LanguageList.class);
+    assertEquals(list.output, "list");
+    assertEquals(listJson.toJson(list, LanguageList.class), "{\"output\":\"list\"}");
+
+    Executable parameterCreator = LanguageParameter.class.getConstructor(String.class);
+    Method parameterGetter = LanguageParameter.class.getMethod("getOutput");
+    ForyJson parameterJson =
+        newJsonBuilder()
+            .registerCodec(
+                LanguageParameter.class,
+                (type, resolver, runtimeType) ->
+                    resolver.createObjectCodec(
+                        type, languageModel(parameterCreator, "source", parameterGetter)))
+            .build();
+    LanguageParameter parameter =
+        parameterJson.fromJson("{\"wire_value\":\"parameter\"}", LanguageParameter.class);
+    assertEquals(parameter.output, "parameter");
+    assertEquals(
+        parameterJson.toJson(parameter, LanguageParameter.class), "{\"wire_value\":\"parameter\"}");
+
+    Executable factoryCreator = LanguageFactory.class.getMethod("create", String.class);
+    Method factoryGetter = LanguageFactory.class.getMethod("getOutput");
+    ForyJson factoryJson =
+        newJsonBuilder()
+            .registerCodec(
+                LanguageFactory.class,
+                (type, resolver, runtimeType) ->
+                    resolver.createObjectCodec(
+                        type, languageModel(factoryCreator, "source", factoryGetter)))
+            .build();
+    LanguageFactory factory =
+        factoryJson.fromJson("{\"output\":\"factory\"}", LanguageFactory.class);
+    assertEquals(factory.output, "factory");
+
+    Executable mixinCreator = LanguageMixinTarget.class.getConstructor(String.class);
+    Method mixinGetter = LanguageMixinTarget.class.getMethod("getOutput");
+    ForyJson mixinJson =
+        newJsonBuilder()
+            .registerMixin(LanguageMixin.class)
+            .registerCodec(
+                LanguageMixinTarget.class,
+                (type, resolver, runtimeType) ->
+                    resolver.createObjectCodec(
+                        type, languageModel(mixinCreator, "source", mixinGetter)))
+            .build();
+    LanguageMixinTarget mixin =
+        mixinJson.fromJson("{\"output\":\"mixin\"}", LanguageMixinTarget.class);
+    assertEquals(mixin.output, "mixin");
+
+    Executable logicalCreator = LanguageInvocation.class.getDeclaredConstructor(String.class);
+    Executable invocationCreator =
+        LanguageInvocation.class.getConstructor(String.class, InvocationMarker.class);
+    Method invocationGetter = LanguageInvocation.class.getMethod("getOutput");
+    ForyJson invocationJson =
+        newJsonBuilder()
+            .registerCodec(
+                LanguageInvocation.class,
+                (type, resolver, runtimeType) ->
+                    resolver.createObjectCodec(
+                        type,
+                        languageModel(
+                            logicalCreator, invocationCreator, "source", invocationGetter)))
+            .build();
+    LanguageInvocation invocation =
+        invocationJson.fromJson("{\"output\":\"bridge\"}", LanguageInvocation.class);
+    assertEquals(invocation.output, "bridge");
+  }
+
+  private static JsonObjectModel languageModel(
+      Executable creator, String parameterName, Method getter) {
+    return languageModel(creator, creator, parameterName, getter);
+  }
+
+  private static JsonObjectModel languageModel(
+      Executable creator, Executable invocationCreator, String parameterName, Method getter) {
+    TypeRef<?> type = TypeRef.of(String.class);
+    return new JsonObjectModel(
+        creator,
+        invocationCreator,
+        null,
+        new String[] {parameterName},
+        new Method[] {getter},
+        new Method[1],
+        new int[] {-1},
+        new boolean[] {false},
+        new TypeRef<?>[] {type},
+        new String[] {"output"},
+        new Method[] {getter},
+        new Method[1],
+        new TypeRef<?>[] {type});
   }
 
   @Test
@@ -421,6 +566,173 @@ public class JsonCreatorTest extends ForyJsonTestModels {
     @JsonCreator
     public static ErrorFactory create(@JsonProperty("id") int id) {
       throw new AssertionError("creator error");
+    }
+  }
+
+  public static final class LanguageList {
+    private final String output;
+
+    @JsonCreator({"output"})
+    public LanguageList(String source) {
+      output = source;
+    }
+
+    public String getOutput() {
+      return output;
+    }
+  }
+
+  public static final class LanguageParameter {
+    private final String output;
+
+    @JsonCreator
+    public LanguageParameter(@JsonProperty("wire_value") String source) {
+      output = source;
+    }
+
+    @JsonProperty("wire_value")
+    public String getOutput() {
+      return output;
+    }
+  }
+
+  public static final class LanguageFactory {
+    private final String output;
+
+    private LanguageFactory(String output) {
+      this.output = output;
+    }
+
+    @JsonCreator({"output"})
+    public static LanguageFactory create(String source) {
+      return new LanguageFactory(source);
+    }
+
+    public String getOutput() {
+      return output;
+    }
+  }
+
+  public static final class LanguageMixinTarget {
+    private final String output;
+
+    public LanguageMixinTarget(String source) {
+      output = source;
+    }
+
+    public String getOutput() {
+      return output;
+    }
+  }
+
+  @JsonMixin(target = LanguageMixinTarget.class)
+  public abstract static class LanguageMixin {
+    @JsonCreator({"output"})
+    LanguageMixin(String source) {}
+  }
+
+  public static final class InvocationMarker {}
+
+  public static final class NullCarrier {}
+
+  public static final class DeferredCarrierOwner {
+    public DeferredCarrierOwner(String value) {}
+  }
+
+  private static final class DeferredNullCarrierCodec extends AbstractJsonValueCodec<NullCarrier>
+      implements TransparentUnboxedValueCodec, TransparentNullCodec {
+    private final org.apache.fory.json.resolver.JsonTypeInfo valueTypeInfo;
+
+    private DeferredNullCarrierCodec(org.apache.fory.json.resolver.JsonTypeInfo valueTypeInfo) {
+      this.valueTypeInfo = valueTypeInfo;
+    }
+
+    @Override
+    public org.apache.fory.json.resolver.JsonTypeInfo valueTypeInfo() {
+      return valueTypeInfo;
+    }
+
+    @Override
+    public Object constructCarrier(JsonReader reader, Object value) {
+      return value;
+    }
+
+    @Override
+    public Object extractValue(Object carrier) {
+      return carrier;
+    }
+
+    @Override
+    public Method[] constructMethods() {
+      return new Method[0];
+    }
+
+    @Override
+    public int[] constructBoxBytes() {
+      return new int[0];
+    }
+
+    @Override
+    public Method[] extractMethods() {
+      return new Method[0];
+    }
+
+    @Override
+    public void write(JsonWriter writer, NullCarrier value) {
+      writer.writeNull();
+    }
+
+    @Override
+    public NullCarrier read(JsonReader reader) {
+      reader.tryReadNull();
+      return new NullCarrier();
+    }
+
+    @Override
+    public Class<?> carrierType() {
+      return String.class;
+    }
+
+    @Override
+    public Object readLatin1Carrier(Latin1JsonReader reader) {
+      return null;
+    }
+
+    @Override
+    public Object readUtf16Carrier(Utf16JsonReader reader) {
+      return null;
+    }
+
+    @Override
+    public Object readUtf8Carrier(Utf8JsonReader reader) {
+      return null;
+    }
+
+    @Override
+    public void writeStringCarrier(StringJsonWriter writer, Object carrier) {
+      writer.writeNull();
+    }
+
+    @Override
+    public void writeUtf8Carrier(Utf8JsonWriter writer, Object carrier) {
+      writer.writeNull();
+    }
+  }
+
+  public static final class LanguageInvocation {
+    private final String output;
+
+    private LanguageInvocation(String source) {
+      output = source;
+    }
+
+    @JsonCreator({"output"})
+    public LanguageInvocation(String source, InvocationMarker ignored) {
+      this(source);
+    }
+
+    public String getOutput() {
+      return output;
     }
   }
 }

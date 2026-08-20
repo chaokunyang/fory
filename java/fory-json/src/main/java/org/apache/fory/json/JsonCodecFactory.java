@@ -29,8 +29,13 @@ import org.apache.fory.reflect.TypeRef;
 /** Creates a complete JSON codec during a resolver-owned cold type lookup. */
 @FunctionalInterface
 public interface JsonCodecFactory {
-  /** Returns a codec for {@code type}, or {@code null} when this factory does not own it. */
-  JsonValueCodec<?> create(TypeRef<?> type, JsonTypeResolver resolver);
+  /**
+   * Returns a codec for {@code type}, or {@code null} when this factory does not own it.
+   *
+   * @param runtimeType true only when {@code type} was selected from an actual value during a
+   *     dynamic write; factories must not infer this from resolver state
+   */
+  JsonValueCodec<?> create(TypeRef<?> type, JsonTypeResolver resolver, boolean runtimeType);
 
   /** Returns the deterministic semantic identity of this factory configuration. */
   default String factoryKey() {

@@ -19,15 +19,16 @@
 
 package org.apache.fory.json.resolver;
 
-import java.lang.reflect.Type;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.json.codec.GeneratedJsonCodec;
 import org.apache.fory.json.codegen.JsonCodegenKey;
 import org.apache.fory.json.resolver.JsonSharedRegistry.GeneratedClasses;
+import org.apache.fory.reflect.TypeRef;
 
 /** Frozen Native Image mapping from JSON configuration semantics to generated classes. */
 @Internal
@@ -77,68 +78,92 @@ public final class JsonGeneratedClassRegistry {
     return configurations.get(key);
   }
 
+  static void mergeSourceCodecs(
+      Map<TypeRef<?>, GeneratedJsonCodec<?>> source,
+      Map<TypeRef<?>, GeneratedJsonCodec<?>> target,
+      Set<Class<?>> added) {
+    for (Map.Entry<TypeRef<?>, GeneratedJsonCodec<?>> entry : source.entrySet()) {
+      TypeRef<?> type = entry.getKey();
+      GeneratedJsonCodec<?> codec = entry.getValue();
+      GeneratedJsonCodec<?> previous = target.putIfAbsent(type, codec);
+      if (previous == null) {
+        added.add(codec.getClass());
+      } else if (previous.getClass() != codec.getClass()) {
+        throw new IllegalStateException(
+            "Conflicting source-generated Fory JSON companions for " + type);
+      }
+    }
+  }
+
   static final class Configuration {
-    private final Map<Class<?>, Class<?>> stringWriters;
-    private final Map<Class<?>, Class<?>> utf8Writers;
-    private final Map<Class<?>, Class<?>> latin1Readers;
-    private final Map<Class<?>, Class<?>> utf16Readers;
-    private final Map<Class<?>, Class<?>> utf8Readers;
-    private final Map<Type, Class<?>> utf8CollectionWriters;
-    private final Map<Type, Class<?>> utf8CollectionReaders;
+    private final Map<TypeRef<?>, Class<?>> stringWriters;
+    private final Map<TypeRef<?>, Class<?>> utf8Writers;
+    private final Map<TypeRef<?>, Class<?>> latin1Readers;
+    private final Map<TypeRef<?>, Class<?>> utf16Readers;
+    private final Map<TypeRef<?>, Class<?>> utf8Readers;
+    private final Map<TypeRef<?>, Class<?>> utf8CollectionWriters;
+    private final Map<TypeRef<?>, Class<?>> utf8CollectionReaders;
+    private final Map<TypeRef<?>, GeneratedJsonCodec<?>> sourceCodecs;
 
     private Configuration(MutableConfiguration source) {
-      stringWriters = immutable(source.stringWriters);
-      utf8Writers = immutable(source.utf8Writers);
-      latin1Readers = immutable(source.latin1Readers);
-      utf16Readers = immutable(source.utf16Readers);
-      utf8Readers = immutable(source.utf8Readers);
-      utf8CollectionWriters = immutable(source.utf8CollectionWriters);
-      utf8CollectionReaders = immutable(source.utf8CollectionReaders);
+      stringWriters = immutableValues(source.stringWriters);
+      utf8Writers = immutableValues(source.utf8Writers);
+      latin1Readers = immutableValues(source.latin1Readers);
+      utf16Readers = immutableValues(source.utf16Readers);
+      utf8Readers = immutableValues(source.utf8Readers);
+      utf8CollectionWriters = immutableValues(source.utf8CollectionWriters);
+      utf8CollectionReaders = immutableValues(source.utf8CollectionReaders);
+      sourceCodecs = immutableValues(source.sourceCodecs);
     }
 
-    Class<?> stringWriter(Class<?> type) {
+    Class<?> stringWriter(TypeRef<?> type) {
       return stringWriters.get(type);
     }
 
-    Class<?> utf8Writer(Class<?> type) {
+    Class<?> utf8Writer(TypeRef<?> type) {
       return utf8Writers.get(type);
     }
 
-    Class<?> latin1Reader(Class<?> type) {
+    Class<?> latin1Reader(TypeRef<?> type) {
       return latin1Readers.get(type);
     }
 
-    Class<?> utf16Reader(Class<?> type) {
+    Class<?> utf16Reader(TypeRef<?> type) {
       return utf16Readers.get(type);
     }
 
-    Class<?> utf8Reader(Class<?> type) {
+    Class<?> utf8Reader(TypeRef<?> type) {
       return utf8Readers.get(type);
     }
 
-    Class<?> utf8CollectionWriter(Type type) {
+    Class<?> utf8CollectionWriter(TypeRef<?> type) {
       return utf8CollectionWriters.get(type);
     }
 
-    Class<?> utf8CollectionReader(Type type) {
+    Class<?> utf8CollectionReader(TypeRef<?> type) {
       return utf8CollectionReaders.get(type);
     }
 
-    private static <K> Map<K, Class<?>> immutable(Map<K, Class<?>> classes) {
-      return classes.isEmpty()
+    GeneratedJsonCodec<?> sourceCodec(TypeRef<?> type) {
+      return sourceCodecs.get(type);
+    }
+
+    private static <K, V> Map<K, V> immutableValues(Map<K, V> values) {
+      return values.isEmpty()
           ? Collections.emptyMap()
-          : Collections.unmodifiableMap(new HashMap<>(classes));
+          : Collections.unmodifiableMap(new HashMap<>(values));
     }
   }
 
   private static final class MutableConfiguration {
-    private final Map<Class<?>, Class<?>> stringWriters = new HashMap<>();
-    private final Map<Class<?>, Class<?>> utf8Writers = new HashMap<>();
-    private final Map<Class<?>, Class<?>> latin1Readers = new HashMap<>();
-    private final Map<Class<?>, Class<?>> utf16Readers = new HashMap<>();
-    private final Map<Class<?>, Class<?>> utf8Readers = new HashMap<>();
-    private final Map<Type, Class<?>> utf8CollectionWriters = new HashMap<>();
-    private final Map<Type, Class<?>> utf8CollectionReaders = new HashMap<>();
+    private final Map<TypeRef<?>, Class<?>> stringWriters = new HashMap<>();
+    private final Map<TypeRef<?>, Class<?>> utf8Writers = new HashMap<>();
+    private final Map<TypeRef<?>, Class<?>> latin1Readers = new HashMap<>();
+    private final Map<TypeRef<?>, Class<?>> utf16Readers = new HashMap<>();
+    private final Map<TypeRef<?>, Class<?>> utf8Readers = new HashMap<>();
+    private final Map<TypeRef<?>, Class<?>> utf8CollectionWriters = new HashMap<>();
+    private final Map<TypeRef<?>, Class<?>> utf8CollectionReaders = new HashMap<>();
+    private final Map<TypeRef<?>, GeneratedJsonCodec<?>> sourceCodecs = new HashMap<>();
 
     private void merge(GeneratedClasses source, Set<Class<?>> added) {
       merge(source.stringWriters(), stringWriters, added);
@@ -148,6 +173,7 @@ public final class JsonGeneratedClassRegistry {
       merge(source.utf8Readers(), utf8Readers, added);
       merge(source.utf8CollectionWriters(), utf8CollectionWriters, added);
       merge(source.utf8CollectionReaders(), utf8CollectionReaders, added);
+      JsonGeneratedClassRegistry.mergeSourceCodecs(source.sourceCodecs(), sourceCodecs, added);
     }
 
     private static <K> void merge(

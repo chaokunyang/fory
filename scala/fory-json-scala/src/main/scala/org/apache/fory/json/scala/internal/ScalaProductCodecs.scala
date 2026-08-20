@@ -57,7 +57,8 @@ private[scala] final class ScalaEmptyTupleCodec(tupleType: Class[_])
 private[scala] final class ScalaValueClassCodec(
     valueType: Class[_],
     constructor: Constructor[_],
-    accessor: Method
+    accessor: Method,
+    runtimeType: Boolean
 ) extends CompositeJsonCodec[AnyRef] {
   private val constructorHandle: MethodHandle = MethodHandles.publicLookup().unreflectConstructor(constructor)
   private val accessorHandle: MethodHandle = MethodHandles.publicLookup().unreflect(accessor)
@@ -66,7 +67,7 @@ private[scala] final class ScalaValueClassCodec(
 
   override def resolveTypes(typeRef: TypeRef[_], resolver: JsonTypeResolver): Unit = {
     if (
-      !resolver.resolvingRuntimeType() && valueType.getTypeParameters.nonEmpty &&
+      !runtimeType && valueType.getTypeParameters.nonEmpty &&
       !typeRef.getType.isInstanceOf[ParameterizedType]
     ) throw ScalaTypeSupport.unsupported(typeRef, "value class requires a complete parameterized TypeRef")
     val underlying = typeRef.resolveType(constructor.getGenericParameterTypes.apply(0))
@@ -105,7 +106,7 @@ private[scala] final class ScalaValueClassCodec(
 }
 
 private[scala] object ScalaValueClassCodec {
-  def create(typeClass: Class[_]): JsonValueCodec[_] = {
+  def create(typeClass: Class[_], runtimeType: Boolean): JsonValueCodec[_] = {
     if (!Modifier.isFinal(typeClass.getModifiers) || typeClass.isInterface) return null
     val fields = typeClass.getDeclaredFields.filter { field =>
       !Modifier.isStatic(field.getModifiers) && !field.isSynthetic && !field.getName.startsWith("$")
@@ -137,6 +138,6 @@ private[scala] object ScalaValueClassCodec {
       method.getReturnType == java.lang.Integer.TYPE
     }
     if (!hasEqualsExtension || !hasHashExtension) null
-    else new ScalaValueClassCodec(typeClass, constructor, accessor)
+    else new ScalaValueClassCodec(typeClass, constructor, accessor, runtimeType)
   }
 }

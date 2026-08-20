@@ -67,13 +67,22 @@
         <build-helper-maven-plugin.version>3.6.1</build-helper-maven-plugin.version>
         <dokka-maven-plugin.version>2.2.0</dokka-maven-plugin.version>
         <maven-spotless-plugin.version>2.43.0</maven-spotless-plugin.version>
-        <google-java-format.version>1.35.0</google-java-format.version>
+        <google-java-format.version>1.24.0</google-java-format.version>
         <dokka.skip>false</dokka.skip>
         <!-- Dokka owns the standard javadoc classifier for mixed Kotlin/Java modules. -->
         <maven.javadoc.skip>true</maven.javadoc.skip>
     </properties>
 
     <profiles>
+        <profile>
+            <id>jdk25-format</id>
+            <activation>
+                <jdk>[25,)</jdk>
+            </activation>
+            <properties>
+                <google-java-format.version>1.35.0</google-java-format.version>
+            </properties>
+        </profile>
         <profile>
             <id>snapshot-publication</id>
             <build>

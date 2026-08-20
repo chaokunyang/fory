@@ -20,6 +20,7 @@
 package org.apache.fory.json;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertThrows;
@@ -342,6 +343,7 @@ public class JsonModuleTest {
     JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
     JsonTypeInfo typeInfo = JsonTestSupport.runtimeTypeInfo(json, RuntimeGeneratedValue.class);
     ObjectCodec<?> owner = resolver.canonicalObjectCodec(typeInfo);
+    assertNotNull(owner);
     assertNotSame(typeInfo.stringWriter(), owner);
     assertNotSame(typeInfo.utf8Writer(), owner);
     assertNotSame(typeInfo.latin1Reader(), owner);

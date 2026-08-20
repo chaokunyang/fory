@@ -50,15 +50,17 @@ Build the correctness and JMH artifacts:
 gradle --no-daemon test verifyGeneratedJsonArtifacts jmhJar
 ```
 
-Run alternating process-isolated trials:
+Run the standard JMH benchmark:
 
 ```bash
-python run_json_benchmark.py --rounds 3 --output-dir reports/json
+python run_json_benchmark.py --output-dir reports/json
 ```
 
-Each round launches one JVM for each library, rotates the library order, and runs that library's
-four operations. The runner retains every raw JMH JSON file and log, then writes the median result
-for each of the 16 benchmark methods to `benchmark_results.json`.
+The runner invokes JMH once for all 16 methods. By default, each method uses three 2-second warmup
+iterations and five 2-second measurement iterations. Standard JMH JSON is written to
+`benchmark_results.json`; the full process log is retained in `benchmark.log`. For a quick harness
+check without collecting publishable numbers, pass
+`--warmup-iterations 1 --iterations 1 --duration 100ms`.
 
 Use `--prepare-only` for CI correctness and Moshi adapter-generation checks without performance
 timing.

@@ -42,22 +42,6 @@ import org.testng.annotations.Test;
 
 public class JsonGeneratedClassRegistryTest {
   @Test
-  public void rejectSignatureCollision() {
-    Map<String, String> signatures = new HashMap<>();
-    JsonGeneratedClassRegistry.mergeSignatures(
-        signatures, Collections.singletonMap("example.Generated", "complete-signature-a"));
-    JsonGeneratedClassRegistry.mergeSignatures(
-        signatures, Collections.singletonMap("example.Generated", "complete-signature-a"));
-    assertEquals(signatures.get("example.Generated"), "complete-signature-a");
-
-    expectThrows(
-        IllegalStateException.class,
-        () ->
-            JsonGeneratedClassRegistry.mergeSignatures(
-                signatures, Collections.singletonMap("example.Generated", "complete-signature-b")));
-  }
-
-  @Test
   public void mergeSourceCodecs() {
     TypeRef<?> type = TypeRef.of(String.class);
     Map<TypeRef<?>, GeneratedJsonCodec<?>> codecs = new HashMap<>();

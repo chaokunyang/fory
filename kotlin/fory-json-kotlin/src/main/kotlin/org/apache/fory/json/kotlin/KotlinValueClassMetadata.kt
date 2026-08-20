@@ -255,21 +255,7 @@ internal object KotlinValueClassMetadata {
     if (active.put(rawType, true) != null) {
       unsupported(rawType, "recursive value-class underlying type")
     }
-    val metadata =
-      rawType.getAnnotation(Metadata::class.java) ?: unsupported(rawType, "missing Kotlin metadata")
-    val classMetadata =
-      try {
-        KotlinClassMetadata.readStrict(metadata)
-      } catch (cause: IllegalArgumentException) {
-        throw ForyJsonException("Unsupported Kotlin metadata on ${rawType.name}", cause)
-      }
-    if (classMetadata !is KotlinClassMetadata.Class) {
-      unsupported(rawType, "metadata is not a class declaration")
-    }
-    val version = classMetadata.version
-    if (version.major != 2 || version.minor != 3) {
-      unsupported(rawType, "metadata ABI $version; expected 2.3")
-    }
+    val classMetadata = KotlinMetadataTypes.classMetadata(rawType)
     val model = classMetadata.kmClass
     if (!model.isValue || model.kind != ClassKind.CLASS) {
       unsupported(rawType, "declaration is not a value class")

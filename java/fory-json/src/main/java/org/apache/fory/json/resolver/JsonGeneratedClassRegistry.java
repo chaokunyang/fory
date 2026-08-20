@@ -78,16 +78,6 @@ public final class JsonGeneratedClassRegistry {
     return configurations.get(key);
   }
 
-  static void mergeSignatures(Map<String, String> target, Map<String, String> source) {
-    for (Map.Entry<String, String> entry : source.entrySet()) {
-      String previous = target.putIfAbsent(entry.getKey(), entry.getValue());
-      if (previous != null && !previous.equals(entry.getValue())) {
-        throw new IllegalStateException(
-            "Generated Fory JSON class-name collision for " + entry.getKey());
-      }
-    }
-  }
-
   static void mergeSourceCodecs(
       Map<TypeRef<?>, GeneratedJsonCodec<?>> source,
       Map<TypeRef<?>, GeneratedJsonCodec<?>> target,
@@ -114,7 +104,6 @@ public final class JsonGeneratedClassRegistry {
     private final Map<TypeRef<?>, Class<?>> utf8CollectionWriters;
     private final Map<TypeRef<?>, Class<?>> utf8CollectionReaders;
     private final Map<TypeRef<?>, GeneratedJsonCodec<?>> sourceCodecs;
-    private final Map<String, String> signatures;
 
     private Configuration(MutableConfiguration source) {
       stringWriters = immutableValues(source.stringWriters);
@@ -125,49 +114,38 @@ public final class JsonGeneratedClassRegistry {
       utf8CollectionWriters = immutableValues(source.utf8CollectionWriters);
       utf8CollectionReaders = immutableValues(source.utf8CollectionReaders);
       sourceCodecs = immutableValues(source.sourceCodecs);
-      signatures = Collections.unmodifiableMap(new HashMap<>(source.signatures));
     }
 
     Class<?> stringWriter(TypeRef<?> type) {
-      return generatedClass(stringWriters, type);
+      return stringWriters.get(type);
     }
 
     Class<?> utf8Writer(TypeRef<?> type) {
-      return generatedClass(utf8Writers, type);
+      return utf8Writers.get(type);
     }
 
     Class<?> latin1Reader(TypeRef<?> type) {
-      return generatedClass(latin1Readers, type);
+      return latin1Readers.get(type);
     }
 
     Class<?> utf16Reader(TypeRef<?> type) {
-      return generatedClass(utf16Readers, type);
+      return utf16Readers.get(type);
     }
 
     Class<?> utf8Reader(TypeRef<?> type) {
-      return generatedClass(utf8Readers, type);
+      return utf8Readers.get(type);
     }
 
     Class<?> utf8CollectionWriter(TypeRef<?> type) {
-      return generatedClass(utf8CollectionWriters, type);
+      return utf8CollectionWriters.get(type);
     }
 
     Class<?> utf8CollectionReader(TypeRef<?> type) {
-      return generatedClass(utf8CollectionReaders, type);
+      return utf8CollectionReaders.get(type);
     }
 
     GeneratedJsonCodec<?> sourceCodec(TypeRef<?> type) {
       return sourceCodecs.get(type);
-    }
-
-    private Class<?> generatedClass(Map<TypeRef<?>, Class<?>> classes, TypeRef<?> type) {
-      Class<?> generatedClass = classes.get(type);
-      if (generatedClass != null && !signatures.containsKey(generatedClass.getName())) {
-        throw new IllegalStateException(
-            "Missing structural signature for generated Fory JSON class "
-                + generatedClass.getName());
-      }
-      return generatedClass;
     }
 
     private static <K, V> Map<K, V> immutableValues(Map<K, V> values) {
@@ -186,10 +164,8 @@ public final class JsonGeneratedClassRegistry {
     private final Map<TypeRef<?>, Class<?>> utf8CollectionWriters = new HashMap<>();
     private final Map<TypeRef<?>, Class<?>> utf8CollectionReaders = new HashMap<>();
     private final Map<TypeRef<?>, GeneratedJsonCodec<?>> sourceCodecs = new HashMap<>();
-    private final Map<String, String> signatures = new HashMap<>();
 
     private void merge(GeneratedClasses source, Set<Class<?>> added) {
-      mergeSignatures(source.signatures());
       merge(source.stringWriters(), stringWriters, added);
       merge(source.utf8Writers(), utf8Writers, added);
       merge(source.latin1Readers(), latin1Readers, added);
@@ -215,10 +191,6 @@ public final class JsonGeneratedClassRegistry {
       } else if (previous != generatedClass) {
         throw new IllegalStateException("Conflicting generated Fory JSON classes for " + key);
       }
-    }
-
-    private void mergeSignatures(Map<String, String> source) {
-      JsonGeneratedClassRegistry.mergeSignatures(signatures, source);
     }
 
     private Configuration freeze() {

@@ -501,21 +501,7 @@ internal object KotlinMetadataModels {
   }
 
   private fun readClass(type: Class<*>): KmClass {
-    val metadata = type.getAnnotation(Metadata::class.java) ?: unsupported(type, "no metadata")
-    val classMetadata =
-      try {
-        KotlinClassMetadata.readStrict(metadata)
-      } catch (cause: IllegalArgumentException) {
-        throw ForyJsonException("Unsupported Kotlin metadata on ${type.name}", cause)
-      }
-    if (classMetadata !is KotlinClassMetadata.Class) {
-      unsupported(type, "metadata is not a class declaration")
-    }
-    val version = classMetadata.version
-    if (version.major != 2 || version.minor != 3) {
-      unsupported(type, "metadata ABI $version; expected 2.3")
-    }
-    return classMetadata.kmClass
+    return KotlinMetadataTypes.classMetadata(type).kmClass
   }
 
   // Kotlin metadata 2.3 encodes contextParameters on functions and properties, but KmClass still
@@ -642,6 +628,30 @@ internal object KotlinMetadataModels {
 
 /** Single owner of strict Kotlin metadata decoding, substitution, and JSON type tokens. */
 internal object KotlinMetadataTypes {
+  fun classMetadata(type: Class<*>): KotlinClassMetadata.Class {
+    val annotation =
+      type.getAnnotation(Metadata::class.java)
+        ?: throw ForyJsonException("Unsupported Kotlin metadata on ${type.name}: missing @Metadata")
+    val metadata =
+      try {
+        KotlinClassMetadata.readStrict(annotation)
+      } catch (cause: IllegalArgumentException) {
+        throw ForyJsonException("Unsupported Kotlin metadata on ${type.name}", cause)
+      }
+    if (metadata !is KotlinClassMetadata.Class) {
+      throw ForyJsonException(
+        "Unsupported Kotlin metadata on ${type.name}: not a class declaration",
+      )
+    }
+    val version = metadata.version
+    if (version.major != 2 || version.minor != 3) {
+      throw ForyJsonException(
+        "Unsupported Kotlin metadata on ${type.name}: ABI $version; expected 2.3",
+      )
+    }
+    return metadata
+  }
+
   fun constructorDescriptor(constructor: Constructor<*>): String =
     descriptor(constructor.parameterTypes, Void.TYPE)
 

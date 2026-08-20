@@ -319,45 +319,13 @@ public final class JsonSharedRegistry {
         utf8Readers,
         utf8CollectionWriters,
         utf8CollectionReaders,
-        sourceCodecs,
-        generatedSignatures(
-            codegen,
-            stringWriters,
-            utf8Writers,
-            latin1Readers,
-            utf16Readers,
-            utf8Readers,
-            utf8CollectionWriters,
-            utf8CollectionReaders));
+        sourceCodecs);
   }
 
   private static <K, V> Map<K, V> immutableSnapshot(Map<K, V> values) {
     return values.isEmpty()
         ? Collections.emptyMap()
         : Collections.unmodifiableMap(new HashMap<>(values));
-  }
-
-  @SafeVarargs
-  private static Map<String, String> generatedSignatures(
-      JsonCodegen codegen, Map<TypeRef<?>, Class<?>>... classes) {
-    Map<String, String> allSignatures = codegen.generatedClassSignatures();
-    Map<String, String> signatures = new HashMap<>();
-    for (Map<TypeRef<?>, Class<?>> capabilities : classes) {
-      for (Class<?> generatedClass : capabilities.values()) {
-        String name = generatedClass.getName();
-        String signature = allSignatures.get(name);
-        if (signature == null) {
-          throw new IllegalStateException(
-              "Missing structural signature for generated Fory JSON class " + name);
-        }
-        String previous = signatures.putIfAbsent(name, signature);
-        if (previous != null && !previous.equals(signature)) {
-          throw new IllegalStateException(
-              "Conflicting structural signatures for generated Fory JSON class " + name);
-        }
-      }
-    }
-    return Collections.unmodifiableMap(signatures);
   }
 
   private static <K> Map<K, Class<?>> completedClasses(
@@ -387,7 +355,6 @@ public final class JsonSharedRegistry {
     private final Map<TypeRef<?>, Class<?>> utf8CollectionWriters;
     private final Map<TypeRef<?>, Class<?>> utf8CollectionReaders;
     private final Map<TypeRef<?>, GeneratedJsonCodec<?>> sourceCodecs;
-    private final Map<String, String> signatures;
 
     private GeneratedClasses(
         Map<TypeRef<?>, Class<?>> stringWriters,
@@ -397,8 +364,7 @@ public final class JsonSharedRegistry {
         Map<TypeRef<?>, Class<?>> utf8Readers,
         Map<TypeRef<?>, Class<?>> utf8CollectionWriters,
         Map<TypeRef<?>, Class<?>> utf8CollectionReaders,
-        Map<TypeRef<?>, GeneratedJsonCodec<?>> sourceCodecs,
-        Map<String, String> signatures) {
+        Map<TypeRef<?>, GeneratedJsonCodec<?>> sourceCodecs) {
       this.stringWriters = stringWriters;
       this.utf8Writers = utf8Writers;
       this.latin1Readers = latin1Readers;
@@ -407,7 +373,6 @@ public final class JsonSharedRegistry {
       this.utf8CollectionWriters = utf8CollectionWriters;
       this.utf8CollectionReaders = utf8CollectionReaders;
       this.sourceCodecs = sourceCodecs;
-      this.signatures = signatures;
     }
 
     Map<TypeRef<?>, Class<?>> stringWriters() {
@@ -440,10 +405,6 @@ public final class JsonSharedRegistry {
 
     Map<TypeRef<?>, GeneratedJsonCodec<?>> sourceCodecs() {
       return sourceCodecs;
-    }
-
-    Map<String, String> signatures() {
-      return signatures;
     }
   }
 

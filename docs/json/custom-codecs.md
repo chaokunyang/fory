@@ -72,7 +72,7 @@ ForyJson json =
         .build();
 ```
 
-Exact `registerCodec` and exact-class factory registration are not supported for types with
+Exact `registerCodec` and exact-class factory registration are not allowed for types with
 dedicated reader/writer operations:
 
 - `boolean`, `byte`, `short`, `int`, `long`, `float`, `double`, and `char`, including their boxed

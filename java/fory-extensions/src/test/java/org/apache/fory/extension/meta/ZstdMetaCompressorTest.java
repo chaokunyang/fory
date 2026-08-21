@@ -31,7 +31,6 @@ public class ZstdMetaCompressorTest {
     byte[] compressed = compressor.compress(data, 0, data.length);
 
     Assert.assertEquals(compressor.decompress(compressed, 0, compressed.length, data.length), data);
-    Assert.assertEquals(compressor.decompress(compressed, 0, compressed.length), data);
     InvalidDataException e =
         Assert.expectThrows(
             InvalidDataException.class,

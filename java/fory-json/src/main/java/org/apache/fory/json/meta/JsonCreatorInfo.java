@@ -683,11 +683,20 @@ public final class JsonCreatorInfo {
 
   private static MethodHandle buildInvoker(
       Executable executable, int logicalCount, int workspaceSize) {
-    if (AndroidSupport.IS_ANDROID || USE_NATIVE_REFLECTION) {
-      // Creator shape validation guarantees a public executable; accessibility is needed only
-      // when its declaring class is non-public.
+    if (AndroidSupport.IS_ANDROID) {
       executable.setAccessible(true);
       return null;
+    }
+    if (USE_NATIVE_REFLECTION) {
+      try {
+        // Creator shape validation guarantees a public executable; accessibility is needed only
+        // when its declaring class is non-public.
+        executable.setAccessible(true);
+        return null;
+      } catch (RuntimeException inaccessible) {
+        // A named application may keep its model package unexported. Fall through to the trusted
+        // creator handle retained by the Native Image Feature instead of requiring module exports.
+      }
     }
     Class<?>[] parameterTypes = executable.getParameterTypes();
     if (logicalCount == parameterTypes.length && workspaceSize == parameterTypes.length) {

@@ -57,10 +57,10 @@ import org.apache.fory.util.function.ToShortFunction;
  * Uniform interpreted object-member access for fields, getters, and setters.
  *
  * <p>Field members use typed access so primitive paths do not box. Ordinary JVM fields delegate to
- * Fory core's {@link FieldAccessor}; JDK 25 Native Image fields use typed reflection. Method
- * members cache a trusted {@code MethodHandle} on the JVM, use reflection on Android, and use
- * lambdas prepared by the Fory JSON Native Image Feature. Generated codecs consume the original
- * field or method metadata and emit direct expressions.
+ * Fory core's {@link FieldAccessor}; JDK 25 Native Image fields use typed reflection when module
+ * access permits it. Method members cache a trusted {@code MethodHandle} on the JVM, use reflection
+ * on Android, and use lambdas prepared by the Fory JSON Native Image Feature. Generated codecs
+ * consume the original field or method metadata and emit direct expressions.
  */
 public abstract class JsonFieldAccessor {
   private static final boolean USE_JDK25_NATIVE_ACCESS =
@@ -188,7 +188,13 @@ public abstract class JsonFieldAccessor {
     if (USE_JDK25_NATIVE_ACCESS) {
       // LambdaMetafactory accepts invocation handles but rejects REF_getField and REF_putField.
       // Typed reflection is faster than JDK 25's VarHandle-backed FieldAccessor in Native Image.
-      return new ReflectiveFieldJsonAccessor(field);
+      try {
+        return new ReflectiveFieldJsonAccessor(field);
+      } catch (RuntimeException e) {
+        // Named applications do not need to open model packages to Fory JSON. When JPMS rejects
+        // reflective override during image analysis, select the existing trusted field owner once.
+        return new FieldJsonAccessor(FieldAccessor.createAccessor(field));
+      }
     }
     return new FieldJsonAccessor(FieldAccessor.createAccessor(field));
   }

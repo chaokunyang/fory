@@ -23,6 +23,7 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotEquals;
 import static org.testng.Assert.assertNotSame;
+import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
@@ -45,8 +46,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import javax.security.auth.Subject;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
+import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.json.annotation.JsonAnyGetter;
 import org.apache.fory.json.annotation.JsonAnySetter;
 import org.apache.fory.json.annotation.JsonSubTypes;
@@ -71,6 +74,7 @@ import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.type.Types;
@@ -309,6 +313,75 @@ public class JsonGeneratedCapabilityKeyTest {
   }
 
   @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  public void hostedConcealedTypeUsesInterpretedRole() throws Exception {
+    if (JdkVersion.MAJOR_VERSION < 9) {
+      return;
+    }
+    String packageName = "org.apache.fory.json.concealed";
+    Path targetOutput = Files.createTempDirectory("fory-json-concealed-target");
+    compileSource(
+        targetOutput,
+        packageName,
+        "ConcealedModel",
+        "public final class ConcealedModel { public jdk.internal.misc.Unsafe value; }",
+        "--add-exports",
+        "java.base/jdk.internal.misc=ALL-UNNAMED");
+    try (URLClassLoader targetLoader =
+        new URLClassLoader(new URL[] {targetOutput.toUri().toURL()}, getClass().getClassLoader())) {
+      Class<?> target = Class.forName(packageName + ".ConcealedModel", true, targetLoader);
+      Class<?> concealed = Class.forName("jdk.internal.misc.Unsafe");
+      ForyJson configured =
+          ForyJson.builder().registerCodec((Class) concealed, JsonTestSupport.nullCodec()).build();
+      JsonTypeResolver resolver = hostedResolver(configured);
+      resolver.generateHostedCodecs(target);
+      assertInterpretedObject(resolver.getTypeInfo((Class) target, target));
+    }
+  }
+
+  @Test
+  public void hostedBootstrapPackageNeedsOwner() throws Exception {
+    Method method =
+        JsonCodegen.class.getDeclaredMethod("hostedDefinitionOwner", Class.class, String.class);
+    method.setAccessible(true);
+    assertNull(method.invoke(null, Subject.class, CodeGenerator.getPackage(Subject.class)));
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  public void hostedTransparentTerminalUsesInterpretedRole() throws Exception {
+    String packageName = "org.apache.fory.json.terminal";
+    Path terminalOutput = Files.createTempDirectory("fory-json-terminal");
+    compileSource(
+        terminalOutput,
+        packageName,
+        "SiblingTerminal",
+        "public final class SiblingTerminal implements "
+            + ProjectionCarrier.class.getCanonicalName()
+            + " {}");
+    try (URLClassLoader terminalLoader =
+        new URLClassLoader(
+            new URL[] {terminalOutput.toUri().toURL()}, getClass().getClassLoader())) {
+      Class<?> terminal = Class.forName(packageName + ".SiblingTerminal", true, terminalLoader);
+      JsonObjectModel model = transparentModel();
+      ForyJson configured =
+          ForyJson.builder()
+              .registerCodec((Class) terminal, JsonTestSupport.nullCodec())
+              .registerCodec(
+                  ProjectionValue.class,
+                  (type, resolver, runtimeType) ->
+                      new SiblingTransparentCodec(resolver.getTypeInfo((Class) terminal, terminal)))
+              .registerCodec(
+                  TransparentModel.class,
+                  (type, resolver, runtimeType) -> resolver.createObjectCodec(type, model))
+              .build();
+      JsonTypeResolver resolver = hostedResolver(configured);
+      resolver.generateHostedCodecs(TransparentModel.class);
+      assertInterpretedObject(resolver.getTypeInfo(TransparentModel.class, TransparentModel.class));
+    }
+  }
+
+  @Test
   public void concurrentInstancesShareFirstClass() throws Exception {
     ForyJson first = ForyJson.builder().withAsyncCompilation(false).build();
     ForyJson second = ForyJson.builder().withAsyncCompilation(false).build();
@@ -499,22 +572,39 @@ public class JsonGeneratedCapabilityKeyTest {
 
   private static void compileSource(
       Path output, String packageName, String simpleName, String declaration) throws IOException {
+    compileSource(output, packageName, simpleName, declaration, new String[0]);
+  }
+
+  private static void compileSource(
+      Path output, String packageName, String simpleName, String declaration, String... options)
+      throws IOException {
     Path source = output.resolve(simpleName + ".java");
     Files.write(
         source, ("package " + packageName + "; " + declaration).getBytes(StandardCharsets.UTF_8));
     JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-    assertEquals(
-        compiler.run(
-            null,
-            null,
-            null,
-            "-proc:none",
-            "-classpath",
-            System.getProperty("java.class.path"),
-            "-d",
-            output.toString(),
-            source.toString()),
-        0);
+    ArrayList<String> arguments = new ArrayList<>();
+    Collections.addAll(
+        arguments, "-proc:none", "-classpath", System.getProperty("java.class.path"));
+    Collections.addAll(arguments, options);
+    Collections.addAll(arguments, "-d", output.toString(), source.toString());
+    assertEquals(compiler.run(null, null, null, arguments.toArray(new String[0])), 0);
+  }
+
+  private static JsonObjectModel transparentModel() throws Exception {
+    TypeRef<?> logicalType = TypeRef.of(ProjectionValue.class, ordinary(false));
+    return new JsonObjectModel(
+        TransparentModel.class.getConstructor(),
+        null,
+        new String[0],
+        new Method[0],
+        new Method[0],
+        new int[0],
+        new boolean[0],
+        new TypeRef<?>[0],
+        new String[] {"value"},
+        new Method[] {TransparentModel.class.getMethod("getValue")},
+        new Method[] {TransparentModel.class.getMethod("setValue", ProjectionCarrier.class)},
+        new TypeRef<?>[] {logicalType});
   }
 
   private static TypeExtMeta ordinary(boolean nullable) {
@@ -555,6 +645,14 @@ public class JsonGeneratedCapabilityKeyTest {
     assertFalse(ObjectCodec.class.isAssignableFrom(typeInfo.utf8Reader().getClass()));
   }
 
+  private static void assertInterpretedObject(JsonTypeInfo typeInfo) {
+    assertTrue(typeInfo.stringWriter() instanceof ObjectCodec<?>);
+    assertTrue(typeInfo.utf8Writer() instanceof ObjectCodec<?>);
+    assertTrue(typeInfo.latin1Reader() instanceof ObjectCodec<?>);
+    assertTrue(typeInfo.utf16Reader() instanceof ObjectCodec<?>);
+    assertTrue(typeInfo.utf8Reader() instanceof ObjectCodec<?>);
+  }
+
   public static final class Model {
     public String value;
 
@@ -589,6 +687,24 @@ public class JsonGeneratedCapabilityKeyTest {
     public String value;
 
     public Child() {}
+  }
+
+  public interface ProjectionCarrier {}
+
+  public static final class ProjectionValue {}
+
+  public static final class TransparentModel {
+    private ProjectionCarrier value;
+
+    public TransparentModel() {}
+
+    public ProjectionCarrier getValue() {
+      return value;
+    }
+
+    public void setValue(ProjectionCarrier value) {
+      this.value = value;
+    }
   }
 
   public static class ChildCodecA implements JsonValueCodec<Child> {
@@ -824,6 +940,101 @@ public class JsonGeneratedCapabilityKeyTest {
     @Override
     public void writeUtf8Carrier(Utf8JsonWriter writer, Object carrier) {
       writer.writeInt((Integer) carrier);
+    }
+  }
+
+  public static final class SiblingTransparentCodec extends AbstractJsonValueCodec<ProjectionValue>
+      implements TransparentUnboxedValueCodec {
+    private final JsonTypeInfo valueTypeInfo;
+
+    public SiblingTransparentCodec(JsonTypeInfo valueTypeInfo) {
+      this.valueTypeInfo = valueTypeInfo;
+    }
+
+    @Override
+    public JsonTypeInfo valueTypeInfo() {
+      return valueTypeInfo;
+    }
+
+    @Override
+    public Object constructCarrier(JsonReader reader, Object value) {
+      return construct(value);
+    }
+
+    @Override
+    public Object extractValue(Object carrier) {
+      return extract((ProjectionCarrier) carrier);
+    }
+
+    @Override
+    public Method[] constructMethods() {
+      return new Method[] {method("construct", Object.class)};
+    }
+
+    @Override
+    public int[] constructBoxBytes() {
+      return new int[] {0};
+    }
+
+    @Override
+    public Method[] extractMethods() {
+      return new Method[] {method("extract", ProjectionCarrier.class)};
+    }
+
+    @Override
+    public void write(JsonWriter writer, ProjectionValue value) {
+      writer.writeNull();
+    }
+
+    @Override
+    public ProjectionValue read(JsonReader reader) {
+      return null;
+    }
+
+    @Override
+    public Class<?> carrierType() {
+      return ProjectionCarrier.class;
+    }
+
+    @Override
+    public Object readLatin1Carrier(Latin1JsonReader reader) {
+      return null;
+    }
+
+    @Override
+    public Object readUtf16Carrier(Utf16JsonReader reader) {
+      return null;
+    }
+
+    @Override
+    public Object readUtf8Carrier(Utf8JsonReader reader) {
+      return null;
+    }
+
+    @Override
+    public void writeStringCarrier(StringJsonWriter writer, Object carrier) {
+      writer.writeNull();
+    }
+
+    @Override
+    public void writeUtf8Carrier(Utf8JsonWriter writer, Object carrier) {
+      writer.writeNull();
+    }
+
+    public static ProjectionCarrier construct(Object value) {
+      return (ProjectionCarrier) value;
+    }
+
+    public static Object extract(ProjectionCarrier carrier) {
+      return carrier;
+    }
+
+    private static Method method(String name, Class<?>... parameterTypes) {
+      try {
+        return SiblingTransparentCodec.class.getMethod(name, parameterTypes);
+      } catch (NoSuchMethodException e) {
+        throw new AssertionError(e);
+      }
     }
   }
 

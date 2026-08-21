@@ -28,7 +28,6 @@ import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -150,14 +149,14 @@ public final class ForyJsonExample {
         .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
         .registerMixin(CoreCompileStateMixin.class)
         .registerMixin(EmptyMixin.class)
-        .registerMixin(SimpleEntryMixin.class)
+        .registerMixin(StackTraceElementMixin.class)
         .build();
   }
 
   private static void testBootstrapMixin(ForyJson json) {
-    SimpleEntry<String, String> value = new SimpleEntry<>("left", "right");
+    StackTraceElement value = new StackTraceElement("Owner", "method", "Owner.java", 12);
     String encoded = json.toJson(value);
-    Preconditions.checkArgument(encoded.contains("left") && encoded.contains("right"));
+    Preconditions.checkArgument(encoded.contains("Owner") && encoded.contains("method"));
   }
 
   private static ForyJson newInterpretedJson() {
@@ -728,8 +727,11 @@ public final class ForyJsonExample {
   @JsonMixin(target = EmptyMixinTarget.class)
   public interface EmptyMixin {}
 
-  @JsonMixin(target = SimpleEntry.class)
-  public interface SimpleEntryMixin {}
+  @JsonMixin(target = StackTraceElement.class)
+  public interface StackTraceElementMixin {
+    @JsonCodec(BootstrapProbeCodec.class)
+    String getClassName();
+  }
 
   public static final class InterpretedMixinTarget {
     private String name;
@@ -920,6 +922,47 @@ public final class ForyJsonExample {
     private static void checkCapability(Object capability, boolean expectGenerated) {
       boolean generated = !(capability instanceof ObjectCodec<?>);
       Preconditions.checkArgument(generated == expectGenerated);
+    }
+  }
+
+  public static final class BootstrapProbeCodec implements JsonValueCodec<String> {
+    public BootstrapProbeCodec() {}
+
+    @Override
+    public void writeString(StringJsonWriter writer, String value) {
+      CodegenProbeCodec.checkCapability(
+          writer
+              .typeResolver()
+              .getTypeInfo(StackTraceElement.class, StackTraceElement.class)
+              .stringWriter(),
+          true);
+      writer.writeString(value);
+    }
+
+    @Override
+    public void writeUtf8(Utf8JsonWriter writer, String value) {
+      CodegenProbeCodec.checkCapability(
+          writer
+              .typeResolver()
+              .getTypeInfo(StackTraceElement.class, StackTraceElement.class)
+              .utf8Writer(),
+          true);
+      writer.writeString(value);
+    }
+
+    @Override
+    public String readLatin1(Latin1JsonReader reader) {
+      return reader.readString();
+    }
+
+    @Override
+    public String readUtf16(Utf16JsonReader reader) {
+      return reader.readString();
+    }
+
+    @Override
+    public String readUtf8(Utf8JsonReader reader) {
+      return reader.readString();
     }
   }
 

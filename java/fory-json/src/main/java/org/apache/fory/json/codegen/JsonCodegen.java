@@ -60,6 +60,7 @@ import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal.DefineClass;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.TypeRef;
@@ -978,10 +979,13 @@ public final class JsonCodegen {
     if (!hostedCodegen) {
       return compileCodecClass(generatedPackage, className, code, invocations);
     }
+    Class<?> definitionOwner = hostedDefinitionOwner(ownerType, generatedPackage);
+    if (definitionOwner == null) {
+      return null;
+    }
     try {
       CompileUnit unit = new CompileUnit(generatedPackage, className, code);
-      return compileHostedClass(
-          hostedDefinitionOwner(ownerType, generatedPackage), unit, invocations);
+      return compileHostedClass(definitionOwner, unit, invocations);
     } catch (Throwable e) {
       throw new ForyJsonException("Cannot compile generated JSON codec " + className, e);
     }
@@ -1007,8 +1011,12 @@ public final class JsonCodegen {
     if (!hostedCodegen) {
       return compileCodecClass(generatedPackage, className, code);
     }
+    Class<?> definitionOwner = hostedDefinitionOwner(elementType, generatedPackage);
+    if (definitionOwner == null) {
+      return null;
+    }
     return compileHostedClass(
-        hostedDefinitionOwner(elementType, generatedPackage),
+        definitionOwner,
         new CompileUnit(generatedPackage, className, code),
         new DirectInvocation[0]);
   }
@@ -1017,12 +1025,14 @@ public final class JsonCodegen {
     while (sourceOwner.isArray()) {
       sourceOwner = sourceOwner.getComponentType();
     }
-    if (sourceOwner.isPrimitive()
-        || sourceOwner.getClassLoader() == null
-        || !CodeGenerator.getPackage(sourceOwner).equals(generatedPackage)) {
+    if (sourceOwner.getClassLoader() != null
+        && CodeGenerator.getPackage(sourceOwner).equals(generatedPackage)) {
+      return sourceOwner;
+    }
+    if (CodeGenerator.getPackage(Generated.class).equals(generatedPackage)) {
       return Generated.class;
     }
-    return sourceOwner;
+    return null;
   }
 
   private Class<?> compileHostedClass(
@@ -1114,22 +1124,8 @@ public final class JsonCodegen {
       return false;
     }
     JsonCreatorInfo creator = codec.creatorInfo();
-    if (creator != null) {
-      if (!canResolveExecutable(creator.invocationExecutable())
-          || creator.defaultConstructor() != null
-              && !canResolveExecutable(creator.defaultConstructor())) {
-        return false;
-      }
-      for (Class<?> parameterType : creator.executable().getParameterTypes()) {
-        if (!canCompileType(parameterType)) {
-          return false;
-        }
-      }
-      for (JsonCreatorFieldInfo field : creator.fields()) {
-        if (!canCompileUnboxed(field.unboxedValueCodec(), true)) {
-          return false;
-        }
-      }
+    if (!canCompileCreator(creator)) {
+      return false;
     }
     JsonUnwrappedInfo unwrapped = codec.unwrappedInfo();
     if (unwrapped != null) {
@@ -1169,22 +1165,8 @@ public final class JsonCodegen {
         return false;
       }
       JsonCreatorInfo creator = group.childCodec().creatorInfo();
-      if (creator != null) {
-        if (!canResolveExecutable(creator.invocationExecutable())
-            || creator.defaultConstructor() != null
-                && !canResolveExecutable(creator.defaultConstructor())) {
-          return false;
-        }
-        for (Class<?> parameterType : creator.executable().getParameterTypes()) {
-          if (!canCompileType(parameterType)) {
-            return false;
-          }
-        }
-        for (JsonCreatorFieldInfo field : creator.fields()) {
-          if (!canCompileUnboxed(field.unboxedValueCodec(), true)) {
-            return false;
-          }
-        }
+      if (!canCompileCreator(creator)) {
+        return false;
       }
     }
     for (JsonUnwrappedInfo.ReadRoute route : unwrapped.readRoutes()) {
@@ -1202,6 +1184,36 @@ public final class JsonCodegen {
     }
     AnyInfo any = owner.anyInfo();
     return any == null || canCompileAnyRead(any, owner.creatorInfo() != null);
+  }
+
+  private boolean canCompileCreator(JsonCreatorInfo creator) {
+    if (creator == null) {
+      return true;
+    }
+    if (!canResolveExecutable(creator.invocationExecutable())
+        || creator.defaultConstructor() != null
+            && !canResolveExecutable(creator.defaultConstructor())) {
+      return false;
+    }
+    Class<?>[] parameterTypes = creator.executable().getParameterTypes();
+    for (int i = 0; i < parameterTypes.length; i++) {
+      if (!canCompileType(parameterTypes[i])) {
+        return false;
+      }
+      Method defaultMethod = creator.defaultMethod(i);
+      // JsonCreatorInfo guarantees that a default method belongs to the creator owner and that its
+      // dependency types are the preceding creator parameters. The generated reader still invokes
+      // that exact method, so validate its access from the final definition context as well.
+      if (defaultMethod != null && !canCall(defaultMethod)) {
+        return false;
+      }
+    }
+    for (JsonCreatorFieldInfo field : creator.fields()) {
+      if (!canCompileUnboxed(field.unboxedValueCodec(), true)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private boolean canCompileAnyWrite(AnyInfo any) {
@@ -1436,6 +1448,9 @@ public final class JsonCodegen {
           reader ? direct.readCarrierMethod() : direct.writeCarrierMethod());
     }
     TransparentUnboxedValueCodec transparent = (TransparentUnboxedValueCodec) codec;
+    if (!canCompileType(transparent.valueTypeInfo().rawType())) {
+      return false;
+    }
     Method[] methods = reader ? transparent.constructMethods() : transparent.extractMethods();
     for (Method method : methods) {
       if (!canResolveExecutable(method)) {
@@ -1475,6 +1490,9 @@ public final class JsonCodegen {
     if (!hostedCodegen || type.isPrimitive()) {
       return true;
     }
+    if (hostedDefinitionOwner == null) {
+      return false;
+    }
     while (type.isArray()) {
       type = type.getComponentType();
     }
@@ -1483,10 +1501,35 @@ public final class JsonCodegen {
     }
     ClassLoader loader = hostedDefinitionOwner.getClassLoader();
     try {
-      return Class.forName(type.getName(), false, loader) == type;
-    } catch (ClassNotFoundException e) {
+      return Class.forName(type.getName(), false, loader) == type
+          && isDefinitionModuleVisible(type);
+    } catch (ReflectiveOperationException e) {
       return false;
     }
+  }
+
+  private boolean isDefinitionModuleVisible(Class<?> type) throws ReflectiveOperationException {
+    if (JdkVersion.MAJOR_VERSION < 9) {
+      return true;
+    }
+    Object ownerModule = _JDKAccess.getModule(hostedDefinitionOwner);
+    Object typeModule = _JDKAccess.getModule(type);
+    if (ownerModule == typeModule) {
+      return true;
+    }
+    // Source compilation uses the composed loader, but the generated class belongs to the
+    // definition owner's module. Loader visibility alone cannot make a concealed package or an
+    // unread module legal at linkage time.
+    Class<?> moduleType = ownerModule.getClass();
+    if (!(Boolean) moduleType.getMethod("canRead", moduleType).invoke(ownerModule, typeModule)) {
+      return false;
+    }
+    Package typePackage = type.getPackage();
+    String packageName = typePackage == null ? "" : typePackage.getName();
+    return (Boolean)
+        moduleType
+            .getMethod("isExported", String.class, moduleType)
+            .invoke(typeModule, packageName, ownerModule);
   }
 
   private boolean isVisible(Class<?> type) {

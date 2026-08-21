@@ -24,7 +24,7 @@ import org.apache.fory.graalvm.ForyJsonExample.CodegenProbeValue;
 import org.apache.fory.graalvm.ForyJsonExample.CoreCompileStateMixin;
 import org.apache.fory.graalvm.ForyJsonExample.EmptyMixin;
 import org.apache.fory.graalvm.ForyJsonExample.InheritedJsonConfig;
-import org.apache.fory.graalvm.ForyJsonExample.SimpleEntryMixin;
+import org.apache.fory.graalvm.ForyJsonExample.StackTraceElementMixin;
 import org.apache.fory.json.ForyJson;
 import org.apache.fory.json.PropertyNamingStrategy;
 import org.apache.fory.json.annotation.ForyJsonProvider;
@@ -43,7 +43,7 @@ class ClosedJsonConfigParent {
         .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
         .registerMixin(CoreCompileStateMixin.class)
         .registerMixin(EmptyMixin.class)
-        .registerMixin(SimpleEntryMixin.class)
+        .registerMixin(StackTraceElementMixin.class)
         .withTypeChecker((className, context) -> false)
         .build();
   }
@@ -55,7 +55,7 @@ class ClosedJsonConfigParent {
         .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
         .registerMixin(CoreCompileStateMixin.class)
         .registerMixin(EmptyMixin.class)
-        .registerMixin(SimpleEntryMixin.class)
+        .registerMixin(StackTraceElementMixin.class)
         .build();
   }
 

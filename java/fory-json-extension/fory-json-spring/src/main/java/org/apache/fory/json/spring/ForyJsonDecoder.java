@@ -20,17 +20,19 @@
 package org.apache.fory.json.spring;
 
 import java.lang.reflect.Type;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.Objects;
 import org.apache.fory.json.ForyJson;
+import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.JsonStreamDecoder;
+import org.apache.fory.json.JsonStreamValueLimitException;
+import org.apache.fory.reflect.TypeRef;
 import org.reactivestreams.Publisher;
 import org.springframework.core.ResolvableType;
 import org.springframework.core.codec.AbstractDataBufferDecoder;
 import org.springframework.core.codec.DecodingException;
 import org.springframework.core.codec.Hints;
-import org.springframework.core.codec.StringDecoder;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferLimitException;
 import org.springframework.core.io.buffer.DataBufferUtils;
@@ -49,26 +51,23 @@ public final class ForyJsonDecoder extends AbstractDataBufferDecoder<Object>
   /** Spring-compatible default maximum buffered JSON value size: 256 KiB. */
   public static final int DEFAULT_MAX_IN_MEMORY_SIZE = 256 * 1024;
 
-  private static final ResolvableType STRING_TYPE = ResolvableType.forClass(String.class);
-  private static final MimeType TEXT_PLAIN_UTF8 =
-      new MimeType("text", "plain", StandardCharsets.UTF_8);
+  private static final int MAX_VALUE_BYTES = Integer.MAX_VALUE - 8;
+  private static final Object END_OF_BUFFER = new Object();
 
   private final ForyJson foryJson;
-  private final StringDecoder ndjsonDecoder;
 
   /** Creates a decoder with {@link #DEFAULT_MAX_IN_MEMORY_SIZE}. */
   public ForyJsonDecoder(ForyJson foryJson) {
     this(foryJson, DEFAULT_MAX_IN_MEMORY_SIZE);
   }
 
-  /** Creates a decoder with the given Spring WebFlux in-memory byte limit. */
+  /** Creates a decoder with the given per-value byte limit, or {@code -1} for no added limit. */
   public ForyJsonDecoder(ForyJson foryJson, int maxInMemorySize) {
     super(
         MediaType.APPLICATION_JSON,
         SpringJsonSupport.APPLICATION_JSON_SUFFIX,
         MediaType.APPLICATION_NDJSON);
     this.foryJson = Objects.requireNonNull(foryJson, "foryJson");
-    ndjsonDecoder = StringDecoder.textPlainOnly();
     setMaxInMemorySize(maxInMemorySize);
   }
 
@@ -79,10 +78,11 @@ public final class ForyJsonDecoder extends AbstractDataBufferDecoder<Object>
 
   @Override
   public void setMaxInMemorySize(int byteCount) {
-    super.setMaxInMemorySize(byteCount);
-    if (ndjsonDecoder != null) {
-      ndjsonDecoder.setMaxInMemorySize(byteCount);
+    if (byteCount == 0 || byteCount < -1 || byteCount > MAX_VALUE_BYTES) {
+      throw new IllegalArgumentException(
+          "maxInMemorySize must be -1 or between 1 and " + MAX_VALUE_BYTES + ": " + byteCount);
     }
+    super.setMaxInMemorySize(byteCount);
   }
 
   @Override
@@ -97,41 +97,7 @@ public final class ForyJsonDecoder extends AbstractDataBufferDecoder<Object>
       ResolvableType elementType,
       MimeType mimeType,
       Map<String, Object> hints) {
-    if (isNdjson(mimeType)) {
-      return ndjsonDecoder
-          .decode(input, STRING_TYPE, TEXT_PLAIN_UTF8, hints)
-          .filter(line -> !line.trim().isEmpty())
-          .<Object>handle(
-              (line, sink) -> {
-                byte[] bytes = line.getBytes(StandardCharsets.UTF_8);
-                int limit = getMaxInMemorySize();
-                if (limit >= 0 && bytes.length > limit) {
-                  sink.error(
-                      new DataBufferLimitException(
-                          "Exceeded limit on max bytes to buffer: " + limit));
-                  return;
-                }
-                Object value = read(bytes, elementType.getType());
-                if (value != null) {
-                  sink.next(value);
-                }
-              });
-    }
-    if (elementType.resolve() == ProblemDetail.class) {
-      return decodeToMono(input, ResolvableType.forClass(Object.class), mimeType, hints)
-          .flatMapMany(
-              value -> {
-                if (!(value instanceof List<?> values)) {
-                  return Flux.error(new DecodingException("Expected a JSON array"));
-                }
-                return Flux.fromStream(() -> values.stream().filter(Objects::nonNull))
-                    .map(this::readProblemDetail);
-              });
-    }
-    ResolvableType listType = ResolvableType.forClassWithGenerics(List.class, elementType);
-    return decodeToMono(input, listType, mimeType, hints)
-        .flatMapMany(
-            value -> Flux.fromStream(() -> ((List<?>) value).stream().filter(Objects::nonNull)));
+    return Flux.defer(() -> decodeStream(input, elementType.getType(), isNdjson(mimeType)));
   }
 
   @Override
@@ -187,7 +153,133 @@ public final class ForyJsonDecoder extends AbstractDataBufferDecoder<Object>
     }
   }
 
+  private Flux<Object> decodeStream(Publisher<DataBuffer> input, Type type, boolean ndjson) {
+    boolean problemDetail = ProblemDetail.class.equals(TypeRef.of(type).getRawType());
+    TypeRef<Object> streamType = TypeRef.of(problemDetail ? Object.class : type);
+    int maxValueBytes = getMaxInMemorySize();
+    if (maxValueBytes < 0) {
+      maxValueBytes = MAX_VALUE_BYTES;
+    }
+    JsonStreamDecoder<Object> decoder =
+        ndjson
+            ? foryJson.newNdjsonStreamDecoder(streamType, maxValueBytes)
+            : foryJson.newArrayStreamDecoder(streamType, maxValueBytes);
+    return Flux.from(input)
+        .concatMap(buffer -> decodeBuffer(buffer, decoder, problemDetail), 1)
+        .concatWith(Mono.defer(() -> finishStream(decoder, problemDetail)))
+        .doOnDiscard(DataBuffer.class, DataBufferUtils::release)
+        .onErrorMap(ForyJsonException.class, this::streamError);
+  }
+
+  private Flux<Object> decodeBuffer(
+      DataBuffer buffer, JsonStreamDecoder<Object> decoder, boolean problemDetail) {
+    return Flux.defer(
+        () -> {
+          DataBufferCursor cursor = new DataBufferCursor(buffer);
+          try {
+            Object value = readNext(cursor, decoder, problemDetail);
+            if (value == END_OF_BUFFER) {
+              cursor.release();
+              return Flux.empty();
+            }
+            cursor.pendingValue = value;
+          } catch (RuntimeException e) {
+            cursor.release();
+            return Flux.error(e);
+          }
+          return Flux.<Object>generate(
+                  sink -> {
+                    Object value = cursor.pendingValue;
+                    sink.next(value);
+                    try {
+                      Object next = readNext(cursor, decoder, problemDetail);
+                      if (next == END_OF_BUFFER) {
+                        sink.complete();
+                      } else {
+                        cursor.pendingValue = next;
+                      }
+                    } catch (RuntimeException e) {
+                      sink.error(e);
+                    }
+                  })
+              .doFinally(signal -> cursor.release());
+        });
+  }
+
+  private Object readNext(
+      DataBufferCursor cursor, JsonStreamDecoder<Object> decoder, boolean problemDetail) {
+    while (true) {
+      ByteBuffer bytes = cursor.next();
+      if (bytes == null) {
+        return END_OF_BUFFER;
+      }
+      if (decoder.decodeNext(bytes)) {
+        Object value = decoder.value();
+        if (value != null) {
+          return problemDetail ? readProblemDetail(value) : value;
+        }
+      }
+    }
+  }
+
+  private Mono<Object> finishStream(JsonStreamDecoder<Object> decoder, boolean problemDetail) {
+    try {
+      if (!decoder.finish()) {
+        return Mono.empty();
+      }
+      Object value = decoder.value();
+      return value == null
+          ? Mono.empty()
+          : Mono.just(problemDetail ? readProblemDetail(value) : value);
+    } catch (RuntimeException e) {
+      return Mono.error(e);
+    }
+  }
+
+  private RuntimeException streamError(ForyJsonException error) {
+    if (error instanceof JsonStreamValueLimitException limitError) {
+      return new DataBufferLimitException(
+          "Exceeded limit on max bytes to buffer: " + limitError.getMaxValueBytes(), error);
+    }
+    return new DecodingException("Fory JSON stream decoding error", error);
+  }
+
   private static boolean isNdjson(MimeType mimeType) {
     return mimeType != null && MediaType.APPLICATION_NDJSON.isCompatibleWith(mimeType);
+  }
+
+  private static final class DataBufferCursor {
+    private final DataBuffer buffer;
+    private final DataBuffer.ByteBufferIterator buffers;
+    private ByteBuffer current;
+    private Object pendingValue;
+
+    private DataBufferCursor(DataBuffer buffer) {
+      this.buffer = buffer;
+      try {
+        buffers = buffer.readableByteBuffers();
+      } catch (RuntimeException | Error e) {
+        DataBufferUtils.release(buffer);
+        throw e;
+      }
+    }
+
+    private ByteBuffer next() {
+      while (current == null || !current.hasRemaining()) {
+        if (!buffers.hasNext()) {
+          return null;
+        }
+        current = buffers.next();
+      }
+      return current;
+    }
+
+    private void release() {
+      try {
+        buffers.close();
+      } finally {
+        DataBufferUtils.release(buffer);
+      }
+    }
   }
 }

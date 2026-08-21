@@ -158,9 +158,12 @@ public final class ReactiveUserController {
 `application/json` writes one JSON array, including `[]` for an empty publisher. With
 `application/x-ndjson`, each `Flux` element is one JSON value followed by a newline.
 
-For request decoding, a `Flux<User>` with `application/json` consumes one complete JSON array and
-then publishes its elements. A `Flux<User>` with `application/x-ndjson` publishes each complete
-line as one element; blank lines are ignored and both LF and CRLF line endings are accepted.
+For request decoding, a `Flux<User>` with `application/json` incrementally consumes one top-level
+JSON array and publishes each element as soon as it is complete; it does not wait for or buffer the
+complete array. A `Flux<User>` with `application/x-ndjson` similarly publishes each complete record;
+blank lines are ignored, both LF and CRLF line endings are accepted, and the final record does not
+need a line ending. Values may span any number of incoming data buffers. Decoding follows downstream
+backpressure and releases each input buffer after it is consumed or if the request is cancelled.
 
 ## Direct Spring Framework setup
 
@@ -317,7 +320,7 @@ Direct Spring applications can pass a different positive byte limit to
 
 ### Spring WebFlux
 
-Each Spring Boot line uses its standard codec aggregation property:
+Each Spring Boot line uses its standard codec memory property:
 
 | Spring Boot | Property                                |
 | ----------- | --------------------------------------- |
@@ -336,8 +339,8 @@ Spring Boot 3.5:
 spring.codec.max-in-memory-size=8MB
 ```
 
-Set only the property for the application's Spring Boot line. When it is absent, Spring's codec
-default remains in effect; most aggregating codecs use 256 KiB. For Fory JSON, the limit applies to
-one complete `Mono` value, the complete body of a JSON array decoded to `Flux`, or one top-level
-NDJSON value. Direct Spring applications configure the same limit with
-`ForyJsonDecoder.setMaxInMemorySize(int)`.
+Set only the property for the application's Spring Boot line. When it is absent, the Fory decoder
+uses Spring's 256 KiB default. The limit applies to one complete `Mono` value, each array element
+decoded to `Flux`, or each NDJSON record. A large Flux request is therefore accepted when every
+individual value is within the limit. Direct Spring applications configure the same limit with
+`ForyJsonDecoder.setMaxInMemorySize(int)`; use `-1` when no application-level value limit is wanted.

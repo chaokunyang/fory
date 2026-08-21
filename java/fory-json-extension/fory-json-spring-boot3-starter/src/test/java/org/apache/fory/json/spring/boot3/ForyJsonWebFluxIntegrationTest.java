@@ -108,6 +108,41 @@ class ForyJsonWebFluxIntegrationTest {
   }
 
   @Test
+  void readsJsonArrayAndNdjson() {
+    webTestClient
+        .post()
+        .uri("/array")
+        .contentType(MediaType.APPLICATION_JSON)
+        .accept(MediaType.APPLICATION_JSON)
+        .bodyValue(
+            "[{\"fory_name\":\"one\"},{\"fory_name\":\"two\"}]".getBytes(StandardCharsets.UTF_8))
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.fory_name")
+        .isEqualTo("two")
+        .jsonPath("$.jackson_name")
+        .doesNotExist();
+
+    webTestClient
+        .post()
+        .uri("/ndjson")
+        .contentType(MediaType.APPLICATION_NDJSON)
+        .accept(MediaType.APPLICATION_JSON)
+        .bodyValue(
+            "{\"fory_name\":\"one\"}\n{\"fory_name\":\"two\"}".getBytes(StandardCharsets.UTF_8))
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.fory_name")
+        .isEqualTo("two")
+        .jsonPath("$.jackson_name")
+        .doesNotExist();
+  }
+
+  @Test
   void rejectsMalformedProblemDetailArray() {
     webTestClient
         .post()
@@ -140,6 +175,22 @@ class ForyJsonWebFluxIntegrationTest {
     @GetMapping(path = "/ndjson", produces = MediaType.APPLICATION_NDJSON_VALUE)
     Flux<EchoValue> ndjson() {
       return Flux.just(new EchoValue("one"), new EchoValue("two"));
+    }
+
+    @PostMapping(
+        path = "/array",
+        consumes = MediaType.APPLICATION_JSON_VALUE,
+        produces = MediaType.APPLICATION_JSON_VALUE)
+    Mono<EchoValue> readArray(@RequestBody Flux<EchoValue> values) {
+      return values.last();
+    }
+
+    @PostMapping(
+        path = "/ndjson",
+        consumes = MediaType.APPLICATION_NDJSON_VALUE,
+        produces = MediaType.APPLICATION_JSON_VALUE)
+    Mono<EchoValue> readNdjson(@RequestBody Flux<EchoValue> values) {
+      return values.last();
     }
 
     @PostMapping(

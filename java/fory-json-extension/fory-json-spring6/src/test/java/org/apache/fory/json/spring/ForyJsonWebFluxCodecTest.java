@@ -22,8 +22,10 @@ package org.apache.fory.json.spring;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertSame;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
+import io.netty.buffer.UnpooledByteBufAllocator;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
@@ -38,6 +40,8 @@ import org.springframework.core.io.buffer.DataBufferFactory;
 import org.springframework.core.io.buffer.DataBufferLimitException;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
+import org.springframework.core.io.buffer.NettyDataBufferFactory;
+import org.springframework.core.io.buffer.PooledDataBuffer;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.testng.annotations.Test;
@@ -47,6 +51,8 @@ import reactor.test.StepVerifier;
 
 public class ForyJsonWebFluxCodecTest {
   private static final DataBufferFactory BUFFER_FACTORY = DefaultDataBufferFactory.sharedInstance;
+  private static final DataBufferFactory POOLED_BUFFERS =
+      new NettyDataBufferFactory(UnpooledByteBufAllocator.DEFAULT);
 
   private final ForyJson foryJson = ForyJson.builder().build();
   private final ResolvableType userType = ResolvableType.forClass(User.class);
@@ -99,6 +105,107 @@ public class ForyJsonWebFluxCodecTest {
             decoder.decode(buffers, userType, MediaType.APPLICATION_NDJSON, Collections.emptyMap()))
         .expectNext(first, second)
         .verifyComplete();
+  }
+
+  @Test
+  public void testValuesAcrossThreeBuffers() {
+    ForyJsonDecoder decoder = new ForyJsonDecoder(foryJson);
+    PooledDataBuffer arrayFirst = pooled("[{\"name\":\"Ali");
+    PooledDataBuffer arraySecond = pooled("ce\",\"a");
+    PooledDataBuffer arrayThird = pooled("ge\":31}]");
+
+    StepVerifier.create(
+            decoder.decode(
+                Flux.just(arrayFirst, arraySecond, arrayThird),
+                userType,
+                MediaType.APPLICATION_JSON,
+                Collections.emptyMap()))
+        .expectNext(new User("Alice", 31))
+        .verifyComplete();
+    assertFalse(arrayFirst.isAllocated());
+    assertFalse(arraySecond.isAllocated());
+    assertFalse(arrayThird.isAllocated());
+
+    PooledDataBuffer composite =
+        (PooledDataBuffer)
+            POOLED_BUFFERS.join(
+                Arrays.asList(pooled("[{\"name\":\"E"), pooled("ve\",\"ag"), pooled("e\":29}]")));
+    StepVerifier.create(
+            decoder.decode(
+                Mono.just((DataBuffer) composite),
+                userType,
+                MediaType.APPLICATION_JSON,
+                Collections.emptyMap()))
+        .expectNext(new User("Eve", 29))
+        .verifyComplete();
+    assertFalse(composite.isAllocated());
+
+    PooledDataBuffer lineFirst = pooled("{\"name\":\"Bo");
+    PooledDataBuffer lineSecond = pooled("b\",\"ag");
+    PooledDataBuffer lineThird = pooled("e\":27}");
+    StepVerifier.create(
+            decoder.decode(
+                Flux.just(lineFirst, lineSecond, lineThird),
+                userType,
+                MediaType.APPLICATION_NDJSON,
+                Collections.emptyMap()))
+        .expectNext(new User("Bob", 27))
+        .verifyComplete();
+    assertFalse(lineFirst.isAllocated());
+    assertFalse(lineSecond.isAllocated());
+    assertFalse(lineThird.isAllocated());
+  }
+
+  @Test
+  public void testBackpressureAndRelease() {
+    ForyJsonDecoder decoder = new ForyJsonDecoder(foryJson);
+    PooledDataBuffer completed =
+        pooled("[{\"name\":\"Alice\",\"age\":31},{\"name\":\"Bob\",\"age\":27}]");
+    PooledDataBuffer trailing = pooled(" \r\n");
+    StepVerifier.create(
+            decoder.decode(
+                Flux.just(completed, trailing),
+                userType,
+                MediaType.APPLICATION_JSON,
+                Collections.emptyMap()),
+            0)
+        .thenRequest(1)
+        .expectNext(new User("Alice", 31))
+        .then(() -> assertTrue(completed.isAllocated()))
+        .thenRequest(1)
+        .expectNext(new User("Bob", 27))
+        .verifyComplete();
+    assertFalse(completed.isAllocated());
+    assertFalse(trailing.isAllocated());
+
+    PooledDataBuffer cancelled =
+        pooled("[{\"name\":\"Alice\",\"age\":31},{\"name\":\"Bob\",\"age\":27}]");
+    PooledDataBuffer queued = pooled("[{\"name\":\"Carol\",\"age\":22}]");
+    StepVerifier.create(
+            decoder.decode(
+                Flux.just(cancelled, queued),
+                userType,
+                MediaType.APPLICATION_JSON,
+                Collections.emptyMap()),
+            0)
+        .thenRequest(1)
+        .expectNext(new User("Alice", 31))
+        .thenCancel()
+        .verify();
+    assertFalse(cancelled.isAllocated());
+    assertFalse(queued.isAllocated());
+
+    PooledDataBuffer failed = pooled("[");
+    RuntimeException failure = new RuntimeException("publisher failed");
+    StepVerifier.create(
+            decoder.decode(
+                Flux.concat(Mono.just((DataBuffer) failed), Flux.error(failure)),
+                userType,
+                MediaType.APPLICATION_JSON,
+                Collections.emptyMap()))
+        .expectErrorMatches(error -> error == failure)
+        .verify();
+    assertFalse(failed.isAllocated());
   }
 
   @Test
@@ -207,6 +314,15 @@ public class ForyJsonWebFluxCodecTest {
                 ResolvableType.forClass(Integer.class),
                 MediaType.APPLICATION_JSON,
                 Collections.emptyMap()))
+        .expectNext(0, 1)
+        .verifyComplete();
+
+    StepVerifier.create(
+            decoder.decode(
+                Mono.just(buffer("[12345]")),
+                ResolvableType.forClass(Integer.class),
+                MediaType.APPLICATION_JSON,
+                Collections.emptyMap()))
         .expectError(DataBufferLimitException.class)
         .verify();
 
@@ -301,6 +417,10 @@ public class ForyJsonWebFluxCodecTest {
         decoder.canDecode(userType, MediaType.parseMediaType("application/json;charset=UTF-16")));
     decoder.setMaxInMemorySize(1024);
     assertEquals(decoder.getMaxInMemorySize(), 1024);
+    decoder.setMaxInMemorySize(-1);
+    assertEquals(decoder.getMaxInMemorySize(), -1);
+    assertThrows(IllegalArgumentException.class, () -> decoder.setMaxInMemorySize(0));
+    assertThrows(IllegalArgumentException.class, () -> decoder.setMaxInMemorySize(-2));
   }
 
   private static String encode(
@@ -326,6 +446,10 @@ public class ForyJsonWebFluxCodecTest {
 
   private static DataBuffer buffer(String value) {
     return BUFFER_FACTORY.wrap(value.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private static PooledDataBuffer pooled(String value) {
+    return (PooledDataBuffer) POOLED_BUFFERS.wrap(value.getBytes(StandardCharsets.UTF_8));
   }
 
   private static void release(DataBuffer buffer) {

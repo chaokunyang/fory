@@ -21,6 +21,7 @@ package org.apache.fory.json.spring;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 import io.netty.buffer.UnpooledByteBufAllocator;
@@ -70,6 +71,10 @@ public class ForyJsonWebFluxCodecTest {
     assertEquals(decoder.getMaxInMemorySize(), ForyJsonDecoder.DEFAULT_MAX_IN_MEMORY_SIZE);
     decoder.setMaxInMemorySize(1024);
     assertEquals(decoder.getMaxInMemorySize(), 1024);
+    decoder.setMaxInMemorySize(-1);
+    assertEquals(decoder.getMaxInMemorySize(), -1);
+    assertThrows(IllegalArgumentException.class, () -> decoder.setMaxInMemorySize(0));
+    assertThrows(IllegalArgumentException.class, () -> decoder.setMaxInMemorySize(-2));
     assertEquals(encoder.getStreamingMediaTypes(), List.of(MediaType.APPLICATION_NDJSON));
   }
 
@@ -187,6 +192,106 @@ public class ForyJsonWebFluxCodecTest {
   }
 
   @Test
+  public void decodesValuesAcrossThreeBuffers() {
+    ForyJsonDecoder decoder = new ForyJsonDecoder(JSON);
+    PooledDataBuffer arrayFirst = pooled("[{\"id\":3,\"na");
+    PooledDataBuffer arraySecond = pooled("me\":\"Ali");
+    PooledDataBuffer arrayThird = pooled("ce\"}]");
+
+    StepVerifier.create(
+            decoder.decode(
+                Flux.just(arrayFirst, arraySecond, arrayThird),
+                USER_TYPE,
+                MediaType.APPLICATION_JSON,
+                Map.of()))
+        .assertNext(
+            value -> {
+              assertEquals(((User) value).id, 3);
+              assertEquals(((User) value).name, "Alice");
+            })
+        .verifyComplete();
+    assertFalse(arrayFirst.isAllocated());
+    assertFalse(arraySecond.isAllocated());
+    assertFalse(arrayThird.isAllocated());
+
+    PooledDataBuffer composite =
+        (PooledDataBuffer)
+            BUFFERS.join(List.of(pooled("[{\"id\":5,\"na"), pooled("me\":\"Ev"), pooled("e\"}]")));
+    StepVerifier.create(
+            decoder.decode(
+                Mono.just((DataBuffer) composite), USER_TYPE, MediaType.APPLICATION_JSON, Map.of()))
+        .assertNext(value -> assertEquals(((User) value).name, "Eve"))
+        .verifyComplete();
+    assertFalse(composite.isAllocated());
+
+    PooledDataBuffer lineFirst = pooled("{\"id\":4,\"na");
+    PooledDataBuffer lineSecond = pooled("me\":\"Bo");
+    PooledDataBuffer lineThird = pooled("b\"}");
+    StepVerifier.create(
+            decoder.decode(
+                Flux.just(lineFirst, lineSecond, lineThird),
+                USER_TYPE,
+                MediaType.APPLICATION_NDJSON,
+                Map.of()))
+        .assertNext(
+            value -> {
+              assertEquals(((User) value).id, 4);
+              assertEquals(((User) value).name, "Bob");
+            })
+        .verifyComplete();
+    assertFalse(lineFirst.isAllocated());
+    assertFalse(lineSecond.isAllocated());
+    assertFalse(lineThird.isAllocated());
+  }
+
+  @Test
+  public void preservesBackpressureAndReleases() {
+    ForyJsonDecoder decoder = new ForyJsonDecoder(JSON);
+    PooledDataBuffer completed =
+        pooled("[{\"id\":1,\"name\":\"one\"},{\"id\":2,\"name\":\"two\"}]");
+    PooledDataBuffer trailing = pooled(" \r\n");
+
+    StepVerifier.create(
+            decoder.decode(
+                Flux.just(completed, trailing), USER_TYPE, MediaType.APPLICATION_JSON, Map.of()),
+            0)
+        .thenRequest(1)
+        .assertNext(value -> assertEquals(((User) value).id, 1))
+        .then(() -> assertTrue(completed.isAllocated()))
+        .thenRequest(1)
+        .assertNext(value -> assertEquals(((User) value).id, 2))
+        .verifyComplete();
+    assertFalse(completed.isAllocated());
+    assertFalse(trailing.isAllocated());
+
+    PooledDataBuffer cancelled =
+        pooled("[{\"id\":3,\"name\":\"three\"},{\"id\":4,\"name\":\"four\"}]");
+    PooledDataBuffer queued = pooled("[{\"id\":5,\"name\":\"five\"}]");
+    StepVerifier.create(
+            decoder.decode(
+                Flux.just(cancelled, queued), USER_TYPE, MediaType.APPLICATION_JSON, Map.of()),
+            0)
+        .thenRequest(1)
+        .assertNext(value -> assertEquals(((User) value).id, 3))
+        .thenCancel()
+        .verify();
+    assertFalse(cancelled.isAllocated());
+    assertFalse(queued.isAllocated());
+
+    PooledDataBuffer failed = pooled("[");
+    RuntimeException failure = new IOExceptionMarker();
+    StepVerifier.create(
+            decoder.decode(
+                Flux.concat(Mono.just((DataBuffer) failed), Flux.error(failure)),
+                USER_TYPE,
+                MediaType.APPLICATION_JSON,
+                Map.of()))
+        .expectErrorMatches(error -> error == failure)
+        .verify();
+    assertFalse(failed.isAllocated());
+  }
+
+  @Test
   public void releasesSingleBufferOverLimit() {
     ForyJsonDecoder decoder = new ForyJsonDecoder(JSON, 4);
     PooledDataBuffer buffer = pooled("{\"id\":1}");
@@ -206,6 +311,26 @@ public class ForyJsonWebFluxCodecTest {
         .expectError(DataBufferLimitException.class)
         .verify();
     assertFalse(ndjson.isAllocated());
+
+    ForyJsonDecoder arrayDecoder = new ForyJsonDecoder(JSON, 1);
+    StepVerifier.create(
+            arrayDecoder.decode(
+                buffers("[0,1]"),
+                ResolvableType.forClass(Integer.class),
+                MediaType.APPLICATION_JSON,
+                Map.of()))
+        .expectNext(0, 1)
+        .verifyComplete();
+    PooledDataBuffer array = pooled("[12]");
+    StepVerifier.create(
+            arrayDecoder.decode(
+                Mono.just((DataBuffer) array),
+                ResolvableType.forClass(Integer.class),
+                MediaType.APPLICATION_JSON,
+                Map.of()))
+        .expectError(DataBufferLimitException.class)
+        .verify();
+    assertFalse(array.isAllocated());
   }
 
   @Test

@@ -40,6 +40,7 @@
     <maven.compiler.source>17</maven.compiler.source>
     <maven.compiler.target>17</maven.compiler.target>
     <fory.java.rootdir>${project.basedir}/../..</fory.java.rootdir>
+    <netty.version>4.1.135.Final</netty.version>
     <spring-framework.version>6.2.19</spring-framework.version>
     <reactor.version>3.7.19</reactor.version>
   </properties>
@@ -71,6 +72,12 @@
       <groupId>io.projectreactor</groupId>
       <artifactId>reactor-test</artifactId>
       <version>${reactor.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-buffer</artifactId>
+      <version>${netty.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>

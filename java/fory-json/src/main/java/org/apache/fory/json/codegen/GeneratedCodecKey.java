@@ -167,7 +167,7 @@ public final class GeneratedCodecKey {
 
   private final Class<?> targetClass;
   private final Role role;
-  private final Object[] projection;
+  private final Object[] keyParts;
   private final Class<?>[] referencedClasses;
   private final Class<?> anchorClass;
   private final int hash;
@@ -175,25 +175,25 @@ public final class GeneratedCodecKey {
   private GeneratedCodecKey(
       Class<?> targetClass,
       Role role,
-      Object[] projection,
+      Object[] keyParts,
       Class<?>[] referencedClasses,
       Class<?> preferredAnchor) {
     this.targetClass = Objects.requireNonNull(targetClass);
     this.role = Objects.requireNonNull(role);
-    this.projection = projection.clone();
-    this.referencedClasses = uniqueClasses(targetClass, referencedClasses, projection);
+    this.keyParts = keyParts.clone();
+    this.referencedClasses = uniqueClasses(targetClass, referencedClasses, keyParts);
     anchorClass = anchor(preferredAnchor, this.referencedClasses);
     hash =
         ((System.identityHashCode(targetClass) * 31 + role.hashCode()) * 31 + CLASS_VERSION) * 31
-            + valuesHash(this.projection);
+            + valuesHash(this.keyParts);
   }
 
   public static GeneratedCodecKey object(
-      Class<?> targetClass, Role role, Object[] projection, Class<?>[] referencedClasses) {
+      Class<?> targetClass, Role role, Object[] keyParts, Class<?>[] referencedClasses) {
     if (role == Role.UTF8_COLLECTION_WRITER || role == Role.UTF8_COLLECTION_READER) {
       throw new IllegalArgumentException("Collection role requires a collection key");
     }
-    return new GeneratedCodecKey(targetClass, role, projection, referencedClasses, targetClass);
+    return new GeneratedCodecKey(targetClass, role, keyParts, referencedClasses, targetClass);
   }
 
   public static GeneratedCodecKey collection(
@@ -238,7 +238,7 @@ public final class GeneratedCodecKey {
     GeneratedCodecKey that = (GeneratedCodecKey) other;
     return targetClass == that.targetClass
         && role == that.role
-        && valuesEqual(projection, that.projection);
+        && valuesEqual(keyParts, that.keyParts);
   }
 
   @Override
@@ -246,15 +246,14 @@ public final class GeneratedCodecKey {
     return hash;
   }
 
-  private static Class<?>[] uniqueClasses(
-      Class<?> target, Class<?>[] explicit, Object[] projection) {
+  private static Class<?>[] uniqueClasses(Class<?> target, Class<?>[] explicit, Object[] keyParts) {
     ArrayList<Class<?>> classes = new ArrayList<>();
     IdentityHashMap<Class<?>, Boolean> seen = new IdentityHashMap<>();
     addClass(target, classes, seen);
     for (Class<?> type : explicit) {
       addClass(type, classes, seen);
     }
-    collectClasses(projection, classes, seen);
+    collectClasses(keyParts, classes, seen);
     return classes.toArray(new Class<?>[0]);
   }
 

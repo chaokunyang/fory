@@ -267,14 +267,14 @@ public class JsonGeneratedCapabilityKeyTest {
   }
 
   @Test
-  public void terminalDirectMethodsVersionProjection() throws Exception {
+  public void terminalDirectMethodsChangeKey() throws Exception {
     JsonTypeInfo first = directTerminal(new VariableDirectCodec(false));
     JsonTypeInfo second = directTerminal(new VariableDirectCodec(true));
-    ProjectionTransparentCodec firstCodec = new ProjectionTransparentCodec(first);
-    ProjectionTransparentCodec secondCodec = new ProjectionTransparentCodec(second);
+    TerminalTransparentCodec firstCodec = new TerminalTransparentCodec(first);
+    TerminalTransparentCodec secondCodec = new TerminalTransparentCodec(second);
 
-    assertNotEquals(unboxedProjection(firstCodec, false), unboxedProjection(secondCodec, false));
-    assertNotEquals(unboxedProjection(firstCodec, true), unboxedProjection(secondCodec, true));
+    assertNotEquals(unboxedKeyParts(firstCodec, false), unboxedKeyParts(secondCodec, false));
+    assertNotEquals(unboxedKeyParts(firstCodec, true), unboxedKeyParts(secondCodec, true));
   }
 
   @Test
@@ -357,7 +357,7 @@ public class JsonGeneratedCapabilityKeyTest {
         packageName,
         "SiblingTerminal",
         "public final class SiblingTerminal implements "
-            + ProjectionCarrier.class.getCanonicalName()
+            + SiblingCarrier.class.getCanonicalName()
             + " {}");
     try (URLClassLoader terminalLoader =
         new URLClassLoader(
@@ -368,7 +368,7 @@ public class JsonGeneratedCapabilityKeyTest {
           ForyJson.builder()
               .registerCodec((Class) terminal, JsonTestSupport.nullCodec())
               .registerCodec(
-                  ProjectionValue.class,
+                  SiblingValue.class,
                   (type, resolver, runtimeType) ->
                       new SiblingTransparentCodec(resolver.getTypeInfo((Class) terminal, terminal)))
               .registerCodec(
@@ -507,19 +507,20 @@ public class JsonGeneratedCapabilityKeyTest {
         .getTypeInfo(TypeRef.of(int.class, TypeExtMeta.of(Types.UINT32, false, false)));
   }
 
-  private static List<Object> unboxedProjection(UnboxedValueCodec codec, boolean reader)
+  private static List<Object> unboxedKeyParts(UnboxedValueCodec codec, boolean reader)
       throws Exception {
     Method method =
-        JsonTypeResolver.class.getDeclaredMethod(
-            "addUnboxedProjection",
-            UnboxedValueCodec.class,
-            boolean.class,
-            ArrayList.class,
-            ArrayList.class);
+        Class.forName("org.apache.fory.json.resolver.GeneratedCodecKeyBuilder")
+            .getDeclaredMethod(
+                "addUnboxedKeyParts",
+                UnboxedValueCodec.class,
+                boolean.class,
+                ArrayList.class,
+                ArrayList.class);
     method.setAccessible(true);
-    ArrayList<Object> projection = new ArrayList<>();
-    method.invoke(null, codec, reader, projection, new ArrayList<Class<?>>());
-    return projection;
+    ArrayList<Object> keyParts = new ArrayList<>();
+    method.invoke(null, codec, reader, keyParts, new ArrayList<Class<?>>());
+    return keyParts;
   }
 
   @SuppressWarnings({"rawtypes", "unchecked"})
@@ -591,7 +592,7 @@ public class JsonGeneratedCapabilityKeyTest {
   }
 
   private static JsonObjectModel transparentModel() throws Exception {
-    TypeRef<?> logicalType = TypeRef.of(ProjectionValue.class, ordinary(false));
+    TypeRef<?> logicalType = TypeRef.of(SiblingValue.class, ordinary(false));
     return new JsonObjectModel(
         TransparentModel.class.getConstructor(),
         null,
@@ -603,7 +604,7 @@ public class JsonGeneratedCapabilityKeyTest {
         new TypeRef<?>[0],
         new String[] {"value"},
         new Method[] {TransparentModel.class.getMethod("getValue")},
-        new Method[] {TransparentModel.class.getMethod("setValue", ProjectionCarrier.class)},
+        new Method[] {TransparentModel.class.getMethod("setValue", SiblingCarrier.class)},
         new TypeRef<?>[] {logicalType});
   }
 
@@ -689,20 +690,20 @@ public class JsonGeneratedCapabilityKeyTest {
     public Child() {}
   }
 
-  public interface ProjectionCarrier {}
+  public interface SiblingCarrier {}
 
-  public static final class ProjectionValue {}
+  public static final class SiblingValue {}
 
   public static final class TransparentModel {
-    private ProjectionCarrier value;
+    private SiblingCarrier value;
 
     public TransparentModel() {}
 
-    public ProjectionCarrier getValue() {
+    public SiblingCarrier getValue() {
       return value;
     }
 
-    public void setValue(ProjectionCarrier value) {
+    public void setValue(SiblingCarrier value) {
       this.value = value;
     }
   }
@@ -864,11 +865,11 @@ public class JsonGeneratedCapabilityKeyTest {
     }
   }
 
-  public static final class ProjectionTransparentCodec extends AbstractJsonValueCodec<Integer>
+  public static final class TerminalTransparentCodec extends AbstractJsonValueCodec<Integer>
       implements TransparentUnboxedValueCodec {
     private final JsonTypeInfo valueTypeInfo;
 
-    public ProjectionTransparentCodec(JsonTypeInfo valueTypeInfo) {
+    public TerminalTransparentCodec(JsonTypeInfo valueTypeInfo) {
       this.valueTypeInfo = valueTypeInfo;
     }
 
@@ -943,7 +944,7 @@ public class JsonGeneratedCapabilityKeyTest {
     }
   }
 
-  public static final class SiblingTransparentCodec extends AbstractJsonValueCodec<ProjectionValue>
+  public static final class SiblingTransparentCodec extends AbstractJsonValueCodec<SiblingValue>
       implements TransparentUnboxedValueCodec {
     private final JsonTypeInfo valueTypeInfo;
 
@@ -963,7 +964,7 @@ public class JsonGeneratedCapabilityKeyTest {
 
     @Override
     public Object extractValue(Object carrier) {
-      return extract((ProjectionCarrier) carrier);
+      return extract((SiblingCarrier) carrier);
     }
 
     @Override
@@ -978,22 +979,22 @@ public class JsonGeneratedCapabilityKeyTest {
 
     @Override
     public Method[] extractMethods() {
-      return new Method[] {method("extract", ProjectionCarrier.class)};
+      return new Method[] {method("extract", SiblingCarrier.class)};
     }
 
     @Override
-    public void write(JsonWriter writer, ProjectionValue value) {
+    public void write(JsonWriter writer, SiblingValue value) {
       writer.writeNull();
     }
 
     @Override
-    public ProjectionValue read(JsonReader reader) {
+    public SiblingValue read(JsonReader reader) {
       return null;
     }
 
     @Override
     public Class<?> carrierType() {
-      return ProjectionCarrier.class;
+      return SiblingCarrier.class;
     }
 
     @Override
@@ -1021,11 +1022,11 @@ public class JsonGeneratedCapabilityKeyTest {
       writer.writeNull();
     }
 
-    public static ProjectionCarrier construct(Object value) {
-      return (ProjectionCarrier) value;
+    public static SiblingCarrier construct(Object value) {
+      return (SiblingCarrier) value;
     }
 
-    public static Object extract(ProjectionCarrier carrier) {
+    public static Object extract(SiblingCarrier carrier) {
       return carrier;
     }
 

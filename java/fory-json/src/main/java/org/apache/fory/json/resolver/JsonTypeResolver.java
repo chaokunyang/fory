@@ -52,7 +52,6 @@ import org.apache.fory.json.codec.ClosedSubtypeCodec;
 import org.apache.fory.json.codec.CodecUtils;
 import org.apache.fory.json.codec.CollectionCodec;
 import org.apache.fory.json.codec.CompositeJsonCodec;
-import org.apache.fory.json.codec.DirectUnboxedValueCodec;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
 import org.apache.fory.json.codec.JsonObjectModel;
 import org.apache.fory.json.codec.JsonSubTypesInfo;
@@ -65,14 +64,11 @@ import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codec.ObjectCodec.AnyInfo;
 import org.apache.fory.json.codec.ScalarCodecs;
 import org.apache.fory.json.codec.StringWriterCodec;
-import org.apache.fory.json.codec.TransparentUnboxedValueCodec;
 import org.apache.fory.json.codec.UnboxedValueCodec;
 import org.apache.fory.json.codec.Utf16ReaderCodec;
 import org.apache.fory.json.codec.Utf8ReaderCodec;
 import org.apache.fory.json.codec.Utf8WriterCodec;
 import org.apache.fory.json.codegen.GeneratedCodecKey;
-import org.apache.fory.json.codegen.GeneratedCodecKey.MemberDescriptor;
-import org.apache.fory.json.codegen.GeneratedCodecKey.Role;
 import org.apache.fory.json.codegen.JsonCodegen;
 import org.apache.fory.json.codegen.JsonJITContext;
 import org.apache.fory.json.meta.JsonCreatorDeclaration;
@@ -238,7 +234,7 @@ public final class JsonTypeResolver {
     }
   }
 
-  private ObjectCodec<?> canonicalObjectOwner(JsonTypeInfo typeInfo) {
+  ObjectCodec<?> canonicalObjectOwner(JsonTypeInfo typeInfo) {
     ObjectCodec<?> owner = objectCodecs.get(metadataKey(typeInfo));
     if (owner != null && canonicalObjectTypeInfos.get(owner) == typeInfo) {
       return owner;
@@ -273,6 +269,10 @@ public final class JsonTypeResolver {
       return null;
     }
     return owner;
+  }
+
+  CollectionCodec<?> collectionCodecOwner(JsonTypeInfo typeInfo) {
+    return collectionCodecs.get(typeInfo);
   }
 
   /** Returns an exact declared UTF-8 collection writer owner, or {@code null}. */
@@ -1733,7 +1733,7 @@ public final class JsonTypeResolver {
     return children;
   }
 
-  private boolean storesAnyCodec(ObjectCodec<?> owner, AnyInfo any) {
+  boolean storesAnyCodec(ObjectCodec<?> owner, AnyInfo any) {
     return canonicalObjectCodec(any.valueTypeInfo()) == null || any.valueRawType() != owner.type();
   }
 
@@ -1747,398 +1747,12 @@ public final class JsonTypeResolver {
 
   GeneratedCodecKey generatedObjectKey(
       JsonTypeInfo typeInfo, ObjectCodec<?> owner, CapabilityKind kind) {
-    ArrayList<Object> projection = new ArrayList<>();
-    ArrayList<Class<?>> classes = new ArrayList<>();
-    projection.add(sharedRegistry.writeNullFields());
-    projection.add(sharedRegistry.propertyDiscoveryEnabled());
-    projection.add(sharedRegistry.propertyNamingStrategy());
-    addMixinProjection(owner.type(), projection, classes);
-    if (readerKind(kind)) {
-      projection.add(owner.graphMemoryBytes());
-      projection.add(owner.hasValidators());
-    }
-    JsonUnwrappedInfo unwrapped = owner.unwrappedInfo();
-    if (unwrapped != null) {
-      for (JsonUnwrappedInfo.Group group : unwrapped.groups()) {
-        ObjectCodec<?> child = group.childCodec();
-        Class<?> childType = child.type();
-        projection.add(childType);
-        classes.add(childType);
-        addMixinProjection(childType, projection, classes);
-        projection.add(MemberDescriptor.of(accessorMember(group.declaration().writeAccessor())));
-        projection.add(MemberDescriptor.of(accessorMember(group.declaration().readAccessor())));
-        projection.add(group.readIndex());
-        projection.add(group.parent() == null ? -1 : group.parent().readIndex());
-        projection.add(group.declaration().constructionIndex());
-        Class<?> parentType = group.parentCodec().type();
-        projection.add(parentType);
-        classes.add(parentType);
-        projection.add(group.writeEnabled());
-        projection.add(group.readEnabled());
-        if (readerKind(kind)) {
-          projection.add(child.graphMemoryBytes());
-          projection.add(child.hasValidators());
-          addCreatorProjection(child.creatorInfo(), projection, classes, kind);
-        }
-      }
-    }
-    if (readerKind(kind)) {
-      addCreatorProjection(owner.creatorInfo(), projection, classes, kind);
-      if (unwrapped == null) {
-        JsonCreatorInfo creator = owner.creatorInfo();
-        if (creator == null) {
-          addReadFields(owner, owner.readFields(), projection, classes, kind);
-        } else {
-          addCreatorFields(owner, creator.fields(), projection, classes, kind);
-        }
-      } else {
-        JsonCreatorInfo creator = owner.creatorInfo();
-        if (creator == null) {
-          addReadFields(owner, owner.readFields(), projection, classes, kind);
-        } else {
-          addCreatorFields(owner, creator.fields(), projection, classes, kind);
-        }
-        for (JsonUnwrappedInfo.ReadRoute route : unwrapped.readRoutes()) {
-          projection.add("route");
-          projection.add(route.group().readIndex());
-          if (route.field() != null) {
-            addReadField(owner, route.field(), projection, classes, kind);
-          } else {
-            addCreatorField(owner, route.creatorField(), projection, classes, kind);
-          }
-        }
-      }
-    } else {
-      if (unwrapped != null) {
-        addUnwrappedWriteOrder(unwrapped.writeEntries(), projection, classes);
-      }
-      JsonFieldInfo[] fields = unwrapped == null ? owner.writeFields() : unwrapped.writeFields();
-      for (int i = 0; i < fields.length; i++) {
-        addWriteField(owner, fields[i], projection, classes, kind);
-      }
-    }
-    addAnyProjection(owner, projection, classes, kind);
-    return GeneratedCodecKey.object(
-        typeInfo.rawType(), role(kind), projection.toArray(), classes.toArray(new Class<?>[0]));
-  }
-
-  private void addUnwrappedWriteOrder(
-      JsonUnwrappedInfo.WriteEntry[] entries,
-      ArrayList<Object> projection,
-      ArrayList<Class<?>> classes) {
-    projection.add(entries.length);
-    for (JsonUnwrappedInfo.WriteEntry entry : entries) {
-      projection.add(entry.kind());
-      if (entry.kind() == JsonUnwrappedInfo.DIRECT) {
-        JsonFieldInfo field = entry.field();
-        projection.add(field.name());
-        addMember(field.writeField(), projection, classes);
-        addMember(field.writeGetter(), projection, classes);
-      } else if (entry.kind() == JsonUnwrappedInfo.GROUP) {
-        projection.add(entry.group().readIndex());
-        addUnwrappedWriteOrder(entry.group().writeEntries(), projection, classes);
-      }
-    }
+    return GeneratedCodecKeyBuilder.object(this, typeInfo, owner, kind);
   }
 
   GeneratedCodecKey generatedCollectionKey(
       JsonTypeInfo typeInfo, CollectionCodec<?> owner, CapabilityKind kind) {
-    Type type = typeInfo.type();
-    Class<?> rawType = CodecUtils.rawType(type, Collection.class);
-    Class<?> elementType = CodecUtils.rawType(CodecUtils.elementType(type), Object.class);
-    return GeneratedCodecKey.collection(
-        rawType,
-        elementType,
-        kind == CapabilityKind.UTF8_WRITER
-            ? Role.UTF8_COLLECTION_WRITER
-            : Role.UTF8_COLLECTION_READER,
-        owner instanceof CollectionCodec.StringCollectionCodec);
-  }
-
-  private void addMixinProjection(
-      Class<?> target, ArrayList<Object> projection, ArrayList<Class<?>> classes) {
-    Class<?> mixin = sharedRegistry.mixinType(target);
-    projection.add(mixin);
-    if (mixin != null) {
-      classes.add(mixin);
-    }
-  }
-
-  private void addCreatorProjection(
-      JsonCreatorInfo creator,
-      ArrayList<Object> projection,
-      ArrayList<Class<?>> classes,
-      CapabilityKind kind) {
-    if (creator == null) {
-      projection.add(null);
-      return;
-    }
-    projection.add("creator");
-    addMember(creator.executable(), projection, classes);
-    addMember(creator.invocationExecutable(), projection, classes);
-    addMember(creator.defaultConstructor(), projection, classes);
-    projection.add(creator.argumentCount());
-    projection.add(creator.defaultMaskCount());
-    projection.add(creator.tracksArgumentPresence());
-    for (int i = 0; i < creator.argumentCount(); i++) {
-      projection.add(creator.defaultMaskBit(i));
-      projection.add(creator.hasDefault(i));
-      addMember(creator.defaultMethod(i), projection, classes);
-    }
-    JsonFieldInfo[] deferred = creator.deferredFields();
-    projection.add(deferred.length);
-    for (int i = 0; i < deferred.length; i++) {
-      projection.add(creator.deferredRequired(i));
-      addReadField(null, deferred[i], projection, classes, kind);
-    }
-  }
-
-  private void addWriteField(
-      ObjectCodec<?> owner,
-      JsonFieldInfo field,
-      ArrayList<Object> projection,
-      ArrayList<Class<?>> classes,
-      CapabilityKind kind) {
-    JsonTypeInfo child = field.writeTypeInfo();
-    projection.add("write");
-    projection.add(field.name());
-    projection.add(field.writeRawType());
-    projection.add(child.rawType());
-    projection.add(field.writeKind());
-    projection.add(field.writeNull());
-    projection.add(field.requiresNonNullWrite());
-    projection.add(field.writesRawString());
-    projection.add(field.writesUnboxedValue());
-    projection.add(usesWriterSlot(owner, child));
-    addMember(field.writeField(), projection, classes);
-    addMember(field.writeGetter(), projection, classes);
-    addCapabilityProjection(child, kind, projection, classes);
-    addUnboxedProjection(field.writeUnboxedValueCodec(), false, projection, classes);
-    addClass(field.writeRawType(), classes);
-    addClass(child.rawType(), classes);
-  }
-
-  private void addReadFields(
-      ObjectCodec<?> owner,
-      JsonFieldInfo[] fields,
-      ArrayList<Object> projection,
-      ArrayList<Class<?>> classes,
-      CapabilityKind kind) {
-    for (JsonFieldInfo field : fields) {
-      addReadField(owner, field, projection, classes, kind);
-    }
-  }
-
-  private void addReadField(
-      ObjectCodec<?> owner,
-      JsonFieldInfo field,
-      ArrayList<Object> projection,
-      ArrayList<Class<?>> classes,
-      CapabilityKind kind) {
-    JsonTypeInfo child = field.readTypeInfo();
-    projection.add("read");
-    projection.add(field.name());
-    projection.add(field.readRawType());
-    projection.add(child.rawType());
-    projection.add(field.readKind());
-    projection.add(field.readIndex());
-    projection.add(field.hasOccurrenceNullability());
-    projection.add(field.occurrenceNullable());
-    projection.add(field.occurrenceWrapsNull());
-    projection.add(field.readsUnboxedValue());
-    projection.add(owner != null && usesReaderSlot(owner, child));
-    addMember(field.readField(), projection, classes);
-    addMember(field.readSetter(), projection, classes);
-    addCapabilityProjection(child, kind, projection, classes);
-    addUnboxedProjection(field.readUnboxedValueCodec(), true, projection, classes);
-    addClass(field.readRawType(), classes);
-    addClass(child.rawType(), classes);
-  }
-
-  private void addCreatorFields(
-      ObjectCodec<?> owner,
-      JsonCreatorFieldInfo[] fields,
-      ArrayList<Object> projection,
-      ArrayList<Class<?>> classes,
-      CapabilityKind kind) {
-    for (JsonCreatorFieldInfo field : fields) {
-      addCreatorField(owner, field, projection, classes, kind);
-    }
-  }
-
-  private void addCreatorField(
-      ObjectCodec<?> owner,
-      JsonCreatorFieldInfo field,
-      ArrayList<Object> projection,
-      ArrayList<Class<?>> classes,
-      CapabilityKind kind) {
-    JsonTypeInfo child = field.typeInfo();
-    projection.add("argument");
-    projection.add(field.name());
-    projection.add(field.argumentIndex());
-    projection.add(field.rawType());
-    projection.add(child.rawType());
-    projection.add(child.kind());
-    projection.add(child.nullable());
-    projection.add(child.rejectsNull());
-    projection.add(field.materializesNullCarrier());
-    projection.add(owner != null && usesReaderSlot(owner, child));
-    addCapabilityProjection(child, kind, projection, classes);
-    addUnboxedProjection(field.unboxedValueCodec(), true, projection, classes);
-    addClass(field.rawType(), classes);
-    addClass(child.rawType(), classes);
-  }
-
-  private void addAnyProjection(
-      ObjectCodec<?> owner,
-      ArrayList<Object> projection,
-      ArrayList<Class<?>> classes,
-      CapabilityKind kind) {
-    AnyInfo any = owner.anyInfo();
-    boolean active =
-        any != null
-            && (readerKind(kind)
-                ? any.readField() != null || any.readSetter() != null
-                : any.writeField() != null || any.writeGetter() != null);
-    if (!active) {
-      projection.add(null);
-      return;
-    }
-    projection.add("any");
-    projection.add(any.valueRawType());
-    projection.add(any.writeIndex());
-    projection.add(any.constructionIndex());
-    boolean storesCodec = storesAnyCodec(owner, any);
-    projection.add(storesCodec);
-    projection.add(
-        storesCodec
-            && (readerKind(kind)
-                ? usesReaderSlot(owner, any.valueTypeInfo())
-                : usesWriterSlot(owner, any.valueTypeInfo())));
-    if (readerKind(kind)) {
-      addMember(any.readField(), projection, classes);
-      addMember(any.readSetter(), projection, classes);
-    } else {
-      addMember(any.writeField(), projection, classes);
-      addMember(any.writeGetter(), projection, classes);
-    }
-    addCapabilityProjection(any.valueTypeInfo(), kind, projection, classes);
-    addClass(any.valueRawType(), classes);
-  }
-
-  private void addCapabilityProjection(
-      JsonTypeInfo typeInfo,
-      CapabilityKind kind,
-      ArrayList<Object> projection,
-      ArrayList<Class<?>> classes) {
-    Object capability = currentCapability(typeInfo, kind);
-    Class<?> capabilityClass =
-        sharedRegistry.canonicalProtectedBuiltin(typeInfo, capability)
-            ? null
-            : logicalCapabilityClass(typeInfo, capability);
-    projection.add(capabilityClass);
-    projection.add(typeInfo.kind());
-    projection.add(typeInfo.nullable());
-    projection.add(typeInfo.rejectsNull());
-    projection.add(typeInfo.transparentNull());
-    addClass(capabilityClass, classes);
-  }
-
-  private Class<?> logicalCapabilityClass(JsonTypeInfo typeInfo, Object capability) {
-    if (canonicalObjectOwner(typeInfo) != null) {
-      return ObjectCodec.class;
-    }
-    CollectionCodec<?> collection = collectionCodecs.get(typeInfo);
-    if (collection != null) {
-      return collection.getClass();
-    }
-    return capability instanceof ClosedSubtypeCodec
-        ? ClosedSubtypeCodec.class
-        : capability.getClass();
-  }
-
-  private static void addUnboxedProjection(
-      UnboxedValueCodec codec,
-      boolean reader,
-      ArrayList<Object> projection,
-      ArrayList<Class<?>> classes) {
-    if (codec == null) {
-      projection.add(null);
-      return;
-    }
-    projection.add(codec.getClass());
-    addClass(codec.getClass(), classes);
-    if (codec instanceof DirectUnboxedValueCodec) {
-      DirectUnboxedValueCodec direct = (DirectUnboxedValueCodec) codec;
-      addMember(
-          reader ? direct.readCarrierMethod() : direct.writeCarrierMethod(), projection, classes);
-      return;
-    }
-    TransparentUnboxedValueCodec transparent = (TransparentUnboxedValueCodec) codec;
-    JsonTypeInfo terminal = transparent.valueTypeInfo();
-    projection.add(terminal.rawType());
-    projection.add(terminal.kind());
-    addClass(terminal.rawType(), classes);
-    UnboxedValueCodec terminalCodec = terminal.unboxedValueCodec();
-    if (terminalCodec instanceof DirectUnboxedValueCodec) {
-      DirectUnboxedValueCodec direct = (DirectUnboxedValueCodec) terminalCodec;
-      addMember(
-          reader ? direct.readCarrierMethod() : direct.writeCarrierMethod(), projection, classes);
-    } else {
-      projection.add(null);
-    }
-    Method[] methods = reader ? transparent.constructMethods() : transparent.extractMethods();
-    projection.add(methods.length);
-    for (Method method : methods) {
-      addMember(method, projection, classes);
-    }
-    if (reader) {
-      int[] boxes = transparent.constructBoxBytes();
-      projection.add(boxes.length);
-      for (int box : boxes) {
-        projection.add(box);
-      }
-    }
-  }
-
-  private static java.lang.reflect.Member accessorMember(
-      org.apache.fory.json.meta.JsonFieldAccessor accessor) {
-    if (accessor == null) {
-      return null;
-    }
-    return accessor.getter() != null ? accessor.getter() : accessor.field();
-  }
-
-  private static void addMember(
-      java.lang.reflect.Member member, ArrayList<Object> projection, ArrayList<Class<?>> classes) {
-    MemberDescriptor descriptor = MemberDescriptor.of(member);
-    projection.add(descriptor);
-    if (member != null) {
-      addClass(member.getDeclaringClass(), classes);
-    }
-  }
-
-  private static void addClass(Class<?> type, ArrayList<Class<?>> classes) {
-    if (type != null) {
-      classes.add(type);
-    }
-  }
-
-  private static Role role(CapabilityKind kind) {
-    switch (kind) {
-      case STRING_WRITER:
-        return Role.STRING_WRITER;
-      case UTF8_WRITER:
-        return Role.UTF8_WRITER;
-      case LATIN1_READER:
-        return Role.LATIN1_READER;
-      case UTF16_READER:
-        return Role.UTF16_READER;
-      case UTF8_READER:
-        return Role.UTF8_READER;
-      default:
-        throw new IllegalStateException("Unknown JSON capability kind " + kind);
-    }
+    return GeneratedCodecKeyBuilder.collection(typeInfo, owner, kind);
   }
 
   /** Returns the nested object type inlined by generated readers, or {@code null}. */
@@ -2439,7 +2053,7 @@ public final class JsonTypeResolver {
     return sharedRegistry.nativeGeneratedClass(generatedObjectKey(typeInfo, owner, kind));
   }
 
-  private static Object currentCapability(JsonTypeInfo typeInfo, CapabilityKind kind) {
+  static Object currentCapability(JsonTypeInfo typeInfo, CapabilityKind kind) {
     switch (kind) {
       case STRING_WRITER:
         return typeInfo.stringWriter();
@@ -2655,7 +2269,7 @@ public final class JsonTypeResolver {
     return owner;
   }
 
-  private static boolean readerKind(CapabilityKind kind) {
+  static boolean readerKind(CapabilityKind kind) {
     return kind == CapabilityKind.LATIN1_READER
         || kind == CapabilityKind.UTF16_READER
         || kind == CapabilityKind.UTF8_READER;

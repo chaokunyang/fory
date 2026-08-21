@@ -56,6 +56,33 @@ public class JsonStreamDecoderTest {
   }
 
   @Test
+  public void decodeArrayBoundaries() {
+    JsonStreamDecoder<Integer> delimiterAtEnd = json.newArrayStreamDecoder(Integer.class, 16);
+    ByteBuffer first = utf8("[1,");
+    assertTrue(delimiterAtEnd.decodeNext(first));
+    assertEquals(delimiterAtEnd.value(), Integer.valueOf(1));
+    assertEquals(first.position(), first.limit());
+    ByteBuffer second = utf8("2]");
+    assertTrue(delimiterAtEnd.decodeNext(second));
+    assertEquals(delimiterAtEnd.value(), Integer.valueOf(2));
+    assertEquals(second.position(), second.limit());
+    assertFalse(delimiterAtEnd.finish());
+
+    JsonStreamDecoder<Integer> delimiterAtStart = json.newArrayStreamDecoder(Integer.class, 16);
+    first = utf8("[1");
+    assertFalse(delimiterAtStart.decodeNext(first));
+    assertEquals(first.position(), first.limit());
+    second = utf8(",2]");
+    assertTrue(delimiterAtStart.decodeNext(second));
+    assertEquals(delimiterAtStart.value(), Integer.valueOf(1));
+    assertEquals(second.position(), 1);
+    assertTrue(delimiterAtStart.decodeNext(second));
+    assertEquals(delimiterAtStart.value(), Integer.valueOf(2));
+    assertEquals(second.position(), second.limit());
+    assertFalse(delimiterAtStart.finish());
+  }
+
+  @Test
   public void decodeNestedArrayValues() {
     String document =
         "[{\"text\":\"a,]}\",\"nested\":[1,{\"x\":2}]}," + "{\"text\":\"z\",\"nested\":[]}]";
@@ -112,6 +139,33 @@ public class JsonStreamDecoderTest {
   }
 
   @Test
+  public void decodeNdjsonBoundaries() {
+    JsonStreamDecoder<Integer> splitCrlf = json.newNdjsonStreamDecoder(Integer.class, 16);
+    ByteBuffer first = utf8("1\r");
+    assertFalse(splitCrlf.decodeNext(first));
+    assertEquals(first.position(), first.limit());
+    ByteBuffer second = utf8("\n2\n");
+    assertTrue(splitCrlf.decodeNext(second));
+    assertEquals(splitCrlf.value(), Integer.valueOf(1));
+    assertEquals(second.position(), 1);
+    assertTrue(splitCrlf.decodeNext(second));
+    assertEquals(splitCrlf.value(), Integer.valueOf(2));
+    assertEquals(second.position(), second.limit());
+    assertFalse(splitCrlf.finish());
+
+    JsonStreamDecoder<Integer> splitBlankLine = json.newNdjsonStreamDecoder(Integer.class, 16);
+    first = utf8("3\n");
+    assertTrue(splitBlankLine.decodeNext(first));
+    assertEquals(splitBlankLine.value(), Integer.valueOf(3));
+    assertEquals(first.position(), first.limit());
+    second = utf8("\n4");
+    assertFalse(splitBlankLine.decodeNext(second));
+    assertEquals(second.position(), second.limit());
+    assertTrue(splitBlankLine.finish());
+    assertEquals(splitBlankLine.value(), Integer.valueOf(4));
+  }
+
+  @Test
   public void distinguishNullValue() {
     JsonStreamDecoder<String> decoder = json.newArrayStreamDecoder(String.class, 16);
     ByteBuffer input = utf8("[null]");
@@ -158,6 +212,16 @@ public class JsonStreamDecoderTest {
     assertEquals(
         decode(cumulative, Collections.singletonList(utf8("[1,2,3,4]"))),
         Arrays.asList(1, 2, 3, 4));
+
+    JsonStreamDecoder<Integer> splitExact = json.newArrayStreamDecoder(Integer.class, 3);
+    ByteBuffer valueChunk = utf8("[123");
+    assertFalse(splitExact.decodeNext(valueChunk));
+    assertEquals(valueChunk.position(), valueChunk.limit());
+    ByteBuffer delimiterChunk = utf8("]");
+    assertTrue(splitExact.decodeNext(delimiterChunk));
+    assertEquals(splitExact.value(), Integer.valueOf(123));
+    assertEquals(delimiterChunk.position(), delimiterChunk.limit());
+    assertFalse(splitExact.finish());
   }
 
   @Test
@@ -183,6 +247,10 @@ public class JsonStreamDecoderTest {
     JsonStreamDecoder<Boolean> invalid = json.newArrayStreamDecoder(Boolean.class, 16);
     assertThrows(ForyJsonException.class, () -> invalid.decodeNext(utf8("[truX]")));
     assertEquals(json.fromJson("7", Integer.class), Integer.valueOf(7));
+
+    JsonStreamDecoder<Integer> standaloneCr = json.newNdjsonStreamDecoder(Integer.class, 16);
+    assertFalse(standaloneCr.decodeNext(utf8("1\r")));
+    assertThrows(ForyJsonException.class, () -> standaloneCr.decodeNext(utf8("2\n")));
   }
 
   @Test
@@ -207,8 +275,10 @@ public class JsonStreamDecoderTest {
     ByteBuffer input = utf8("[1,2]");
     assertTrue(decoder.decodeNext(input));
     assertEquals(decoder.value(), Integer.valueOf(1));
+    assertEquals(input.position(), 3);
     assertTrue(decoder.decodeNext(input));
     assertEquals(decoder.value(), Integer.valueOf(2));
+    assertEquals(input.position(), input.limit());
     assertFalse(decoder.decodeNext(input));
     assertThrows(IllegalStateException.class, decoder::value);
     assertFalse(decoder.finish());

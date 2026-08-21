@@ -34,7 +34,7 @@ import org.apache.fory.reflect.TypeRef;
  * order.
  *
  * <p>Each returned value is parsed by an independent {@link ForyJson} root operation. The decoder
- * retains one bounded staging array whose capacity grows to the largest value seen and is reused
+ * retains one bounded staging array whose capacity grows with committed value bytes and is reused
  * until successful {@link #finish()} or any {@link #decodeNext(ByteBuffer) decodeNext} or {@code
  * finish} failure permanently terminates the decoder.
  */
@@ -54,7 +54,6 @@ public final class JsonStreamDecoder<T> {
   private static final byte AFTER_ARRAY = 4;
 
   private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
-  private static final int INITIAL_VALUE_BYTES = 8 * 1024;
   private static final byte[] EMPTY_BYTES = new byte[0];
 
   private static final long BYTE_ONES = 0x0101010101010101L;
@@ -200,44 +199,55 @@ public final class JsonStreamDecoder<T> {
         if (token != '[') {
           throw framingError("Expected top-level JSON array");
         }
+        input.get();
         arrayState = FIRST_VALUE;
       } else if (arrayState == FIRST_VALUE && token == ']') {
+        input.get();
         arrayState = AFTER_ARRAY;
       } else {
         if (token == ',' || token == ']') {
           throw framingError("Expected JSON array element");
         }
         arrayState = IN_VALUE;
-        appendArrayByte((byte) token);
       }
     }
   }
 
   private boolean scanArrayValue(ByteBuffer input) {
-    while (input.hasRemaining()) {
+    int segmentStart = input.position();
+    int scanCursor = segmentStart;
+    int inputLimit = input.limit();
+    int remaining = maxValueBytes - valueLength;
+    int scanLimit = inputLimit;
+    if (scanLimit - segmentStart > remaining) {
+      scanLimit = segmentStart + remaining + 1;
+    }
+    // Keep the caller-visible position at the commit cursor while absolute scans update framing.
+    // This lets the complete current-buffer value segment enter staging through one bulk copy.
+    while (scanCursor < scanLimit) {
       if (escaped) {
-        appendByte(input.get());
+        scanCursor++;
         escaped = false;
         continue;
       }
-      int start = input.position();
-      int limit = input.limit();
-      int remaining = maxValueBytes - valueLength;
-      if (limit - start > remaining) {
-        limit = start + remaining + 1;
-      }
       int special =
-          inString ? findStringSpecial(input, start, limit) : findArraySpecial(input, start, limit);
-      appendRun(input, special - start);
-      if (special == limit) {
-        return false;
+          inString
+              ? findStringSpecial(input, scanCursor, scanLimit)
+              : findArraySpecial(input, scanCursor, scanLimit);
+      scanCursor = special;
+      if (scanCursor == scanLimit) {
+        break;
       }
-      byte ch = input.get();
+      byte ch = input.get(scanCursor);
       if (!inString && objectDepth == 0 && arrayDepth == 0 && (ch == ',' || ch == ']')) {
+        appendSegment(input, scanCursor);
+        input.position(scanCursor + 1);
         return completeArrayValue(ch);
       }
-      appendArrayByte(ch);
+      updateArrayState(ch);
+      scanCursor++;
     }
+    appendSegment(input, scanCursor);
     return false;
   }
 
@@ -250,8 +260,7 @@ public final class JsonStreamDecoder<T> {
     return true;
   }
 
-  private void appendArrayByte(byte ch) {
-    appendByte(ch);
+  private void updateArrayState(byte ch) {
     if (inString) {
       if (ch == '\\') {
         escaped = true;
@@ -325,7 +334,7 @@ public final class JsonStreamDecoder<T> {
       }
       int special = findLineSpecial(input, start, limit);
       markRecordStart(input, start, special);
-      appendRun(input, special - start);
+      appendSegment(input, special);
       if (special == limit) {
         return false;
       }
@@ -380,16 +389,25 @@ public final class JsonStreamDecoder<T> {
   }
 
   private int nextNonWhitespace(ByteBuffer input) {
-    while (input.hasRemaining()) {
-      int ch = input.get() & 0xff;
+    int start = input.position();
+    int cursor = start;
+    int limit = input.limit();
+    while (cursor < limit) {
+      int ch = input.get(cursor) & 0xff;
       if (!isWhitespace(ch)) {
+        if (cursor != start) {
+          input.position(cursor);
+        }
         return ch;
       }
+      cursor++;
     }
+    input.position(limit);
     return -1;
   }
 
-  private void appendRun(ByteBuffer input, int length) {
+  private void appendSegment(ByteBuffer input, int end) {
+    int length = end - input.position();
     if (length == 0) {
       return;
     }
@@ -415,7 +433,7 @@ public final class JsonStreamDecoder<T> {
 
   private void growValueBytes(int required) {
     int current = valueBytes.length;
-    long grown = current == 0 ? INITIAL_VALUE_BYTES : (long) current + (current >> 1);
+    long grown = current == 0 ? required : (long) current + (current >> 1);
     if (grown < required) {
       grown = (long) required + (required >> 1);
     }

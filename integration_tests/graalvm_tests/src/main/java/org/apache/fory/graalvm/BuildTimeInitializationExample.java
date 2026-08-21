@@ -29,14 +29,13 @@ import org.apache.fory.util.Preconditions;
 public final class BuildTimeInitializationExample {
   private static final ThreadSafeFory FORY =
       Fory.builder().withLanguage(Language.JAVA).withCompatible(true).buildThreadLocalFory();
+  private static final ForyJson JSON = ForyJson.builder().withConcurrencyLevel(1).build();
 
   private BuildTimeInitializationExample() {}
 
   public static void main(String[] args) {
-    // Fory JSON execution states and fixed-pool entries are runtime-initialized deliberately.
-    ForyJson jsonRuntime = ForyJson.builder().build();
-    String json = jsonRuntime.toJson("fory");
-    Preconditions.checkArgument("fory".equals(jsonRuntime.fromJson(json, String.class)));
+    String json = JSON.toJson("fory");
+    Preconditions.checkArgument("fory".equals(JSON.fromJson(json, String.class)));
     Preconditions.checkArgument("fory".equals(FORY.deserialize(FORY.serialize("fory"))));
     System.out.println("BuildTimeInitializationExample succeed");
   }

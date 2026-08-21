@@ -57,8 +57,11 @@ public final class ForyJsonGraalVMFeatureJarVerifier {
   private static final String RUNTIME_OPTION = "--initialize-at-run-time=";
   private static final String BUILD_TIME_TARGETS =
       "org.apache.fory.json.ForyJson,"
+          + "org.apache.fory.json.ForyJson$PooledState,"
+          + "org.apache.fory.json.ForyJson$JsonState,"
           + "org.apache.fory.json.ForyJsonBuilder,"
           + "org.apache.fory.json.JsonConfig,"
+          + "org.apache.fory.json.JsonTypeCheckContext,"
           + "org.apache.fory.json.PropertyNamingStrategy,"
           + "org.apache.fory.json.codegen,"
           + "org.apache.fory.json.codec,"

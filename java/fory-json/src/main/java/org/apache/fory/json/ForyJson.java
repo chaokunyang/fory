@@ -938,11 +938,12 @@ public final class ForyJson {
   }
 
   /**
-   * Permanently owns one runtime execution state and leases it to at most one root operation.
+   * Permanently owns one execution state and leases it to at most one root operation.
    *
-   * <p>This class must remain runtime-initialized in Native Image. Initializing it while building
-   * the image would also pull its resolver, readers, writers, caches, and buffers into build-time
-   * initialization.
+   * <p>Native Image initializes this class at build time so an application may retain a static
+   * {@link ForyJson} in the image heap. The class has no static state; pooled objects enter the
+   * image only when the application constructs and retains that {@code ForyJson} while building the
+   * image. Custom codecs and modules retained by such an instance must also be build-time safe.
    */
   private static final class PooledState {
     private final JsonState state;
@@ -972,6 +973,10 @@ public final class ForyJson {
    * through every capability call. The runtime-class cache and declared-token cache each avoid
    * resolver lookup only on an identity hit; the declared cache also retains the resolved raw type
    * used by typed-root write validation.
+   *
+   * <p>Native Image initializes this class with {@link PooledState} so a build-time-created static
+   * {@link ForyJson} can retain its complete state graph. Ordinary runtime-created instances still
+   * construct these mutable states after image startup.
    */
   private static final class JsonState {
     private final JsonTypeResolver typeResolver;

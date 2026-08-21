@@ -28,6 +28,7 @@ import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -132,13 +133,14 @@ public final class ForyJsonExample {
     ForyJson interpretedJson = newInterpretedJson();
     exerciseCodegenConfiguration(DEFAULT_JSON, true, true);
     exerciseCodegenConfiguration(providerJson, true, true);
-    exerciseCodegenConfiguration(interpretedJson, false, true);
+    exerciseCodegenConfiguration(interpretedJson, false, false);
     testEmptyMixin(providerJson, true, true);
-    testEmptyMixin(interpretedJson, false, true);
+    testEmptyMixin(interpretedJson, false, false);
     testInterpretedMetadata(interpretedJson);
     testPrimitiveProperties(interpretedJson);
     testIndependentChildCodegen();
     testExternalModuleMixin();
+    testBootstrapMixin(providerJson);
   }
 
   private static ForyJson newProviderJson() {
@@ -148,7 +150,14 @@ public final class ForyJsonExample {
         .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
         .registerMixin(CoreCompileStateMixin.class)
         .registerMixin(EmptyMixin.class)
+        .registerMixin(SimpleEntryMixin.class)
         .build();
+  }
+
+  private static void testBootstrapMixin(ForyJson json) {
+    SimpleEntry<String, String> value = new SimpleEntry<>("left", "right");
+    String encoded = json.toJson(value);
+    Preconditions.checkArgument(encoded.contains("left") && encoded.contains("right"));
   }
 
   private static ForyJson newInterpretedJson() {
@@ -718,6 +727,9 @@ public final class ForyJsonExample {
 
   @JsonMixin(target = EmptyMixinTarget.class)
   public interface EmptyMixin {}
+
+  @JsonMixin(target = SimpleEntry.class)
+  public interface SimpleEntryMixin {}
 
   public static final class InterpretedMixinTarget {
     private String name;

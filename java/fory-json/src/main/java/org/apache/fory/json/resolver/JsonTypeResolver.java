@@ -1749,9 +1749,7 @@ public final class JsonTypeResolver {
       JsonTypeInfo typeInfo, ObjectCodec<?> owner, CapabilityKind kind) {
     ArrayList<Object> projection = new ArrayList<>();
     ArrayList<Class<?>> classes = new ArrayList<>();
-    if (!readerKind(kind)) {
-      projection.add(sharedRegistry.writeNullFields());
-    }
+    projection.add(sharedRegistry.writeNullFields());
     projection.add(sharedRegistry.propertyDiscoveryEnabled());
     projection.add(sharedRegistry.propertyNamingStrategy());
     addMixinProjection(owner.type(), projection, classes);
@@ -1997,7 +1995,12 @@ public final class JsonTypeResolver {
       ArrayList<Class<?>> classes,
       CapabilityKind kind) {
     AnyInfo any = owner.anyInfo();
-    if (any == null) {
+    boolean active =
+        any != null
+            && (readerKind(kind)
+                ? any.readField() != null || any.readSetter() != null
+                : any.writeField() != null || any.writeGetter() != null);
+    if (!active) {
       projection.add(null);
       return;
     }
@@ -2076,6 +2079,14 @@ public final class JsonTypeResolver {
     projection.add(terminal.rawType());
     projection.add(terminal.kind());
     addClass(terminal.rawType(), classes);
+    UnboxedValueCodec terminalCodec = terminal.unboxedValueCodec();
+    if (terminalCodec instanceof DirectUnboxedValueCodec) {
+      DirectUnboxedValueCodec direct = (DirectUnboxedValueCodec) terminalCodec;
+      addMember(
+          reader ? direct.readCarrierMethod() : direct.writeCarrierMethod(), projection, classes);
+    } else {
+      projection.add(null);
+    }
     Method[] methods = reader ? transparent.constructMethods() : transparent.extractMethods();
     projection.add(methods.length);
     for (Method method : methods) {

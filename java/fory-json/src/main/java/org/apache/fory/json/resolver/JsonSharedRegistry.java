@@ -231,8 +231,8 @@ public final class JsonSharedRegistry {
         }
       }
     }
-    // Hosted compilation produces classes shared by configurations with the same source shape.
-    // Runtime type policy is intentionally not part of that shape and remains enforced by each
+    // Hosted compilation shares classes only for equal generated-class keys. Runtime type policy
+    // is intentionally not part of that key and remains enforced by each
     // runtime resolver before it installs a generated capability.
     typeChecker = hostedCodegen ? null : config.typeChecker();
     typeCheckContext = hostedCodegen ? null : config.typeCheckContext();
@@ -1217,8 +1217,10 @@ public final class JsonSharedRegistry {
   }
 
   boolean canonicalProtectedBuiltin(JsonTypeInfo typeInfo, Object capability) {
-    return CodecRegistry.isProtectedBuiltinType(typeInfo.rawType())
-        && exactCodecs.get(typeInfo.rawType()) == capability;
+    Class<?> rawType = typeInfo.rawType();
+    return CodecRegistry.isProtectedBuiltinType(rawType)
+        && (exactCodecs.get(rawType) == capability
+            || ArrayCodec.isCanonicalProtectedCodec(rawType, capability));
   }
 
   /** Adds exact pair context to a cold effective-schema validation failure. */

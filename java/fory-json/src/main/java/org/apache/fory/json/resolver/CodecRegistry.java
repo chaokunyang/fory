@@ -190,7 +190,7 @@ public final class CodecRegistry {
   private static void checkRegistrationType(Class<?> type) {
     if (isProtectedBuiltinType(type)) {
       throw new IllegalArgumentException(
-          "JSON codec registration is not supported for built-in type " + type.getTypeName());
+          "JSON codec registration is not allowed for built-in type " + type.getTypeName());
     }
   }
 

@@ -1050,12 +1050,24 @@ public final class JsonCodegen {
       throw new ForyJsonException(
           "Cannot define generated JSON codec beside bootstrap type " + ownerType.getName());
     }
-    Object ownerModule = _JDKAccess.getModule(ownerType);
-    // The generated source names APIs from both JSON and core. A concealed third-party model
-    // package may not already read either module, so establish only those two implementation
-    // dependencies before defining the ordinary class in the model module.
-    _JDKAccess.addReads(ownerModule, _JDKAccess.getModule(JsonCodegen.class));
-    _JDKAccess.addReads(ownerModule, _JDKAccess.getModule(DefineClass.class));
+    if (JdkVersion.MAJOR_VERSION >= 9) {
+      Object ownerModule = _JDKAccess.getModule(ownerType);
+      // The generated source names APIs from both JSON and core. A concealed third-party model
+      // package may not already read those implementation modules, so establish the generated
+      // class's actual dependencies before defining it in the model module. JDK 8-24 core field
+      // access also emits sun.misc.Unsafe calls; the generated class, rather than Fory core, owns
+      // that linkage and therefore needs its own read edge to jdk.unsupported.
+      _JDKAccess.addReads(ownerModule, _JDKAccess.getModule(JsonCodegen.class));
+      _JDKAccess.addReads(ownerModule, _JDKAccess.getModule(DefineClass.class));
+      if (JdkVersion.MAJOR_VERSION < 25) {
+        try {
+          _JDKAccess.addReads(
+              ownerModule, _JDKAccess.getModule(Class.forName("sun.misc.Unsafe", false, null)));
+        } catch (ClassNotFoundException e) {
+          throw new ForyJsonException("Cannot resolve generated Unsafe field access", e);
+        }
+      }
+    }
     Class<?> mainClass =
         DefineClass.defineClass(
             mainClassName, ownerType, ownerLoader, ownerType.getProtectionDomain(), mainBytecode);

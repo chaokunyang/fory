@@ -486,8 +486,8 @@ public final class JsonStreamDecoder<T> {
     valueBytes = EMPTY_BYTES;
   }
 
-  private ForyJsonException valueTooLarge() {
-    return new ForyJsonException("JSON stream value exceeds maxValueBytes " + maxValueBytes);
+  private JsonStreamValueLimitException valueTooLarge() {
+    return new JsonStreamValueLimitException(maxValueBytes);
   }
 
   private static ForyJsonException framingError(String message) {

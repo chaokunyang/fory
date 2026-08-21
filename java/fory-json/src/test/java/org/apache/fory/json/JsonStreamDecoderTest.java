@@ -24,6 +24,7 @@ import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.expectThrows;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -198,7 +199,9 @@ public class JsonStreamDecoderTest {
 
     JsonStreamDecoder<Integer> oversized = json.newArrayStreamDecoder(Integer.class, 2);
     ByteBuffer input = utf8("[123]");
-    assertThrows(ForyJsonException.class, () -> oversized.decodeNext(input));
+    JsonStreamValueLimitException error =
+        expectThrows(JsonStreamValueLimitException.class, () -> oversized.decodeNext(input));
+    assertEquals(error.getMaxValueBytes(), 2);
     assertTrue(input.position() > 0);
     assertThrows(IllegalStateException.class, () -> oversized.decodeNext(input));
 

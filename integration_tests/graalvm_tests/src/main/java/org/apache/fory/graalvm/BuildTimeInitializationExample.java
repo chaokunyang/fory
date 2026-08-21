@@ -1,0 +1,43 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package org.apache.fory.graalvm;
+
+import org.apache.fory.Fory;
+import org.apache.fory.ThreadSafeFory;
+import org.apache.fory.config.Language;
+import org.apache.fory.json.ForyJson;
+import org.apache.fory.util.Preconditions;
+
+/** Verifies Fory initialization across the Native Image build-time and runtime boundary. */
+public final class BuildTimeInitializationExample {
+  private static final ThreadSafeFory FORY =
+      Fory.builder().withLanguage(Language.JAVA).withCompatible(true).buildThreadLocalFory();
+
+  private BuildTimeInitializationExample() {}
+
+  public static void main(String[] args) {
+    // Fory JSON execution states and fixed-pool entries are runtime-initialized deliberately.
+    ForyJson jsonRuntime = ForyJson.builder().build();
+    String json = jsonRuntime.toJson("fory");
+    Preconditions.checkArgument("fory".equals(jsonRuntime.fromJson(json, String.class)));
+    Preconditions.checkArgument("fory".equals(FORY.deserialize(FORY.serialize("fory"))));
+    System.out.println("BuildTimeInitializationExample succeed");
+  }
+}

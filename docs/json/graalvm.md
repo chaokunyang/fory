@@ -57,6 +57,10 @@ model metadata and prepares its field, property, creator, record, and `JsonAnySe
 runtime, `ForyJson.builder().build()` can therefore use interpreted codecs without application
 reflection configuration, package exports or opens, or build-time initialization.
 
+Create the `ForyJson` instance at runtime as shown above. Do not retain one from a class configured
+for build-time initialization: its pooled readers, writers, resolvers, caches, and buffers are
+runtime state by design.
+
 ## Generated Codecs
 
 To include generated codecs for a configuration, return that completed configuration from a

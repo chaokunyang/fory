@@ -937,7 +937,13 @@ public final class ForyJson {
         "Invalid UTF-8 byte range: offset=" + offset + ", length=" + length);
   }
 
-  /** Permanently owns one execution state and leases it to at most one root operation. */
+  /**
+   * Permanently owns one runtime execution state and leases it to at most one root operation.
+   *
+   * <p>This class must remain runtime-initialized in Native Image. Initializing it while building
+   * the image would also pull its resolver, readers, writers, caches, and buffers into build-time
+   * initialization.
+   */
   private static final class PooledState {
     private final JsonState state;
     private final AtomicInteger leased;

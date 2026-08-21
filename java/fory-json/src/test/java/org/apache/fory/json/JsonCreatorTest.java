@@ -19,7 +19,6 @@
 
 package org.apache.fory.json;
 
-import static org.apache.fory.json.JsonTestSupport.nullCodec;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.fail;
@@ -269,8 +268,8 @@ public class JsonCreatorTest extends ForyJsonTestModels {
   }
 
   @Test
-  public void customPrimitiveNullRejected() {
-    ForyJson json = newJsonBuilder().registerCodec(int.class, nullCodec()).build();
+  public void creatorPrimitiveNullRejected() {
+    ForyJson json = newJson();
     assertThrows(
         ForyJsonException.class,
         () -> json.fromJson("{\"id\":null}", CustomPrimitiveCreator.class));

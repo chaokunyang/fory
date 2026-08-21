@@ -42,7 +42,12 @@ public interface JsonCodecFactory {
     return getClass().getName();
   }
 
-  /** Returns runtime classes represented by an exact closed root codec. */
+  /**
+   * Returns runtime classes represented by an exact closed root codec.
+   *
+   * <p>The list must not contain a dedicated reader/writer scalar type or {@code byte[]}, {@code
+   * String[]}, or {@code long[]}.
+   */
   @Internal
   default List<Class<?>> handledRuntimeClasses() {
     return Collections.emptyList();

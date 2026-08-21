@@ -21,7 +21,6 @@ package org.apache.fory.graalvm.closed;
 
 import org.apache.fory.graalvm.ForyJsonExample.CodegenProbeCodec;
 import org.apache.fory.graalvm.ForyJsonExample.CodegenProbeValue;
-import org.apache.fory.graalvm.ForyJsonExample.CodegenRejectingClassLoader;
 import org.apache.fory.graalvm.ForyJsonExample.CoreCompileStateMixin;
 import org.apache.fory.graalvm.ForyJsonExample.EmptyMixin;
 import org.apache.fory.graalvm.ForyJsonExample.InheritedJsonConfig;
@@ -43,7 +42,6 @@ class ClosedJsonConfigParent {
         .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
         .registerMixin(CoreCompileStateMixin.class)
         .registerMixin(EmptyMixin.class)
-        .withClassLoader(new CodegenRejectingClassLoader())
         .withTypeChecker((className, context) -> false)
         .build();
   }

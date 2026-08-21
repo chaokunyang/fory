@@ -81,9 +81,9 @@ public final class ForyJsonBuilder {
 
   /**
    * Enables generated object codecs for supported classes. Enabled by default and automatically
-   * disabled on Android. In a GraalVM native image, generated codecs are available only for
-   * configurations returned by a reachable {@link
-   * org.apache.fory.json.annotation.ForyJsonProvider}; other configurations use interpreted codecs.
+   * disabled on Android. A GraalVM Native Image includes generated codecs for the default
+   * configuration and for each reachable {@link org.apache.fory.json.annotation.ForyJsonProvider}
+   * configuration. An exact generated-codec miss uses the interpreted codec.
    */
   public ForyJsonBuilder withCodegen(boolean codegenEnabled) {
     this.codegenEnabled = codegenEnabled;
@@ -210,13 +210,23 @@ public final class ForyJsonBuilder {
    * <p>The same codec instance may be called concurrently by pooled JSON states and must therefore
    * be thread-safe. Building snapshots the registration map, although the registered codec objects
    * themselves are intentionally shared.
+   *
+   * <p>Exact registration is rejected for primitive and boxed scalar types, {@link String}, {@link
+   * CharSequence}, {@link Number}, standard big-number, UUID, and {@code java.time} scalar types,
+   * plus {@code byte[]}, {@code String[]}, and {@code long[]}. Those types are owned by dedicated
+   * reader/writer operations. Occurrence annotations such as {@code JsonCodec} remain supported.
    */
   public <T> ForyJsonBuilder registerCodec(Class<T> type, JsonValueCodec<T> codec) {
     codecRegistry.register(type, codec);
     return this;
   }
 
-  /** Registers a resolver-owned complete codec factory for one exact class. */
+  /**
+   * Registers a resolver-owned complete codec factory for one exact class.
+   *
+   * <p>The exact type restrictions documented by {@link #registerCodec(Class, JsonValueCodec)}
+   * apply to this registration as well.
+   */
   public <T> ForyJsonBuilder registerCodec(Class<T> type, JsonCodecFactory factory) {
     codecRegistry.registerFactory(type, factory);
     return this;
@@ -289,7 +299,6 @@ public final class ForyJsonBuilder {
             installed.codecs,
             installed.mixins,
             installed.factories,
-            installed.moduleIdentities,
             installed.factoryIdentities,
             typeChecker));
   }

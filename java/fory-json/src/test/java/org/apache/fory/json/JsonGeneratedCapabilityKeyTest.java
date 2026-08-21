@@ -19,10 +19,14 @@
 
 package org.apache.fory.json;
 
+import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertSame;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
@@ -31,10 +35,17 @@ import java.util.concurrent.ExecutorService;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.codec.JsonObjectModel;
+import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.codec.ObjectCodec;
+import org.apache.fory.json.data.PublicFields;
+import org.apache.fory.json.reader.Latin1JsonReader;
+import org.apache.fory.json.reader.Utf16JsonReader;
+import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonSharedRegistry;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.json.writer.StringJsonWriter;
+import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.StringSerializer;
@@ -55,7 +66,7 @@ public class JsonGeneratedCapabilityKeyTest {
     JsonTypeInfo tracked =
         resolver.getTypeInfo(
             TypeRef.of(Model.class, TypeExtMeta.of(Types.UNKNOWN, false, true, false, false)));
-    assertNotSame(raw.utf8Reader().getClass(), tracked.utf8Reader().getClass());
+    assertSame(raw.utf8Reader().getClass(), tracked.utf8Reader().getClass());
   }
 
   @Test
@@ -75,12 +86,12 @@ public class JsonGeneratedCapabilityKeyTest {
         resolver.getTypeInfo(listType(null, TypeRef.of(String.class, ordinary(false))));
     JsonTypeInfo nullableElement =
         resolver.getTypeInfo(listType(null, TypeRef.of(String.class, ordinary(true))));
-    assertNotSame(nonNullElement.utf8Writer().getClass(), nullableElement.utf8Writer().getClass());
-    assertNotSame(nonNullElement.utf8Reader().getClass(), nullableElement.utf8Reader().getClass());
+    assertSame(nonNullElement.utf8Writer().getClass(), nullableElement.utf8Writer().getClass());
+    assertSame(nonNullElement.utf8Reader().getClass(), nullableElement.utf8Reader().getClass());
   }
 
   @Test
-  public void componentMetadataRemainsDistinct() {
+  public void injectedComponentMetadataReusesParentClass() {
     JsonTypeResolver resolver = resolver();
     TypeRef<?> nonNullArray =
         TypeRef.of(
@@ -89,8 +100,8 @@ public class JsonGeneratedCapabilityKeyTest {
         TypeRef.of(String[].class, ordinary(false), null, TypeRef.of(String.class, ordinary(true)));
     JsonTypeInfo nonNull = resolver.getTypeInfo(boxType(nonNullArray));
     JsonTypeInfo nullable = resolver.getTypeInfo(boxType(nullableArray));
-    assertNotSame(nonNull.utf8Writer().getClass(), nullable.utf8Writer().getClass());
-    assertNotSame(nonNull.utf8Reader().getClass(), nullable.utf8Reader().getClass());
+    assertSame(nonNull.utf8Writer().getClass(), nullable.utf8Writer().getClass());
+    assertSame(nonNull.utf8Reader().getClass(), nullable.utf8Reader().getClass());
   }
 
   @Test
@@ -149,9 +160,155 @@ public class JsonGeneratedCapabilityKeyTest {
     assertSame(typeInfo.rawType(), HostedAnnotatedModel.class);
   }
 
+  @Test
+  public void directCodecClassVersionsParent() {
+    JsonTypeInfo first = parentType(new ChildCodecA());
+    JsonTypeInfo equivalent = parentType(new ChildCodecA());
+    JsonTypeInfo different = parentType(new ChildCodecB());
+
+    assertObjectClasses(first, equivalent);
+    assertDifferentObjectClasses(first, different);
+  }
+
+  @Test
+  public void directCodecStateStaysInstanceOwned() {
+    ForyJson first = parentJson(new StatefulChildCodec("first:"));
+    ForyJson second = parentJson(new StatefulChildCodec("second:"));
+    JsonTypeInfo firstType = parentType(first);
+    JsonTypeInfo secondType = parentType(second);
+    assertObjectClasses(firstType, secondType);
+
+    Parent value = new Parent();
+    value.child = new Child();
+    value.child.value = "value";
+    assertEquals(first.toJson(value), "{\"child\":\"first:value\"}");
+    assertEquals(second.toJson(value), "{\"child\":\"second:value\"}");
+    assertEquals(first.fromJson("{\"child\":\"first:value\"}", Parent.class).child.value, "value");
+    assertEquals(
+        second.fromJson("{\"child\":\"second:value\"}", Parent.class).child.value, "value");
+  }
+
+  @Test
+  public void unrelatedRegistrationDoesNotVersionParent() {
+    JsonTypeInfo first = parentType(new ChildCodecA());
+    ForyJson json = parentJson(new ChildCodecA(), true);
+    assertObjectClasses(first, parentType(json));
+  }
+
+  @Test
+  public void configuredLoaderDoesNotVersionClass() {
+    ForyJson first = ForyJson.builder().withAsyncCompilation(false).build();
+    ForyJson second =
+        ForyJson.builder()
+            .withClassLoader(new ClassLoader(Model.class.getClassLoader()) {})
+            .withAsyncCompilation(false)
+            .build();
+    JsonTypeInfo firstType =
+        JsonTestSupport.currentTypeResolver(first).getTypeInfo(Model.class, Model.class);
+    JsonTypeInfo secondType =
+        JsonTestSupport.currentTypeResolver(second).getTypeInfo(Model.class, Model.class);
+    assertObjectClasses(firstType, secondType);
+  }
+
+  @Test
+  public void collectionClassIgnoresElementCodec() {
+    JsonTypeInfo first = collectionType(new ChildCodecA());
+    JsonTypeInfo different = collectionType(new ChildCodecB());
+
+    assertSame(first.utf8Writer().getClass(), different.utf8Writer().getClass());
+    assertSame(first.utf8Reader().getClass(), different.utf8Reader().getClass());
+  }
+
+  @Test
+  public void sameNamedLoaderClassesDoNotCollide() throws Exception {
+    byte[] bytes = classBytes(PublicFields.class);
+    Class<?> firstClass = shadowClass(PublicFields.class, bytes);
+    Class<?> secondClass = shadowClass(PublicFields.class, bytes);
+    assertNotSame(firstClass, secondClass);
+
+    JsonTypeInfo first = loaderType(firstClass);
+    JsonTypeInfo second = loaderType(secondClass);
+    assertDifferentObjectClasses(first, second);
+  }
+
   private static JsonTypeResolver resolver() {
     ForyJson json = ForyJson.builder().withAsyncCompilation(false).build();
     return JsonTestSupport.currentTypeResolver(json);
+  }
+
+  private static JsonTypeInfo parentType(JsonValueCodec<Child> codec) {
+    return parentType(parentJson(codec));
+  }
+
+  private static ForyJson parentJson(JsonValueCodec<Child> codec) {
+    return parentJson(codec, false);
+  }
+
+  private static ForyJson parentJson(JsonValueCodec<Child> codec, boolean unrelated) {
+    ForyJsonBuilder builder =
+        ForyJson.builder().registerCodec(Child.class, codec).withAsyncCompilation(false);
+    if (unrelated) {
+      builder.registerCodec(Unrelated.class, JsonTestSupport.nullCodec());
+    }
+    return builder.build();
+  }
+
+  private static JsonTypeInfo parentType(ForyJson json) {
+    return JsonTestSupport.currentTypeResolver(json).getTypeInfo(Parent.class, Parent.class);
+  }
+
+  private static JsonTypeInfo collectionType(JsonValueCodec<Child> codec) {
+    ForyJson json =
+        ForyJson.builder().registerCodec(Child.class, codec).withAsyncCompilation(false).build();
+    return JsonTestSupport.currentTypeResolver(json).getTypeInfo(new TypeRef<List<Child>>() {});
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private static JsonTypeInfo loaderType(Class<?> type) {
+    ForyJson json =
+        ForyJson.builder()
+            .withClassLoader(type.getClassLoader())
+            .withAsyncCompilation(false)
+            .build();
+    return JsonTestSupport.currentTypeResolver(json).getTypeInfo((Class) type, type);
+  }
+
+  private static Class<?> shadowClass(Class<?> type, byte[] bytes) throws ClassNotFoundException {
+    String name = type.getName();
+    ClassLoader loader =
+        new ClassLoader(type.getClassLoader()) {
+          @Override
+          protected Class<?> loadClass(String className, boolean resolve)
+              throws ClassNotFoundException {
+            synchronized (getClassLoadingLock(className)) {
+              if (!name.equals(className)) {
+                return super.loadClass(className, resolve);
+              }
+              Class<?> loaded = findLoadedClass(className);
+              if (loaded == null) {
+                loaded = defineClass(className, bytes, 0, bytes.length);
+              }
+              if (resolve) {
+                resolveClass(loaded);
+              }
+              return loaded;
+            }
+          }
+        };
+    return loader.loadClass(name);
+  }
+
+  private static byte[] classBytes(Class<?> type) throws IOException {
+    String resource = "/" + type.getName().replace('.', '/') + ".class";
+    try (InputStream input = type.getResourceAsStream(resource);
+        ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+      byte[] buffer = new byte[1024];
+      int read;
+      while ((read = input.read(buffer)) >= 0) {
+        output.write(buffer, 0, read);
+      }
+      return output.toByteArray();
+    }
   }
 
   private static TypeExtMeta ordinary(boolean nullable) {
@@ -176,6 +333,14 @@ public class JsonGeneratedCapabilityKeyTest {
     assertSame(expected.utf8Reader().getClass(), actual.utf8Reader().getClass());
   }
 
+  private static void assertDifferentObjectClasses(JsonTypeInfo expected, JsonTypeInfo actual) {
+    assertNotSame(expected.stringWriter().getClass(), actual.stringWriter().getClass());
+    assertNotSame(expected.utf8Writer().getClass(), actual.utf8Writer().getClass());
+    assertNotSame(expected.latin1Reader().getClass(), actual.latin1Reader().getClass());
+    assertNotSame(expected.utf16Reader().getClass(), actual.utf16Reader().getClass());
+    assertNotSame(expected.utf8Reader().getClass(), actual.utf8Reader().getClass());
+  }
+
   private static void assertGeneratedObject(JsonTypeInfo typeInfo) {
     assertFalse(ObjectCodec.class.isAssignableFrom(typeInfo.stringWriter().getClass()));
     assertFalse(ObjectCodec.class.isAssignableFrom(typeInfo.utf8Writer().getClass()));
@@ -189,6 +354,94 @@ public class JsonGeneratedCapabilityKeyTest {
 
     public Model() {}
   }
+
+  public static final class Parent {
+    public Child child;
+
+    public Parent() {}
+  }
+
+  public static final class Child {
+    public String value;
+
+    public Child() {}
+  }
+
+  public static class ChildCodecA implements JsonValueCodec<Child> {
+    @Override
+    public void writeString(StringJsonWriter writer, Child value) {
+      writer.writeString(value.value);
+    }
+
+    @Override
+    public void writeUtf8(Utf8JsonWriter writer, Child value) {
+      writer.writeString(value.value);
+    }
+
+    @Override
+    public Child readLatin1(Latin1JsonReader reader) {
+      return child(reader.readString());
+    }
+
+    @Override
+    public Child readUtf16(Utf16JsonReader reader) {
+      return child(reader.readString());
+    }
+
+    @Override
+    public Child readUtf8(Utf8JsonReader reader) {
+      return child(reader.readString());
+    }
+
+    private static Child child(String text) {
+      Child value = new Child();
+      value.value = text;
+      return value;
+    }
+  }
+
+  public static final class ChildCodecB extends ChildCodecA {}
+
+  public static final class StatefulChildCodec extends ChildCodecA {
+    private final String prefix;
+
+    public StatefulChildCodec(String prefix) {
+      this.prefix = prefix;
+    }
+
+    @Override
+    public void writeString(StringJsonWriter writer, Child value) {
+      writer.writeString(prefix + value.value);
+    }
+
+    @Override
+    public void writeUtf8(Utf8JsonWriter writer, Child value) {
+      writer.writeString(prefix + value.value);
+    }
+
+    @Override
+    public Child readLatin1(Latin1JsonReader reader) {
+      return childWithoutPrefix(reader.readString());
+    }
+
+    @Override
+    public Child readUtf16(Utf16JsonReader reader) {
+      return childWithoutPrefix(reader.readString());
+    }
+
+    @Override
+    public Child readUtf8(Utf8JsonReader reader) {
+      return childWithoutPrefix(reader.readString());
+    }
+
+    private Child childWithoutPrefix(String text) {
+      Child value = new Child();
+      value.value = text.substring(prefix.length());
+      return value;
+    }
+  }
+
+  public static final class Unrelated {}
 
   public static final class Box<T> {
     public T value;

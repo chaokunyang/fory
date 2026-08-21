@@ -1330,7 +1330,6 @@ public class JsonAsyncCompilationTest {
             Collections.<Class<?>, Class<?>>emptyMap(),
             new JsonCodecFactory[0],
             Collections.<String>emptyList(),
-            Collections.<String>emptyList(),
             null);
     ControlledExecutor executor = new ControlledExecutor();
     Constructor<JsonSharedRegistry> constructor =

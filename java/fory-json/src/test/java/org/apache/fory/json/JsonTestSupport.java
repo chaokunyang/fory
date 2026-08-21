@@ -37,7 +37,6 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.StringSerializer;
 
 final class JsonTestSupport {
-  private static final String GENERATED_CODEC_SUFFIX = "ForyJsonCodec";
   private static final JsonConfig CONFIG =
       new JsonConfig(
           false,
@@ -54,7 +53,6 @@ final class JsonTestSupport {
           new CodecRegistry(),
           Collections.<Class<?>, Class<?>>emptyMap(),
           new JsonCodecFactory[0],
-          Collections.<String>emptyList(),
           Collections.<String>emptyList(),
           null);
   private static final JsonSharedRegistry REGISTRY = new JsonSharedRegistry(CONFIG);
@@ -208,19 +206,6 @@ final class JsonTestSupport {
       throw new AssertionError("No generated UTF-8 writer for " + type);
     }
     return codec.getClass();
-  }
-
-  static String generatedCodecIdentity(Class<?> generatedClass) {
-    String simpleName = generatedClass.getSimpleName();
-    int suffixStart = simpleName.lastIndexOf(GENERATED_CODEC_SUFFIX + "_");
-    if (suffixStart < 0) {
-      throw new AssertionError("Unexpected generated class " + generatedClass.getName());
-    }
-    String identity = simpleName.substring(suffixStart + GENERATED_CODEC_SUFFIX.length() + 1);
-    if (!identity.matches("[0-9a-f]{64}")) {
-      throw new AssertionError("Unexpected generated class " + generatedClass.getName());
-    }
-    return identity;
   }
 
   static String stringReaderPath(String input) {

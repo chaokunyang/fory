@@ -52,6 +52,7 @@ import org.apache.fory.json.codec.ClosedSubtypeCodec;
 import org.apache.fory.json.codec.CodecUtils;
 import org.apache.fory.json.codec.CollectionCodec;
 import org.apache.fory.json.codec.CompositeJsonCodec;
+import org.apache.fory.json.codec.DirectUnboxedValueCodec;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
 import org.apache.fory.json.codec.JsonObjectModel;
 import org.apache.fory.json.codec.JsonSubTypesInfo;
@@ -64,10 +65,14 @@ import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codec.ObjectCodec.AnyInfo;
 import org.apache.fory.json.codec.ScalarCodecs;
 import org.apache.fory.json.codec.StringWriterCodec;
+import org.apache.fory.json.codec.TransparentUnboxedValueCodec;
 import org.apache.fory.json.codec.UnboxedValueCodec;
 import org.apache.fory.json.codec.Utf16ReaderCodec;
 import org.apache.fory.json.codec.Utf8ReaderCodec;
 import org.apache.fory.json.codec.Utf8WriterCodec;
+import org.apache.fory.json.codegen.GeneratedCodecKey;
+import org.apache.fory.json.codegen.GeneratedCodecKey.MemberDescriptor;
+import org.apache.fory.json.codegen.GeneratedCodecKey.Role;
 import org.apache.fory.json.codegen.JsonCodegen;
 import org.apache.fory.json.codegen.JsonJITContext;
 import org.apache.fory.json.meta.JsonCreatorDeclaration;
@@ -76,8 +81,6 @@ import org.apache.fory.json.meta.JsonCreatorInfo;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldKind;
 import org.apache.fory.json.meta.JsonFieldTable;
-import org.apache.fory.logging.Logger;
-import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.type.Types;
@@ -99,13 +102,8 @@ import org.apache.fory.type.Types;
  * identity so parameterized and language-semantic bindings own distinct generated capabilities.
  */
 public final class JsonTypeResolver {
-  private static final Logger LOG = LoggerFactory.getLogger(JsonTypeResolver.class);
   private static final TypeExtMeta NON_NULL_SUBTYPE_TYPE =
       TypeExtMeta.of(Types.UNKNOWN, false, false, false, false);
-  private static final String NATIVE_INTERPRETER_MESSAGE =
-      "Fory JSON is using interpreted codecs because the current configuration was not included "
-          + "in this native image. Return this configuration from a reachable "
-          + "@ForyJsonProvider to enable generated codecs.";
 
   private final Map<Object, ObjectCodec<?>> objectCodecs;
   private final Map<Object, JsonTypeInfo> typeInfos;
@@ -814,21 +812,9 @@ public final class JsonTypeResolver {
       return;
     }
     if (!sharedRegistry.generatedCapabilitiesEnabled()) {
-      if (sharedRegistry.missingNativeConfiguration() && containsObjectModel(roots)) {
-        LOG.warnOnce(NATIVE_INTERPRETER_MESSAGE);
-      }
       return;
     }
     requestCapabilities(roots);
-  }
-
-  private boolean containsObjectModel(ArrayList<JsonTypeInfo> roots) {
-    for (int i = 0; i < roots.size(); i++) {
-      if (canonicalObjectOwner(roots.get(i)) != null) {
-        return true;
-      }
-    }
-    return false;
   }
 
   private void rollbackResolution(ResolutionSnapshot snapshot) {
@@ -1051,11 +1037,6 @@ public final class JsonTypeResolver {
     Class<?> type = ownerType.getRawType();
     sharedRegistry.checkSecure(type);
     validateObjectModel(ownerType, objectModel);
-    if (!sharedRegistry.hostedCodegen() && sharedRegistry.missingNativeConfiguration()) {
-      throw new ForyJsonException(
-          "Missing provider-selected Fory JSON Native configuration for language object model "
-              + ownerType);
-    }
     // The language module already owns the exact construction/accessor model. A Java generated
     // companion may still supply faster operations, but its absence must not override that model.
     GeneratedJsonCodec<?> generatedCodec = sharedRegistry.generatedCodecIfPresent(ownerType);
@@ -1306,7 +1287,7 @@ public final class JsonTypeResolver {
         (StringWriterCodec<Object>[]) new StringWriterCodec<?>[fields.length];
     for (int i = 0; i < fields.length; i++) {
       JsonFieldInfo field = fields[i];
-      if (JsonCodegen.usesWriteCodec(field)) {
+      if (usesWriteCodec(field)) {
         JsonTypeInfo typeInfo = field.writeTypeInfo();
         codecs[i] = resolvedCapability(typeInfo, capabilities, CapabilityKind.STRING_WRITER);
       }
@@ -1338,7 +1319,7 @@ public final class JsonTypeResolver {
         (Utf8WriterCodec<Object>[]) new Utf8WriterCodec<?>[fields.length];
     for (int i = 0; i < fields.length; i++) {
       JsonFieldInfo field = fields[i];
-      if (JsonCodegen.usesUtf8WriteCodec(field, this)) {
+      if (usesUtf8WriteCodec(field)) {
         JsonTypeInfo typeInfo = field.writeTypeInfo();
         codecs[i] = resolvedCapability(typeInfo, capabilities, CapabilityKind.UTF8_WRITER);
       }
@@ -1367,7 +1348,7 @@ public final class JsonTypeResolver {
         (StringWriterCodec<Object>[]) new StringWriterCodec<?>[fields.length];
     for (int i = 0; i < fields.length; i++) {
       JsonFieldInfo field = fields[i];
-      if (JsonCodegen.usesWriteCodec(field)) {
+      if (usesWriteCodec(field)) {
         JsonTypeInfo child = field.writeTypeInfo();
         codecs[i] = resolvedCapability(child, capabilities, CapabilityKind.STRING_WRITER);
       }
@@ -1396,7 +1377,7 @@ public final class JsonTypeResolver {
         (Utf8WriterCodec<Object>[]) new Utf8WriterCodec<?>[fields.length];
     for (int i = 0; i < fields.length; i++) {
       JsonFieldInfo field = fields[i];
-      if (JsonCodegen.usesUtf8WriteCodec(field, this)) {
+      if (usesUtf8WriteCodec(field)) {
         JsonTypeInfo child = field.writeTypeInfo();
         codecs[i] = resolvedCapability(child, capabilities, CapabilityKind.UTF8_WRITER);
       }
@@ -1467,10 +1448,9 @@ public final class JsonTypeResolver {
     for (int i = 0; i < fields.length; i++) {
       JsonFieldInfo field = fields[i];
       JsonTypeInfo typeInfo = field.readTypeInfo();
-      if (JsonCodegen.usesReadCodec(field, this)) {
+      if (usesReadCodec(field)) {
         codecs[i] = resolvedCapability(typeInfo, capabilities, CapabilityKind.LATIN1_READER);
-      } else if (JsonCodegen.readNestedType(field, this) != null
-          && field.readRawType() != owner.type()) {
+      } else if (readNestedType(field) != null && field.readRawType() != owner.type()) {
         codecs[i] = resolvedCapability(typeInfo, capabilities, CapabilityKind.LATIN1_READER);
       }
     }
@@ -1537,10 +1517,9 @@ public final class JsonTypeResolver {
     for (int i = 0; i < fields.length; i++) {
       JsonFieldInfo field = fields[i];
       JsonTypeInfo typeInfo = field.readTypeInfo();
-      if (JsonCodegen.usesReadCodec(field, this)) {
+      if (usesReadCodec(field)) {
         codecs[i] = resolvedCapability(typeInfo, capabilities, CapabilityKind.UTF16_READER);
-      } else if (JsonCodegen.readNestedType(field, this) != null
-          && field.readRawType() != owner.type()) {
+      } else if (readNestedType(field) != null && field.readRawType() != owner.type()) {
         codecs[i] = resolvedCapability(typeInfo, capabilities, CapabilityKind.UTF16_READER);
       }
     }
@@ -1607,10 +1586,9 @@ public final class JsonTypeResolver {
     for (int i = 0; i < fields.length; i++) {
       JsonFieldInfo field = fields[i];
       JsonTypeInfo typeInfo = field.readTypeInfo();
-      if (JsonCodegen.usesReadCodec(field, this)) {
+      if (usesReadCodec(field)) {
         codecs[i] = resolvedCapability(typeInfo, capabilities, CapabilityKind.UTF8_READER);
-      } else if (JsonCodegen.readNestedType(field, this) != null
-          && field.readRawType() != owner.type()) {
+      } else if (readNestedType(field) != null && field.readRawType() != owner.type()) {
         codecs[i] = resolvedCapability(typeInfo, capabilities, CapabilityKind.UTF8_READER);
       }
     }
@@ -1759,12 +1737,481 @@ public final class JsonTypeResolver {
     return canonicalObjectCodec(any.valueTypeInfo()) == null || any.valueRawType() != owner.type();
   }
 
-  private enum CapabilityKind {
+  enum CapabilityKind {
     STRING_WRITER,
     UTF8_WRITER,
     LATIN1_READER,
     UTF16_READER,
     UTF8_READER
+  }
+
+  GeneratedCodecKey generatedObjectKey(
+      JsonTypeInfo typeInfo, ObjectCodec<?> owner, CapabilityKind kind) {
+    ArrayList<Object> projection = new ArrayList<>();
+    ArrayList<Class<?>> classes = new ArrayList<>();
+    if (!readerKind(kind)) {
+      projection.add(sharedRegistry.writeNullFields());
+    }
+    projection.add(sharedRegistry.propertyDiscoveryEnabled());
+    projection.add(sharedRegistry.propertyNamingStrategy());
+    addMixinProjection(owner.type(), projection, classes);
+    if (readerKind(kind)) {
+      projection.add(owner.graphMemoryBytes());
+      projection.add(owner.hasValidators());
+    }
+    JsonUnwrappedInfo unwrapped = owner.unwrappedInfo();
+    if (unwrapped != null) {
+      for (JsonUnwrappedInfo.Group group : unwrapped.groups()) {
+        ObjectCodec<?> child = group.childCodec();
+        Class<?> childType = child.type();
+        projection.add(childType);
+        classes.add(childType);
+        addMixinProjection(childType, projection, classes);
+        projection.add(MemberDescriptor.of(accessorMember(group.declaration().writeAccessor())));
+        projection.add(MemberDescriptor.of(accessorMember(group.declaration().readAccessor())));
+        projection.add(group.readIndex());
+        projection.add(group.parent() == null ? -1 : group.parent().readIndex());
+        projection.add(group.declaration().constructionIndex());
+        Class<?> parentType = group.parentCodec().type();
+        projection.add(parentType);
+        classes.add(parentType);
+        projection.add(group.writeEnabled());
+        projection.add(group.readEnabled());
+        if (readerKind(kind)) {
+          projection.add(child.graphMemoryBytes());
+          projection.add(child.hasValidators());
+          addCreatorProjection(child.creatorInfo(), projection, classes, kind);
+        }
+      }
+    }
+    if (readerKind(kind)) {
+      addCreatorProjection(owner.creatorInfo(), projection, classes, kind);
+      if (unwrapped == null) {
+        JsonCreatorInfo creator = owner.creatorInfo();
+        if (creator == null) {
+          addReadFields(owner, owner.readFields(), projection, classes, kind);
+        } else {
+          addCreatorFields(owner, creator.fields(), projection, classes, kind);
+        }
+      } else {
+        JsonCreatorInfo creator = owner.creatorInfo();
+        if (creator == null) {
+          addReadFields(owner, owner.readFields(), projection, classes, kind);
+        } else {
+          addCreatorFields(owner, creator.fields(), projection, classes, kind);
+        }
+        for (JsonUnwrappedInfo.ReadRoute route : unwrapped.readRoutes()) {
+          projection.add("route");
+          projection.add(route.group().readIndex());
+          if (route.field() != null) {
+            addReadField(owner, route.field(), projection, classes, kind);
+          } else {
+            addCreatorField(owner, route.creatorField(), projection, classes, kind);
+          }
+        }
+      }
+    } else {
+      if (unwrapped != null) {
+        addUnwrappedWriteOrder(unwrapped.writeEntries(), projection, classes);
+      }
+      JsonFieldInfo[] fields = unwrapped == null ? owner.writeFields() : unwrapped.writeFields();
+      for (int i = 0; i < fields.length; i++) {
+        addWriteField(owner, fields[i], projection, classes, kind);
+      }
+    }
+    addAnyProjection(owner, projection, classes, kind);
+    return GeneratedCodecKey.object(
+        typeInfo.rawType(), role(kind), projection.toArray(), classes.toArray(new Class<?>[0]));
+  }
+
+  private void addUnwrappedWriteOrder(
+      JsonUnwrappedInfo.WriteEntry[] entries,
+      ArrayList<Object> projection,
+      ArrayList<Class<?>> classes) {
+    projection.add(entries.length);
+    for (JsonUnwrappedInfo.WriteEntry entry : entries) {
+      projection.add(entry.kind());
+      if (entry.kind() == JsonUnwrappedInfo.DIRECT) {
+        JsonFieldInfo field = entry.field();
+        projection.add(field.name());
+        addMember(field.writeField(), projection, classes);
+        addMember(field.writeGetter(), projection, classes);
+      } else if (entry.kind() == JsonUnwrappedInfo.GROUP) {
+        projection.add(entry.group().readIndex());
+        addUnwrappedWriteOrder(entry.group().writeEntries(), projection, classes);
+      }
+    }
+  }
+
+  GeneratedCodecKey generatedCollectionKey(
+      JsonTypeInfo typeInfo, CollectionCodec<?> owner, CapabilityKind kind) {
+    Type type = typeInfo.type();
+    Class<?> rawType = CodecUtils.rawType(type, Collection.class);
+    Class<?> elementType = CodecUtils.rawType(CodecUtils.elementType(type), Object.class);
+    return GeneratedCodecKey.collection(
+        rawType,
+        elementType,
+        kind == CapabilityKind.UTF8_WRITER
+            ? Role.UTF8_COLLECTION_WRITER
+            : Role.UTF8_COLLECTION_READER,
+        owner instanceof CollectionCodec.StringCollectionCodec);
+  }
+
+  private void addMixinProjection(
+      Class<?> target, ArrayList<Object> projection, ArrayList<Class<?>> classes) {
+    Class<?> mixin = sharedRegistry.mixinType(target);
+    projection.add(mixin);
+    if (mixin != null) {
+      classes.add(mixin);
+    }
+  }
+
+  private void addCreatorProjection(
+      JsonCreatorInfo creator,
+      ArrayList<Object> projection,
+      ArrayList<Class<?>> classes,
+      CapabilityKind kind) {
+    if (creator == null) {
+      projection.add(null);
+      return;
+    }
+    projection.add("creator");
+    addMember(creator.executable(), projection, classes);
+    addMember(creator.invocationExecutable(), projection, classes);
+    addMember(creator.defaultConstructor(), projection, classes);
+    projection.add(creator.argumentCount());
+    projection.add(creator.defaultMaskCount());
+    projection.add(creator.tracksArgumentPresence());
+    for (int i = 0; i < creator.argumentCount(); i++) {
+      projection.add(creator.defaultMaskBit(i));
+      projection.add(creator.hasDefault(i));
+      addMember(creator.defaultMethod(i), projection, classes);
+    }
+    JsonFieldInfo[] deferred = creator.deferredFields();
+    projection.add(deferred.length);
+    for (int i = 0; i < deferred.length; i++) {
+      projection.add(creator.deferredRequired(i));
+      addReadField(null, deferred[i], projection, classes, kind);
+    }
+  }
+
+  private void addWriteField(
+      ObjectCodec<?> owner,
+      JsonFieldInfo field,
+      ArrayList<Object> projection,
+      ArrayList<Class<?>> classes,
+      CapabilityKind kind) {
+    JsonTypeInfo child = field.writeTypeInfo();
+    projection.add("write");
+    projection.add(field.name());
+    projection.add(field.writeRawType());
+    projection.add(child.rawType());
+    projection.add(field.writeKind());
+    projection.add(field.writeNull());
+    projection.add(field.requiresNonNullWrite());
+    projection.add(field.writesRawString());
+    projection.add(field.writesUnboxedValue());
+    projection.add(usesWriterSlot(owner, child));
+    addMember(field.writeField(), projection, classes);
+    addMember(field.writeGetter(), projection, classes);
+    addCapabilityProjection(child, kind, projection, classes);
+    addUnboxedProjection(field.writeUnboxedValueCodec(), false, projection, classes);
+    addClass(field.writeRawType(), classes);
+    addClass(child.rawType(), classes);
+  }
+
+  private void addReadFields(
+      ObjectCodec<?> owner,
+      JsonFieldInfo[] fields,
+      ArrayList<Object> projection,
+      ArrayList<Class<?>> classes,
+      CapabilityKind kind) {
+    for (JsonFieldInfo field : fields) {
+      addReadField(owner, field, projection, classes, kind);
+    }
+  }
+
+  private void addReadField(
+      ObjectCodec<?> owner,
+      JsonFieldInfo field,
+      ArrayList<Object> projection,
+      ArrayList<Class<?>> classes,
+      CapabilityKind kind) {
+    JsonTypeInfo child = field.readTypeInfo();
+    projection.add("read");
+    projection.add(field.name());
+    projection.add(field.readRawType());
+    projection.add(child.rawType());
+    projection.add(field.readKind());
+    projection.add(field.readIndex());
+    projection.add(field.hasOccurrenceNullability());
+    projection.add(field.occurrenceNullable());
+    projection.add(field.occurrenceWrapsNull());
+    projection.add(field.readsUnboxedValue());
+    projection.add(owner != null && usesReaderSlot(owner, child));
+    addMember(field.readField(), projection, classes);
+    addMember(field.readSetter(), projection, classes);
+    addCapabilityProjection(child, kind, projection, classes);
+    addUnboxedProjection(field.readUnboxedValueCodec(), true, projection, classes);
+    addClass(field.readRawType(), classes);
+    addClass(child.rawType(), classes);
+  }
+
+  private void addCreatorFields(
+      ObjectCodec<?> owner,
+      JsonCreatorFieldInfo[] fields,
+      ArrayList<Object> projection,
+      ArrayList<Class<?>> classes,
+      CapabilityKind kind) {
+    for (JsonCreatorFieldInfo field : fields) {
+      addCreatorField(owner, field, projection, classes, kind);
+    }
+  }
+
+  private void addCreatorField(
+      ObjectCodec<?> owner,
+      JsonCreatorFieldInfo field,
+      ArrayList<Object> projection,
+      ArrayList<Class<?>> classes,
+      CapabilityKind kind) {
+    JsonTypeInfo child = field.typeInfo();
+    projection.add("argument");
+    projection.add(field.name());
+    projection.add(field.argumentIndex());
+    projection.add(field.rawType());
+    projection.add(child.rawType());
+    projection.add(child.kind());
+    projection.add(child.nullable());
+    projection.add(child.rejectsNull());
+    projection.add(field.materializesNullCarrier());
+    projection.add(owner != null && usesReaderSlot(owner, child));
+    addCapabilityProjection(child, kind, projection, classes);
+    addUnboxedProjection(field.unboxedValueCodec(), true, projection, classes);
+    addClass(field.rawType(), classes);
+    addClass(child.rawType(), classes);
+  }
+
+  private void addAnyProjection(
+      ObjectCodec<?> owner,
+      ArrayList<Object> projection,
+      ArrayList<Class<?>> classes,
+      CapabilityKind kind) {
+    AnyInfo any = owner.anyInfo();
+    if (any == null) {
+      projection.add(null);
+      return;
+    }
+    projection.add("any");
+    projection.add(any.valueRawType());
+    projection.add(any.writeIndex());
+    projection.add(any.constructionIndex());
+    boolean storesCodec = storesAnyCodec(owner, any);
+    projection.add(storesCodec);
+    projection.add(
+        storesCodec
+            && (readerKind(kind)
+                ? usesReaderSlot(owner, any.valueTypeInfo())
+                : usesWriterSlot(owner, any.valueTypeInfo())));
+    if (readerKind(kind)) {
+      addMember(any.readField(), projection, classes);
+      addMember(any.readSetter(), projection, classes);
+    } else {
+      addMember(any.writeField(), projection, classes);
+      addMember(any.writeGetter(), projection, classes);
+    }
+    addCapabilityProjection(any.valueTypeInfo(), kind, projection, classes);
+    addClass(any.valueRawType(), classes);
+  }
+
+  private void addCapabilityProjection(
+      JsonTypeInfo typeInfo,
+      CapabilityKind kind,
+      ArrayList<Object> projection,
+      ArrayList<Class<?>> classes) {
+    Object capability = currentCapability(typeInfo, kind);
+    Class<?> capabilityClass =
+        sharedRegistry.canonicalProtectedBuiltin(typeInfo, capability)
+            ? null
+            : logicalCapabilityClass(typeInfo, capability);
+    projection.add(capabilityClass);
+    projection.add(typeInfo.kind());
+    projection.add(typeInfo.nullable());
+    projection.add(typeInfo.rejectsNull());
+    projection.add(typeInfo.transparentNull());
+    addClass(capabilityClass, classes);
+  }
+
+  private Class<?> logicalCapabilityClass(JsonTypeInfo typeInfo, Object capability) {
+    if (canonicalObjectOwner(typeInfo) != null) {
+      return ObjectCodec.class;
+    }
+    CollectionCodec<?> collection = collectionCodecs.get(typeInfo);
+    if (collection != null) {
+      return collection.getClass();
+    }
+    return capability instanceof ClosedSubtypeCodec
+        ? ClosedSubtypeCodec.class
+        : capability.getClass();
+  }
+
+  private static void addUnboxedProjection(
+      UnboxedValueCodec codec,
+      boolean reader,
+      ArrayList<Object> projection,
+      ArrayList<Class<?>> classes) {
+    if (codec == null) {
+      projection.add(null);
+      return;
+    }
+    projection.add(codec.getClass());
+    addClass(codec.getClass(), classes);
+    if (codec instanceof DirectUnboxedValueCodec) {
+      DirectUnboxedValueCodec direct = (DirectUnboxedValueCodec) codec;
+      addMember(
+          reader ? direct.readCarrierMethod() : direct.writeCarrierMethod(), projection, classes);
+      return;
+    }
+    TransparentUnboxedValueCodec transparent = (TransparentUnboxedValueCodec) codec;
+    JsonTypeInfo terminal = transparent.valueTypeInfo();
+    projection.add(terminal.rawType());
+    projection.add(terminal.kind());
+    addClass(terminal.rawType(), classes);
+    Method[] methods = reader ? transparent.constructMethods() : transparent.extractMethods();
+    projection.add(methods.length);
+    for (Method method : methods) {
+      addMember(method, projection, classes);
+    }
+    if (reader) {
+      int[] boxes = transparent.constructBoxBytes();
+      projection.add(boxes.length);
+      for (int box : boxes) {
+        projection.add(box);
+      }
+    }
+  }
+
+  private static java.lang.reflect.Member accessorMember(
+      org.apache.fory.json.meta.JsonFieldAccessor accessor) {
+    if (accessor == null) {
+      return null;
+    }
+    return accessor.getter() != null ? accessor.getter() : accessor.field();
+  }
+
+  private static void addMember(
+      java.lang.reflect.Member member, ArrayList<Object> projection, ArrayList<Class<?>> classes) {
+    MemberDescriptor descriptor = MemberDescriptor.of(member);
+    projection.add(descriptor);
+    if (member != null) {
+      addClass(member.getDeclaringClass(), classes);
+    }
+  }
+
+  private static void addClass(Class<?> type, ArrayList<Class<?>> classes) {
+    if (type != null) {
+      classes.add(type);
+    }
+  }
+
+  private static Role role(CapabilityKind kind) {
+    switch (kind) {
+      case STRING_WRITER:
+        return Role.STRING_WRITER;
+      case UTF8_WRITER:
+        return Role.UTF8_WRITER;
+      case LATIN1_READER:
+        return Role.LATIN1_READER;
+      case UTF16_READER:
+        return Role.UTF16_READER;
+      case UTF8_READER:
+        return Role.UTF8_READER;
+      default:
+        throw new IllegalStateException("Unknown JSON capability kind " + kind);
+    }
+  }
+
+  /** Returns the nested object type inlined by generated readers, or {@code null}. */
+  @Internal
+  public Class<?> readNestedType(JsonFieldInfo field) {
+    if (!field.readsUnboxedValue()
+        && field.readKind() == JsonFieldKind.OBJECT
+        && field.readRawType() != Object.class
+        && canonicalObjectCodec(field.readTypeInfo()) != null) {
+      return field.readRawType();
+    }
+    return null;
+  }
+
+  /** Returns whether a generated string writer stores a field codec. */
+  @Internal
+  public boolean usesWriteCodec(JsonFieldInfo field) {
+    if (field.writesUnboxedValue() && field.writeKind() == JsonFieldKind.ENUM) {
+      return true;
+    }
+    switch (field.writeKind()) {
+      case ARRAY:
+      case MAP:
+      case OBJECT:
+        return true;
+      case COLLECTION:
+        return !writesStringCollectionDirectly(field);
+      default:
+        return false;
+    }
+  }
+
+  /** Returns whether a generated UTF-8 writer stores a field codec. */
+  @Internal
+  public boolean usesUtf8WriteCodec(JsonFieldInfo field) {
+    return usesWriteCodec(field)
+        || field.writeKind() == JsonFieldKind.COLLECTION
+            && exactUtf8WriterCollection(field.writeTypeInfo()) != null;
+  }
+
+  /** Returns whether a generated reader stores a field codec. */
+  @Internal
+  public boolean usesReadCodec(JsonFieldInfo field) {
+    if (field.readsUnboxedValue()) {
+      if (field.readDirectUnboxedValueCodec() != null) {
+        return false;
+      }
+      Class<?> rawType = field.readTypeInfo().rawType();
+      JsonFieldKind kind = field.readKind();
+      if (rawType == String.class && kind == JsonFieldKind.STRING) {
+        return false;
+      }
+      if (rawType.isPrimitive()) {
+        return !((rawType == boolean.class && kind == JsonFieldKind.BOOLEAN)
+            || (rawType == byte.class && kind == JsonFieldKind.BYTE)
+            || (rawType == short.class && kind == JsonFieldKind.SHORT)
+            || (rawType == int.class && kind == JsonFieldKind.INT)
+            || (rawType == long.class && kind == JsonFieldKind.LONG)
+            || (rawType == float.class && kind == JsonFieldKind.FLOAT)
+            || (rawType == double.class && kind == JsonFieldKind.DOUBLE)
+            || (rawType == char.class && kind == JsonFieldKind.CHAR));
+      }
+      return true;
+    }
+    switch (field.readKind()) {
+      case ENUM:
+      case ARRAY:
+      case COLLECTION:
+      case MAP:
+        return true;
+      case OBJECT:
+        return !(field.readRawType() != Object.class
+            && canonicalObjectCodec(field.readTypeInfo()) != null);
+      default:
+        return false;
+    }
+  }
+
+  /** Returns whether the standard string collection writer is fully inlined. */
+  @Internal
+  public static boolean writesStringCollectionDirectly(JsonFieldInfo field) {
+    return field.writeElementRawType() == String.class
+        && field.writeTypeInfo().stringWriter().getClass()
+            == CollectionCodec.StringCollectionCodec.class;
   }
 
   private ArrayList<JsonTypeInfo> capabilityChildren(ObjectCodec<?> owner, CapabilityKind kind) {
@@ -1777,9 +2224,7 @@ public final class JsonTypeResolver {
       for (int i = 0; i < fields.length; i++) {
         JsonFieldInfo field = fields[i];
         boolean usesCodec =
-            kind == CapabilityKind.UTF8_WRITER
-                ? JsonCodegen.usesUtf8WriteCodec(field, this)
-                : JsonCodegen.usesWriteCodec(field);
+            kind == CapabilityKind.UTF8_WRITER ? usesUtf8WriteCodec(field) : usesWriteCodec(field);
         if (usesCodec
             && (field.writeRawType() != owner.type()
                 || canonicalObjectOwner(field.writeTypeInfo()) == null)) {
@@ -1836,8 +2281,8 @@ public final class JsonTypeResolver {
 
   private void addReadDependency(
       ArrayList<JsonTypeInfo> children, ObjectCodec<?> owner, JsonFieldInfo field) {
-    if (JsonCodegen.usesReadCodec(field, this)
-        || JsonCodegen.readNestedType(field, this) != null && field.readRawType() != owner.type()) {
+    if (usesReadCodec(field)
+        || readNestedType(field) != null && field.readRawType() != owner.type()) {
       children.add(field.readTypeInfo());
     }
   }
@@ -1953,50 +2398,34 @@ public final class JsonTypeResolver {
     if (owner.fixedInstance()) {
       return false;
     }
-    if (nativeObjectClass(typeInfo.typeRef(), kind) != null) {
+    GeneratedCodecKey key = generatedObjectKey(typeInfo, owner, kind);
+    if (sharedRegistry.nativeGeneratedClass(key) != null) {
       return true;
     }
-    if (sharedRegistry.nativeGeneratedClasses() && typeInfo.type() instanceof ParameterizedType) {
-      // A selected Native configuration contains only the exact generic bindings reached during
-      // hosted analysis. A missing parameterized object is not the same schema as its raw class.
-      return true;
+    if (sharedRegistry.nativeGeneratedClasses()) {
+      return false;
     }
     return codegen != null
         && (kind == CapabilityKind.STRING_WRITER || kind == CapabilityKind.UTF8_WRITER
-            ? codegen.canCompileWriter(owner)
-            : codegen.canCompileReader(owner));
+            ? codegen.canCompileWriter(key, owner)
+            : codegen.canCompileReader(key, owner));
   }
 
   private boolean canCompileCollection(JsonTypeInfo typeInfo, CapabilityKind kind) {
-    TypeRef<?> type = typeInfo.typeRef();
-    boolean generated =
-        kind == CapabilityKind.UTF8_WRITER
-            ? sharedRegistry.nativeUtf8CollectionWriterClass(type) != null
-            : sharedRegistry.nativeUtf8CollectionReaderClass(type) != null;
-    if (generated) {
+    CollectionCodec<?> owner = exactUtf8CollectionOwner(typeInfo);
+    GeneratedCodecKey key = generatedCollectionKey(typeInfo, owner, kind);
+    if (sharedRegistry.nativeGeneratedClass(key) != null) {
       return true;
     }
-    if (sharedRegistry.nativeGeneratedClasses() && type.getType() instanceof ParameterizedType) {
-      return true;
+    if (sharedRegistry.nativeGeneratedClasses()) {
+      return false;
     }
     return codegen != null;
   }
 
-  private Class<?> nativeObjectClass(TypeRef<?> type, CapabilityKind kind) {
-    switch (kind) {
-      case STRING_WRITER:
-        return sharedRegistry.nativeStringWriterClass(type);
-      case UTF8_WRITER:
-        return sharedRegistry.nativeUtf8WriterClass(type);
-      case LATIN1_READER:
-        return sharedRegistry.nativeLatin1ReaderClass(type);
-      case UTF16_READER:
-        return sharedRegistry.nativeUtf16ReaderClass(type);
-      case UTF8_READER:
-        return sharedRegistry.nativeUtf8ReaderClass(type);
-      default:
-        throw new IllegalStateException("Unknown JSON capability kind " + kind);
-    }
+  private Class<?> nativeObjectClass(
+      JsonTypeInfo typeInfo, ObjectCodec<?> owner, CapabilityKind kind) {
+    return sharedRegistry.nativeGeneratedClass(generatedObjectKey(typeInfo, owner, kind));
   }
 
   private static Object currentCapability(JsonTypeInfo typeInfo, CapabilityKind kind) {
@@ -2022,12 +2451,10 @@ public final class JsonTypeResolver {
     }
     if (node.collectionOwner != null) {
       if (kind == CapabilityKind.UTF8_WRITER) {
-        return sharedRegistry.utf8CollectionWriterClass(
-            node.typeInfo.typeRef(), node.collectionOwner);
+        return sharedRegistry.utf8CollectionWriterClass(node.typeInfo, node.collectionOwner, this);
       }
       if (kind == CapabilityKind.UTF8_READER) {
-        return sharedRegistry.utf8CollectionReaderClass(
-            node.typeInfo.typeRef(), node.collectionOwner);
+        return sharedRegistry.utf8CollectionReaderClass(node.typeInfo, node.collectionOwner, this);
       }
       throw new IllegalStateException("Unsupported generated JSON collection capability " + kind);
     }
@@ -2052,15 +2479,10 @@ public final class JsonTypeResolver {
       throw new IllegalStateException("Inline subtype readers reuse child generated classes");
     }
     if (node.collectionOwner != null) {
-      if (kind == CapabilityKind.UTF8_WRITER) {
-        return sharedRegistry.nativeUtf8CollectionWriterClass(node.typeInfo.typeRef());
-      }
-      if (kind == CapabilityKind.UTF8_READER) {
-        return sharedRegistry.nativeUtf8CollectionReaderClass(node.typeInfo.typeRef());
-      }
-      throw new IllegalStateException("Unsupported generated JSON collection capability " + kind);
+      return sharedRegistry.nativeGeneratedClass(
+          generatedCollectionKey(node.typeInfo, node.collectionOwner, kind));
     }
-    return nativeObjectClass(node.typeInfo.typeRef(), kind);
+    return nativeObjectClass(node.typeInfo, node.objectOwner, kind);
   }
 
   private Object newCapability(

@@ -174,10 +174,6 @@ public class ThreadSafeExample {
 }
 ```
 
-Use `ThreadLocalFory` in a build-time-initialized bootstrap. `ThreadPoolFory` and
-`buildThreadSafeForyPool` own fixed pooled entries that are runtime-initialized; create that variant
-at runtime instead.
-
 ## Troubleshooting
 
 ### "Type is instantiated reflectively but was never registered"

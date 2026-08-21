@@ -29,6 +29,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
+import java.util.function.ObjDoubleConsumer;
+import java.util.function.ObjIntConsumer;
+import java.util.function.ObjLongConsumer;
 import java.util.function.Predicate;
 import java.util.function.ToDoubleFunction;
 import java.util.function.ToIntFunction;
@@ -40,6 +43,11 @@ import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.util.function.ObjBooleanConsumer;
+import org.apache.fory.util.function.ObjByteConsumer;
+import org.apache.fory.util.function.ObjCharConsumer;
+import org.apache.fory.util.function.ObjFloatConsumer;
+import org.apache.fory.util.function.ObjShortConsumer;
 import org.apache.fory.util.function.ToByteFunction;
 import org.apache.fory.util.function.ToCharFunction;
 import org.apache.fory.util.function.ToFloatFunction;
@@ -188,14 +196,14 @@ public abstract class JsonFieldAccessor {
   private static JsonFieldAccessor newGetterAccessor(Member member) {
     Method getter = (Method) member;
     return USE_JDK25_NATIVE_ACCESS
-        ? new LambdaGetterJsonAccessor(getter)
+        ? LambdaGetterJsonAccessor.create(getter)
         : new GetterJsonAccessor(getter);
   }
 
   private static JsonFieldAccessor newSetterAccessor(Member member) {
     Method setter = (Method) member;
     return USE_JDK25_NATIVE_ACCESS && setter.getParameterCount() == 1
-        ? new LambdaSetterJsonAccessor(setter)
+        ? LambdaSetterJsonAccessor.create(setter)
         : new SetterJsonAccessor(setter);
   }
 
@@ -515,16 +523,45 @@ public abstract class JsonFieldAccessor {
     }
   }
 
-  private static final class LambdaGetterJsonAccessor extends JsonFieldAccessor {
+  private abstract static class LambdaGetterJsonAccessor extends JsonFieldAccessor {
     private final Method getter;
-    private final Object function;
 
     private LambdaGetterJsonAccessor(Method getter) {
       this.getter = getter;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static JsonFieldAccessor create(Method getter) {
       MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(getter.getDeclaringClass());
       try {
-        function =
+        Object function =
             _JDKAccess.makeGetterFunction(lookup, lookup.unreflect(getter), getter.getReturnType());
+        Class<?> type = getter.getReturnType();
+        if (!type.isPrimitive()) {
+          return new ObjectLambdaGetterJsonAccessor(getter, (Function<Object, Object>) function);
+        }
+        if (type == boolean.class) {
+          return new BooleanLambdaGetterJsonAccessor(getter, (Predicate<Object>) function);
+        }
+        if (type == byte.class) {
+          return new ByteLambdaGetterJsonAccessor(getter, (ToByteFunction<Object>) function);
+        }
+        if (type == short.class) {
+          return new ShortLambdaGetterJsonAccessor(getter, (ToShortFunction<Object>) function);
+        }
+        if (type == int.class) {
+          return new IntLambdaGetterJsonAccessor(getter, (ToIntFunction<Object>) function);
+        }
+        if (type == long.class) {
+          return new LongLambdaGetterJsonAccessor(getter, (ToLongFunction<Object>) function);
+        }
+        if (type == float.class) {
+          return new FloatLambdaGetterJsonAccessor(getter, (ToFloatFunction<Object>) function);
+        }
+        if (type == double.class) {
+          return new DoubleLambdaGetterJsonAccessor(getter, (ToDoubleFunction<Object>) function);
+        }
+        return new CharLambdaGetterJsonAccessor(getter, (ToCharFunction<Object>) function);
       } catch (IllegalAccessException e) {
         throw accessException(getter, e);
       }
@@ -534,120 +571,207 @@ public abstract class JsonFieldAccessor {
     public Method getter() {
       return getter;
     }
+  }
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public Object getObject(Object target) {
-      Class<?> type = getter.getReturnType();
-      if (!type.isPrimitive()) {
-        try {
-          return ((Function<Object, Object>) function).apply(target);
-        } catch (Throwable e) {
-          throw accessException(getter, e);
-        }
-      }
-      if (type == boolean.class) {
-        return getBoolean(target);
-      }
-      if (type == byte.class) {
-        return getByte(target);
-      }
-      if (type == short.class) {
-        return getShort(target);
-      }
-      if (type == int.class) {
-        return getInt(target);
-      }
-      if (type == long.class) {
-        return getLong(target);
-      }
-      if (type == float.class) {
-        return getFloat(target);
-      }
-      if (type == double.class) {
-        return getDouble(target);
-      }
-      return getChar(target);
+  private static final class ObjectLambdaGetterJsonAccessor extends LambdaGetterJsonAccessor {
+    private final Function<Object, Object> function;
+
+    private ObjectLambdaGetterJsonAccessor(Method getter, Function<Object, Object> function) {
+      super(getter);
+      this.function = function;
     }
 
     @Override
-    @SuppressWarnings("unchecked")
+    public Object getObject(Object target) {
+      try {
+        return function.apply(target);
+      } catch (Throwable e) {
+        throw accessException(getter(), e);
+      }
+    }
+  }
+
+  private static final class BooleanLambdaGetterJsonAccessor extends LambdaGetterJsonAccessor {
+    private final Predicate<Object> function;
+
+    private BooleanLambdaGetterJsonAccessor(Method getter, Predicate<Object> function) {
+      super(getter);
+      this.function = function;
+    }
+
+    @Override
     public boolean getBoolean(Object target) {
       try {
-        return ((Predicate<Object>) function).test(target);
+        return function.test(target);
       } catch (Throwable e) {
-        throw accessException(getter, e);
+        throw accessException(getter(), e);
       }
     }
 
     @Override
-    @SuppressWarnings("unchecked")
+    public Object getObject(Object target) {
+      return getBoolean(target);
+    }
+  }
+
+  private static final class ByteLambdaGetterJsonAccessor extends LambdaGetterJsonAccessor {
+    private final ToByteFunction<Object> function;
+
+    private ByteLambdaGetterJsonAccessor(Method getter, ToByteFunction<Object> function) {
+      super(getter);
+      this.function = function;
+    }
+
+    @Override
     public byte getByte(Object target) {
       try {
-        return ((ToByteFunction<Object>) function).applyAsByte(target);
+        return function.applyAsByte(target);
       } catch (Throwable e) {
-        throw accessException(getter, e);
+        throw accessException(getter(), e);
       }
     }
 
     @Override
-    @SuppressWarnings("unchecked")
+    public Object getObject(Object target) {
+      return getByte(target);
+    }
+  }
+
+  private static final class ShortLambdaGetterJsonAccessor extends LambdaGetterJsonAccessor {
+    private final ToShortFunction<Object> function;
+
+    private ShortLambdaGetterJsonAccessor(Method getter, ToShortFunction<Object> function) {
+      super(getter);
+      this.function = function;
+    }
+
+    @Override
     public short getShort(Object target) {
       try {
-        return ((ToShortFunction<Object>) function).applyAsShort(target);
+        return function.applyAsShort(target);
       } catch (Throwable e) {
-        throw accessException(getter, e);
+        throw accessException(getter(), e);
       }
     }
 
     @Override
-    @SuppressWarnings("unchecked")
+    public Object getObject(Object target) {
+      return getShort(target);
+    }
+  }
+
+  private static final class IntLambdaGetterJsonAccessor extends LambdaGetterJsonAccessor {
+    private final ToIntFunction<Object> function;
+
+    private IntLambdaGetterJsonAccessor(Method getter, ToIntFunction<Object> function) {
+      super(getter);
+      this.function = function;
+    }
+
+    @Override
     public int getInt(Object target) {
       try {
-        return ((ToIntFunction<Object>) function).applyAsInt(target);
+        return function.applyAsInt(target);
       } catch (Throwable e) {
-        throw accessException(getter, e);
+        throw accessException(getter(), e);
       }
     }
 
     @Override
-    @SuppressWarnings("unchecked")
+    public Object getObject(Object target) {
+      return getInt(target);
+    }
+  }
+
+  private static final class LongLambdaGetterJsonAccessor extends LambdaGetterJsonAccessor {
+    private final ToLongFunction<Object> function;
+
+    private LongLambdaGetterJsonAccessor(Method getter, ToLongFunction<Object> function) {
+      super(getter);
+      this.function = function;
+    }
+
+    @Override
     public long getLong(Object target) {
       try {
-        return ((ToLongFunction<Object>) function).applyAsLong(target);
+        return function.applyAsLong(target);
       } catch (Throwable e) {
-        throw accessException(getter, e);
+        throw accessException(getter(), e);
       }
     }
 
     @Override
-    @SuppressWarnings("unchecked")
+    public Object getObject(Object target) {
+      return getLong(target);
+    }
+  }
+
+  private static final class FloatLambdaGetterJsonAccessor extends LambdaGetterJsonAccessor {
+    private final ToFloatFunction<Object> function;
+
+    private FloatLambdaGetterJsonAccessor(Method getter, ToFloatFunction<Object> function) {
+      super(getter);
+      this.function = function;
+    }
+
+    @Override
     public float getFloat(Object target) {
       try {
-        return ((ToFloatFunction<Object>) function).applyAsFloat(target);
+        return function.applyAsFloat(target);
       } catch (Throwable e) {
-        throw accessException(getter, e);
+        throw accessException(getter(), e);
       }
     }
 
     @Override
-    @SuppressWarnings("unchecked")
+    public Object getObject(Object target) {
+      return getFloat(target);
+    }
+  }
+
+  private static final class DoubleLambdaGetterJsonAccessor extends LambdaGetterJsonAccessor {
+    private final ToDoubleFunction<Object> function;
+
+    private DoubleLambdaGetterJsonAccessor(Method getter, ToDoubleFunction<Object> function) {
+      super(getter);
+      this.function = function;
+    }
+
+    @Override
     public double getDouble(Object target) {
       try {
-        return ((ToDoubleFunction<Object>) function).applyAsDouble(target);
+        return function.applyAsDouble(target);
       } catch (Throwable e) {
-        throw accessException(getter, e);
+        throw accessException(getter(), e);
       }
     }
 
     @Override
-    @SuppressWarnings("unchecked")
+    public Object getObject(Object target) {
+      return getDouble(target);
+    }
+  }
+
+  private static final class CharLambdaGetterJsonAccessor extends LambdaGetterJsonAccessor {
+    private final ToCharFunction<Object> function;
+
+    private CharLambdaGetterJsonAccessor(Method getter, ToCharFunction<Object> function) {
+      super(getter);
+      this.function = function;
+    }
+
+    @Override
     public char getChar(Object target) {
       try {
-        return ((ToCharFunction<Object>) function).applyAsChar(target);
+        return function.applyAsChar(target);
       } catch (Throwable e) {
-        throw accessException(getter, e);
+        throw accessException(getter(), e);
       }
+    }
+
+    @Override
+    public Object getObject(Object target) {
+      return getChar(target);
     }
   }
 
@@ -684,18 +808,66 @@ public abstract class JsonFieldAccessor {
     }
   }
 
-  private static final class LambdaSetterJsonAccessor extends JsonFieldAccessor {
+  private abstract static class LambdaSetterJsonAccessor extends JsonFieldAccessor {
     private final Method setter;
-    private final BiConsumer<Object, Object> function;
 
-    @SuppressWarnings("unchecked")
     private LambdaSetterJsonAccessor(Method setter) {
       this.setter = setter;
+    }
+
+    private static JsonFieldAccessor create(Method setter) {
       MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(setter.getDeclaringClass());
       try {
-        function =
-            (BiConsumer<Object, Object>)
-                (BiConsumer<?, ?>) _JDKAccess.makeJDKBiConsumer(lookup, lookup.unreflect(setter));
+        MethodHandle handle = lookup.unreflect(setter);
+        Class<?> type = setter.getParameterTypes()[0];
+        if (!type.isPrimitive()) {
+          return new ObjectLambdaSetterJsonAccessor(
+              setter, _JDKAccess.makeJDKBiConsumer(lookup, handle));
+        }
+        if (type == boolean.class) {
+          return new BooleanLambdaSetterJsonAccessor(
+              setter,
+              _JDKAccess.makeObjPrimitiveConsumer(
+                  lookup, handle, ObjBooleanConsumer.class, boolean.class));
+        }
+        if (type == byte.class) {
+          return new ByteLambdaSetterJsonAccessor(
+              setter,
+              _JDKAccess.makeObjPrimitiveConsumer(
+                  lookup, handle, ObjByteConsumer.class, byte.class));
+        }
+        if (type == short.class) {
+          return new ShortLambdaSetterJsonAccessor(
+              setter,
+              _JDKAccess.makeObjPrimitiveConsumer(
+                  lookup, handle, ObjShortConsumer.class, short.class));
+        }
+        if (type == int.class) {
+          return new IntLambdaSetterJsonAccessor(
+              setter,
+              _JDKAccess.makeObjPrimitiveConsumer(lookup, handle, ObjIntConsumer.class, int.class));
+        }
+        if (type == long.class) {
+          return new LongLambdaSetterJsonAccessor(
+              setter,
+              _JDKAccess.makeObjPrimitiveConsumer(
+                  lookup, handle, ObjLongConsumer.class, long.class));
+        }
+        if (type == float.class) {
+          return new FloatLambdaSetterJsonAccessor(
+              setter,
+              _JDKAccess.makeObjPrimitiveConsumer(
+                  lookup, handle, ObjFloatConsumer.class, float.class));
+        }
+        if (type == double.class) {
+          return new DoubleLambdaSetterJsonAccessor(
+              setter,
+              _JDKAccess.makeObjPrimitiveConsumer(
+                  lookup, handle, ObjDoubleConsumer.class, double.class));
+        }
+        return new CharLambdaSetterJsonAccessor(
+            setter,
+            _JDKAccess.makeObjPrimitiveConsumer(lookup, handle, ObjCharConsumer.class, char.class));
       } catch (IllegalAccessException e) {
         throw accessException(setter, e);
       }
@@ -705,14 +877,207 @@ public abstract class JsonFieldAccessor {
     public Method setter() {
       return setter;
     }
+  }
+
+  private static final class ObjectLambdaSetterJsonAccessor extends LambdaSetterJsonAccessor {
+    private final BiConsumer<Object, Object> function;
+
+    private ObjectLambdaSetterJsonAccessor(Method setter, BiConsumer<Object, Object> function) {
+      super(setter);
+      this.function = function;
+    }
 
     @Override
     public void putObject(Object target, Object value) {
       try {
         function.accept(target, value);
       } catch (Throwable e) {
-        throw accessException(setter, e);
+        throw accessException(setter(), e);
       }
+    }
+  }
+
+  private static final class BooleanLambdaSetterJsonAccessor extends LambdaSetterJsonAccessor {
+    private final ObjBooleanConsumer<Object> function;
+
+    private BooleanLambdaSetterJsonAccessor(Method setter, ObjBooleanConsumer<Object> function) {
+      super(setter);
+      this.function = function;
+    }
+
+    @Override
+    public void putBoolean(Object target, boolean value) {
+      try {
+        function.accept(target, value);
+      } catch (Throwable e) {
+        throw accessException(setter(), e);
+      }
+    }
+
+    @Override
+    public void putObject(Object target, Object value) {
+      putBoolean(target, (Boolean) value);
+    }
+  }
+
+  private static final class ByteLambdaSetterJsonAccessor extends LambdaSetterJsonAccessor {
+    private final ObjByteConsumer<Object> function;
+
+    private ByteLambdaSetterJsonAccessor(Method setter, ObjByteConsumer<Object> function) {
+      super(setter);
+      this.function = function;
+    }
+
+    @Override
+    public void putByte(Object target, byte value) {
+      try {
+        function.accept(target, value);
+      } catch (Throwable e) {
+        throw accessException(setter(), e);
+      }
+    }
+
+    @Override
+    public void putObject(Object target, Object value) {
+      putByte(target, (Byte) value);
+    }
+  }
+
+  private static final class ShortLambdaSetterJsonAccessor extends LambdaSetterJsonAccessor {
+    private final ObjShortConsumer<Object> function;
+
+    private ShortLambdaSetterJsonAccessor(Method setter, ObjShortConsumer<Object> function) {
+      super(setter);
+      this.function = function;
+    }
+
+    @Override
+    public void putShort(Object target, short value) {
+      try {
+        function.accept(target, value);
+      } catch (Throwable e) {
+        throw accessException(setter(), e);
+      }
+    }
+
+    @Override
+    public void putObject(Object target, Object value) {
+      putShort(target, (Short) value);
+    }
+  }
+
+  private static final class IntLambdaSetterJsonAccessor extends LambdaSetterJsonAccessor {
+    private final ObjIntConsumer<Object> function;
+
+    private IntLambdaSetterJsonAccessor(Method setter, ObjIntConsumer<Object> function) {
+      super(setter);
+      this.function = function;
+    }
+
+    @Override
+    public void putInt(Object target, int value) {
+      try {
+        function.accept(target, value);
+      } catch (Throwable e) {
+        throw accessException(setter(), e);
+      }
+    }
+
+    @Override
+    public void putObject(Object target, Object value) {
+      putInt(target, (Integer) value);
+    }
+  }
+
+  private static final class LongLambdaSetterJsonAccessor extends LambdaSetterJsonAccessor {
+    private final ObjLongConsumer<Object> function;
+
+    private LongLambdaSetterJsonAccessor(Method setter, ObjLongConsumer<Object> function) {
+      super(setter);
+      this.function = function;
+    }
+
+    @Override
+    public void putLong(Object target, long value) {
+      try {
+        function.accept(target, value);
+      } catch (Throwable e) {
+        throw accessException(setter(), e);
+      }
+    }
+
+    @Override
+    public void putObject(Object target, Object value) {
+      putLong(target, (Long) value);
+    }
+  }
+
+  private static final class FloatLambdaSetterJsonAccessor extends LambdaSetterJsonAccessor {
+    private final ObjFloatConsumer<Object> function;
+
+    private FloatLambdaSetterJsonAccessor(Method setter, ObjFloatConsumer<Object> function) {
+      super(setter);
+      this.function = function;
+    }
+
+    @Override
+    public void putFloat(Object target, float value) {
+      try {
+        function.accept(target, value);
+      } catch (Throwable e) {
+        throw accessException(setter(), e);
+      }
+    }
+
+    @Override
+    public void putObject(Object target, Object value) {
+      putFloat(target, (Float) value);
+    }
+  }
+
+  private static final class DoubleLambdaSetterJsonAccessor extends LambdaSetterJsonAccessor {
+    private final ObjDoubleConsumer<Object> function;
+
+    private DoubleLambdaSetterJsonAccessor(Method setter, ObjDoubleConsumer<Object> function) {
+      super(setter);
+      this.function = function;
+    }
+
+    @Override
+    public void putDouble(Object target, double value) {
+      try {
+        function.accept(target, value);
+      } catch (Throwable e) {
+        throw accessException(setter(), e);
+      }
+    }
+
+    @Override
+    public void putObject(Object target, Object value) {
+      putDouble(target, (Double) value);
+    }
+  }
+
+  private static final class CharLambdaSetterJsonAccessor extends LambdaSetterJsonAccessor {
+    private final ObjCharConsumer<Object> function;
+
+    private CharLambdaSetterJsonAccessor(Method setter, ObjCharConsumer<Object> function) {
+      super(setter);
+      this.function = function;
+    }
+
+    @Override
+    public void putChar(Object target, char value) {
+      try {
+        function.accept(target, value);
+      } catch (Throwable e) {
+        throw accessException(setter(), e);
+      }
+    }
+
+    @Override
+    public void putObject(Object target, Object value) {
+      putChar(target, (Character) value);
     }
   }
 

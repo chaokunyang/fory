@@ -30,7 +30,6 @@ import java.util.function.Supplier;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.fory.AbstractThreadSafeFory;
 import org.apache.fory.Fory;
-import org.apache.fory.ThreadLocalFory;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.io.ForyInputStream;
@@ -366,11 +365,11 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   }
 
   /**
-   * Runtime-owned fixed-pool entry.
+   * Fixed-pool entry retained by its owning {@link ThreadPoolFory}.
    *
-   * <p>This class must remain runtime-initialized in Native Image. Build-time serializer setup uses
-   * {@link ThreadLocalFory}; initializing this entry while building the image would also pull the
-   * fixed pool's complete Fory object graph into build-time initialization.
+   * <p>Native Image initializes this class at build time so an application may retain a static
+   * fixed pool in the image heap. The class has no static state; pooled Fory instances enter the
+   * image only when the application constructs and retains that pool while building the image.
    */
   private static final class PooledEntry {
     private final Fory fory;

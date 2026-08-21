@@ -213,6 +213,19 @@ public class JsonStreamDecoderTest {
         decode(cumulative, Collections.singletonList(utf8("[1,2,3,4]"))),
         Arrays.asList(1, 2, 3, 4));
 
+    JsonStreamDecoder<Integer> leadingWhitespace = json.newArrayStreamDecoder(Integer.class, 1);
+    assertEquals(
+        decode(leadingWhitespace, Collections.singletonList(utf8("[ \t1]"))),
+        Collections.singletonList(1));
+
+    JsonStreamDecoder<Integer> trailingWhitespace = json.newArrayStreamDecoder(Integer.class, 1);
+    assertThrows(ForyJsonException.class, () -> trailingWhitespace.decodeNext(utf8("[1 ]")));
+
+    JsonStreamDecoder<Integer> exactBlankLine = json.newNdjsonStreamDecoder(Integer.class, 2);
+    assertEquals(
+        decode(exactBlankLine, Collections.singletonList(utf8(" \t\n1\n"))),
+        Collections.singletonList(1));
+
     JsonStreamDecoder<Integer> splitExact = json.newArrayStreamDecoder(Integer.class, 3);
     ByteBuffer valueChunk = utf8("[123");
     assertFalse(splitExact.decodeNext(valueChunk));

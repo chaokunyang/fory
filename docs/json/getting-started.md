@@ -221,7 +221,10 @@ The decoder advances the supplied buffer's position, but does not retain the buf
 limit or byte order. Heap, direct, sliced, and read-only buffers are supported. One decoder owns one
 stream, is not thread-safe, and cannot be reused after `finish()` or a failure. The required
 `maxValueBytes` limit applies independently to each array element or NDJSON record rather than to
-the complete stream.
+the complete stream. For arrays, the limit excludes the outer brackets, commas, and whitespace
+skipped before an element; whitespace after an element and before its comma or closing bracket is
+counted. For NDJSON, every byte other than the LF or CRLF line ending is counted. Whitespace-only
+lines are skipped, but an oversized whitespace-only line still fails the limit.
 
 ### Generic types
 

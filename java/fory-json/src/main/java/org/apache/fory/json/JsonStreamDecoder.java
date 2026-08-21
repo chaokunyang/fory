@@ -37,6 +37,11 @@ import org.apache.fory.reflect.TypeRef;
  * retains one bounded staging array whose capacity grows with committed value bytes and is reused
  * until successful {@link #finish()} or any {@link #decodeNext(ByteBuffer) decodeNext} or {@code
  * finish} failure permanently terminates the decoder.
+ *
+ * <p>For array streams, {@code maxValueBytes} excludes outer punctuation and whitespace skipped
+ * before an element, but includes whitespace after the element and before its delimiter. For
+ * NDJSON, it counts every record byte except LF or the CRLF line ending. Whitespace-only NDJSON
+ * lines are skipped as records but remain subject to the limit.
  */
 @NotThreadSafe
 public final class JsonStreamDecoder<T> {

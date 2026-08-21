@@ -29,25 +29,14 @@ public interface MetaCompressor {
   byte[] compress(byte[] data, int offset, int size);
 
   /**
-   * Decompress without an output-size bound. Callers processing untrusted data must use {@link
-   * #decompress(byte[], int, int, int)} instead.
-   */
-  byte[] decompress(byte[] data, int offset, int size);
-
-  /**
    * Decompress at most {@code maxOutputSize} bytes.
    *
    * <p>Implementations must enforce the bound incrementally or before sizing any allocation from
-   * metadata declared by the compressed input. Implementations which only provide the legacy
-   * unbounded overload fail this call before decompression starts.
+   * metadata declared by the compressed input.
    *
-   * @throws InvalidDataException if bounded decompression is unsupported or the output would exceed
-   *     {@code maxOutputSize}
+   * @throws InvalidDataException if the output would exceed {@code maxOutputSize}
    */
-  default byte[] decompress(byte[] data, int offset, int size, int maxOutputSize) {
-    throw new InvalidDataException(
-        "MetaCompressor does not implement bounded metadata decompression.");
-  }
+  byte[] decompress(byte[] data, int offset, int size, int maxOutputSize);
 
   /**
    * Check whether {@link MetaCompressor} implements `equals/hashCode` method. If not implemented,

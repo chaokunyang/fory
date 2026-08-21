@@ -48,11 +48,6 @@ public class ZstdMetaCompressor implements MetaCompressor {
   }
 
   @Override
-  public byte[] decompress(byte[] data, int offset, int size) {
-    return decompress(data, offset, size, Integer.MAX_VALUE);
-  }
-
-  @Override
   public byte[] decompress(byte[] data, int offset, int size, int maxOutputSize) {
     // The frame content size is sender-controlled. Validate the long value before narrowing it or
     // sizing the output array so a small frame cannot trigger a disproportionate allocation.

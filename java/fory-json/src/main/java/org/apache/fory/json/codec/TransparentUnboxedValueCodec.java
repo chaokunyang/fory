@@ -24,7 +24,13 @@ import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 
-/** Exact terminal conversion for a logical value transparent to one underlying JSON type. */
+/**
+ * Exact terminal conversion for a logical value transparent to one underlying JSON type.
+ *
+ * <p>The terminal type and every generated operation, including terminal direct operations and
+ * graph charges, must depend only on the codec implementation class and logical serialized class.
+ * Resolver-local instance state must not change them.
+ */
 @Internal
 public interface TransparentUnboxedValueCodec extends UnboxedValueCodec {
   /** Returns the already-bound terminal value type. */

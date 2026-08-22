@@ -229,7 +229,7 @@ see [Fory JSON Security](security.md).
 Builder mutation after `build()` does not modify an existing `ForyJson` instance.
 
 On Android, runtime code generation and asynchronous compilation are disabled. In a GraalVM native
-image, runtime compilation is unavailable. Reachable models receive a default generated baseline,
-and reachable `ForyJsonProvider` configurations add exact generated entries. A runtime exact miss
-uses an interpreted codec with build-time-prepared access metadata. Every other builder option
-keeps the behavior described above.
+image, runtime compilation is unavailable. Fory JSON generates codecs for reachable models with the
+default configuration and each reachable `ForyJsonProvider` configuration. A model without a
+matching generated codec uses an interpreted codec. Every other builder option keeps the behavior
+described above.

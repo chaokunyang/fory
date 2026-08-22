@@ -84,7 +84,10 @@ dedicated reader/writer operations:
 
 The restriction is exact; it does not include application subclasses. It also does not disable
 occurrence-level `JsonCodec`, `JsonFormat`, or other semantic mappings. Use those mechanisms when a
-field or parameter of a protected type needs a different representation.
+field or parameter of one of these types needs a different representation.
+
+`ObjectCodec` instances belong to the resolver that created them and cannot be registered directly.
+Use an exact `JsonCodecFactory` when a language module needs to supply an object model.
 
 Use `JsonCodecFactory` when one factory owns a family of declared or parameterized types:
 

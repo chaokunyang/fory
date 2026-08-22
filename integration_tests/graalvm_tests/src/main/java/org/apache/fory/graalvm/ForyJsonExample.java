@@ -19,8 +19,6 @@
 
 package org.apache.fory.graalvm;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -87,44 +85,33 @@ public final class ForyJsonExample {
   private ForyJsonExample() {}
 
   public static void main(String[] args) {
-    PrintStream originalOut = System.out;
-    ByteArrayOutputStream captured = new ByteArrayOutputStream();
-    try (PrintStream testOut = new PrintStream(captured, true, StandardCharsets.UTF_8)) {
-      System.setOut(testOut);
-      try {
-        Preconditions.checkArgument(
-            ClosedJsonConfigs.class.isAnnotationPresent(ForyJsonProvider.class));
-        if (GraalvmSupport.isGraalRuntime()) {
-          testHostedCodegenConfigurations();
-        }
-        testModels();
-        testConfigurations();
-        testCodecs();
-        testValueAnnotations();
-        testSubtypes();
-        testContainerRoots();
-        testGenericProperties();
-        testUnwrapped();
-        testValidator();
-        testGraphMemoryBudget();
-        testContainerGraphBudget();
-        testSpecialContainerBudget();
-        testMixin();
-        testMixinValue();
-        testMixinValueRecord();
-        testMixinEnumValue();
-        testMixinCodec();
-        testBigDecimal();
-        testSqlTypes();
-        testFormatTimezone();
-        testClosedPackage();
-      } finally {
-        System.setOut(originalOut);
-      }
+    Preconditions.checkArgument(
+        ClosedJsonConfigs.class.isAnnotationPresent(ForyJsonProvider.class));
+    if (GraalvmSupport.isGraalRuntime()) {
+      testHostedCodegenConfigurations();
     }
-    String output = new String(captured.toByteArray(), StandardCharsets.UTF_8);
-    originalOut.print(output);
-    originalOut.println("Fory JSON succeed");
+    testModels();
+    testConfigurations();
+    testCodecs();
+    testValueAnnotations();
+    testSubtypes();
+    testContainerRoots();
+    testGenericProperties();
+    testUnwrapped();
+    testValidator();
+    testGraphMemoryBudget();
+    testContainerGraphBudget();
+    testSpecialContainerBudget();
+    testMixin();
+    testMixinValue();
+    testMixinValueRecord();
+    testMixinEnumValue();
+    testMixinCodec();
+    testBigDecimal();
+    testSqlTypes();
+    testFormatTimezone();
+    testClosedPackage();
+    System.out.println("Fory JSON succeed");
   }
 
   private static void testHostedCodegenConfigurations() {

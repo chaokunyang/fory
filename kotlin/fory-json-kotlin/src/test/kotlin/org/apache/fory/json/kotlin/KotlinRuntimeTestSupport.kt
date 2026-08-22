@@ -141,12 +141,13 @@ private fun compileStates(json: ForyJson): Map<String, CompileState> {
     codegen.javaClass.getDeclaredMethod(
       "compiler",
       GeneratedCodecKey::class.java,
+      Class::class.java,
       String::class.java,
       String::class.java,
     )
   compiler.isAccessible = true
   return futures.keys
-    .map { compiler.invoke(codegen, it, "", "") }
+    .map { key -> compiler.invoke(codegen, key, key.targetClass(), "", "") }
     .map { ReflectionUtils.getObjectFieldValue(it, "codeGenerator") }
     .distinct()
     .flatMap {

@@ -33,9 +33,9 @@ import org.apache.fory.json.ForyJson;
  * effective public, non-static, zero-argument instance method whose exact return type is {@link
  * ForyJson} is invoked once while the native image is built. This includes inherited superclass
  * methods and public interface default methods. Fory JSON always generates reachable models for the
- * default configuration, then adds generated codecs for every returned configuration. Equal exact
- * model-role keys reuse one generated class. At runtime, an exact miss uses the interpreted codec.
- * The provider package does not need to be exported or opened to Fory.
+ * default configuration, then adds generated codecs for every returned configuration. Models
+ * without a matching generated codec use the interpreted codec. The provider package does not need
+ * to be exported or opened to Fory.
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)

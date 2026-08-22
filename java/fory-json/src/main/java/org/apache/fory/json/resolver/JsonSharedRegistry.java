@@ -80,7 +80,6 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -91,6 +90,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.CodeGenerator;
@@ -289,20 +289,16 @@ public final class JsonSharedRegistry {
     }
     Map<GeneratedCodecKey, Class<?>> classes = completedClasses(generatedClassFutures);
     Map<CompanionKey, GeneratedJsonCodec<?>> sourceCodecs =
-        immutableSnapshot(generatedCodecCapabilities);
+        generatedCodecCapabilities.isEmpty()
+            ? Collections.emptyMap()
+            : Collections.unmodifiableMap(new HashMap<>(generatedCodecCapabilities));
     return new GeneratedClasses(classes, sourceCodecs);
   }
 
-  private static <K, V> Map<K, V> immutableSnapshot(Map<K, V> values) {
-    return values.isEmpty()
-        ? Collections.emptyMap()
-        : Collections.unmodifiableMap(new HashMap<>(values));
-  }
-
-  private static <K> Map<K, Class<?>> completedClasses(
-      Map<K, CompletableFuture<Class<?>>> futures) {
-    Map<K, Class<?>> classes = new HashMap<>(futures.size());
-    for (Map.Entry<K, CompletableFuture<Class<?>>> entry : futures.entrySet()) {
+  private static Map<GeneratedCodecKey, Class<?>> completedClasses(
+      Map<GeneratedCodecKey, CompletableFuture<Class<?>>> futures) {
+    Map<GeneratedCodecKey, Class<?>> classes = new HashMap<>(futures.size());
+    for (Map.Entry<GeneratedCodecKey, CompletableFuture<Class<?>>> entry : futures.entrySet()) {
       CompletableFuture<Class<?>> future = entry.getValue();
       if (!future.isDone() || future.isCompletedExceptionally()) {
         throw new IllegalStateException(
@@ -338,65 +334,36 @@ public final class JsonSharedRegistry {
   }
 
   CompletableFuture<Class<?>> stringWriterClass(
-      JsonTypeInfo typeInfo, ObjectCodec<?> owner, JsonTypeResolver resolver) {
-    GeneratedCodecKey key =
-        resolver.generatedObjectKey(typeInfo, owner, JsonTypeResolver.CapabilityKind.STRING_WRITER);
-    return generatedClassFuture(
-        generatedClassFutures, key, () -> codegen.compileStringWriter(key, owner, resolver));
+      GeneratedCodecKey key, ObjectCodec<?> owner, JsonTypeResolver resolver) {
+    return generatedClassFuture(key, () -> codegen.compileStringWriter(key, owner, resolver));
   }
 
   CompletableFuture<Class<?>> utf8WriterClass(
-      JsonTypeInfo typeInfo, ObjectCodec<?> owner, JsonTypeResolver resolver) {
-    GeneratedCodecKey key =
-        resolver.generatedObjectKey(typeInfo, owner, JsonTypeResolver.CapabilityKind.UTF8_WRITER);
-    return generatedClassFuture(
-        generatedClassFutures, key, () -> codegen.compileUtf8Writer(key, owner, resolver));
+      GeneratedCodecKey key, ObjectCodec<?> owner, JsonTypeResolver resolver) {
+    return generatedClassFuture(key, () -> codegen.compileUtf8Writer(key, owner, resolver));
   }
 
   CompletableFuture<Class<?>> latin1ReaderClass(
-      JsonTypeInfo typeInfo, ObjectCodec<?> owner, JsonTypeResolver resolver) {
-    GeneratedCodecKey key =
-        resolver.generatedObjectKey(typeInfo, owner, JsonTypeResolver.CapabilityKind.LATIN1_READER);
-    return generatedClassFuture(
-        generatedClassFutures, key, () -> codegen.compileLatin1Reader(key, owner, resolver));
+      GeneratedCodecKey key, ObjectCodec<?> owner, JsonTypeResolver resolver) {
+    return generatedClassFuture(key, () -> codegen.compileLatin1Reader(key, owner, resolver));
   }
 
   CompletableFuture<Class<?>> utf16ReaderClass(
-      JsonTypeInfo typeInfo, ObjectCodec<?> owner, JsonTypeResolver resolver) {
-    GeneratedCodecKey key =
-        resolver.generatedObjectKey(typeInfo, owner, JsonTypeResolver.CapabilityKind.UTF16_READER);
-    return generatedClassFuture(
-        generatedClassFutures, key, () -> codegen.compileUtf16Reader(key, owner, resolver));
+      GeneratedCodecKey key, ObjectCodec<?> owner, JsonTypeResolver resolver) {
+    return generatedClassFuture(key, () -> codegen.compileUtf16Reader(key, owner, resolver));
   }
 
   CompletableFuture<Class<?>> utf8ReaderClass(
-      JsonTypeInfo typeInfo, ObjectCodec<?> owner, JsonTypeResolver resolver) {
-    GeneratedCodecKey key =
-        resolver.generatedObjectKey(typeInfo, owner, JsonTypeResolver.CapabilityKind.UTF8_READER);
-    return generatedClassFuture(
-        generatedClassFutures, key, () -> codegen.compileUtf8Reader(key, owner, resolver));
+      GeneratedCodecKey key, ObjectCodec<?> owner, JsonTypeResolver resolver) {
+    return generatedClassFuture(key, () -> codegen.compileUtf8Reader(key, owner, resolver));
   }
 
-  CompletableFuture<Class<?>> utf8CollectionWriterClass(
-      JsonTypeInfo typeInfo, CollectionCodec<?> owner, JsonTypeResolver resolver) {
-    GeneratedCodecKey key =
-        resolver.generatedCollectionKey(
-            typeInfo, owner, JsonTypeResolver.CapabilityKind.UTF8_WRITER);
-    return generatedClassFuture(
-        generatedClassFutures,
-        key,
-        () -> codegen.compileUtf8CollectionWriter(key, typeInfo.typeRef(), owner));
+  CompletableFuture<Class<?>> utf8CollectionWriterClass(GeneratedCodecKey key) {
+    return generatedClassFuture(key, () -> codegen.compileUtf8CollectionWriter(key));
   }
 
-  CompletableFuture<Class<?>> utf8CollectionReaderClass(
-      JsonTypeInfo typeInfo, CollectionCodec<?> owner, JsonTypeResolver resolver) {
-    GeneratedCodecKey key =
-        resolver.generatedCollectionKey(
-            typeInfo, owner, JsonTypeResolver.CapabilityKind.UTF8_READER);
-    return generatedClassFuture(
-        generatedClassFutures,
-        key,
-        () -> codegen.compileUtf8CollectionReader(key, typeInfo.typeRef(), owner));
+  CompletableFuture<Class<?>> utf8CollectionReaderClass(GeneratedCodecKey key) {
+    return generatedClassFuture(key, () -> codegen.compileUtf8CollectionReader(key));
   }
 
   boolean generatedCapabilitiesEnabled() {
@@ -408,32 +375,30 @@ public final class JsonSharedRegistry {
   }
 
   boolean nativeGeneratedClasses() {
-    return nativeCodegenEnabled && codegen == null;
+    return nativeCodegenEnabled;
   }
 
   Class<?> nativeGeneratedClass(GeneratedCodecKey key) {
     return nativeCodegenEnabled ? JsonGeneratedClassRegistry.generatedClass(key) : null;
   }
 
-  private <K> CompletableFuture<Class<?>> generatedClassFuture(
-      ConcurrentHashMap<K, CompletableFuture<Class<?>>> classes,
-      K key,
-      Callable<Class<?>> compiler) {
-    CompletableFuture<Class<?>> existing = classes.get(key);
+  private CompletableFuture<Class<?>> generatedClassFuture(
+      GeneratedCodecKey key, Supplier<Class<?>> compiler) {
+    CompletableFuture<Class<?>> existing = generatedClassFutures.get(key);
     if (existing != null) {
       return existing;
     }
     CompletableFuture<Class<?>> candidate = new CompletableFuture<>();
-    existing = classes.putIfAbsent(key, candidate);
+    existing = generatedClassFutures.putIfAbsent(key, candidate);
     if (existing != null) {
       return existing;
     }
     Runnable task =
         () -> {
           try {
-            candidate.complete(compiler.call());
+            candidate.complete(compiler.get());
           } catch (Throwable failure) {
-            classes.remove(key, candidate);
+            generatedClassFutures.remove(key, candidate);
             candidate.completeExceptionally(failure);
           }
         };
@@ -448,7 +413,7 @@ public final class JsonSharedRegistry {
     try {
       service.execute(task);
     } catch (RuntimeException | Error failure) {
-      classes.remove(key, candidate);
+      generatedClassFutures.remove(key, candidate);
       candidate.completeExceptionally(failure);
       throw failure;
     }
@@ -924,10 +889,11 @@ public final class JsonSharedRegistry {
 
   public JsonValueCodec<?> createCodec(
       Class<?> rawType, TypeRef<?> typeRef, JsonTypeResolver localResolver) {
-    return createCodec(rawType, typeRef, localResolver, null, false);
+    ResolvedCodec resolved = resolveCodec(rawType, typeRef, localResolver, null, false);
+    return resolved == null ? null : resolved.codec;
   }
 
-  JsonValueCodec<?> createCodec(
+  ResolvedCodec resolveCodec(
       Class<?> rawType,
       TypeRef<?> typeRef,
       JsonTypeResolver localResolver,
@@ -935,11 +901,13 @@ public final class JsonSharedRegistry {
       boolean runtimeType) {
     JsonValueCodec<?> customCodec = customCodec(rawType);
     if (customCodec != null) {
-      return customCodec;
+      return new ResolvedCodec(customCodec, null);
     }
     FactoryBinding exactFactory = customCodecs.getFactory(rawType);
     if (exactFactory != null) {
-      return createExactCodec(rawType, typeRef, exactFactory, localResolver, runtimeType);
+      return new ResolvedCodec(
+          createExactCodec(rawType, typeRef, exactFactory, localResolver, runtimeType),
+          exactFactory.key());
     }
     if (childFactory != null) {
       // A parent-derived subtype is only the default model. Exact application registration above
@@ -950,7 +918,7 @@ public final class JsonSharedRegistry {
             "Closed JSON subtype factory did not create the exact ObjectCodec for "
                 + rawType.getName());
       }
-      return childCodec;
+      return new ResolvedCodec(childCodec, childFactory.factoryKey());
     }
     if (typeRef.getTypeExtMeta() != null
         && (rawType == OptionalInt.class
@@ -960,27 +928,27 @@ public final class JsonSharedRegistry {
         throw new ForyJsonException("Nullable Optional has ambiguous JSON null: " + typeRef);
       }
       if (rawType == OptionalInt.class) {
-        return ScalarCodecs.OptionalIntCodec.NON_NULL;
+        return new ResolvedCodec(ScalarCodecs.OptionalIntCodec.NON_NULL, null);
       }
       if (rawType == OptionalLong.class) {
-        return ScalarCodecs.OptionalLongCodec.NON_NULL;
+        return new ResolvedCodec(ScalarCodecs.OptionalLongCodec.NON_NULL, null);
       }
-      return ScalarCodecs.OptionalDoubleCodec.NON_NULL;
+      return new ResolvedCodec(ScalarCodecs.OptionalDoubleCodec.NON_NULL, null);
     }
     boolean semanticToken =
         typeRef.getTypeExtMeta() != null && typeRef.getTypeExtMeta().typeId() != Types.UNKNOWN;
     if (semanticToken) {
       // The exact JVM carrier codec cannot erase an explicit semantic type. The installed module
       // owns that representation even when the semantic value uses a primitive carrier.
-      JsonValueCodec<?> codec = createModuleCodec(typeRef, localResolver, runtimeType);
-      if (codec == null) {
+      ResolvedCodec resolved = createModuleCodec(typeRef, localResolver, runtimeType);
+      if (resolved == null) {
         throw new ForyJsonException("No installed JSON module owns semantic type " + typeRef);
       }
-      return codec;
+      return resolved;
     }
     JsonValueCodec<?> codec = exactCodecs.get(rawType);
     if (codec != null) {
-      return codec;
+      return new ResolvedCodec(codec, null);
     }
     if (rawType == Class.class) {
       // JSON strings must not be treated as class-loading authority by the default codecs.
@@ -994,58 +962,60 @@ public final class JsonSharedRegistry {
       throw new ForyJsonException("Unsupported JSON type " + rawType);
     }
     if (rawType.isEnum()) {
-      return new ScalarCodecs.EnumCodec(rawType);
+      return new ResolvedCodec(new ScalarCodecs.EnumCodec(rawType), null);
     }
     if (rawType.isArray()) {
-      return ArrayCodec.create(rawType, typeRef, localResolver);
+      return new ResolvedCodec(ArrayCodec.create(rawType, typeRef, localResolver), null);
     }
     if (rawType == Optional.class) {
-      return new ScalarCodecs.OptionalCodec(typeRef, localResolver);
+      return new ResolvedCodec(new ScalarCodecs.OptionalCodec(typeRef, localResolver), null);
     }
     if (rawType == AtomicReference.class) {
       JsonTypeInfo contentInfo = localResolver.getTypeInfo(CodecUtils.elementTypeRef(typeRef));
-      return ScalarCodecs.AtomicReferenceCodec.create(typeRef, contentInfo);
+      return new ResolvedCodec(
+          ScalarCodecs.AtomicReferenceCodec.create(typeRef, contentInfo), null);
     }
     if (rawType == AtomicReferenceArray.class) {
       JsonTypeInfo elementInfo = localResolver.getTypeInfo(CodecUtils.elementTypeRef(typeRef));
-      return ScalarCodecs.AtomicReferenceArrayCodec.create(elementInfo);
+      return new ResolvedCodec(ScalarCodecs.AtomicReferenceArrayCodec.create(elementInfo), null);
     }
     if (Calendar.class.isAssignableFrom(rawType)) {
-      return ScalarCodecs.CalendarCodec.INSTANCE;
+      return new ResolvedCodec(ScalarCodecs.CalendarCodec.INSTANCE, null);
     }
     if (Date.class.isAssignableFrom(rawType)) {
-      return ScalarCodecs.DateCodec.INSTANCE;
+      return new ResolvedCodec(ScalarCodecs.DateCodec.INSTANCE, null);
     }
     if (ZoneId.class.isAssignableFrom(rawType)) {
-      return ScalarCodecs.ZoneIdCodec.INSTANCE;
+      return new ResolvedCodec(ScalarCodecs.ZoneIdCodec.INSTANCE, null);
     }
     if (ByteBuffer.class.isAssignableFrom(rawType)) {
-      return ScalarCodecs.ByteBufferCodec.INSTANCE;
+      return new ResolvedCodec(ScalarCodecs.ByteBufferCodec.INSTANCE, null);
     }
     if (File.class.isAssignableFrom(rawType)) {
-      return ScalarCodecs.FileCodec.INSTANCE;
+      return new ResolvedCodec(ScalarCodecs.FileCodec.INSTANCE, null);
     }
     if (Path.class.isAssignableFrom(rawType)) {
-      return ScalarCodecs.PathCodec.INSTANCE;
+      return new ResolvedCodec(ScalarCodecs.PathCodec.INSTANCE, null);
     }
-    codec = createModuleCodec(typeRef, localResolver, runtimeType);
-    if (codec != null) {
-      return codec;
+    ResolvedCodec resolved = createModuleCodec(typeRef, localResolver, runtimeType);
+    if (resolved != null) {
+      return resolved;
     }
     if (Number.class.isAssignableFrom(rawType) || CharSequence.class.isAssignableFrom(rawType)) {
       throw new ForyJsonException("Unsupported JSON type " + rawType);
     }
     if (Collection.class.isAssignableFrom(rawType)) {
-      return CollectionCodec.create(rawType, typeRef, localResolver);
+      return new ResolvedCodec(CollectionCodec.create(rawType, typeRef, localResolver), null);
     }
     if (Map.class.isAssignableFrom(rawType)) {
-      return MapCodec.create(rawType, typeRef, localResolver);
+      return new ResolvedCodec(MapCodec.create(rawType, typeRef, localResolver), null);
     }
     return null;
   }
 
   JsonValueCodec<?> createRuntimeCodec(Class<?> rawType, JsonTypeResolver localResolver) {
-    return createCodec(rawType, TypeRef.of(rawType), localResolver, null, true);
+    ResolvedCodec resolved = resolveCodec(rawType, TypeRef.of(rawType), localResolver, null, true);
+    return resolved == null ? null : resolved.codec;
   }
 
   private JsonValueCodec<?> createExactCodec(
@@ -1076,7 +1046,7 @@ public final class JsonSharedRegistry {
     return binding.target;
   }
 
-  private JsonValueCodec<?> createModuleCodec(
+  private ResolvedCodec createModuleCodec(
       TypeRef<?> typeRef, JsonTypeResolver localResolver, boolean runtimeType) {
     JsonValueCodec<?> selected = null;
     UnsupportedJsonTypeException unsupported = null;
@@ -1108,13 +1078,31 @@ public final class JsonSharedRegistry {
     }
     if (claims.size() == 1) {
       if (selected != null) {
-        return selected;
+        return new ResolvedCodec(selected, claims.get(0));
       }
       throw unsupported;
     }
     claims.sort(String::compareTo);
     throw new ForyJsonException(
         "Conflicting JSON codec factories for " + typeRef.getType() + ": " + claims);
+  }
+
+  static final class ResolvedCodec {
+    private final JsonValueCodec<?> codec;
+    private final String factoryKey;
+
+    private ResolvedCodec(JsonValueCodec<?> codec, String factoryKey) {
+      this.codec = codec;
+      this.factoryKey = factoryKey;
+    }
+
+    JsonValueCodec<?> codec() {
+      return codec;
+    }
+
+    String factoryKey() {
+      return factoryKey;
+    }
   }
 
   private static final class ExactFactoryBinding {
@@ -1214,13 +1202,6 @@ public final class JsonSharedRegistry {
   Class<?> mixinType(Class<?> targetType) {
     JsonMixinAnnotations.TargetOverlay overlay = mixinAnnotations.overlay(targetType);
     return overlay == null ? null : overlay.mixinType();
-  }
-
-  boolean canonicalProtectedBuiltin(JsonTypeInfo typeInfo, Object capability) {
-    Class<?> rawType = typeInfo.rawType();
-    return CodecRegistry.isProtectedBuiltinType(rawType)
-        && (exactCodecs.get(rawType) == capability
-            || ArrayCodec.isCanonicalProtectedCodec(rawType, capability));
   }
 
   /** Adds exact pair context to a cold effective-schema validation failure. */

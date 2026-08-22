@@ -175,15 +175,6 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
     return (ArrayCodec<T>) codec;
   }
 
-  /** Returns whether {@code codec} is the canonical protected exact-array implementation. */
-  @Internal
-  public static boolean isCanonicalProtectedCodec(Class<?> arrayType, Object codec) {
-    return arrayType == byte[].class && codec == ByteArrayCodec.INSTANCE
-        || arrayType == String[].class
-            && (codec == StringArrayCodec.INSTANCE || codec == StringArrayCodec.NON_NULL)
-        || arrayType == long[].class && codec == LongArrayCodec.INSTANCE;
-  }
-
   // Package visibility lets Java 8 nested codecs call these helpers without synthetic accessors.
   static void reserveReferenceBatch(JsonReader reader, int size) {
     // Reserve each batch before reading its final element. This bounds unreserved reference storage

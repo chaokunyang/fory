@@ -22,7 +22,12 @@ package org.apache.fory.json.codec;
 import java.lang.reflect.Method;
 import org.apache.fory.annotation.Internal;
 
-/** Exact parent-carrier operations for a semantic leaf which is not transparent to its carrier. */
+/**
+ * Exact parent-carrier operations for a semantic leaf which is not transparent to its carrier.
+ *
+ * <p>The generated operations must depend only on the codec implementation class and logical
+ * serialized class. Resolver-local instance state must not select different methods.
+ */
 @Internal
 public interface DirectUnboxedValueCodec extends UnboxedValueCodec {
   /** Returns the exact static {@code (JsonReader) -> carrier} generated invocation. */

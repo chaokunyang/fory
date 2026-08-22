@@ -19,6 +19,7 @@
 
 package org.apache.fory.json.resolver;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -34,34 +35,32 @@ import org.apache.fory.reflect.TypeRef;
 public final class JsonGeneratedClassRegistry {
   private static Map<GeneratedCodecKey, Class<?>> pendingClasses = new HashMap<>();
   private static Map<CompanionKey, GeneratedJsonCodec<?>> pendingCompanions = new HashMap<>();
-  private static GeneratedEntry[] generatedEntries = new GeneratedEntry[0];
+  private static Map<GeneratedCodecKey, Class<?>> generatedClasses = Collections.emptyMap();
   private static CompanionEntry[] companionEntries = new CompanionEntry[0];
-  private static boolean frozen;
 
   private JsonGeneratedClassRegistry() {}
 
   /** Publishes one hosted configuration's generated classes during Native Image analysis. */
   public static synchronized Set<Class<?>> register(JsonSharedRegistry hostedRegistry) {
-    if (frozen) {
+    if (pendingClasses == null) {
       throw new IllegalStateException("Fory JSON generated class registry is frozen");
     }
     GeneratedClasses generated = hostedRegistry.generatedClasses();
     LinkedHashSet<Class<?>> added = new LinkedHashSet<>();
     mergeClasses(generated.classes(), added);
-    mergeCompanions(generated.sourceCodecs(), added);
-    snapshot();
+    mergeSourceCodecs(generated.sourceCodecs(), pendingCompanions, added);
     return added;
   }
 
   /** Finalizes Native runtime lookup and releases hosted mutable state. */
   public static synchronized void freeze() {
-    if (frozen) {
+    if (pendingClasses == null) {
       return;
     }
-    snapshot();
+    generatedClasses = pendingClasses;
+    snapshotCompanions();
     pendingClasses = null;
     pendingCompanions = null;
-    frozen = true;
   }
 
   static Class<?> generatedClass(GeneratedCodecKey key) {
@@ -69,12 +68,7 @@ public final class JsonGeneratedClassRegistry {
     if (pending != null) {
       return pending.get(key);
     }
-    for (GeneratedEntry entry : generatedEntries) {
-      if (entry.key.equals(key)) {
-        return entry.generatedClass;
-      }
-    }
-    return null;
+    return generatedClasses.get(key);
   }
 
   static GeneratedJsonCodec<?> sourceCodec(CompanionKey key) {
@@ -104,11 +98,6 @@ public final class JsonGeneratedClassRegistry {
     }
   }
 
-  private static void mergeCompanions(
-      Map<CompanionKey, GeneratedJsonCodec<?>> source, Set<Class<?>> added) {
-    mergeSourceCodecs(source, pendingCompanions, added);
-  }
-
   static void mergeSourceCodecs(
       Map<CompanionKey, ? extends GeneratedJsonCodec<?>> source,
       Map<CompanionKey, GeneratedJsonCodec<?>> target,
@@ -125,14 +114,9 @@ public final class JsonGeneratedClassRegistry {
     }
   }
 
-  private static void snapshot() {
-    generatedEntries = new GeneratedEntry[pendingClasses.size()];
-    int index = 0;
-    for (Map.Entry<GeneratedCodecKey, Class<?>> entry : pendingClasses.entrySet()) {
-      generatedEntries[index++] = new GeneratedEntry(entry.getKey(), entry.getValue());
-    }
+  private static void snapshotCompanions() {
     companionEntries = new CompanionEntry[pendingCompanions.size()];
-    index = 0;
+    int index = 0;
     for (Map.Entry<CompanionKey, GeneratedJsonCodec<?>> entry : pendingCompanions.entrySet()) {
       companionEntries[index++] = new CompanionEntry(entry.getKey(), entry.getValue());
     }
@@ -141,12 +125,10 @@ public final class JsonGeneratedClassRegistry {
   static final class CompanionKey {
     private final TypeRef<?> type;
     private final Class<?> mixinType;
-    private final int hash;
 
     CompanionKey(TypeRef<?> type, Class<?> mixinType) {
       this.type = type;
       this.mixinType = mixinType;
-      hash = type.hashCode() * 31 + System.identityHashCode(mixinType);
     }
 
     @Override
@@ -163,17 +145,7 @@ public final class JsonGeneratedClassRegistry {
 
     @Override
     public int hashCode() {
-      return hash;
-    }
-  }
-
-  private static final class GeneratedEntry {
-    private final GeneratedCodecKey key;
-    private final Class<?> generatedClass;
-
-    private GeneratedEntry(GeneratedCodecKey key, Class<?> generatedClass) {
-      this.key = key;
-      this.generatedClass = generatedClass;
+      return type.hashCode() * 31 + System.identityHashCode(mixinType);
     }
   }
 

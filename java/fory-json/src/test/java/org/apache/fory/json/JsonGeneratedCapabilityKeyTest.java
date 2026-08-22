@@ -23,7 +23,6 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotEquals;
 import static org.testng.Assert.assertNotSame;
-import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
@@ -49,18 +48,18 @@ import java.util.concurrent.Future;
 import javax.security.auth.Subject;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
-import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.json.annotation.JsonAnyGetter;
 import org.apache.fory.json.annotation.JsonAnySetter;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonType;
+import org.apache.fory.json.annotation.JsonUnwrapped;
 import org.apache.fory.json.codec.AbstractJsonValueCodec;
 import org.apache.fory.json.codec.DirectUnboxedValueCodec;
 import org.apache.fory.json.codec.JsonObjectModel;
 import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codec.TransparentUnboxedValueCodec;
-import org.apache.fory.json.codec.UnboxedValueCodec;
+import org.apache.fory.json.codegen.GeneratedCodecKey;
 import org.apache.fory.json.codegen.JsonCodegen;
 import org.apache.fory.json.data.PublicFields;
 import org.apache.fory.json.reader.JsonReader;
@@ -119,7 +118,7 @@ public class JsonGeneratedCapabilityKeyTest {
   }
 
   @Test
-  public void injectedComponentMetadataReusesParentClass() {
+  public void injectedMetadataReusesParentClass() {
     JsonTypeResolver resolver = resolver();
     TypeRef<?> nonNullArray =
         TypeRef.of(
@@ -130,6 +129,111 @@ public class JsonGeneratedCapabilityKeyTest {
     JsonTypeInfo nullable = resolver.getTypeInfo(boxType(nullableArray));
     assertSame(nonNull.utf8Writer().getClass(), nullable.utf8Writer().getClass());
     assertSame(nonNull.utf8Reader().getClass(), nullable.utf8Reader().getClass());
+  }
+
+  @Test
+  public void genericScalarInputsReuseClass() {
+    ForyJson json = ForyJson.builder().withAsyncCompilation(false).build();
+    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
+    JsonTypeInfo strings = resolver.getTypeInfo(new TypeRef<GenericModel<String>>() {});
+    JsonTypeInfo integers = resolver.getTypeInfo(new TypeRef<GenericModel<Integer>>() {});
+    JsonTypeInfo bytes = resolver.getTypeInfo(new TypeRef<GenericModel<Byte>>() {});
+    JsonTypeInfo enums = resolver.getTypeInfo(new TypeRef<GenericModel<FirstEnum>>() {});
+    assertObjectClasses(strings, integers);
+    assertObjectClasses(strings, bytes);
+    assertObjectClasses(strings, enums);
+
+    GenericModel<String> stringValue = new GenericModel<>();
+    stringValue.value = "value";
+    GenericModel<Integer> intValue = new GenericModel<>();
+    intValue.value = 7;
+    GenericModel<Byte> byteValue = new GenericModel<>();
+    byteValue.value = (byte) 3;
+    GenericModel<FirstEnum> enumValue = new GenericModel<>();
+    enumValue.value = FirstEnum.VALUE;
+    TypeRef<GenericModel<String>> stringType = new TypeRef<GenericModel<String>>() {};
+    TypeRef<GenericModel<Integer>> intType = new TypeRef<GenericModel<Integer>>() {};
+    TypeRef<GenericModel<Byte>> byteType = new TypeRef<GenericModel<Byte>>() {};
+    TypeRef<GenericModel<FirstEnum>> enumType = new TypeRef<GenericModel<FirstEnum>>() {};
+    assertEquals(json.toJson(stringValue, stringType), "{\"value\":\"value\"}");
+    assertEquals(json.toJson(intValue, intType), "{\"value\":7}");
+    assertEquals(json.toJson(byteValue, byteType), "{\"value\":3}");
+    assertEquals(json.toJson(enumValue, enumType), "{\"value\":\"VALUE\"}");
+    assertEquals(json.fromJson(json.toJson(stringValue, stringType), stringType).value, "value");
+    assertEquals(json.fromJson(json.toJson(intValue, intType), intType).value, 7);
+    assertEquals(json.fromJson(json.toJson(byteValue, byteType), byteType).value, (byte) 3);
+    assertSame(
+        json.fromJson(json.toJson(enumValue, enumType), enumType).value, FirstEnum.VALUE);
+  }
+
+  @Test
+  public void equivalentGenericInputsReuseClass() {
+    ForyJson json = ForyJson.builder().withAsyncCompilation(false).build();
+    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
+    JsonTypeInfo first = resolver.getTypeInfo(new TypeRef<GenericModel<Child>>() {});
+    JsonTypeInfo second = resolver.getTypeInfo(new TypeRef<GenericModel<OtherChild>>() {});
+    assertObjectClasses(first, second);
+
+    GenericModel<Child> firstValue = new GenericModel<>();
+    firstValue.value = new Child();
+    firstValue.value.value = "first";
+    GenericModel<OtherChild> secondValue = new GenericModel<>();
+    secondValue.value = new OtherChild();
+    secondValue.value.value = 2;
+    TypeRef<GenericModel<Child>> firstType = new TypeRef<GenericModel<Child>>() {};
+    TypeRef<GenericModel<OtherChild>> secondType = new TypeRef<GenericModel<OtherChild>>() {};
+    assertEquals(json.toJson(firstValue, firstType), "{\"value\":{\"value\":\"first\"}}");
+    assertEquals(json.toJson(secondValue, secondType), "{\"value\":{\"value\":2}}");
+    assertEquals(json.fromJson(json.toJson(firstValue, firstType), firstType).value.value, "first");
+    assertEquals(json.fromJson(json.toJson(secondValue, secondType), secondType).value.value, 2);
+  }
+
+  @Test
+  public void genericCollectionInputsReuseClass() {
+    ForyJson json = ForyJson.builder().withAsyncCompilation(false).build();
+    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
+    TypeRef<GenericCollection<String>> stringType = new TypeRef<GenericCollection<String>>() {};
+    TypeRef<GenericCollection<Child>> childType = new TypeRef<GenericCollection<Child>>() {};
+    assertObjectClasses(resolver.getTypeInfo(stringType), resolver.getTypeInfo(childType));
+
+    GenericCollection<String> strings = new GenericCollection<>();
+    strings.values = Collections.singletonList("value");
+    GenericCollection<Child> children = new GenericCollection<>();
+    Child child = new Child();
+    child.value = "child";
+    children.values = Collections.singletonList(child);
+    assertEquals(
+        json.fromJson(json.toJson(strings, stringType), stringType).values.get(0), "value");
+    assertEquals(
+        json.fromJson(json.toJson(children, childType), childType).values.get(0).value, "child");
+  }
+
+  @Test
+  public void genericEnumInputsReuseClass() {
+    ForyJson json = ForyJson.builder().withAsyncCompilation(false).build();
+    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
+    JsonTypeInfo first = resolver.getTypeInfo(new TypeRef<GenericModel<FirstEnum>>() {});
+    JsonTypeInfo second = resolver.getTypeInfo(new TypeRef<GenericModel<SecondEnum>>() {});
+    assertObjectClasses(first, second);
+
+    GenericModel<FirstEnum> firstValue = new GenericModel<>();
+    firstValue.value = FirstEnum.VALUE;
+    GenericModel<SecondEnum> secondValue = new GenericModel<>();
+    secondValue.value = SecondEnum.VALUE;
+    TypeRef<GenericModel<FirstEnum>> firstType = new TypeRef<GenericModel<FirstEnum>>() {};
+    TypeRef<GenericModel<SecondEnum>> secondType = new TypeRef<GenericModel<SecondEnum>>() {};
+    assertSame(json.fromJson(json.toJson(firstValue, firstType), firstType).value, FirstEnum.VALUE);
+    assertSame(
+        json.fromJson(json.toJson(secondValue, secondType), secondType).value, SecondEnum.VALUE);
+  }
+
+  @Test
+  public void genericRegisteredCodecUsesBaseCapability() {
+    ForyJson json = parentJson(new ChildCodecA());
+    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
+    JsonTypeInfo first = resolver.getTypeInfo(new TypeRef<GenericPair<Child, OtherChild>>() {});
+    JsonTypeInfo second = resolver.getTypeInfo(new TypeRef<GenericPair<OtherChild, Child>>() {});
+    assertObjectClasses(first, second);
   }
 
   @Test
@@ -199,6 +303,24 @@ public class JsonGeneratedCapabilityKeyTest {
   }
 
   @Test
+  public void hiddenCodecClassesReuseParent() {
+    JsonTypeInfo first = parentType(new HiddenChildCodecA());
+    JsonTypeInfo second = parentType(new HiddenChildCodecB());
+
+    assertObjectClasses(first, second);
+  }
+
+  @Test
+  public void objectFactoryVersionsClass() throws Exception {
+    assertDifferentObjectClasses(factoryModelType(true), factoryModelType(false));
+  }
+
+  @Test
+  public void unwrappedFactoryVersionsParent() throws Exception {
+    assertDifferentObjectClasses(unwrappedFactoryType(true), unwrappedFactoryType(false));
+  }
+
+  @Test
   public void directCodecStateStaysInstanceOwned() {
     ForyJson first = parentJson(new StatefulChildCodec("first:"));
     ForyJson second = parentJson(new StatefulChildCodec("second:"));
@@ -217,7 +339,39 @@ public class JsonGeneratedCapabilityKeyTest {
   }
 
   @Test
-  public void unrelatedRegistrationDoesNotVersionParent() {
+  public void transparentTerminalStaysInstanceOwned() throws Exception {
+    ForyJson first = transparentJson(new TerminalCodecA());
+    ForyJson second = transparentJson(new TerminalCodecB());
+    JsonTypeInfo firstType = transparentType(first);
+    JsonTypeInfo secondType = transparentType(second);
+    assertObjectClasses(firstType, secondType);
+
+    TransparentModel value = new TransparentModel();
+    value.setValue(new LocalTerminal("value"));
+    assertEquals(first.toJson(value), "{\"value\":\"a:value\"}");
+    assertEquals(second.toJson(value), "{\"value\":\"b:value\"}");
+    assertEquals(
+        ((LocalTerminal)
+                first.fromJson("{\"value\":\"a:value\"}", TransparentModel.class).getValue())
+            .value,
+        "value");
+    assertEquals(
+        ((LocalTerminal)
+                second.fromJson("{\"value\":\"b:value\"}", TransparentModel.class).getValue())
+            .value,
+        "value");
+  }
+
+  @Test
+  public void transparentDirectTerminalVersionsClass() throws Exception {
+    JsonTypeInfo first = transparentType(transparentJson(new DirectTerminalCodecA()));
+    JsonTypeInfo second = transparentType(transparentJson(new DirectTerminalCodecB()));
+
+    assertDifferentObjectClasses(first, second);
+  }
+
+  @Test
+  public void unrelatedRegistrationReusesParent() {
     JsonTypeInfo first = parentType(new ChildCodecA());
     ForyJson json = parentJson(new ChildCodecA(), true);
     assertObjectClasses(first, parentType(json));
@@ -239,20 +393,26 @@ public class JsonGeneratedCapabilityKeyTest {
   }
 
   @Test
-  public void rawWriteNullVersionsReaders() {
+  public void writeNullVersionsWriters() {
     ForyJson first = ForyJson.builder().withAsyncCompilation(false).build();
     ForyJson second = ForyJson.builder().writeNullFields(true).withAsyncCompilation(false).build();
-    assertDifferentObjectClasses(
-        JsonTestSupport.currentTypeResolver(first).getTypeInfo(Model.class, Model.class),
-        JsonTestSupport.currentTypeResolver(second).getTypeInfo(Model.class, Model.class));
+    JsonTypeInfo firstType =
+        JsonTestSupport.currentTypeResolver(first).getTypeInfo(Model.class, Model.class);
+    JsonTypeInfo secondType =
+        JsonTestSupport.currentTypeResolver(second).getTypeInfo(Model.class, Model.class);
+    assertNotSame(firstType.stringWriter().getClass(), secondType.stringWriter().getClass());
+    assertNotSame(firstType.utf8Writer().getClass(), secondType.utf8Writer().getClass());
+    assertSame(firstType.latin1Reader().getClass(), secondType.latin1Reader().getClass());
+    assertSame(firstType.utf16Reader().getClass(), secondType.utf16Reader().getClass());
+    assertSame(firstType.utf8Reader().getClass(), secondType.utf8Reader().getClass());
   }
 
   @Test
-  public void inactiveAnyDirectionReusesClass() {
+  public void anyCodecUsesCapabilityInterface() {
     JsonTypeInfo getterA = anyType(GetterAny.class, new ChildCodecA());
     JsonTypeInfo getterB = anyType(GetterAny.class, new ChildCodecB());
-    assertNotSame(getterA.stringWriter().getClass(), getterB.stringWriter().getClass());
-    assertNotSame(getterA.utf8Writer().getClass(), getterB.utf8Writer().getClass());
+    assertSame(getterA.stringWriter().getClass(), getterB.stringWriter().getClass());
+    assertSame(getterA.utf8Writer().getClass(), getterB.utf8Writer().getClass());
     assertSame(getterA.latin1Reader().getClass(), getterB.latin1Reader().getClass());
     assertSame(getterA.utf16Reader().getClass(), getterB.utf16Reader().getClass());
     assertSame(getterA.utf8Reader().getClass(), getterB.utf8Reader().getClass());
@@ -261,55 +421,20 @@ public class JsonGeneratedCapabilityKeyTest {
     JsonTypeInfo setterB = anyType(SetterAny.class, new ChildCodecB());
     assertSame(setterA.stringWriter().getClass(), setterB.stringWriter().getClass());
     assertSame(setterA.utf8Writer().getClass(), setterB.utf8Writer().getClass());
-    assertNotSame(setterA.latin1Reader().getClass(), setterB.latin1Reader().getClass());
-    assertNotSame(setterA.utf16Reader().getClass(), setterB.utf16Reader().getClass());
-    assertNotSame(setterA.utf8Reader().getClass(), setterB.utf8Reader().getClass());
+    assertSame(setterA.latin1Reader().getClass(), setterB.latin1Reader().getClass());
+    assertSame(setterA.utf16Reader().getClass(), setterB.utf16Reader().getClass());
+    assertSame(setterA.utf8Reader().getClass(), setterB.utf8Reader().getClass());
   }
 
   @Test
-  public void terminalDirectMethodsChangeKey() throws Exception {
-    JsonTypeInfo first = directTerminal(new VariableDirectCodec(false));
-    JsonTypeInfo second = directTerminal(new VariableDirectCodec(true));
-    TerminalTransparentCodec firstCodec = new TerminalTransparentCodec(first);
-    TerminalTransparentCodec secondCodec = new TerminalTransparentCodec(second);
-
-    assertNotEquals(unboxedKeyParts(firstCodec, false), unboxedKeyParts(secondCodec, false));
-    assertNotEquals(unboxedKeyParts(firstCodec, true), unboxedKeyParts(secondCodec, true));
-  }
-
-  @Test
-  @SuppressWarnings({"rawtypes", "unchecked"})
-  public void hostedSiblingCodecUsesInterface() throws Exception {
-    String packageName = "org.apache.fory.json.sibling";
-    Path targetOutput = Files.createTempDirectory("fory-json-sibling-target");
-    compileSource(
-        targetOutput,
-        packageName,
-        "SiblingModel",
-        "public final class SiblingModel { public " + Child.class.getCanonicalName() + " child; }");
-    Path codecOutput = Files.createTempDirectory("fory-json-sibling-codec");
-    compileSource(
-        codecOutput,
-        packageName,
-        "SiblingChildCodec",
-        "public final class SiblingChildCodec extends "
-            + ChildCodecA.class.getCanonicalName()
-            + " {}");
-    try (URLClassLoader targetLoader =
-            new URLClassLoader(
-                new URL[] {targetOutput.toUri().toURL()}, getClass().getClassLoader());
-        URLClassLoader codecLoader =
-            new URLClassLoader(
-                new URL[] {codecOutput.toUri().toURL()}, getClass().getClassLoader())) {
-      Class<?> target = Class.forName(packageName + ".SiblingModel", true, targetLoader);
-      Class<?> codecType = Class.forName(packageName + ".SiblingChildCodec", true, codecLoader);
-      JsonValueCodec<Child> codec =
-          (JsonValueCodec<Child>) codecType.getDeclaredConstructor().newInstance();
-      ForyJson configured = parentJson(codec);
-      JsonTypeResolver resolver = hostedResolver(configured);
-      List<ObjectCodec<?>> models = resolver.generateHostedCodecs(target);
-      assertTrue(models.stream().anyMatch(model -> model.type() == target));
-    }
+  public void hostedCodecUsesInterface() throws Exception {
+    JsonTypeResolver first = hostedResolver(parentJson(new ChildCodecA()));
+    JsonTypeResolver second = hostedResolver(parentJson(new ChildCodecB()));
+    first.generateHostedCodecs(Parent.class);
+    second.generateHostedCodecs(Parent.class);
+    assertObjectClasses(
+        first.getTypeInfo(Parent.class, Parent.class),
+        second.getTypeInfo(Parent.class, Parent.class));
   }
 
   @Test
@@ -340,16 +465,19 @@ public class JsonGeneratedCapabilityKeyTest {
   }
 
   @Test
-  public void hostedBootstrapPackageNeedsOwner() throws Exception {
-    Method method =
-        JsonCodegen.class.getDeclaredMethod("hostedDefinitionOwner", Class.class, String.class);
-    method.setAccessible(true);
-    assertNull(method.invoke(null, Subject.class, CodeGenerator.getPackage(Subject.class)));
+  public void hostedBootstrapUsesInterpretedRole() throws Exception {
+    JsonTypeResolver resolver =
+        hostedResolver(
+            ForyJson.builder()
+                .registerCodec(java.security.Principal.class, JsonTestSupport.nullCodec())
+                .build());
+    resolver.generateHostedCodecs(Subject.class);
+    assertInterpretedObject(resolver.getTypeInfo(Subject.class, Subject.class));
   }
 
   @Test
   @SuppressWarnings({"rawtypes", "unchecked"})
-  public void hostedTransparentTerminalUsesInterpretedRole() throws Exception {
+  public void hostedTerminalUsesInterpretedRole() throws Exception {
     String packageName = "org.apache.fory.json.terminal";
     Path terminalOutput = Files.createTempDirectory("fory-json-terminal");
     compileSource(
@@ -441,6 +569,12 @@ public class JsonGeneratedCapabilityKeyTest {
     Class<?> firstClass = shadowClass(PublicFields.class, bytes);
     Class<?> secondClass = shadowClass(PublicFields.class, bytes);
     assertNotSame(firstClass, secondClass);
+    GeneratedCodecKey firstKey =
+        GeneratedCodecKey.object(firstClass, GeneratedCodecKey.Role.STRING_WRITER, new Object[0]);
+    GeneratedCodecKey secondKey =
+        GeneratedCodecKey.object(secondClass, GeneratedCodecKey.Role.STRING_WRITER, new Object[0]);
+    assertEquals(firstKey.hashCode(), secondKey.hashCode());
+    assertNotEquals(firstKey, secondKey);
 
     JsonTypeInfo first = loaderType(firstClass);
     JsonTypeInfo second = loaderType(secondClass);
@@ -473,10 +607,88 @@ public class JsonGeneratedCapabilityKeyTest {
     return JsonTestSupport.currentTypeResolver(json).getTypeInfo(Parent.class, Parent.class);
   }
 
+  private static ForyJson transparentJson(JsonValueCodec<LocalTerminal> terminalCodec)
+      throws Exception {
+    JsonObjectModel model = transparentModel();
+    return ForyJson.builder()
+        .registerCodec(LocalTerminal.class, terminalCodec)
+        .registerCodec(
+            SiblingValue.class,
+            (type, resolver, runtimeType) ->
+                new SiblingTransparentCodec(
+                    resolver.getTypeInfo(LocalTerminal.class, LocalTerminal.class)))
+        .registerCodec(
+            TransparentModel.class,
+            (type, resolver, runtimeType) -> resolver.createObjectCodec(type, model))
+        .withAsyncCompilation(false)
+        .build();
+  }
+
+  private static JsonTypeInfo transparentType(ForyJson json) {
+    return JsonTestSupport.currentTypeResolver(json)
+        .getTypeInfo(TransparentModel.class, TransparentModel.class);
+  }
+
+  private static Method publicMethod(Class<?> owner, String name, Class<?>... parameterTypes) {
+    try {
+      return owner.getMethod(name, parameterTypes);
+    } catch (NoSuchMethodException e) {
+      throw new AssertionError(e);
+    }
+  }
+
   private static JsonTypeInfo collectionType(JsonValueCodec<Child> codec) {
     ForyJson json =
         ForyJson.builder().registerCodec(Child.class, codec).withAsyncCompilation(false).build();
     return JsonTestSupport.currentTypeResolver(json).getTypeInfo(new TypeRef<List<Child>>() {});
+  }
+
+  private static JsonTypeInfo factoryModelType(boolean first) throws Exception {
+    JsonObjectModel model = factoryModel(first);
+    JsonCodecFactory factory =
+        new JsonCodecFactory() {
+          @Override
+          public JsonValueCodec<?> create(
+              TypeRef<?> type, JsonTypeResolver resolver, boolean runtimeType) {
+            return resolver.createObjectCodec(type, model);
+          }
+
+          @Override
+          public String factoryKey() {
+            return first ? "factory-model-first" : "factory-model-second";
+          }
+        };
+    ForyJson json =
+        ForyJson.builder()
+            .registerCodec(FactoryModel.class, factory)
+            .withAsyncCompilation(false)
+            .build();
+    return JsonTestSupport.currentTypeResolver(json)
+        .getTypeInfo(FactoryModel.class, FactoryModel.class);
+  }
+
+  private static JsonTypeInfo unwrappedFactoryType(boolean first) throws Exception {
+    JsonObjectModel model = factoryModel(first);
+    JsonCodecFactory factory =
+        new JsonCodecFactory() {
+          @Override
+          public JsonValueCodec<?> create(
+              TypeRef<?> type, JsonTypeResolver resolver, boolean runtimeType) {
+            return resolver.createObjectCodec(type, model);
+          }
+
+          @Override
+          public String factoryKey() {
+            return first ? "unwrapped-first" : "unwrapped-second";
+          }
+        };
+    ForyJson json =
+        ForyJson.builder()
+            .registerCodec(FactoryModel.class, factory)
+            .withAsyncCompilation(false)
+            .build();
+    return JsonTestSupport.currentTypeResolver(json)
+        .getTypeInfo(UnwrappedFactoryModel.class, UnwrappedFactoryModel.class);
   }
 
   @SuppressWarnings({"rawtypes", "unchecked"})
@@ -491,36 +703,6 @@ public class JsonGeneratedCapabilityKeyTest {
             JsonConfig.class, ExecutorService.class, boolean.class);
     constructor.setAccessible(true);
     return new JsonTypeResolver(constructor.newInstance(json.config(), null, true));
-  }
-
-  private static JsonTypeInfo directTerminal(VariableDirectCodec codec) {
-    JsonCodecFactory factory =
-        (type, resolver, runtimeType) ->
-            type.getRawType() == int.class
-                    && type.getTypeExtMeta() != null
-                    && type.getTypeExtMeta().typeId() == Types.UINT32
-                ? codec
-                : null;
-    ForyJson json =
-        ForyJson.builder().withModule(context -> context.registerCodecFactory(factory)).build();
-    return JsonTestSupport.currentTypeResolver(json)
-        .getTypeInfo(TypeRef.of(int.class, TypeExtMeta.of(Types.UINT32, false, false)));
-  }
-
-  private static List<Object> unboxedKeyParts(UnboxedValueCodec codec, boolean reader)
-      throws Exception {
-    Method method =
-        Class.forName("org.apache.fory.json.resolver.GeneratedCodecKeyBuilder")
-            .getDeclaredMethod(
-                "addUnboxedKeyParts",
-                UnboxedValueCodec.class,
-                boolean.class,
-                ArrayList.class,
-                ArrayList.class);
-    method.setAccessible(true);
-    ArrayList<Object> keyParts = new ArrayList<>();
-    method.invoke(null, codec, reader, keyParts, new ArrayList<Class<?>>());
-    return keyParts;
   }
 
   @SuppressWarnings({"rawtypes", "unchecked"})
@@ -608,6 +790,26 @@ public class JsonGeneratedCapabilityKeyTest {
         new TypeRef<?>[] {logicalType});
   }
 
+  private static JsonObjectModel factoryModel(boolean first) throws Exception {
+    String name = first ? "first" : "second";
+    Class<?> valueType = first ? String.class : long.class;
+    String getter = first ? "getFirst" : "getSecond";
+    String setter = first ? "setFirst" : "setSecond";
+    return new JsonObjectModel(
+        FactoryModel.class.getConstructor(),
+        null,
+        new String[0],
+        new Method[0],
+        new Method[0],
+        new int[0],
+        new boolean[0],
+        new TypeRef<?>[0],
+        new String[] {name},
+        new Method[] {FactoryModel.class.getMethod(getter)},
+        new Method[] {FactoryModel.class.getMethod(setter, valueType)},
+        new TypeRef<?>[] {TypeRef.of(valueType)});
+  }
+
   private static TypeExtMeta ordinary(boolean nullable) {
     return TypeExtMeta.of(Types.UNKNOWN, nullable, false, false, false);
   }
@@ -666,6 +868,62 @@ public class JsonGeneratedCapabilityKeyTest {
     public Parent() {}
   }
 
+  public static final class GenericModel<T> {
+    public T value;
+
+    public GenericModel() {}
+  }
+
+  public static final class GenericPair<T, U> {
+    public T first;
+    public U second;
+
+    public GenericPair() {}
+  }
+
+  public static final class GenericCollection<T> {
+    public List<T> values;
+
+    public GenericCollection() {}
+  }
+
+  public enum FirstEnum {
+    VALUE
+  }
+
+  public enum SecondEnum {
+    VALUE
+  }
+
+  public static final class FactoryModel {
+    private String first;
+    private long second;
+
+    public FactoryModel() {}
+
+    public String getFirst() {
+      return first;
+    }
+
+    public void setFirst(String first) {
+      this.first = first;
+    }
+
+    public long getSecond() {
+      return second;
+    }
+
+    public void setSecond(long second) {
+      this.second = second;
+    }
+  }
+
+  public static final class UnwrappedFactoryModel {
+    @JsonUnwrapped public FactoryModel value;
+
+    public UnwrappedFactoryModel() {}
+  }
+
   public static final class GetterAny {
     private final Map<String, Child> values = new LinkedHashMap<>();
 
@@ -690,7 +948,21 @@ public class JsonGeneratedCapabilityKeyTest {
     public Child() {}
   }
 
+  public static final class OtherChild {
+    public long value;
+
+    public OtherChild() {}
+  }
+
   public interface SiblingCarrier {}
+
+  public static final class LocalTerminal implements SiblingCarrier {
+    final String value;
+
+    LocalTerminal(String value) {
+      this.value = value;
+    }
+  }
 
   public static final class SiblingValue {}
 
@@ -743,6 +1015,146 @@ public class JsonGeneratedCapabilityKeyTest {
 
   public static final class ChildCodecB extends ChildCodecA {}
 
+  private static final class HiddenChildCodecA extends ChildCodecA {}
+
+  private static final class HiddenChildCodecB extends ChildCodecA {}
+
+  public abstract static class TerminalCodec implements JsonValueCodec<LocalTerminal> {
+    private final String prefix;
+
+    TerminalCodec(String prefix) {
+      this.prefix = prefix;
+    }
+
+    @Override
+    public void writeString(StringJsonWriter writer, LocalTerminal value) {
+      writer.writeString(prefix + value.value);
+    }
+
+    @Override
+    public void writeUtf8(Utf8JsonWriter writer, LocalTerminal value) {
+      writer.writeString(prefix + value.value);
+    }
+
+    @Override
+    public LocalTerminal readLatin1(Latin1JsonReader reader) {
+      return terminal(reader.readString());
+    }
+
+    @Override
+    public LocalTerminal readUtf16(Utf16JsonReader reader) {
+      return terminal(reader.readString());
+    }
+
+    @Override
+    public LocalTerminal readUtf8(Utf8JsonReader reader) {
+      return terminal(reader.readString());
+    }
+
+    private LocalTerminal terminal(String value) {
+      return new LocalTerminal(value.substring(prefix.length()));
+    }
+  }
+
+  public static final class TerminalCodecA extends TerminalCodec {
+    TerminalCodecA() {
+      super("a:");
+    }
+  }
+
+  public static final class TerminalCodecB extends TerminalCodec {
+    TerminalCodecB() {
+      super("b:");
+    }
+  }
+
+  public abstract static class DirectTerminalCodec extends TerminalCodec
+      implements DirectUnboxedValueCodec {
+    DirectTerminalCodec(String prefix) {
+      super(prefix);
+    }
+
+    @Override
+    public Class<?> carrierType() {
+      return LocalTerminal.class;
+    }
+
+    @Override
+    public Object readLatin1Carrier(Latin1JsonReader reader) {
+      return readLatin1(reader);
+    }
+
+    @Override
+    public Object readUtf16Carrier(Utf16JsonReader reader) {
+      return readUtf16(reader);
+    }
+
+    @Override
+    public Object readUtf8Carrier(Utf8JsonReader reader) {
+      return readUtf8(reader);
+    }
+
+    @Override
+    public void writeStringCarrier(StringJsonWriter writer, Object carrier) {
+      writeString(writer, (LocalTerminal) carrier);
+    }
+
+    @Override
+    public void writeUtf8Carrier(Utf8JsonWriter writer, Object carrier) {
+      writeUtf8(writer, (LocalTerminal) carrier);
+    }
+  }
+
+  public static final class DirectTerminalCodecA extends DirectTerminalCodec {
+    DirectTerminalCodecA() {
+      super("a:");
+    }
+
+    @Override
+    public Method readCarrierMethod() {
+      return publicMethod(DirectTerminalCodecA.class, "read", JsonReader.class);
+    }
+
+    @Override
+    public Method writeCarrierMethod() {
+      return publicMethod(
+          DirectTerminalCodecA.class, "write", JsonWriter.class, LocalTerminal.class);
+    }
+
+    public static LocalTerminal read(JsonReader reader) {
+      return new LocalTerminal(reader.readString().substring(2));
+    }
+
+    public static void write(JsonWriter writer, LocalTerminal value) {
+      writer.writeString("a:" + value.value);
+    }
+  }
+
+  public static final class DirectTerminalCodecB extends DirectTerminalCodec {
+    DirectTerminalCodecB() {
+      super("b:");
+    }
+
+    @Override
+    public Method readCarrierMethod() {
+      return publicMethod(DirectTerminalCodecB.class, "read", JsonReader.class);
+    }
+
+    @Override
+    public Method writeCarrierMethod() {
+      return publicMethod(
+          DirectTerminalCodecB.class, "write", JsonWriter.class, LocalTerminal.class);
+    }
+
+    public static LocalTerminal read(JsonReader reader) {
+      return new LocalTerminal(reader.readString().substring(2));
+    }
+
+    public static void write(JsonWriter writer, LocalTerminal value) {
+      writer.writeString("b:" + value.value);
+    }
+  }
+
   public static final class StatefulChildCodec extends ChildCodecA {
     private final String prefix;
 
@@ -779,168 +1191,6 @@ public class JsonGeneratedCapabilityKeyTest {
       Child value = new Child();
       value.value = text.substring(prefix.length());
       return value;
-    }
-  }
-
-  public static class VariableDirectCodec extends AbstractJsonValueCodec<Integer>
-      implements DirectUnboxedValueCodec {
-    private final boolean alternate;
-
-    public VariableDirectCodec(boolean alternate) {
-      this.alternate = alternate;
-    }
-
-    @Override
-    public void write(JsonWriter writer, Integer value) {
-      writer.writeInt(value);
-    }
-
-    @Override
-    public Integer read(JsonReader reader) {
-      return reader.readInt();
-    }
-
-    @Override
-    public Class<?> carrierType() {
-      return int.class;
-    }
-
-    @Override
-    public Object readLatin1Carrier(Latin1JsonReader reader) {
-      return reader.readInt();
-    }
-
-    @Override
-    public Object readUtf16Carrier(Utf16JsonReader reader) {
-      return reader.readInt();
-    }
-
-    @Override
-    public Object readUtf8Carrier(Utf8JsonReader reader) {
-      return reader.readInt();
-    }
-
-    @Override
-    public void writeStringCarrier(StringJsonWriter writer, Object carrier) {
-      writer.writeInt((Integer) carrier);
-    }
-
-    @Override
-    public void writeUtf8Carrier(Utf8JsonWriter writer, Object carrier) {
-      writer.writeInt((Integer) carrier);
-    }
-
-    @Override
-    public Method readCarrierMethod() {
-      return method(alternate ? "readSecond" : "readFirst", JsonReader.class);
-    }
-
-    @Override
-    public Method writeCarrierMethod() {
-      return method(alternate ? "writeSecond" : "writeFirst", JsonWriter.class, int.class);
-    }
-
-    public static int readFirst(JsonReader reader) {
-      return reader.readInt();
-    }
-
-    public static int readSecond(JsonReader reader) {
-      return reader.readInt();
-    }
-
-    public static void writeFirst(JsonWriter writer, int value) {
-      writer.writeInt(value);
-    }
-
-    public static void writeSecond(JsonWriter writer, int value) {
-      writer.writeInt(value);
-    }
-
-    private static Method method(String name, Class<?>... parameters) {
-      try {
-        return VariableDirectCodec.class.getMethod(name, parameters);
-      } catch (NoSuchMethodException e) {
-        throw new AssertionError(e);
-      }
-    }
-  }
-
-  public static final class TerminalTransparentCodec extends AbstractJsonValueCodec<Integer>
-      implements TransparentUnboxedValueCodec {
-    private final JsonTypeInfo valueTypeInfo;
-
-    public TerminalTransparentCodec(JsonTypeInfo valueTypeInfo) {
-      this.valueTypeInfo = valueTypeInfo;
-    }
-
-    @Override
-    public JsonTypeInfo valueTypeInfo() {
-      return valueTypeInfo;
-    }
-
-    @Override
-    public Object constructCarrier(JsonReader reader, Object value) {
-      return value;
-    }
-
-    @Override
-    public Object extractValue(Object carrier) {
-      return carrier;
-    }
-
-    @Override
-    public Method[] constructMethods() {
-      return new Method[0];
-    }
-
-    @Override
-    public int[] constructBoxBytes() {
-      return new int[0];
-    }
-
-    @Override
-    public Method[] extractMethods() {
-      return new Method[0];
-    }
-
-    @Override
-    public void write(JsonWriter writer, Integer value) {
-      writer.writeInt(value);
-    }
-
-    @Override
-    public Integer read(JsonReader reader) {
-      return reader.readInt();
-    }
-
-    @Override
-    public Class<?> carrierType() {
-      return int.class;
-    }
-
-    @Override
-    public Object readLatin1Carrier(Latin1JsonReader reader) {
-      return reader.readInt();
-    }
-
-    @Override
-    public Object readUtf16Carrier(Utf16JsonReader reader) {
-      return reader.readInt();
-    }
-
-    @Override
-    public Object readUtf8Carrier(Utf8JsonReader reader) {
-      return reader.readInt();
-    }
-
-    @Override
-    public void writeStringCarrier(StringJsonWriter writer, Object carrier) {
-      writer.writeInt((Integer) carrier);
-    }
-
-    @Override
-    public void writeUtf8Carrier(Utf8JsonWriter writer, Object carrier) {
-      writer.writeInt((Integer) carrier);
     }
   }
 

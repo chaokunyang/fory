@@ -115,7 +115,6 @@ final class ForyJsonGraalVMFeature implements Feature {
   private final Set<ObjectCodec<?>> processedObjectModels =
       Collections.newSetFromMap(new IdentityHashMap<>());
   private final ArrayList<HostedConfiguration> hostedConfigurations = new ArrayList<>();
-  private boolean defaultConfigurationAdded;
 
   @Override
   public String getDescription() {
@@ -157,7 +156,8 @@ final class ForyJsonGraalVMFeature implements Feature {
         }
         if (type == ForyJson.class) {
           registerBuiltInTypes(access);
-          addDefaultConfiguration();
+          hostedConfigurations.add(
+              new HostedConfiguration(ForyJson.builder().buildConfig()));
           changed = true;
         }
       }
@@ -259,14 +259,6 @@ final class ForyJsonGraalVMFeature implements Feature {
     return changed;
   }
 
-  private void addDefaultConfiguration() {
-    if (defaultConfigurationAdded) {
-      return;
-    }
-    defaultConfigurationAdded = true;
-    hostedConfigurations.add(new HostedConfiguration(ForyJson.builder().build().config()));
-  }
-
   private boolean addFactoryRoot(
       DuringAnalysisAccess access, HostedConfiguration configuration, Class<?> type) {
     boolean changed = configuration.factoryModels.add(type);
@@ -348,6 +340,7 @@ final class ForyJsonGraalVMFeature implements Feature {
       }
       ArrayList<Class<?>> models = new ArrayList<>(selectedModels);
       models.sort(Comparator.comparing(Class::getName));
+      boolean generated = false;
       for (Class<?> model : models) {
         // A raw generic Class is not a schema. Hosted capabilities are generated only when a
         // concrete TypeRef occurrence is reached from a selected non-generic root; eagerly
@@ -369,12 +362,14 @@ final class ForyJsonGraalVMFeature implements Feature {
         for (ObjectCodec<?> objectModel : objectModels) {
           registerObjectModel(access, objectModel);
         }
-        Set<Class<?>> generatedClasses =
-            JsonGeneratedClassRegistry.register(configuration.registry);
+        generated = true;
+        changed = true;
+      }
+      if (generated) {
+        Set<Class<?>> generatedClasses = JsonGeneratedClassRegistry.register(configuration.registry);
         for (Class<?> generatedClass : generatedClasses) {
           registerGeneratedClass(generatedClass);
         }
-        changed = true;
       }
     }
     return changed;

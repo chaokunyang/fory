@@ -182,7 +182,7 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
   }
 
   @Test(dataProvider = "enableCodegen")
-  public void sameConfigUsesSameClass(boolean codegen) throws Exception {
+  public void sameConfigUsesSameClass(boolean codegen) {
     ForyJson first = newJson(codegen);
     ForyJson second = newJson(codegen);
     ForyJson writeNullFields = newJsonBuilder(codegen).writeNullFields(true).build();

@@ -58,6 +58,9 @@ public final class JsonTypeInfo {
   private final boolean rejectsNull;
   private final boolean transparentNull;
   private final UnboxedValueCodec unboxedValueCodec;
+  private final String objectFactoryKey;
+  // Only exact registry or factory selection can vary independently of target/Mixin metadata.
+  private final Class<?> registeredCodecClass;
   private StringWriterCodec<Object> stringWriter;
   private Utf8WriterCodec<Object> utf8Writer;
   private Latin1ReaderCodec<Object> latin1Reader;
@@ -66,7 +69,7 @@ public final class JsonTypeInfo {
   private final boolean annotationCodec;
 
   JsonTypeInfo(TypeRef<?> typeRef, JsonFieldKind kind, JsonValueCodec<Object> codec) {
-    this(typeRef, kind, codec, false);
+    this(typeRef, kind, codec, false, null, null);
   }
 
   JsonTypeInfo(
@@ -74,6 +77,16 @@ public final class JsonTypeInfo {
       JsonFieldKind kind,
       JsonValueCodec<Object> codec,
       boolean annotationCodec) {
+    this(typeRef, kind, codec, annotationCodec, null, null);
+  }
+
+  JsonTypeInfo(
+      TypeRef<?> typeRef,
+      JsonFieldKind kind,
+      JsonValueCodec<Object> codec,
+      boolean annotationCodec,
+      String objectFactoryKey,
+      Class<?> registeredCodecClass) {
     this.typeRef = typeRef;
     this.rawType = typeRef.getRawType();
     this.kind = kind;
@@ -84,6 +97,8 @@ public final class JsonTypeInfo {
         metadata != null && !metadata.nullable() && !metadata.nullableWrapper() && !transparentNull;
     unboxedValueCodec = codec instanceof UnboxedValueCodec ? (UnboxedValueCodec) codec : null;
     this.annotationCodec = annotationCodec;
+    this.objectFactoryKey = objectFactoryKey;
+    this.registeredCodecClass = registeredCodecClass;
     stringWriter = codec;
     utf8Writer = codec;
     latin1Reader = codec;
@@ -182,5 +197,15 @@ public final class JsonTypeInfo {
   @Internal
   public boolean usesAnnotationCodec() {
     return annotationCodec;
+  }
+
+  String objectFactoryKey() {
+    return objectFactoryKey;
+  }
+
+  /** Returns the exact application-registered codec implementation, or {@code null}. */
+  @Internal
+  public Class<?> registeredCodecClass() {
+    return registeredCodecClass;
   }
 }

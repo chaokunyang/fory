@@ -48,6 +48,7 @@ import java.util.concurrent.ConcurrentMap;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.JsonCodecFactory;
 import org.apache.fory.json.codec.JsonValueCodec;
+import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.util.Preconditions;
 
 /**
@@ -58,7 +59,7 @@ import org.apache.fory.util.Preconditions;
  * from an existing {@code ForyJson}. The runtime registry reads that owned snapshot directly.
  */
 public final class CodecRegistry {
-  private static final Set<Class<?>> PROTECTED_BUILTIN_TYPES = protectedBuiltinTypes();
+  private static final Set<Class<?>> DEDICATED_READER_WRITER_TYPES = dedicatedReaderWriterTypes();
 
   private final ConcurrentMap<Class<?>, JsonValueCodec<?>> codecs;
   private final ConcurrentMap<Class<?>, FactoryBinding> factories;
@@ -78,6 +79,10 @@ public final class CodecRegistry {
   public <T> void register(Class<T> type, JsonValueCodec<T> codec) {
     Preconditions.checkNotNull(type);
     Preconditions.checkNotNull(codec);
+    if (codec instanceof ObjectCodec<?>) {
+      throw new IllegalArgumentException(
+          "ObjectCodec instances are resolver-owned; register a JsonCodecFactory instead");
+    }
     checkRegistrationType(type);
     codecs.put(type, codec);
     factories.remove(type);
@@ -89,12 +94,6 @@ public final class CodecRegistry {
     checkRegistrationType(type);
     factories.put(type, FactoryBinding.create(type, factory));
     codecs.remove(type);
-  }
-
-  /** Returns whether the exact type is implemented by a protected built-in reader/writer path. */
-  @Internal
-  public static boolean isProtectedBuiltinType(Class<?> type) {
-    return PROTECTED_BUILTIN_TYPES.contains(type);
   }
 
   public JsonValueCodec<?> get(Class<?> type) {
@@ -142,8 +141,8 @@ public final class CodecRegistry {
     return new CodecRegistry(copied, copiedFactories);
   }
 
-  private static Set<Class<?>> protectedBuiltinTypes() {
-    Set<Class<?>> types = Collections.newSetFromMap(new IdentityHashMap<>());
+  private static Set<Class<?>> dedicatedReaderWriterTypes() {
+    Set<Class<?>> types = new HashSet<>();
     Collections.addAll(
         types,
         boolean.class,
@@ -188,7 +187,7 @@ public final class CodecRegistry {
   }
 
   private static void checkRegistrationType(Class<?> type) {
-    if (isProtectedBuiltinType(type)) {
+    if (DEDICATED_READER_WRITER_TYPES.contains(type)) {
       throw new IllegalArgumentException(
           "JSON codec registration is not allowed for built-in type " + type.getTypeName());
     }

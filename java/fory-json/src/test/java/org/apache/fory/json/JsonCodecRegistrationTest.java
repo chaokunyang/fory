@@ -44,13 +44,14 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import org.apache.fory.json.codec.JsonValueCodec;
+import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.resolver.CodecRegistry;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.reflect.TypeRef;
 import org.testng.annotations.Test;
 
 public class JsonCodecRegistrationTest {
-  private static final Class<?>[] PROTECTED_TYPES = {
+  private static final Class<?>[] DEDICATED_TYPES = {
     boolean.class,
     Boolean.class,
     byte.class,
@@ -93,10 +94,9 @@ public class JsonCodecRegistrationTest {
 
   @Test
   @SuppressWarnings({"rawtypes", "unchecked"})
-  public void protectedBuiltinRegistrationsRejected() {
+  public void dedicatedTypeRegistrationsRejected() {
     JsonCodecFactory factory = (type, resolver, runtimeType) -> null;
-    for (Class<?> type : PROTECTED_TYPES) {
-      assertTrue(CodecRegistry.isProtectedBuiltinType(type), type.getTypeName());
+    for (Class<?> type : DEDICATED_TYPES) {
       assertThrows(
           IllegalArgumentException.class,
           () -> ForyJson.builder().registerCodec((Class) type, nullCodec()));
@@ -107,7 +107,7 @@ public class JsonCodecRegistrationTest {
   }
 
   @Test
-  public void factoryHandledBuiltinRejectedBeforeMutation() {
+  public void factoryHandledDedicatedTypeRejected() {
     CodecRegistry registry = new CodecRegistry();
     JsonCodecFactory factory =
         new JsonCodecFactory() {
@@ -128,7 +128,7 @@ public class JsonCodecRegistrationTest {
   }
 
   @Test
-  public void moduleExactBuiltinRejected() {
+  public void moduleExactDedicatedTypeRejected() {
     assertThrows(
         IllegalArgumentException.class,
         () ->
@@ -147,9 +147,18 @@ public class JsonCodecRegistrationTest {
   @Test
   public void otherBuiltinRegistrationAllowed() {
     CodecRegistry registry = new CodecRegistry();
-    assertFalse(CodecRegistry.isProtectedBuiltinType(File.class));
     registry.register(File.class, nullCodec());
     assertTrue(registry.contains(File.class));
+  }
+
+  @Test
+  public void objectCodecRegistrationRejected() {
+    ForyJson source = ForyJson.builder().build();
+    ObjectCodec<ApplicationValue> codec =
+        JsonTestSupport.currentTypeResolver(source).getObjectCodec(ApplicationValue.class);
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> ForyJson.builder().registerCodec(ApplicationValue.class, codec));
   }
 
   public static final class ApplicationValue {}

@@ -45,8 +45,8 @@ public interface JsonCodecFactory {
   /**
    * Returns runtime classes represented by an exact closed root codec.
    *
-   * <p>The list must not contain a dedicated reader/writer scalar type or {@code byte[]}, {@code
-   * String[]}, or {@code long[]}.
+   * <p>Dedicated reader/writer scalar types, {@code byte[]}, {@code String[]}, and {@code long[]}
+   * are not allowed.
    */
   @Internal
   default List<Class<?>> handledRuntimeClasses() {

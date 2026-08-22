@@ -90,8 +90,9 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   `@JsonCodec`, `@JsonFormat`, and semantic metadata remain separate from exact registry mutation
   and are fixed by the target class or effective Mixin.
 - Fory JSON `ObjectCodec` instances are resolver-owned and must not be registered directly. A
-  language module that supplies a custom object model must use a `JsonCodecFactory`, whose stable
-  factory key participates in the generated object-class identity.
+  language module that supplies a custom object model must use a `JsonCodecFactory`. A configurable
+  factory's stable key must cover every option that can change its created codec class, object
+  model, or generated operations.
 - Do not add normal-JVM process-global caches keyed by user classes, generated classes, serializer
   classes, classloaders, or class-bound method handles. Prefer per-runtime state, immutable shared
   metadata, or build-time-only template data. The only exception is Fory JSON's generated-role

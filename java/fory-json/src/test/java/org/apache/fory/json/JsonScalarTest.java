@@ -2199,38 +2199,35 @@ public class JsonScalarTest extends ForyJsonTestModels {
   }
 
   @Test(dataProvider = "enableCodegen")
-  public void customPrimitiveNull(boolean codegen) {
+  public void primitiveNull(boolean codegen) {
     ForyJson json = newJson(codegen);
     assertThrows(ForyJsonException.class, () -> json.fromJson("null", int.class));
     assertThrows(
         ForyJsonException.class,
         () -> json.fromJson("null".getBytes(StandardCharsets.UTF_8), int.class));
     assertThrows(
-        ForyJsonException.class,
-        () -> json.fromJson("{\"value\":null}", CustomPrimitiveField.class));
+        ForyJsonException.class, () -> json.fromJson("{\"value\":null}", PrimitiveField.class));
     assertThrows(
         ForyJsonException.class,
-        () -> json.fromJson("{\"ignored\":\"\u0100\",\"value\":null}", CustomPrimitiveField.class));
+        () -> json.fromJson("{\"ignored\":\"\u0100\",\"value\":null}", PrimitiveField.class));
     assertThrows(
         ForyJsonException.class,
         () ->
             json.fromJson(
-                "{\"value\":null}".getBytes(StandardCharsets.UTF_8), CustomPrimitiveField.class));
-    assertGeneratedWhenSupported(json, CustomPrimitiveField.class, codegen);
+                "{\"value\":null}".getBytes(StandardCharsets.UTF_8), PrimitiveField.class));
+    assertGeneratedWhenSupported(json, PrimitiveField.class, codegen);
 
     assertThrows(
-        ForyJsonException.class,
-        () -> json.fromJson("{\"value\":null}", CustomPrimitiveSetter.class));
+        ForyJsonException.class, () -> json.fromJson("{\"value\":null}", PrimitiveSetter.class));
     assertThrows(
         ForyJsonException.class,
-        () ->
-            json.fromJson("{\"ignored\":\"\u0100\",\"value\":null}", CustomPrimitiveSetter.class));
+        () -> json.fromJson("{\"ignored\":\"\u0100\",\"value\":null}", PrimitiveSetter.class));
     assertThrows(
         ForyJsonException.class,
         () ->
             json.fromJson(
-                "{\"value\":null}".getBytes(StandardCharsets.UTF_8), CustomPrimitiveSetter.class));
-    assertGeneratedWhenSupported(json, CustomPrimitiveSetter.class, codegen);
+                "{\"value\":null}".getBytes(StandardCharsets.UTF_8), PrimitiveSetter.class));
+    assertGeneratedWhenSupported(json, PrimitiveSetter.class, codegen);
   }
 
   @Test
@@ -2359,11 +2356,11 @@ public class JsonScalarTest extends ForyJsonTestModels {
     public float floatValue;
   }
 
-  public static final class CustomPrimitiveField {
+  public static final class PrimitiveField {
     public int value;
   }
 
-  public static final class CustomPrimitiveSetter {
+  public static final class PrimitiveSetter {
     private int stored;
 
     public void setValue(int value) {

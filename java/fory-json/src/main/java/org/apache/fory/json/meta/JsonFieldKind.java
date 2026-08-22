@@ -19,8 +19,6 @@
 
 package org.apache.fory.json.meta;
 
-import org.apache.fory.annotation.Internal;
-
 /**
  * Semantic field families used to select interpreted and generated JSON operations.
  *
@@ -41,30 +39,5 @@ public enum JsonFieldKind {
   ARRAY,
   COLLECTION,
   MAP,
-  OBJECT;
-
-  /** Returns whether this kind uses the dedicated operation for {@code type}. */
-  @Internal
-  public boolean matchesPrimitive(Class<?> type) {
-    switch (this) {
-      case BOOLEAN:
-        return type == boolean.class;
-      case BYTE:
-        return type == byte.class;
-      case SHORT:
-        return type == short.class;
-      case INT:
-        return type == int.class;
-      case LONG:
-        return type == long.class;
-      case FLOAT:
-        return type == float.class;
-      case DOUBLE:
-        return type == double.class;
-      case CHAR:
-        return type == char.class;
-      default:
-        return false;
-    }
-  }
+  OBJECT
 }

@@ -84,7 +84,7 @@ final class StringWriterCodegen extends JsonWriterCodegen {
 
   @Override
   boolean writesStringCollectionDirectly(JsonFieldInfo property) {
-    return JsonTypeResolver.writesStringCollectionDirectly(property);
+    return JsonCodegen.writesStringCollectionDirectly(property);
   }
 
   @Override

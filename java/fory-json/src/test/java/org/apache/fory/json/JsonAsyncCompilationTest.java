@@ -637,7 +637,7 @@ public class JsonAsyncCompilationTest {
 
     controlled.json.fromJson(
         "{\"value\":\"raw\"}".getBytes(StandardCharsets.UTF_8), GenericAsyncBox.class);
-    assertEquals(controlled.executor.submittedTasks(), 5);
+    assertEquals(controlled.executor.submittedTasks(), 10);
     resolver.lockJIT();
     try {
       JsonTypeInfo raw = resolver.getTypeInfo(GenericAsyncBox.class, GenericAsyncBox.class);
@@ -651,7 +651,7 @@ public class JsonAsyncCompilationTest {
     Object rawReader =
         resolver.getTypeInfo(GenericAsyncBox.class, GenericAsyncBox.class).utf8Reader();
     assertNotSame(rawReader, parameterized.utf8Reader());
-    assertSame(rawReader.getClass(), parameterized.utf8Reader().getClass());
+    assertNotSame(rawReader.getClass(), parameterized.utf8Reader().getClass());
 
     JsonValueCodec<AsyncChild> codec = nullCodec();
     CodecRegistry codecs = new CodecRegistry();

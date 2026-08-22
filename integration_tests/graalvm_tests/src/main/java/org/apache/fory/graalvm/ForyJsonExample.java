@@ -119,9 +119,10 @@ public final class ForyJsonExample {
     ForyJson interpretedJson = newInterpretedJson();
     exerciseCodegenConfiguration(DEFAULT_JSON, true, true);
     exerciseCodegenConfiguration(providerJson, true, true);
-    exerciseCodegenConfiguration(interpretedJson, false, false);
+    exerciseCodegenConfiguration(interpretedJson, false, true);
+    testRegisteredCodec(providerJson);
     testEmptyMixin(providerJson, true, true);
-    testEmptyMixin(interpretedJson, false, false);
+    testEmptyMixin(interpretedJson, false, true);
     testInterpretedMetadata(interpretedJson);
     testPrimitiveProperties(interpretedJson);
     testIndependentChildCodegen();
@@ -237,6 +238,16 @@ public final class ForyJsonExample {
             .probe
             .value
             .equals("probe"));
+  }
+
+  private static void testRegisteredCodec(ForyJson json) {
+    CodegenProbeCodec.expect(RegisteredCodecModel.class, true);
+    RegisteredCodecModel value = new RegisteredCodecModel();
+    value.probe = new CodegenProbeValue("registered");
+    String encoded = json.toJson(value);
+    Preconditions.checkArgument(encoded.equals("{\"probe\":\"registered\"}"));
+    Preconditions.checkArgument(
+        json.fromJson(encoded, RegisteredCodecModel.class).probe.value.equals("registered"));
   }
 
   private static void testClosedPackage() {
@@ -702,6 +713,13 @@ public final class ForyJsonExample {
     public CodegenProbeChild(String name) {
       this.name = name;
     }
+  }
+
+  @JsonType
+  public static final class RegisteredCodecModel {
+    public CodegenProbeValue probe;
+
+    public RegisteredCodecModel() {}
   }
 
   public static final class EmptyMixinTarget {

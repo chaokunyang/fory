@@ -161,7 +161,7 @@ abstract class JsonWriterCodegen {
   private boolean usesWriteCodec(JsonFieldInfo property) {
     return property.writeKind() == JsonFieldKind.COLLECTION
         ? !writesStringCollectionDirectly(property)
-        : resolver.usesWriteCodec(property);
+        : JsonCodegen.usesWriteCodec(property);
   }
 
   static Reference fieldRef(String name, Class<?> type) {

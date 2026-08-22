@@ -214,8 +214,9 @@ public final class CodecRegistry {
       }
       List<Class<?>> declared = Preconditions.checkNotNull(factory.handledRuntimeClasses());
       ArrayList<Class<?>> handled = new ArrayList<>(declared.size());
+      // Registration identity is Class identity; same-named classes from different loaders are
+      // distinct runtime branches and must remain representable by one factory.
       IdentityHashMap<Class<?>, Boolean> identities = new IdentityHashMap<>();
-      HashSet<String> names = new HashSet<>();
       for (Class<?> runtimeType : declared) {
         Preconditions.checkNotNull(runtimeType);
         checkRegistrationType(runtimeType);
@@ -223,8 +224,7 @@ public final class CodecRegistry {
           throw new IllegalArgumentException(
               runtimeType.getName() + " is not a subtype of " + target.getName());
         }
-        if (identities.put(runtimeType, Boolean.TRUE) != null
-            || !names.add(runtimeType.getName())) {
+        if (identities.put(runtimeType, Boolean.TRUE) != null) {
           throw new IllegalArgumentException(
               "Duplicate handled runtime class " + runtimeType.getName());
         }

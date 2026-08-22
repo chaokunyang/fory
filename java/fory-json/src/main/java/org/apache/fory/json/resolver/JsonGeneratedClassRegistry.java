@@ -115,6 +115,8 @@ public final class JsonGeneratedClassRegistry {
   }
 
   private static void snapshotCompanions() {
+    // Companion keys retain TypeRef and Mixin identity hashes. Freeze them as entries so Native
+    // runtime lookup uses equality instead of a hosted HashMap bucket computed before image start.
     companionEntries = new CompanionEntry[pendingCompanions.size()];
     int index = 0;
     for (Map.Entry<CompanionKey, GeneratedJsonCodec<?>> entry : pendingCompanions.entrySet()) {

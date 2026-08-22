@@ -104,6 +104,10 @@ ForyJson json =
         .build();
 ```
 
+A configurable factory must override `factoryKey()` with a deterministic value covering every
+option that can change the created codec class, object model, or generated operations. The default
+factory class name is sufficient only for a configuration-free factory.
+
 `runtimeType` is `true` only when the factory is selecting a codec for the actual class of a value
 during a dynamic write. Declared roots and composite child types receive `false`. A composite codec
 that needs this distinction after construction must retain the flag for its later `resolveTypes`

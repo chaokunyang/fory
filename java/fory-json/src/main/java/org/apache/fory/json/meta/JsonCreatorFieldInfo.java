@@ -229,11 +229,6 @@ public final class JsonCreatorFieldInfo {
         : null;
   }
 
-  /** Returns whether this argument uses its primitive reader operation directly. */
-  public boolean readsDirectPrimitive() {
-    return typeInfo.kind().matchesPrimitive(rawType);
-  }
-
   /** Throws the cold failure used by interpreted and generated readers. */
   public Object rejectNullRead() {
     throw new ForyJsonException("JSON creator property " + name + " is not nullable");

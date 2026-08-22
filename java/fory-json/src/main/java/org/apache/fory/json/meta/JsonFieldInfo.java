@@ -450,21 +450,6 @@ public final class JsonFieldInfo {
     return writeRawType;
   }
 
-  /** Returns the erased Java type exposed by the write field or getter. */
-  @Internal
-  public Class<?> writeAccessorType() {
-    return writeRawType(writeField, writeGetter);
-  }
-
-  /** Returns whether the resolved write type differs from the Java member declaration. */
-  @Internal
-  public boolean writeTypeDiffersFromDeclaration() {
-    Type declaredType = writeType(writeField, writeGetter);
-    return declaredType != null
-        && writeTypeRef != null
-        && !declaredType.equals(writeTypeRef.getType());
-  }
-
   private static Class<?> writeRawType(Field field, Method getter) {
     return getter == null ? fieldRawType(field) : getter.getReturnType();
   }
@@ -512,21 +497,6 @@ public final class JsonFieldInfo {
 
   public Class<?> readRawType() {
     return readRawType;
-  }
-
-  /** Returns the erased Java type accepted by the read field or setter. */
-  @Internal
-  public Class<?> readAccessorType() {
-    return readRawType(readField, readSetter);
-  }
-
-  /** Returns whether the resolved read type differs from the Java member declaration. */
-  @Internal
-  public boolean readTypeDiffersFromDeclaration() {
-    Type declaredType = readType(readField, readSetter);
-    return declaredType != null
-        && readTypeRef != null
-        && !declaredType.equals(readTypeRef.getType());
   }
 
   private static Class<?> readRawType(Field field, Method setter) {

@@ -40,6 +40,7 @@ import org.apache.fory.codegen.JaninoUtils;
 import org.apache.fory.codegen.JaninoUtils.DirectInvocation;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.codec.CollectionCodec;
 import org.apache.fory.json.codec.DirectUnboxedValueCodec;
 import org.apache.fory.json.codec.JsonUnwrappedInfo;
 import org.apache.fory.json.codec.Latin1ReaderCodec;
@@ -55,6 +56,7 @@ import org.apache.fory.json.meta.JsonCreatorFieldInfo;
 import org.apache.fory.json.meta.JsonCreatorInfo;
 import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.meta.JsonFieldInfo;
+import org.apache.fory.json.meta.JsonFieldKind;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.platform.JdkVersion;
@@ -86,7 +88,7 @@ public final class JsonCodegen {
   private static final int HOT_INLINE_LIMIT = 325;
   private static final int GENERATED_NAME_PREFIX_CODE_POINTS = 32;
   private static final AtomicLong GENERATED_CLASS_SUFFIX = new AtomicLong();
-  private static volatile ClassValueCache<PerClassGeneratedCodecCache> generatedClasses =
+  private static volatile ClassValueCache<PerClassGeneratedCodecCache> generatedClassCache =
       newGeneratedClassCache();
 
   private final CodeGenerator codeGenerator;
@@ -212,7 +214,7 @@ public final class JsonCodegen {
       GeneratedCodecKey key, Class<?> sourceOwner, CompilerOperation operation) {
     String generatedPackage = CodeGenerator.getPackage(sourceOwner);
     PerClassGeneratedCodecCache perClass =
-        generatedClasses.get(key.anchorClass(), PerClassGeneratedCodecCache::new);
+        generatedClassCache.get(key.anchorClass(), PerClassGeneratedCodecCache::new);
     CacheEntry entry =
         perClass.entries.computeIfAbsent(
             key,
@@ -277,7 +279,7 @@ public final class JsonCodegen {
   /** Releases the hosted strong cache after Native Image analysis freezes the runtime registry. */
   @Internal
   public static void resetGeneratedClassCache() {
-    generatedClasses = newGeneratedClassCache();
+    generatedClassCache = newGeneratedClassCache();
   }
 
   private static ClassValueCache<PerClassGeneratedCodecCache> newGeneratedClassCache() {
@@ -1186,6 +1188,88 @@ public final class JsonCodegen {
     return isGeneratedClassVisible(any.valueRawType());
   }
 
+  @Internal
+  public static Class<?> readNestedType(JsonFieldInfo field, JsonTypeResolver resolver) {
+    if (!field.readsUnboxedValue()
+        && field.readKind() == JsonFieldKind.OBJECT
+        && field.readRawType() != Object.class
+        && resolver.canonicalObjectCodec(field.readTypeInfo()) != null) {
+      return field.readRawType();
+    }
+    return null;
+  }
+
+  @Internal
+  public static boolean usesWriteCodec(JsonFieldInfo field) {
+    if (field.writesUnboxedValue() && field.writeKind() == JsonFieldKind.ENUM) {
+      return true;
+    }
+    switch (field.writeKind()) {
+      case ARRAY:
+      case MAP:
+      case OBJECT:
+        return true;
+      case COLLECTION:
+        return !writesStringCollectionDirectly(field);
+      default:
+        return false;
+    }
+  }
+
+  @Internal
+  public static boolean usesUtf8WriteCodec(JsonFieldInfo field, JsonTypeResolver resolver) {
+    return usesWriteCodec(field)
+        || field.writeKind() == JsonFieldKind.COLLECTION
+            && resolver.exactUtf8WriterCollection(field.writeTypeInfo()) != null;
+  }
+
+  static boolean writesStringCollectionDirectly(JsonFieldInfo field) {
+    return field.writeElementRawType() == String.class
+        && field.writeTypeInfo().stringWriter().getClass()
+            == CollectionCodec.StringCollectionCodec.class;
+  }
+
+  @Internal
+  public static boolean usesReadCodec(JsonFieldInfo field, JsonTypeResolver resolver) {
+    if (field.readsUnboxedValue()) {
+      if (field.readDirectUnboxedValueCodec() != null) {
+        return false;
+      }
+      Class<?> rawType = field.readTypeInfo().rawType();
+      JsonFieldKind kind = field.readKind();
+      if (rawType == String.class && kind == JsonFieldKind.STRING) {
+        return false;
+      }
+      if (rawType.isPrimitive()) {
+        return !((rawType == boolean.class && kind == JsonFieldKind.BOOLEAN)
+            || (rawType == byte.class && kind == JsonFieldKind.BYTE)
+            || (rawType == short.class && kind == JsonFieldKind.SHORT)
+            || (rawType == int.class && kind == JsonFieldKind.INT)
+            || (rawType == long.class && kind == JsonFieldKind.LONG)
+            || (rawType == float.class && kind == JsonFieldKind.FLOAT)
+            || (rawType == double.class && kind == JsonFieldKind.DOUBLE)
+            || (rawType == char.class && kind == JsonFieldKind.CHAR));
+      }
+      return true;
+    }
+    switch (field.readKind()) {
+      case ENUM:
+      case ARRAY:
+      case COLLECTION:
+      case MAP:
+        return true;
+      case OBJECT:
+        return !usesReadObjectCodec(field, resolver);
+      default:
+        return false;
+    }
+  }
+
+  private static boolean usesReadObjectCodec(JsonFieldInfo field, JsonTypeResolver resolver) {
+    return field.readRawType() != Object.class
+        && resolver.canonicalObjectCodec(field.readTypeInfo()) != null;
+  }
+
   Class<?> stringWriterFieldType(JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
     if (typeInfo.usesAnnotationCodec()) {
       return StringWriterCodec.class;
@@ -1194,7 +1278,10 @@ public final class JsonCodegen {
       return StringWriterCodec.class;
     }
     Object codec = typeInfo.stringWriter();
-    return codecFieldType(typeInfo, codec.getClass(), StringWriterCodec.class);
+    Class<?> type = codec.getClass();
+    return isPublicSourceType(type) && isGeneratedClassVisible(type)
+        ? type
+        : StringWriterCodec.class;
   }
 
   Class<?> utf8WriterFieldType(JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
@@ -1208,7 +1295,8 @@ public final class JsonCodegen {
       return Utf8WriterCodec.class;
     }
     Object codec = typeInfo.utf8Writer();
-    return codecFieldType(typeInfo, codec.getClass(), Utf8WriterCodec.class);
+    Class<?> type = codec.getClass();
+    return isPublicSourceType(type) && isGeneratedClassVisible(type) ? type : Utf8WriterCodec.class;
   }
 
   Class<?> latin1ReaderFieldType(JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
@@ -1218,8 +1306,10 @@ public final class JsonCodegen {
     if (resolver.canonicalObjectCodec(typeInfo) != null) {
       return Latin1ReaderCodec.class;
     }
-    return codecFieldType(
-        typeInfo, typeInfo.latin1Reader().getClass(), Latin1ReaderCodec.class);
+    Class<?> type = typeInfo.latin1Reader().getClass();
+    return isPublicSourceType(type) && isGeneratedClassVisible(type)
+        ? type
+        : Latin1ReaderCodec.class;
   }
 
   Class<?> utf16ReaderFieldType(JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
@@ -1229,8 +1319,10 @@ public final class JsonCodegen {
     if (resolver.canonicalObjectCodec(typeInfo) != null) {
       return Utf16ReaderCodec.class;
     }
-    return codecFieldType(
-        typeInfo, typeInfo.utf16Reader().getClass(), Utf16ReaderCodec.class);
+    Class<?> type = typeInfo.utf16Reader().getClass();
+    return isPublicSourceType(type) && isGeneratedClassVisible(type)
+        ? type
+        : Utf16ReaderCodec.class;
   }
 
   Class<?> utf8ReaderFieldType(JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
@@ -1243,20 +1335,8 @@ public final class JsonCodegen {
     if (resolver.canonicalObjectCodec(typeInfo) != null) {
       return Utf8ReaderCodec.class;
     }
-    return codecFieldType(typeInfo, typeInfo.utf8Reader().getClass(), Utf8ReaderCodec.class);
-  }
-
-  private Class<?> codecFieldType(
-      JsonTypeInfo typeInfo, Class<?> codecClass, Class<?> capabilityType) {
-    // Native-hosted object classes must be reusable by the same exact key at image runtime, where
-    // registered codec instances are reconstructed independently. Keep ordinary registered codecs
-    // behind the stable role interface; direct unboxed operations are handled separately.
-    if (hostedCodegen && typeInfo.registeredCodecClass() != null) {
-      return capabilityType;
-    }
-    return isCodecClassSourceAccessible(codecClass) && isGeneratedClassVisible(codecClass)
-        ? codecClass
-        : capabilityType;
+    Class<?> type = typeInfo.utf8Reader().getClass();
+    return isPublicSourceType(type) && isGeneratedClassVisible(type) ? type : Utf8ReaderCodec.class;
   }
 
   @Internal
@@ -1272,7 +1352,7 @@ public final class JsonCodegen {
     JsonUnwrappedInfo unwrapped = owner.unwrappedInfo();
     if (unwrapped != null) {
       for (JsonUnwrappedInfo.ReadRoute route : unwrapped.readRoutes()) {
-        if (route.field() != null && resolver.readNestedType(route.field()) == owner.type()) {
+        if (route.field() != null && readNestedType(route.field(), resolver) == owner.type()) {
           return true;
         }
       }
@@ -1293,7 +1373,7 @@ public final class JsonCodegen {
       return false;
     }
     for (JsonFieldInfo property : properties) {
-      if (resolver.readNestedType(property) == type) {
+      if (readNestedType(property, resolver) == type) {
         return true;
       }
     }
@@ -1311,7 +1391,7 @@ public final class JsonCodegen {
     if (field != null && !canCompileField(field)) {
       return false;
     }
-    Class<?> rawType = property.writeAccessorType();
+    Class<?> rawType = property.writeRawType();
     if (rawType != null && !rawType.isPrimitive() && !isGeneratedClassVisible(rawType)) {
       return false;
     }
@@ -1333,7 +1413,7 @@ public final class JsonCodegen {
     if (property.readSetter() == null && property.readField() == null) {
       return false;
     }
-    Class<?> rawType = property.readAccessorType();
+    Class<?> rawType = property.readRawType();
     if (rawType != null && !rawType.isPrimitive() && !isGeneratedClassVisible(rawType)) {
       return false;
     }
@@ -1450,12 +1530,6 @@ public final class JsonCodegen {
         moduleType
             .getMethod("isExported", String.class, moduleType)
             .invoke(typeModule, packageName, ownerModule);
-  }
-
-  /** Returns whether a codec implementation can be named in generated Java source. */
-  @Internal
-  public static boolean isCodecClassSourceAccessible(Class<?> codecType) {
-    return isPublicSourceType(codecType);
   }
 
   private boolean isVisible(Class<?> type) {

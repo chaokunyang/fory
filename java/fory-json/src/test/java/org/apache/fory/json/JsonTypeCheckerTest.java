@@ -86,7 +86,7 @@ public class JsonTypeCheckerTest extends ForyJsonTestModels {
   }
 
   @Test
-  public void customExactUsesChecker() {
+  public void customExactWriteUsesChecker() {
     ForyJson json =
         newJsonBuilder()
             .registerCodec(CheckedBean.class, nullCodec())
@@ -105,7 +105,7 @@ public class JsonTypeCheckerTest extends ForyJsonTestModels {
   }
 
   @Test
-  public void customCodecUsesChecker() {
+  public void customExactReadUsesChecker() {
     ForyJson json =
         newJsonBuilder()
             .registerCodec(CheckedBean.class, nullCodec())

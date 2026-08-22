@@ -101,7 +101,7 @@ final class Utf8WriterCodegen extends JsonWriterCodegen {
 
   @Override
   boolean writesStringCollectionDirectly(JsonFieldInfo property) {
-    return JsonTypeResolver.writesStringCollectionDirectly(property)
+    return JsonCodegen.writesStringCollectionDirectly(property)
         && resolver.exactUtf8WriterCollection(property.writeTypeInfo()) == null;
   }
 

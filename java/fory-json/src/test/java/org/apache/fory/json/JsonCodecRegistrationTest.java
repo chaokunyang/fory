@@ -20,7 +20,9 @@
 package org.apache.fory.json;
 
 import static org.apache.fory.json.JsonTestSupport.nullCodec;
+import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
@@ -40,6 +42,7 @@ import java.time.Year;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -125,6 +128,34 @@ public class JsonCodecRegistrationTest {
     assertThrows(
         IllegalArgumentException.class, () -> registry.registerFactory(Object.class, factory));
     assertFalse(registry.contains(Object.class));
+  }
+
+  @Test
+  public void sameNamedHandledClassesAllowed() throws Exception {
+    Class<?> first = JsonTestSupport.shadowClass(ApplicationValue.class);
+    Class<?> second = JsonTestSupport.shadowClass(ApplicationValue.class);
+    assertNotSame(first, second);
+
+    CodecRegistry registry = new CodecRegistry();
+    JsonCodecFactory factory =
+        new JsonCodecFactory() {
+          @Override
+          public JsonValueCodec<?> create(
+              TypeRef<?> type, JsonTypeResolver resolver, boolean runtimeType) {
+            return null;
+          }
+
+          @Override
+          public List<Class<?>> handledRuntimeClasses() {
+            return Arrays.asList(first, second);
+          }
+        };
+    registry.registerFactory(Object.class, factory);
+
+    List<Class<?>> handled = registry.getFactory(Object.class).handledRuntimeClasses();
+    assertEquals(handled.size(), 2);
+    assertTrue(handled.contains(first));
+    assertTrue(handled.contains(second));
   }
 
   @Test

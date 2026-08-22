@@ -25,8 +25,9 @@ import org.apache.fory.annotation.Internal;
 /**
  * Exact parent-carrier operations for a semantic leaf which is not transparent to its carrier.
  *
- * <p>The generated operations must depend only on the codec implementation class and logical
- * serialized class. Resolver-local instance state must not select different methods.
+ * <p>Instances supplied by direct exact registration are keyed by implementation class and must
+ * therefore expose the same generated operations. A factory which varies these operations must
+ * represent that difference in {@code JsonCodecFactory.factoryKey()}.
  */
 @Internal
 public interface DirectUnboxedValueCodec extends UnboxedValueCodec {

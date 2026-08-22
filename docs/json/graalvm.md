@@ -110,6 +110,7 @@ Default-configuration codecs remain available when providers are present, and ev
 provider adds codecs for its configuration. A codegen-enabled runtime uses an interpreted codec
 whenever no matching generated codec is available. Reflection metadata remains available in either
 case.
+
 `withCodegen(false)`
 explicitly selects interpreted codecs and does not request generated-codec lookup. Asynchronous
 compilation is disabled in a native executable.
@@ -138,8 +139,8 @@ construction. A Kotlin-enabled runtime configuration with no matching generated 
 prepared interpreted codec.
 
 An exact generic Kotlin root is available only when its complete binding is reached through a
-property, constructor argument, container/map child, or closed subtype of a provider-selected
-concrete root. Keep using `jsonTypeRef<T>()` at the direct root call; no public root registry or
+property, constructor argument, container/map child, or closed subtype of a reachable concrete
+root. Keep using `jsonTypeRef<T>()` at the direct root call; no public root registry or
 reflection configuration is needed.
 
 ## Mixins

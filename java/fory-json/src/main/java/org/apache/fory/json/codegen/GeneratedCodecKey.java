@@ -19,11 +19,18 @@
 
 package org.apache.fory.json.codegen;
 
+import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.GenericDeclaration;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.Objects;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.reflect.TypeRef;
 
 /** Exact, source-independent identity of one generated JSON capability class. */
 @Internal
@@ -51,33 +58,47 @@ public final class GeneratedCodecKey {
 
   private final Class<?> targetClass;
   private final Role role;
+  private final TypeRef<?> rootBinding;
   private final Object[] keyParts;
   private final int hash;
 
-  private GeneratedCodecKey(Class<?> targetClass, Role role, Object[] keyParts) {
+  private GeneratedCodecKey(
+      Class<?> targetClass, Role role, TypeRef<?> rootBinding, Object[] keyParts) {
     this.targetClass = Objects.requireNonNull(targetClass);
     this.role = Objects.requireNonNull(role);
+    this.rootBinding = rootBinding;
     this.keyParts = keyParts.clone();
     // Hosted keys are reconstructed at Native runtime. Class names keep hashes stable across that
     // boundary; equals still uses Class identity so same-named loader classes remain distinct.
     hash =
-        (targetClass.getName().hashCode() * 31 + role.ordinal()) * 31 + valuesHash(this.keyParts);
+        ((targetClass.getName().hashCode() * 31 + role.ordinal()) * 31
+                    + rootBindingHash(rootBinding))
+                * 31
+            + valuesHash(this.keyParts);
   }
 
-  public static GeneratedCodecKey object(Class<?> targetClass, Role role, Object[] keyParts) {
+  public static GeneratedCodecKey object(
+      Class<?> targetClass, TypeRef<?> rootBinding, Role role, Object[] keyParts) {
     if (collectionRole(role)) {
       throw new IllegalArgumentException("Collection role requires a collection key");
     }
-    return new GeneratedCodecKey(targetClass, role, keyParts);
+    return new GeneratedCodecKey(targetClass, role, rootBinding, keyParts);
   }
 
   public static GeneratedCodecKey collection(
-      Class<?> collectionClass, Class<?> elementClass, Role role, boolean stringElements) {
+      Class<?> collectionClass,
+      TypeRef<?> rootBinding,
+      Class<?> elementClass,
+      Role role,
+      boolean stringElements) {
     if (!collectionRole(role)) {
       throw new IllegalArgumentException("Object role requires an object key");
     }
     return new GeneratedCodecKey(
-        collectionClass, role, new Object[] {elementClass, stringElements});
+        collectionClass,
+        role,
+        Objects.requireNonNull(rootBinding),
+        new Object[] {Objects.requireNonNull(elementClass), stringElements});
   }
 
   public Class<?> targetClass() {
@@ -106,12 +127,9 @@ public final class GeneratedCodecKey {
     if (preferred.getClassLoader() != null) {
       return preferred;
     }
-    if (targetClass.getClassLoader() != null) {
-      return targetClass;
-    }
-    for (Object keyPart : keyParts) {
-      if (keyPart instanceof Class<?> && ((Class<?>) keyPart).getClassLoader() != null) {
-        return (Class<?>) keyPart;
+    for (Class<?> referencedClass : referencedClasses()) {
+      if (referencedClass.getClassLoader() != null) {
+        return referencedClass;
       }
     }
     return preferred;
@@ -122,6 +140,7 @@ public final class GeneratedCodecKey {
     ArrayList<Class<?>> classes = new ArrayList<>();
     IdentityHashMap<Class<?>, Boolean> seen = new IdentityHashMap<>();
     addClass(targetClass, classes, seen);
+    addTypeRefClasses(rootBinding, classes, seen);
     for (Object keyPart : keyParts) {
       if (keyPart instanceof Class<?>) {
         addClass((Class<?>) keyPart, classes, seen);
@@ -141,6 +160,7 @@ public final class GeneratedCodecKey {
     GeneratedCodecKey that = (GeneratedCodecKey) other;
     return targetClass == that.targetClass
         && role == that.role
+        && Objects.equals(rootBinding, that.rootBinding)
         && Arrays.equals(keyParts, that.keyParts);
   }
 
@@ -184,5 +204,74 @@ public final class GeneratedCodecKey {
       hash = hash * 31 + valueHash;
     }
     return hash;
+  }
+
+  private static int rootBindingHash(TypeRef<?> typeRef) {
+    if (typeRef == null) {
+      return 0;
+    }
+    int hash = typeRef.getRawType().getName().hashCode();
+    if (typeRef.hasTypeExtMeta() || typeRef.getType() instanceof ParameterizedType) {
+      for (TypeRef<?> argument : typeRef.getTypeArguments()) {
+        hash = hash * 31 + rootBindingHash(argument);
+      }
+    }
+    return hash;
+  }
+
+  private static void addTypeRefClasses(
+      TypeRef<?> typeRef, ArrayList<Class<?>> classes, IdentityHashMap<Class<?>, Boolean> seen) {
+    if (typeRef == null) {
+      return;
+    }
+    addTypeClasses(typeRef.getType(), classes, seen);
+    if (typeRef.hasTypeExtMeta()) {
+      for (TypeRef<?> argument : typeRef.getTypeArguments()) {
+        addTypeRefClasses(argument, classes, seen);
+      }
+      if (typeRef.isArray()) {
+        addTypeRefClasses(typeRef.getComponentType(), classes, seen);
+      }
+    }
+  }
+
+  private static void addTypeClasses(
+      Type type, ArrayList<Class<?>> classes, IdentityHashMap<Class<?>, Boolean> seen) {
+    if (type == null) {
+      return;
+    }
+    if (type instanceof Class<?>) {
+      addClass((Class<?>) type, classes, seen);
+      return;
+    }
+    if (type instanceof ParameterizedType) {
+      ParameterizedType parameterized = (ParameterizedType) type;
+      addTypeClasses(parameterized.getOwnerType(), classes, seen);
+      addTypeClasses(parameterized.getRawType(), classes, seen);
+      for (Type argument : parameterized.getActualTypeArguments()) {
+        addTypeClasses(argument, classes, seen);
+      }
+      return;
+    }
+    if (type instanceof GenericArrayType) {
+      addTypeClasses(((GenericArrayType) type).getGenericComponentType(), classes, seen);
+      return;
+    }
+    if (type instanceof WildcardType) {
+      WildcardType wildcard = (WildcardType) type;
+      for (Type bound : wildcard.getUpperBounds()) {
+        addTypeClasses(bound, classes, seen);
+      }
+      for (Type bound : wildcard.getLowerBounds()) {
+        addTypeClasses(bound, classes, seen);
+      }
+      return;
+    }
+    if (type instanceof TypeVariable<?>) {
+      GenericDeclaration declaration = ((TypeVariable<?>) type).getGenericDeclaration();
+      if (declaration instanceof Class<?>) {
+        addClass((Class<?>) declaration, classes, seen);
+      }
+    }
   }
 }

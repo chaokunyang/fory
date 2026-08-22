@@ -26,9 +26,7 @@ import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.net.URL;
@@ -50,6 +48,8 @@ import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 import org.apache.fory.json.annotation.JsonAnyGetter;
 import org.apache.fory.json.annotation.JsonAnySetter;
+import org.apache.fory.json.annotation.JsonCodec;
+import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.annotation.JsonUnwrapped;
@@ -97,28 +97,28 @@ public class JsonGeneratedCapabilityKeyTest {
   }
 
   @Test
-  public void outerNullabilityReusesCollectionClasses() {
+  public void collectionBindingVersionsClasses() {
     JsonTypeResolver resolver = resolver();
     TypeRef<?> element = TypeRef.of(String.class);
     JsonTypeInfo raw = resolver.getTypeInfo(listType(null, element));
     JsonTypeInfo nonNull = resolver.getTypeInfo(listType(ordinary(false), element));
     JsonTypeInfo nullable = resolver.getTypeInfo(listType(ordinary(true), element));
 
-    assertSame(raw.utf8Writer().getClass(), nonNull.utf8Writer().getClass());
-    assertSame(raw.utf8Writer().getClass(), nullable.utf8Writer().getClass());
-    assertSame(raw.utf8Reader().getClass(), nonNull.utf8Reader().getClass());
-    assertSame(raw.utf8Reader().getClass(), nullable.utf8Reader().getClass());
+    assertNotSame(raw.utf8Writer().getClass(), nonNull.utf8Writer().getClass());
+    assertNotSame(raw.utf8Writer().getClass(), nullable.utf8Writer().getClass());
+    assertNotSame(raw.utf8Reader().getClass(), nonNull.utf8Reader().getClass());
+    assertNotSame(raw.utf8Reader().getClass(), nullable.utf8Reader().getClass());
 
     JsonTypeInfo nonNullElement =
         resolver.getTypeInfo(listType(null, TypeRef.of(String.class, ordinary(false))));
     JsonTypeInfo nullableElement =
         resolver.getTypeInfo(listType(null, TypeRef.of(String.class, ordinary(true))));
-    assertSame(nonNullElement.utf8Writer().getClass(), nullableElement.utf8Writer().getClass());
-    assertSame(nonNullElement.utf8Reader().getClass(), nullableElement.utf8Reader().getClass());
+    assertNotSame(nonNullElement.utf8Writer().getClass(), nullableElement.utf8Writer().getClass());
+    assertNotSame(nonNullElement.utf8Reader().getClass(), nullableElement.utf8Reader().getClass());
   }
 
   @Test
-  public void injectedMetadataReusesParentClass() {
+  public void nestedBindingVersionsParentClass() {
     JsonTypeResolver resolver = resolver();
     TypeRef<?> nonNullArray =
         TypeRef.of(
@@ -127,21 +127,20 @@ public class JsonGeneratedCapabilityKeyTest {
         TypeRef.of(String[].class, ordinary(false), null, TypeRef.of(String.class, ordinary(true)));
     JsonTypeInfo nonNull = resolver.getTypeInfo(boxType(nonNullArray));
     JsonTypeInfo nullable = resolver.getTypeInfo(boxType(nullableArray));
-    assertSame(nonNull.utf8Writer().getClass(), nullable.utf8Writer().getClass());
-    assertSame(nonNull.utf8Reader().getClass(), nullable.utf8Reader().getClass());
+    assertDifferentObjectClasses(nonNull, nullable);
   }
 
   @Test
-  public void genericScalarInputsReuseClass() {
+  public void genericBindingsVersionClass() {
     ForyJson json = ForyJson.builder().withAsyncCompilation(false).build();
     JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
     JsonTypeInfo strings = resolver.getTypeInfo(new TypeRef<GenericModel<String>>() {});
     JsonTypeInfo integers = resolver.getTypeInfo(new TypeRef<GenericModel<Integer>>() {});
     JsonTypeInfo bytes = resolver.getTypeInfo(new TypeRef<GenericModel<Byte>>() {});
     JsonTypeInfo enums = resolver.getTypeInfo(new TypeRef<GenericModel<FirstEnum>>() {});
-    assertObjectClasses(strings, integers);
-    assertObjectClasses(strings, bytes);
-    assertObjectClasses(strings, enums);
+    assertDifferentObjectClasses(strings, integers);
+    assertDifferentObjectClasses(strings, bytes);
+    assertDifferentObjectClasses(strings, enums);
 
     GenericModel<String> stringValue = new GenericModel<>();
     stringValue.value = "value";
@@ -162,78 +161,20 @@ public class JsonGeneratedCapabilityKeyTest {
     assertEquals(json.fromJson(json.toJson(stringValue, stringType), stringType).value, "value");
     assertEquals(json.fromJson(json.toJson(intValue, intType), intType).value, 7);
     assertEquals(json.fromJson(json.toJson(byteValue, byteType), byteType).value, (byte) 3);
-    assertSame(
-        json.fromJson(json.toJson(enumValue, enumType), enumType).value, FirstEnum.VALUE);
+    assertSame(json.fromJson(json.toJson(enumValue, enumType), enumType).value, FirstEnum.VALUE);
   }
 
   @Test
-  public void equivalentGenericInputsReuseClass() {
-    ForyJson json = ForyJson.builder().withAsyncCompilation(false).build();
-    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
-    JsonTypeInfo first = resolver.getTypeInfo(new TypeRef<GenericModel<Child>>() {});
-    JsonTypeInfo second = resolver.getTypeInfo(new TypeRef<GenericModel<OtherChild>>() {});
-    assertObjectClasses(first, second);
+  public void exactGenericBindingReusesClass() {
+    TypeRef<GenericModel<String>> type = new TypeRef<GenericModel<String>>() {};
+    ForyJson first = ForyJson.builder().withAsyncCompilation(false).build();
+    ForyJson second = ForyJson.builder().withAsyncCompilation(false).build();
+    JsonTypeInfo firstType = JsonTestSupport.currentTypeResolver(first).getTypeInfo(type);
+    JsonTypeInfo secondType =
+        JsonTestSupport.currentTypeResolver(second)
+            .getTypeInfo(new TypeRef<GenericModel<String>>() {});
 
-    GenericModel<Child> firstValue = new GenericModel<>();
-    firstValue.value = new Child();
-    firstValue.value.value = "first";
-    GenericModel<OtherChild> secondValue = new GenericModel<>();
-    secondValue.value = new OtherChild();
-    secondValue.value.value = 2;
-    TypeRef<GenericModel<Child>> firstType = new TypeRef<GenericModel<Child>>() {};
-    TypeRef<GenericModel<OtherChild>> secondType = new TypeRef<GenericModel<OtherChild>>() {};
-    assertEquals(json.toJson(firstValue, firstType), "{\"value\":{\"value\":\"first\"}}");
-    assertEquals(json.toJson(secondValue, secondType), "{\"value\":{\"value\":2}}");
-    assertEquals(json.fromJson(json.toJson(firstValue, firstType), firstType).value.value, "first");
-    assertEquals(json.fromJson(json.toJson(secondValue, secondType), secondType).value.value, 2);
-  }
-
-  @Test
-  public void genericCollectionInputsReuseClass() {
-    ForyJson json = ForyJson.builder().withAsyncCompilation(false).build();
-    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
-    TypeRef<GenericCollection<String>> stringType = new TypeRef<GenericCollection<String>>() {};
-    TypeRef<GenericCollection<Child>> childType = new TypeRef<GenericCollection<Child>>() {};
-    assertObjectClasses(resolver.getTypeInfo(stringType), resolver.getTypeInfo(childType));
-
-    GenericCollection<String> strings = new GenericCollection<>();
-    strings.values = Collections.singletonList("value");
-    GenericCollection<Child> children = new GenericCollection<>();
-    Child child = new Child();
-    child.value = "child";
-    children.values = Collections.singletonList(child);
-    assertEquals(
-        json.fromJson(json.toJson(strings, stringType), stringType).values.get(0), "value");
-    assertEquals(
-        json.fromJson(json.toJson(children, childType), childType).values.get(0).value, "child");
-  }
-
-  @Test
-  public void genericEnumInputsReuseClass() {
-    ForyJson json = ForyJson.builder().withAsyncCompilation(false).build();
-    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
-    JsonTypeInfo first = resolver.getTypeInfo(new TypeRef<GenericModel<FirstEnum>>() {});
-    JsonTypeInfo second = resolver.getTypeInfo(new TypeRef<GenericModel<SecondEnum>>() {});
-    assertObjectClasses(first, second);
-
-    GenericModel<FirstEnum> firstValue = new GenericModel<>();
-    firstValue.value = FirstEnum.VALUE;
-    GenericModel<SecondEnum> secondValue = new GenericModel<>();
-    secondValue.value = SecondEnum.VALUE;
-    TypeRef<GenericModel<FirstEnum>> firstType = new TypeRef<GenericModel<FirstEnum>>() {};
-    TypeRef<GenericModel<SecondEnum>> secondType = new TypeRef<GenericModel<SecondEnum>>() {};
-    assertSame(json.fromJson(json.toJson(firstValue, firstType), firstType).value, FirstEnum.VALUE);
-    assertSame(
-        json.fromJson(json.toJson(secondValue, secondType), secondType).value, SecondEnum.VALUE);
-  }
-
-  @Test
-  public void genericRegisteredCodecUsesBaseCapability() {
-    ForyJson json = parentJson(new ChildCodecA());
-    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
-    JsonTypeInfo first = resolver.getTypeInfo(new TypeRef<GenericPair<Child, OtherChild>>() {});
-    JsonTypeInfo second = resolver.getTypeInfo(new TypeRef<GenericPair<OtherChild, Child>>() {});
-    assertObjectClasses(first, second);
+    assertObjectClasses(firstType, secondType);
   }
 
   @Test
@@ -303,11 +244,39 @@ public class JsonGeneratedCapabilityKeyTest {
   }
 
   @Test
-  public void hiddenCodecClassesReuseParent() {
+  public void hiddenCodecClassesVersionParent() {
     JsonTypeInfo first = parentType(new HiddenChildCodecA());
     JsonTypeInfo second = parentType(new HiddenChildCodecB());
 
-    assertObjectClasses(first, second);
+    assertDifferentObjectClasses(first, second);
+  }
+
+  @Test
+  public void directFactoryVersionsParent() {
+    assertDifferentObjectClasses(
+        parentFactoryType("direct-a", new ChildCodecA(), true),
+        parentFactoryType("direct-b", new ChildCodecB(), true));
+  }
+
+  @Test
+  public void moduleFactoryVersionsParent() {
+    assertDifferentObjectClasses(
+        parentFactoryType("module-a", new ChildCodecA(), false),
+        parentFactoryType("module-b", new ChildCodecB(), false));
+  }
+
+  @Test
+  public void directMixinVersionsParent() {
+    ForyJson first = ForyJson.builder().withAsyncCompilation(false).build();
+    ForyJson second =
+        ForyJson.builder().registerMixin(ChildCodecMixin.class).withAsyncCompilation(false).build();
+    assertDifferentObjectClasses(parentType(first), parentType(second));
+
+    Parent value = new Parent();
+    value.child = new Child();
+    value.child.value = "value";
+    assertEquals(first.toJson(value), "{\"child\":{\"value\":\"value\"}}");
+    assertEquals(second.toJson(value), "{\"child\":\"value\"}");
   }
 
   @Test
@@ -339,12 +308,12 @@ public class JsonGeneratedCapabilityKeyTest {
   }
 
   @Test
-  public void transparentTerminalStaysInstanceOwned() throws Exception {
-    ForyJson first = transparentJson(new TerminalCodecA());
-    ForyJson second = transparentJson(new TerminalCodecB());
+  public void transparentDirectFactoryVersionsClass() throws Exception {
+    ForyJson first = transparentJson(new DirectTerminalCodecA());
+    ForyJson second = transparentJson(new DirectTerminalCodecB());
     JsonTypeInfo firstType = transparentType(first);
     JsonTypeInfo secondType = transparentType(second);
-    assertObjectClasses(firstType, secondType);
+    assertDifferentObjectClasses(firstType, secondType);
 
     TransparentModel value = new TransparentModel();
     value.setValue(new LocalTerminal("value"));
@@ -360,14 +329,6 @@ public class JsonGeneratedCapabilityKeyTest {
                 second.fromJson("{\"value\":\"b:value\"}", TransparentModel.class).getValue())
             .value,
         "value");
-  }
-
-  @Test
-  public void transparentDirectTerminalVersionsClass() throws Exception {
-    JsonTypeInfo first = transparentType(transparentJson(new DirectTerminalCodecA()));
-    JsonTypeInfo second = transparentType(transparentJson(new DirectTerminalCodecB()));
-
-    assertDifferentObjectClasses(first, second);
   }
 
   @Test
@@ -408,11 +369,23 @@ public class JsonGeneratedCapabilityKeyTest {
   }
 
   @Test
-  public void anyCodecUsesCapabilityInterface() {
+  public void fieldModeVersionsClasses() {
+    ForyJson properties = ForyJson.builder().withAsyncCompilation(false).build();
+    ForyJson fields = ForyJson.builder().withFieldMode(true).withAsyncCompilation(false).build();
+    JsonTypeInfo propertyType =
+        JsonTestSupport.currentTypeResolver(properties).getTypeInfo(Model.class, Model.class);
+    JsonTypeInfo fieldType =
+        JsonTestSupport.currentTypeResolver(fields).getTypeInfo(Model.class, Model.class);
+
+    assertDifferentObjectClasses(propertyType, fieldType);
+  }
+
+  @Test
+  public void anyCodecVersionsGeneratedRoles() {
     JsonTypeInfo getterA = anyType(GetterAny.class, new ChildCodecA());
     JsonTypeInfo getterB = anyType(GetterAny.class, new ChildCodecB());
-    assertSame(getterA.stringWriter().getClass(), getterB.stringWriter().getClass());
-    assertSame(getterA.utf8Writer().getClass(), getterB.utf8Writer().getClass());
+    assertNotSame(getterA.stringWriter().getClass(), getterB.stringWriter().getClass());
+    assertNotSame(getterA.utf8Writer().getClass(), getterB.utf8Writer().getClass());
     assertSame(getterA.latin1Reader().getClass(), getterB.latin1Reader().getClass());
     assertSame(getterA.utf16Reader().getClass(), getterB.utf16Reader().getClass());
     assertSame(getterA.utf8Reader().getClass(), getterB.utf8Reader().getClass());
@@ -421,20 +394,9 @@ public class JsonGeneratedCapabilityKeyTest {
     JsonTypeInfo setterB = anyType(SetterAny.class, new ChildCodecB());
     assertSame(setterA.stringWriter().getClass(), setterB.stringWriter().getClass());
     assertSame(setterA.utf8Writer().getClass(), setterB.utf8Writer().getClass());
-    assertSame(setterA.latin1Reader().getClass(), setterB.latin1Reader().getClass());
-    assertSame(setterA.utf16Reader().getClass(), setterB.utf16Reader().getClass());
-    assertSame(setterA.utf8Reader().getClass(), setterB.utf8Reader().getClass());
-  }
-
-  @Test
-  public void hostedCodecUsesInterface() throws Exception {
-    JsonTypeResolver first = hostedResolver(parentJson(new ChildCodecA()));
-    JsonTypeResolver second = hostedResolver(parentJson(new ChildCodecB()));
-    first.generateHostedCodecs(Parent.class);
-    second.generateHostedCodecs(Parent.class);
-    assertObjectClasses(
-        first.getTypeInfo(Parent.class, Parent.class),
-        second.getTypeInfo(Parent.class, Parent.class));
+    assertNotSame(setterA.latin1Reader().getClass(), setterB.latin1Reader().getClass());
+    assertNotSame(setterA.utf16Reader().getClass(), setterB.utf16Reader().getClass());
+    assertNotSame(setterA.utf8Reader().getClass(), setterB.utf8Reader().getClass());
   }
 
   @Test
@@ -565,20 +527,72 @@ public class JsonGeneratedCapabilityKeyTest {
 
   @Test
   public void sameNamedLoaderClassesDoNotCollide() throws Exception {
-    byte[] bytes = classBytes(PublicFields.class);
-    Class<?> firstClass = shadowClass(PublicFields.class, bytes);
-    Class<?> secondClass = shadowClass(PublicFields.class, bytes);
+    Class<?> firstClass = JsonTestSupport.shadowClass(PublicFields.class);
+    Class<?> secondClass = JsonTestSupport.shadowClass(PublicFields.class);
     assertNotSame(firstClass, secondClass);
     GeneratedCodecKey firstKey =
-        GeneratedCodecKey.object(firstClass, GeneratedCodecKey.Role.STRING_WRITER, new Object[0]);
+        GeneratedCodecKey.object(
+            firstClass, null, GeneratedCodecKey.Role.STRING_WRITER, new Object[0]);
     GeneratedCodecKey secondKey =
-        GeneratedCodecKey.object(secondClass, GeneratedCodecKey.Role.STRING_WRITER, new Object[0]);
+        GeneratedCodecKey.object(
+            secondClass, null, GeneratedCodecKey.Role.STRING_WRITER, new Object[0]);
     assertEquals(firstKey.hashCode(), secondKey.hashCode());
     assertNotEquals(firstKey, secondKey);
+
+    TypeRef<?> firstBinding =
+        TypeRef.ofDeclaredTypeArguments(
+            GenericModel.class, null, Collections.singletonList(TypeRef.of(firstClass)), null);
+    TypeRef<?> secondBinding =
+        TypeRef.ofDeclaredTypeArguments(
+            GenericModel.class, null, Collections.singletonList(TypeRef.of(secondClass)), null);
+    GeneratedCodecKey firstGenericKey =
+        GeneratedCodecKey.object(
+            GenericModel.class, firstBinding, GeneratedCodecKey.Role.STRING_WRITER, new Object[0]);
+    GeneratedCodecKey secondGenericKey =
+        GeneratedCodecKey.object(
+            GenericModel.class, secondBinding, GeneratedCodecKey.Role.STRING_WRITER, new Object[0]);
+    assertEquals(firstGenericKey.hashCode(), secondGenericKey.hashCode());
+    assertNotEquals(firstGenericKey, secondGenericKey);
 
     JsonTypeInfo first = loaderType(firstClass);
     JsonTypeInfo second = loaderType(secondClass);
     assertDifferentObjectClasses(first, second);
+  }
+
+  @Test
+  public void equalKeysHaveEqualHash() {
+    TypeRef<?> strings =
+        TypeRef.ofSemanticTypeArguments(
+            GenericModel.class, null, Collections.singletonList(TypeRef.of(String.class)), null);
+    TypeRef<?> integers =
+        TypeRef.ofSemanticTypeArguments(
+            GenericModel.class, null, Collections.singletonList(TypeRef.of(Integer.class)), null);
+    assertEquals(strings, integers);
+
+    GeneratedCodecKey first =
+        GeneratedCodecKey.object(
+            GenericModel.class, strings, GeneratedCodecKey.Role.STRING_WRITER, new Object[0]);
+    GeneratedCodecKey second =
+        GeneratedCodecKey.object(
+            GenericModel.class, integers, GeneratedCodecKey.Role.STRING_WRITER, new Object[0]);
+    assertEquals(first, second);
+    assertEquals(first.hashCode(), second.hashCode());
+  }
+
+  @Test
+  public void rootBindingAnchorsBootstrapTarget() {
+    TypeRef<Map.Entry<Child, String>> binding = new TypeRef<Map.Entry<Child, String>>() {};
+    GeneratedCodecKey key =
+        GeneratedCodecKey.object(
+            Map.Entry.class, binding, GeneratedCodecKey.Role.STRING_WRITER, new Object[0]);
+    assertSame(key.anchorClass(), Child.class);
+
+    TypeRef<Map.Entry<? super Child, String>> lowerBound =
+        new TypeRef<Map.Entry<? super Child, String>>() {};
+    GeneratedCodecKey lowerBoundKey =
+        GeneratedCodecKey.object(
+            Map.Entry.class, lowerBound, GeneratedCodecKey.Role.STRING_WRITER, new Object[0]);
+    assertSame(lowerBoundKey.anchorClass(), Child.class);
   }
 
   private static JsonTypeResolver resolver() {
@@ -598,9 +612,53 @@ public class JsonGeneratedCapabilityKeyTest {
     ForyJsonBuilder builder =
         ForyJson.builder().registerCodec(Child.class, codec).withAsyncCompilation(false);
     if (unrelated) {
-      builder.registerCodec(Unrelated.class, JsonTestSupport.nullCodec());
+      JsonCodecFactory factory =
+          new JsonCodecFactory() {
+            @Override
+            public JsonValueCodec<?> create(
+                TypeRef<?> type, JsonTypeResolver resolver, boolean runtimeType) {
+              return type.getRawType() == OtherUnrelated.class ? JsonTestSupport.nullCodec() : null;
+            }
+
+            @Override
+            public String factoryKey() {
+              return "unrelated-module";
+            }
+          };
+      builder
+          .registerCodec(Unrelated.class, JsonTestSupport.nullCodec())
+          .registerMixin(UnrelatedMixin.class)
+          .withModule(
+              context -> {
+                context.registerCodec(OtherUnrelated.class, factory);
+                context.registerCodecFactory(factory);
+              });
     }
     return builder.build();
+  }
+
+  private static JsonTypeInfo parentFactoryType(
+      String key, JsonValueCodec<Child> codec, boolean exact) {
+    JsonCodecFactory factory =
+        new JsonCodecFactory() {
+          @Override
+          public JsonValueCodec<?> create(
+              TypeRef<?> type, JsonTypeResolver resolver, boolean runtimeType) {
+            return type.getRawType() == Child.class ? codec : null;
+          }
+
+          @Override
+          public String factoryKey() {
+            return key;
+          }
+        };
+    ForyJsonBuilder builder = ForyJson.builder().withAsyncCompilation(false);
+    if (exact) {
+      builder.registerCodec(Child.class, factory);
+    } else {
+      builder.withModule(context -> context.registerCodecFactory(factory));
+    }
+    return parentType(builder.build());
   }
 
   private static JsonTypeInfo parentType(ForyJson json) {
@@ -610,13 +668,23 @@ public class JsonGeneratedCapabilityKeyTest {
   private static ForyJson transparentJson(JsonValueCodec<LocalTerminal> terminalCodec)
       throws Exception {
     JsonObjectModel model = transparentModel();
+    JsonCodecFactory siblingFactory =
+        new JsonCodecFactory() {
+          @Override
+          public JsonValueCodec<?> create(
+              TypeRef<?> type, JsonTypeResolver resolver, boolean runtimeType) {
+            return new SiblingTransparentCodec(
+                resolver.getTypeInfo(LocalTerminal.class, LocalTerminal.class));
+          }
+
+          @Override
+          public String factoryKey() {
+            return "sibling-transparent:" + terminalCodec.getClass().getName();
+          }
+        };
     return ForyJson.builder()
         .registerCodec(LocalTerminal.class, terminalCodec)
-        .registerCodec(
-            SiblingValue.class,
-            (type, resolver, runtimeType) ->
-                new SiblingTransparentCodec(
-                    resolver.getTypeInfo(LocalTerminal.class, LocalTerminal.class)))
+        .registerCodec(SiblingValue.class, siblingFactory)
         .registerCodec(
             TransparentModel.class,
             (type, resolver, runtimeType) -> resolver.createObjectCodec(type, model))
@@ -713,44 +781,6 @@ public class JsonGeneratedCapabilityKeyTest {
             .withAsyncCompilation(false)
             .build();
     return JsonTestSupport.currentTypeResolver(json).getTypeInfo((Class) type, type);
-  }
-
-  private static Class<?> shadowClass(Class<?> type, byte[] bytes) throws ClassNotFoundException {
-    String name = type.getName();
-    ClassLoader loader =
-        new ClassLoader(type.getClassLoader()) {
-          @Override
-          protected Class<?> loadClass(String className, boolean resolve)
-              throws ClassNotFoundException {
-            synchronized (getClassLoadingLock(className)) {
-              if (!name.equals(className)) {
-                return super.loadClass(className, resolve);
-              }
-              Class<?> loaded = findLoadedClass(className);
-              if (loaded == null) {
-                loaded = defineClass(className, bytes, 0, bytes.length);
-              }
-              if (resolve) {
-                resolveClass(loaded);
-              }
-              return loaded;
-            }
-          }
-        };
-    return loader.loadClass(name);
-  }
-
-  private static byte[] classBytes(Class<?> type) throws IOException {
-    String resource = "/" + type.getName().replace('.', '/') + ".class";
-    try (InputStream input = type.getResourceAsStream(resource);
-        ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-      byte[] buffer = new byte[1024];
-      int read;
-      while ((read = input.read(buffer)) >= 0) {
-        output.write(buffer, 0, read);
-      }
-      return output.toByteArray();
-    }
   }
 
   private static void compileSource(
@@ -874,24 +904,7 @@ public class JsonGeneratedCapabilityKeyTest {
     public GenericModel() {}
   }
 
-  public static final class GenericPair<T, U> {
-    public T first;
-    public U second;
-
-    public GenericPair() {}
-  }
-
-  public static final class GenericCollection<T> {
-    public List<T> values;
-
-    public GenericCollection() {}
-  }
-
   public enum FirstEnum {
-    VALUE
-  }
-
-  public enum SecondEnum {
     VALUE
   }
 
@@ -946,12 +959,6 @@ public class JsonGeneratedCapabilityKeyTest {
     public String value;
 
     public Child() {}
-  }
-
-  public static final class OtherChild {
-    public long value;
-
-    public OtherChild() {}
   }
 
   public interface SiblingCarrier {}
@@ -1019,10 +1026,11 @@ public class JsonGeneratedCapabilityKeyTest {
 
   private static final class HiddenChildCodecB extends ChildCodecA {}
 
-  public abstract static class TerminalCodec implements JsonValueCodec<LocalTerminal> {
+  public abstract static class DirectTerminalCodec
+      implements JsonValueCodec<LocalTerminal>, DirectUnboxedValueCodec {
     private final String prefix;
 
-    TerminalCodec(String prefix) {
+    DirectTerminalCodec(String prefix) {
       this.prefix = prefix;
     }
 
@@ -1049,29 +1057,6 @@ public class JsonGeneratedCapabilityKeyTest {
     @Override
     public LocalTerminal readUtf8(Utf8JsonReader reader) {
       return terminal(reader.readString());
-    }
-
-    private LocalTerminal terminal(String value) {
-      return new LocalTerminal(value.substring(prefix.length()));
-    }
-  }
-
-  public static final class TerminalCodecA extends TerminalCodec {
-    TerminalCodecA() {
-      super("a:");
-    }
-  }
-
-  public static final class TerminalCodecB extends TerminalCodec {
-    TerminalCodecB() {
-      super("b:");
-    }
-  }
-
-  public abstract static class DirectTerminalCodec extends TerminalCodec
-      implements DirectUnboxedValueCodec {
-    DirectTerminalCodec(String prefix) {
-      super(prefix);
     }
 
     @Override
@@ -1102,6 +1087,10 @@ public class JsonGeneratedCapabilityKeyTest {
     @Override
     public void writeUtf8Carrier(Utf8JsonWriter writer, Object carrier) {
       writeUtf8(writer, (LocalTerminal) carrier);
+    }
+
+    private LocalTerminal terminal(String value) {
+      return new LocalTerminal(value.substring(prefix.length()));
     }
   }
 
@@ -1290,6 +1279,15 @@ public class JsonGeneratedCapabilityKeyTest {
   }
 
   public static final class Unrelated {}
+
+  public static final class OtherUnrelated {}
+
+  @JsonMixin(target = Child.class)
+  @JsonCodec(ChildCodecA.class)
+  public abstract static class ChildCodecMixin {}
+
+  @JsonMixin(target = Unrelated.class)
+  public abstract static class UnrelatedMixin {}
 
   public static final class Box<T> {
     public T value;

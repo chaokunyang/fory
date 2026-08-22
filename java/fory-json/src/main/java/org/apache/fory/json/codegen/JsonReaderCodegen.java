@@ -141,7 +141,7 @@ abstract class JsonReaderCodegen {
   abstract Reference readerRef();
 
   final Class<?> readNestedType(JsonFieldInfo property) {
-    return resolver.readNestedType(property);
+    return JsonCodegen.readNestedType(property, resolver);
   }
 
   String genReaderCode(
@@ -173,7 +173,7 @@ abstract class JsonReaderCodegen {
       if (usesReadInfo(properties[i])) {
         ctx.addField(JsonFieldInfo.class, "rp" + i);
       }
-      if (resolver.usesReadCodec(properties[i])) {
+      if (JsonCodegen.usesReadCodec(properties[i], resolver)) {
         addValueReaderField(ctx, properties[i], "r" + i);
       }
       if (storesReadObjectCodec(type, properties[i])) {
@@ -373,7 +373,7 @@ abstract class JsonReaderCodegen {
         if (usesReadInfo(field)) {
           ctx.addField(JsonFieldInfo.class, "rp" + id);
         }
-        if (resolver.usesReadCodec(field)) {
+        if (JsonCodegen.usesReadCodec(field, resolver)) {
           addValueReaderField(ctx, field, "r" + id);
         }
         if (storesReadObjectCodec(type, field)) {
@@ -525,7 +525,7 @@ abstract class JsonReaderCodegen {
       if (usesReadInfo(properties[i])) {
         ctx.addField(JsonFieldInfo.class, "rp" + i);
       }
-      if (resolver.usesReadCodec(properties[i])) {
+      if (JsonCodegen.usesReadCodec(properties[i], resolver)) {
         addValueReaderField(ctx, properties[i], "r" + i);
       }
       if (storesReadObjectCodec(type, properties[i])) {
@@ -2041,7 +2041,7 @@ abstract class JsonReaderCodegen {
               hashes,
               new Expression.Invoke(property, "nameHash", TypeRef.of(long.class)).inline(),
               id));
-      if (resolver.usesReadCodec(properties[i])) {
+      if (JsonCodegen.usesReadCodec(properties[i], resolver)) {
         if (usesReaderSlot(properties[i].readTypeInfo())) {
           expressions.add(
               new Expression.Assign(
@@ -2177,7 +2177,7 @@ abstract class JsonReaderCodegen {
           new Expression.Assign(
               new Reference("this.rp" + id, TypeRef.of(JsonFieldInfo.class)), property));
     }
-    if (resolver.usesReadCodec(field)) {
+    if (JsonCodegen.usesReadCodec(field, resolver)) {
       if (usesReaderSlot(field.readTypeInfo())) {
         expressions.add(
             new Expression.Assign(
@@ -4501,7 +4501,7 @@ abstract class JsonReaderCodegen {
   }
 
   final boolean usesReadCodec(JsonFieldInfo property) {
-    return resolver.usesReadCodec(property);
+    return JsonCodegen.usesReadCodec(property, resolver);
   }
 
   final boolean usesReadInfo(JsonFieldInfo property) {

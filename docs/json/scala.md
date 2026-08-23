@@ -196,7 +196,8 @@ builder call site:
 val json = ForyJsonScala.builder().register[thirdparty.Result].build()
 ```
 
-The same derivation owns an empty `JsonSubTypes` table for a Scala 3 sealed trait or class:
+For a Scala 3 sealed trait or class, add an empty `JsonSubTypes` annotation and derive
+`ScalaJsonCodec`:
 
 ```scala
 import org.apache.fory.json.annotation.JsonSubTypes
@@ -246,7 +247,7 @@ prevents an unrelated dependency from changing deserialization behavior. See
 
 ## GraalVM Native Image
 
-The Scala module uses the same build-time module registration on the JVM and in a native image.
-Application models, custom codecs, and derived enum or sealed schemas must be reachable when the native image
-is built. Generate Fory codecs as part of the native-image build rather than adding general
-reflection configuration. No Scala compiler, TASTy reader, or runtime macro execution is required.
+The Scala module uses the same registration on the JVM and in a native image. Application models,
+custom codecs, and derived enum or sealed schemas must be reachable when the native image is built.
+Generate Fory codecs as part of the native-image build rather than adding general reflection
+configuration.

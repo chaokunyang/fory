@@ -194,11 +194,16 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   "Unsupported" instead.
 - After editing Markdown files outside `tasks/`, run `prettier --write <file>` on each changed Markdown file before finishing. Do not format Markdown under `tasks/`.
 - User guide docs must explain user-visible behavior, commands, and examples.
-  Do not add implementation details, internal ownership rationale, build flags,
-  or type-id-space caveats unless they directly clarify a confusion users can
-  act on. Translate internal owner-model details into concrete user actions, and
-  avoid phrases such as "serializer-owned capability" or "registration alone
-  does not..." in user-facing docs.
+  Do not expose implementation details unless readers must know them to choose an
+  API, configure a build, understand observable behavior, or resolve a documented
+  failure. Internal mechanisms such as metadata owners, generated tables,
+  processor handoffs, caches, reflection fallbacks, hosted discovery, and codegen
+  ownership belong in internal docs such as `docs/security/**`, source comments,
+  or task records. State required dependencies, platform versions,
+  configuration, and user-visible constraints directly without explaining the
+  internal mechanism that enforces them. If an implementation detail does not
+  change a concrete user action or supported behavior, omit it from user-facing
+  documentation.
 - Add comments only when behavior is hard to understand or an algorithm is non-obvious.
 - Do not remove existing code comments unless they are stale, misleading, redundant, or no longer necessary after the change.
 - Only add tests that verify internal behaviors or fix specific bugs; do not create unnecessary tests unless requested.

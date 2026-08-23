@@ -45,9 +45,8 @@ dependencies {
 }
 ```
 
-The runtime reads Kotlin/JVM metadata directly; do not add `kotlin-reflect`. KSP is not required for
-JVM applications or unminified Android builds. Android applications that use R8 or ProGuard should
-also apply KSP and add the retention-rule processor:
+The Kotlin module does not require `kotlin-reflect`. KSP is required only for Android builds that
+use R8 or ProGuard:
 
 ```kotlin title="build.gradle.kts"
 plugins {
@@ -61,11 +60,9 @@ dependencies {
 
 Annotate every Kotlin source model that needs exact minification retention with `@JsonType`. For a
 third-party target, declare an exact `@JsonMixin` in application source instead. Use Kotlin KSP for
-a Mixin when either the Mixin or its exact target is Kotlin. If a Kotlin-source Mixin adds an
-inferred `JsonSubTypes` table to a Java sealed target, also enable `fory-annotation-processor` and
-compile on JDK 17 or newer. KSP forwards that source declaration to the Java processor, which emits
-the target's sealed table and exact R8 or ProGuard rules. KSP does not generate codecs or change the
-JSON mapping.
+a Mixin when either the Mixin or its exact target is Kotlin. If a Kotlin-source Mixin adds inferred
+`JsonSubTypes` to a Java sealed target, also enable `fory-annotation-processor` and compile on JDK 17
+or newer.
 
 ## Quick start
 
@@ -259,12 +256,11 @@ stateful object and a companion object require an exact custom codec. `Unit` als
 token.
 
 Annotate a sealed class or interface with `JsonSubTypes` and leave `value` empty to infer its closed
-hierarchy from Kotlin metadata. Fory recursively includes concrete sealed descendants and stops at
-each concrete open class, admitting that exact class but not its descendants. An open abstract
-branch is rejected. Inferred logical names are source simple names, including object names without
-a trailing `$`. A non-empty `value` remains an exact explicit subset. Input contains a logical
-subtype name, never a JVM class name. See [Annotations](annotations.md#jsonsubtypes) for the
-property and wrapper shapes.
+hierarchy. Fory recursively includes concrete sealed descendants and stops at each concrete open
+class, admitting that exact class but not its descendants. An open abstract branch is rejected.
+Inferred logical names are source simple names, including object names without a trailing `$`. A
+non-empty `value` remains an exact explicit subset. Input contains a logical subtype name, never a
+JVM class name. See [Annotations](annotations.md#jsonsubtypes) for the property and wrapper shapes.
 
 ## Supported Kotlin types
 
@@ -347,18 +343,15 @@ See [Security](security.md) before decoding untrusted input.
 On GraalVM Native Image, use the existing `@ForyJsonProvider` workflow, install
 `ForyJsonKotlin`, and enable code generation in the returned configuration. Annotate each reachable
 concrete Kotlin model with `@JsonType`, or register an exact reachable Mixin for a third-party
-target. Fory reads the Kotlin metadata and adds generated codecs for each reachable Kotlin-enabled
-provider configuration while building the image. A model without a matching generated codec uses
-the interpreted codec. Only exact generic bindings reached through concrete roots are available.
-Do not add reflection configuration or package-wide opens.
+target. Models not selected for code generation continue to use interpreted mapping. Only exact
+generic bindings reached through concrete roots are available. Do not add reflection configuration
+or package-wide opens.
 
-On Android, use API 26 or later. The runtime reads Kotlin metadata in both debug and release builds,
-including sealed-subclass metadata, and runtime JSON code generation remains disabled. KSP is not
-needed to discover an unminified hierarchy; it emits the exact retention rules required when R8 or
-ProGuard can rename or remove members of that hierarchy. A Kotlin-source Mixin that requests
-inference for a Java sealed target also requires the Java annotation processor on JDK 17 or newer,
-because Android cannot discover the Java permitted subclasses at runtime. Follow the
-[installation](#installation) above and the [Android guide](android.md) when shrinking is enabled.
+On Android, use API 26 or later. Runtime JSON code generation remains disabled. Kotlin sealed
+inference needs no additional setup in an unminified build; enable KSP when R8 or ProGuard is used.
+A Kotlin-source Mixin that adds inferred `JsonSubTypes` to a Java sealed target also requires
+`fory-annotation-processor` and JDK 17 or newer. Follow the [installation](#installation) above and
+the [Android guide](android.md) when shrinking is enabled.
 
 Kotlin/Native, Kotlin/JS, and Kotlin/Wasm are not supported by this JVM module.
 

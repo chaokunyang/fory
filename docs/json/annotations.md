@@ -27,25 +27,14 @@ Fory JSON provides these mapping and validation annotations in
 Fory JSON APIs, not Jackson, Gson, or Fory binary-protocol compatibility annotations.
 
 `JsonType` is not inherited, so mark each eligible concrete model that must participate in a
-platform build workflow. For Java source, the Fory annotation processor generates direct property
-and creator operations plus exact retention rules on the JVM and Android. A directly annotated
-`JsonValue` Record also receives generated value-access and canonical-constructor operations.
-Ordinary unannotated Java classes may still use reflection; on Android they need
-application-authored exact R8 rules. Android-desugared Records require processor-generated
-operations from either a direct `JsonType` declaration or a compiled exact `JsonMixin` pair.
-Outside Native Image, a directly annotated Java model that uses the default object codec fails
-during codec creation if its generated Java operations are missing.
+platform build workflow. For Java source, apply `fory-annotation-processor`. Ordinary unannotated
+Java classes may still use reflection; on Android they need application-authored exact R8 rules.
+Android-desugared Records require either a direct `JsonType` declaration or a compiled exact
+`JsonMixin` pair. Outside Native Image, a directly annotated Java model that uses the default object
+codec fails during codec creation if the annotation processor was not applied.
 
-Kotlin/JVM models are mapped from validated Kotlin metadata and do not require generated
-construction operations. In Android builds that use R8 or ProGuard, Kotlin KSP emits exact
-retention rules for Kotlin `@JsonType` models. It also processes an exact Mixin declared in
-application source when either the Mixin or its exact target is Kotlin. A Kotlin-source Mixin that
-adds inferred `JsonSubTypes` to a Java sealed target also requires the Java annotation processor on
-JDK 17 or newer. KSP does not generate codecs or construction operations. GraalVM Native Image
-discovers reachable Java and Kotlin `JsonType` declarations directly. It generates codecs with the
-default configuration and each reachable provider configuration; models without a matching
-generated codec use interpreted codecs. See the [GraalVM guide](graalvm.md) and
-[Android guide](android.md) for the platform workflows.
+Kotlin/JVM models use the Kotlin JSON module. See the [Kotlin guide](kotlin.md),
+[GraalVM guide](graalvm.md), and [Android guide](android.md) for platform setup.
 
 ## Kotlin use-site targets
 
@@ -129,12 +118,10 @@ A `JsonCodec` supplied by a Mixin is the target's effective annotation. An exact
 `registerCodec` registration still wins, while the effective type annotation wins over a built-in
 mapping.
 
-On Android, compile a Java-source Mixin for a Java target with the Fory annotation processor. If
-either the Mixin source or its exact target is Kotlin, apply the Kotlin KSP processor instead so the
-pair's exact retention rules are packaged. For a Kotlin-source Mixin that adds inferred
-`JsonSubTypes` to a Java sealed target, apply both processors and compile on JDK 17 or newer; the
-Java processor emits the sealed table that Android cannot discover at runtime. GraalVM Native Image
-discovers reachable Mixins directly. See the platform guides linked above.
+On Android, a Java-only Mixin pair requires `fory-annotation-processor`; a pair involving Kotlin
+requires `fory-json-kotlin-ksp`. A Kotlin-source Mixin that adds inferred `JsonSubTypes` to a Java
+sealed target requires both and must be compiled on JDK 17 or newer. See the platform guides linked
+above.
 
 ## `JsonProperty`
 
@@ -751,13 +738,11 @@ descendants are not admitted. An open abstract class or interface makes inferenc
 branch is not closed. Duplicate names and logical-name hash collisions also fail. These inferred
 names are wire names and are not transformed by the property naming strategy.
 
-Java sealed discovery uses Java 17 class metadata on a standard JVM. The Java annotation processor
-emits the same table from source for Android, where the runtime sealed reflection APIs are not
-available. Kotlin uses Kotlin metadata at runtime; KSP retains the exact hierarchy metadata and
-model operations for minified Android builds. A Kotlin-source Mixin that applies inference to a
-Java sealed target requires both KSP and the Java annotation processor, so the Java source hierarchy
-is compiled into the same generated table. Scala 3 uses `derives ScalaJsonCodec` or builder
-derivation. Scala 2 sealed traits and classes are not inferred.
+Java sealed types require JDK 17 or newer. On Android, Java sealed inference also requires
+`fory-annotation-processor`, and minified Kotlin models require `fory-json-kotlin-ksp`. A
+Kotlin-source Mixin that adds inference to a Java sealed target requires both. Scala 3 sealed types
+use `derives ScalaJsonCodec` or builder derivation. Scala 2 sealed traits and classes are not
+inferred.
 
 The default `PROPERTY` inclusion writes an inline discriminator as the first output member:
 
@@ -834,6 +819,6 @@ when only a smaller subset should be available, or configure `JsonTypeChecker` t
 inferred candidates. The fixed disallow list must accept the complete inferred closure. An explicit
 table remains exact and fails if its entry conflicts with the checker.
 
-At GraalVM native-image runtime, annotate the base with `JsonType` when it is not otherwise reached
-from a provider root. Inferred sealed tables are embedded while the image is built. Explicit tables
-must use class-literal entries rather than `className`; listed classes are registered automatically.
+For GraalVM Native Image, annotate the base with `JsonType` when it is not otherwise reached from a
+provider root. Empty tables are supported for reachable Java, Kotlin, and Scala 3 sealed schemas.
+Explicit tables must use class-literal entries rather than `className`.

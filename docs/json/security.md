@@ -29,7 +29,7 @@ Kotlin type tokens and metadata are trusted schema declarations, not input autho
 module validates the logical type, physical JVM carrier, and constructor/default operations before
 parsing. JSON input cannot select a class, constructor, compiler default target, object, companion,
 module, codec, or callable. `JsonSubTypes` selects only a logical name from a finite table: either
-the explicit entries or the concrete closure proven by Kotlin sealed metadata.
+the explicit entries or the inferred sealed hierarchy.
 
 ## Type Policy And Class Loading
 

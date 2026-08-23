@@ -82,10 +82,9 @@ val text = json.toJson(User(7, "Alice"), userType)
 val decoded = json.fromJson(text, userType)
 ```
 
-The runtime reads Kotlin/JVM metadata directly. Add `fory-json-kotlin-ksp` only to Android builds
-that use R8 or ProGuard; it emits exact retention rules for Kotlin `@JsonType` models and
-source-owned exact Mixins. GraalVM Native Image uses the normal `@ForyJsonProvider` workflow. The
-complete setup and Kotlin type behavior are in the [Kotlin JSON guide](kotlin.md).
+The Kotlin module does not require `kotlin-reflect`. Add `fory-json-kotlin-ksp` only to Android
+builds that use R8 or ProGuard. GraalVM Native Image uses the normal `@ForyJsonProvider` workflow.
+The complete setup and Kotlin type behavior are in the [Kotlin JSON guide](kotlin.md).
 
 ### JDK 25 and later
 

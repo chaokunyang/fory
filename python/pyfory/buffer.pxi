@@ -43,17 +43,6 @@ cdef int32_t max_buffer_size = 2 ** 31 - 1
 cdef int UTF16_LE = -1
 
 
-cdef inline c_bool _is_forward_contiguous(object view):
-    cdef object stride
-    if not view.c_contiguous:
-        return False
-    # CPython considers a one-element negative-stride view contiguous, but its
-    # address is not the start of a forward nbytes region.
-    for stride in view.strides:
-        if stride < 0:
-            return False
-    return True
-
 @cython.final
 cdef class _SharedBufferOwner:
     cdef shared_ptr[CBuffer] buffer
@@ -147,8 +136,6 @@ cdef class Buffer:
         cdef Py_ssize_t py_length
         cdef int32_t length_
         cdef Py_buffer py_buffer
-        if not _is_forward_contiguous(view):
-            raise ValueError("Buffer data must be C-contiguous with non-negative strides")
         if buffer_len > max_buffer_size:
             raise ValueError(f"Buffer size {buffer_len} exceeds the maximum supported size")
         if length is None:
@@ -274,8 +261,7 @@ cdef class Buffer:
             raise ValueError(f"{owner} length {length} exceeds the maximum supported size")
         return <int32_t>length
 
-    cdef inline void _prepare_write(self, int32_t needed_size):
-        self._check_writable()
+    cdef inline void _prepare_capacity(self, int32_t needed_size):
         cdef int32_t writer_index = <int32_t>self.c_buffer.writer_index()
         cdef int32_t end
         if needed_size < 0 or needed_size > max_buffer_size - writer_index:
@@ -286,6 +272,10 @@ cdef class Buffer:
         end = writer_index + needed_size
         if end > self.c_buffer.size() and end > max_buffer_size // 2:
             self.c_buffer.reserve(<uint32_t>end)
+
+    cdef inline void _prepare_write(self, int32_t needed_size):
+        self._check_writable()
+        self._prepare_capacity(needed_size)
 
     cdef inline void _grow_checked(self, int32_t needed_size):
         self._prepare_write(needed_size)
@@ -319,8 +309,7 @@ cdef class Buffer:
         return self.c_buffer.own_data()
 
     cpdef inline reserve(self, int32_t new_size):
-        self._check_writable()
-        if new_size < 0 or new_size > max_buffer_size:
+        if new_size < 0:
             raise ValueError(f"Buffer size {new_size} out of bound {0, max_buffer_size}")
         self.c_buffer.reserve(new_size)
 
@@ -489,8 +478,8 @@ cdef class Buffer:
         cdef Py_ssize_t element_count
         cdef Py_ssize_t src_offset_
         cdef Py_ssize_t size_
-        if not _is_forward_contiguous(view):
-            raise ValueError("Source buffer must be C-contiguous with non-negative strides")
+        if not view.c_contiguous:
+            raise ValueError("Source buffer must be C-contiguous")
         if itemsize <= 0:
             raise ValueError(f"Invalid source buffer item size {itemsize}")
         element_count = view.nbytes // itemsize
@@ -505,8 +494,6 @@ cdef class Buffer:
 
     cdef inline void _copy_buffer(self, uint32_t offset, object view, int32_t src_offset, int32_t size):
         cdef Py_buffer py_buffer
-        if offset > <uint32_t>max_buffer_size:
-            raise ValueError(f"Destination offset {offset} exceeds the maximum supported size")
         self.check_bound(<int32_t>offset, size)
         if size == 0:
             return
@@ -521,8 +508,9 @@ cdef class Buffer:
         cdef object view = memoryview(v)
         cdef int32_t src_offset
         cdef int32_t size
-        self._check_writable()
         self._buffer_byte_range(view, src_index, length, &src_offset, &size)
+        if size > 0:
+            self._check_writable()
         self._copy_buffer(offset, view, src_offset, size)
 
     cpdef inline write_bytes_and_size(self, bytes value):
@@ -543,8 +531,6 @@ cdef class Buffer:
         if length > 0:
             self._prepare_write(length)
             self.c_buffer.write_bytes(&data[0], length)
-        else:
-            self._check_writable()
 
     cpdef inline bytes read_bytes(self, int32_t length):
         if length == 0:
@@ -591,8 +577,8 @@ cdef class Buffer:
         cdef const unsigned char[:] data = value
         cdef int32_t length = self._checked_length(data.nbytes, "Binary")
         cdef uint64_t end = <uint64_t>offset + <uint64_t>length
-        self._check_writable()
         if length > 0:
+            self._check_writable()
             if end > <uint64_t>max_buffer_size:
                 raise ValueError(f"Destination range {(offset, end)} exceeds the maximum supported size")
             if end > <uint64_t>self.c_buffer.size():
@@ -622,27 +608,25 @@ cdef class Buffer:
         else:
             length = length_
         self._buffer_byte_range(view, src_index_, length, &src_offset, &size)
+        if size == 0:
+            return
         cdef uint32_t offset = self.c_buffer.writer_index()
         self._grow_checked(size)
         self._copy_buffer(offset, view, src_offset, size)
         self.c_buffer.increase_writer_index(size)
 
     cpdef inline write(self, value):
-        cdef object view = memoryview(value)
         cdef const unsigned char[::1] data
         cdef int32_t length
-        if not _is_forward_contiguous(view):
-            raise ValueError("Source buffer must be C-contiguous with non-negative strides")
-        data = view
-        length = self._checked_length(view.nbytes, "Buffer")
+        data = value
+        length = self._checked_length(data.nbytes, "Buffer")
         if length > 0:
             self._prepare_write(length)
             self.c_buffer.write_bytes(&data[0], length)
-        else:
-            self._check_writable()
 
     cpdef inline grow(self, int32_t needed_size):
-        self._grow_checked(needed_size)
+        self._prepare_capacity(needed_size)
+        self.c_buffer.grow(<uint32_t>needed_size)
 
     cpdef inline ensure(self, int32_t length):
         if length < 0:

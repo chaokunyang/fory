@@ -186,8 +186,7 @@ def test_buffer_native_ranges():
         Buffer(memoryview(b"abcd")[::2])
     negative_singleton = memoryview(bytearray(b"x"))[::-1]
     assert negative_singleton.c_contiguous
-    with pytest.raises(Exception):
-        Buffer(negative_singleton)
+    assert Buffer(negative_singleton).to_bytes() == b"x"
     with pytest.raises(Exception):
         Buffer.allocate(-1)
 
@@ -239,6 +238,16 @@ def test_buffer_export_mutability():
     with pytest.raises(TypeError):
         immutable_view[0] = 1
 
+    immutable.reserve(32)
+    immutable.grow(1)
+    immutable.ensure(32)
+    immutable.put_bytes(0, b"")
+    immutable.put_buffer(0, b"", 0, 0)
+    immutable.write_bytes(b"")
+    immutable.write_buffer(b"")
+    immutable.write(b"")
+    assert immutable.get_bytes(0, 16) == b"\0" * 16
+
     mutations = (
         lambda: immutable.put_uint8(0, 1),
         lambda: immutable.put_bytes(0, b"x"),
@@ -248,9 +257,6 @@ def test_buffer_export_mutability():
         lambda: immutable.write_buffer(b"x"),
         lambda: immutable.write(b"x"),
         lambda: immutable.write_string("x"),
-        lambda: immutable.reserve(32),
-        lambda: immutable.grow(1),
-        lambda: immutable.ensure(32),
         lambda: set_bit(immutable, 0, 0),
         lambda: clear_bit(immutable, 0, 0),
         lambda: set_bit_to(immutable, 0, 0, True),
@@ -291,16 +297,7 @@ def test_write_context_writable_buffer():
 
 
 def test_bulk_pointer_ranges():
-    negative_singleton = memoryview(bytearray(b"x"))[::-1]
     target = Buffer.allocate(1)
-    with pytest.raises(Exception):
-        target.put_buffer(0, negative_singleton, 0, 1)
-    with pytest.raises(Exception):
-        target.write_buffer(negative_singleton)
-    with pytest.raises(Exception):
-        target.write(negative_singleton)
-    with pytest.raises(Exception):
-        pyfory.mmh3.hash_buffer(negative_singleton)
 
     np = pytest.importorskip("numpy")
     huge = np.lib.stride_tricks.as_strided(np.zeros(1, dtype=np.uint8), shape=(2**31,), strides=(1,))

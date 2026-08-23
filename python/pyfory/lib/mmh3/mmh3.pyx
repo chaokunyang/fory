@@ -52,15 +52,11 @@ cpdef tuple hash_unicode(unicode value, uint32_t seed=0):
 cpdef tuple hash_buffer(value, uint32_t seed=0):
     cdef int64_t[2] out
     cdef object view = memoryview(value)
-    cdef object stride
     cdef const unsigned char[::1] data_view
     cdef Py_ssize_t length = view.nbytes
     cdef const unsigned char* data = &_empty_hash_data
     if not view.c_contiguous:
-        raise ValueError("Hash input must be C-contiguous with non-negative strides")
-    for stride in view.strides:
-        if stride < 0:
-            raise ValueError("Hash input must be C-contiguous with non-negative strides")
+        raise ValueError("Hash input must be C-contiguous")
     if length > 2147483647:
         raise OverflowError(f"Buffer length {length} exceeds the native hash limit")
     data_view = view

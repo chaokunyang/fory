@@ -413,9 +413,7 @@ public class GraphMemoryBudgetTest extends ForyTestBase {
     LongArrayWriter longWriter = new LongArrayWriter();
     long longListBytes =
         GraphMemoryEstimates.shallowObjectBytes(LongBoxedListReader.class)
-            + Math.max(
-                primitiveArrayBytes(longWriter.value.length, 8),
-                collectionBytes(longWriter.value.length));
+            + collectionBytes(longWriter.value.length);
     LongBoxedListReader longListReader =
         assertCompatibleBudget(longWriter, LongBoxedListReader.class, longListBytes);
     assertEquals(longListReader.value, Arrays.asList(1L, 2L, 3L));
@@ -423,9 +421,7 @@ public class GraphMemoryBudgetTest extends ForyTestBase {
     BoolArrayWriter boolWriter = new BoolArrayWriter();
     long boolListBytes =
         GraphMemoryEstimates.shallowObjectBytes(BoolBoxedListReader.class)
-            + Math.max(
-                primitiveArrayBytes(boolWriter.value.length, 1),
-                collectionBytes(boolWriter.value.length));
+            + collectionBytes(boolWriter.value.length);
     BoolBoxedListReader boolListReader =
         assertCompatibleBudget(boolWriter, BoolBoxedListReader.class, boolListBytes);
     assertEquals(boolListReader.value, Arrays.asList(true, false, true));

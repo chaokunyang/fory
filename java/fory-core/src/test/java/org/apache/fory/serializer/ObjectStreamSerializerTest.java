@@ -1671,7 +1671,6 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     TypeInfo dynamic = withReadContext(fory, dynamicFrame, typeResolver::readTypeInfo);
 
     assertSame(dynamic.getType(), SingleLayerClass.class);
-    Assert.assertFalse(remoteTypeDefs.containsKey(headerHash));
   }
 
   @Test

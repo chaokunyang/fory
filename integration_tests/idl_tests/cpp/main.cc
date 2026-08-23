@@ -1703,6 +1703,11 @@ fory::Result<void, fory::Error> RunRoundTrip(bool compatible) {
                       .compatible(compatible)
                       .check_struct_version(!compatible)
                       .track_ref(true)
+                      // This fixture intentionally crosses several generated
+                      // Struct and smart-pointer decoder owners. Its purpose is
+                      // identity roundtrip, not testing the default depth
+                      // policy, so provision the complete valid graph.
+                      .max_dyn_depth(32)
                       .build();
   tree::register_types(ref_fory);
   graph::register_types(ref_fory);

@@ -716,8 +716,9 @@ reflection configuration for validators.
 
 ## `JsonSubTypes`
 
-`JsonSubTypes` declares the complete finite subtype table for an interface or abstract class. Each
-entry has a case-sensitive logical JSON name and exactly one trusted Java type source:
+`JsonSubTypes` declares a finite subtype table for an interface or abstract class. A non-empty
+`value` is the complete explicit table. Each entry has a case-sensitive logical JSON name and
+exactly one trusted Java type source:
 
 - `value = Circle.class`; or
 - `className = "com.example.shape.Circle"` using the exact Java binary name.
@@ -725,6 +726,32 @@ entry has a case-sensitive logical JSON name and exactly one trusted Java type s
 `className` is useful when an API JAR must not depend on an implementation JAR. It is resolved by
 the fixed builder class loader when the table is built. JSON input never supplies a Java class name
 and cannot add entries. Post-build subtype registration and open subtype discovery are not supported.
+
+Leave `value` empty to infer a sealed hierarchy:
+
+```java
+@JsonSubTypes(property = "kind")
+public sealed interface Shape permits Circle, Polygon {}
+
+public final class Circle implements Shape {}
+
+public sealed interface Polygon extends Shape permits Rectangle {}
+
+public final class Rectangle implements Polygon {}
+```
+
+Fory recursively traverses sealed abstract classes and interfaces. It adds every concrete class
+using its source simple name, including a concrete class that is itself sealed, and continues below
+a concrete sealed class. A concrete open or non-sealed class is added as one exact entry and its
+descendants are not admitted. An open abstract class or interface makes inference fail because that
+branch is not closed. Duplicate names and logical-name hash collisions also fail. These inferred
+names are wire names and are not transformed by the property naming strategy.
+
+Java sealed discovery uses Java 17 class metadata on a standard JVM. The Java annotation processor
+emits the same table from source for Android, where the runtime sealed reflection APIs are not
+available. Kotlin uses Kotlin metadata at runtime; KSP retains the exact hierarchy metadata and
+model operations for minified Android builds. Scala 3 uses `derives ScalaJsonCodec` or builder
+derivation. Scala 2 sealed traits and classes are not inferred.
 
 The default `PROPERTY` inclusion writes an inline discriminator as the first output member:
 
@@ -789,12 +816,18 @@ Both wrappers may delegate to an exact custom subtype codec. All three inclusion
 plain JSON null unless codec precedence selects a custom complete-value codec for the declared
 base, replacing the annotation.
 
-The base must be an interface or abstract class. Every entry must resolve to a unique concrete,
-assignable class, and serialization accepts only an exact listed runtime class. Listing a parent
-does not implicitly admit its descendants. The annotation is read from the declared base itself and
-is not inherited from another annotated interface or abstract class. Readers accept only the
-configured inclusion; changing inclusion is a wire-format change and there is no dual-read
-fallback.
+The base must be an interface or abstract class. Every effective entry must be a unique concrete,
+assignable class, and serialization accepts only an exact table member. In an explicit table,
+listing a parent does not implicitly admit its descendants. The annotation is read from the
+declared base itself and is not inherited from another annotated interface or abstract class.
+Readers accept only the configured inclusion; changing inclusion is a wire-format change and there
+is no dual-read fallback.
 
-At GraalVM native-image runtime, annotate the base with `JsonType` and use class-literal entries
-rather than `className` entries. Listed class-literal subtypes are registered automatically.
+The selected top-level base authorizes its inferred static sealed closure. Use an explicit table
+when only a smaller subset should be available, or configure `JsonTypeChecker` to filter exact
+inferred candidates. The fixed disallow list must accept the complete inferred closure. An explicit
+table remains exact and fails if its entry conflicts with the checker.
+
+At GraalVM native-image runtime, annotate the base with `JsonType` when it is not otherwise reached
+from a provider root. Inferred sealed tables are embedded while the image is built. Explicit tables
+must use class-literal entries rather than `className`; listed classes are registered automatically.

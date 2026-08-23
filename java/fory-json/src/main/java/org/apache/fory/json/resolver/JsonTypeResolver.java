@@ -188,7 +188,7 @@ public final class JsonTypeResolver {
       // owner used to build an unwrapped parent.
       return canonicalObjectCodec(typeInfo);
     }
-    if (customTypeInfo(rawType, rawType) != null || sharedRegistry.subTypesInfo(rawType) != null) {
+    if (customTypeInfo(rawType, rawType) != null || sharedRegistry.hasSubTypes(rawType)) {
       return null;
     }
     JsonSharedRegistry.ResolvedCodec selected =
@@ -491,7 +491,7 @@ public final class JsonTypeResolver {
       publishTypeInfo(key, typeInfo);
       return typeInfo;
     }
-    JsonSubTypesInfo definition = sharedRegistry.subTypesInfo(rawType);
+    JsonSubTypesInfo definition = sharedRegistry.explicitSubTypesInfo(rawType);
     if (definition != null) {
       sharedRegistry.checkSecure(rawType);
       ClosedSubtypeCodec codec = new ClosedSubtypeCodec(rawType, definition);
@@ -531,7 +531,7 @@ public final class JsonTypeResolver {
     }
     if (sharedRegistry.customCodec(rawType) != null
         || sharedRegistry.codecDeclaration(rawType) != null
-        || sharedRegistry.subTypesInfo(rawType) != null) {
+        || sharedRegistry.hasSubTypes(rawType)) {
       throw invalidCodecConfig(
           rawType, "a child codec is hidden by the complete codec for the current value");
     }
@@ -611,7 +611,7 @@ public final class JsonTypeResolver {
     if (sharedRegistry.customCodec(rawType) != null
         || sharedRegistry.codecDeclaration(rawType) != null
         || sharedRegistry.valueDeclaration(rawType) != null
-        || sharedRegistry.subTypesInfo(rawType) != null) {
+        || sharedRegistry.hasSubTypes(rawType)) {
       throw invalidFormatConfig(rawType, "a complete representation hides its direct child");
     }
     sharedRegistry.checkSecure(rawType);
@@ -706,7 +706,7 @@ public final class JsonTypeResolver {
       return;
     }
     Class<?> rawType = type.getRawType();
-    if (!Modifier.isFinal(rawType.getModifiers()) && sharedRegistry.subTypesInfo(rawType) == null) {
+    if (!Modifier.isFinal(rawType.getModifiers()) && !sharedRegistry.hasSubTypes(rawType)) {
       throw new ForyJsonException(
           "Covariant JSON type must be final or declare effective @JsonSubTypes: " + type);
     }
@@ -1031,6 +1031,80 @@ public final class JsonTypeResolver {
 
   public void checkSecure(Class<?> type) {
     sharedRegistry.checkSecure(type);
+  }
+
+  /** Returns whether the exact type requests language-owned sealed subtype inference. */
+  @Internal
+  public boolean isInferredSubtype(Class<?> type) {
+    return sharedRegistry.inferredSubTypes(type);
+  }
+
+  /**
+   * Creates a dispatcher from an already published inferred table, or returns {@code null}.
+   *
+   * <p>This lets a language module avoid parsing hierarchy metadata again while keeping child
+   * codecs resolver-local.
+   */
+  @Internal
+  public JsonValueCodec<?> cachedInferredSubtypeCodec(
+      TypeRef<?> type, JsonCodecFactory childFactory) {
+    JsonSubTypesInfo definition = sharedRegistry.cachedSubTypesInfo(type.getRawType());
+    if (definition == null) {
+      JsonNativeSubtypeRegistry.Table table =
+          JsonNativeSubtypeRegistry.table(
+              type.getRawType(), sharedRegistry.mixinType(type.getRawType()));
+      if (table != null) {
+        definition =
+            sharedRegistry.inferredSubTypesInfo(type.getRawType(), table.classes, table.names);
+      }
+    }
+    return definition == null
+        ? null
+        : new ClosedSubtypeCodec(type.getRawType(), definition, type, childFactory);
+  }
+
+  /** Returns the accepted closed-subtype branches already resolved for hosted reachability. */
+  @Internal
+  public Class<?>[] resolvedSubtypeClasses(Class<?> type) {
+    JsonSubTypesInfo definition = sharedRegistry.cachedSubTypesInfo(type);
+    return definition == null ? new Class<?>[0] : definition.classes();
+  }
+
+  /**
+   * Validates and atomically publishes one language-produced sealed subtype table.
+   *
+   * <p>The producer supplies trusted static hierarchy metadata. Common validation applies fixed
+   * disallows and the configured checker before JSON input can select a logical name.
+   */
+  @Internal
+  public JsonValueCodec<?> createInferredSubtypeCodec(
+      TypeRef<?> type,
+      Class<?>[] classes,
+      String[] names,
+      JsonCodecFactory childFactory,
+      Object[] fixedInstances) {
+    JsonSubTypesInfo definition =
+        sharedRegistry.inferredSubTypesInfo(type.getRawType(), classes, names);
+    Object[] acceptedFixed = alignFixedInstances(definition, classes, fixedInstances);
+    return new ClosedSubtypeCodec(type.getRawType(), definition, type, childFactory, acceptedFixed);
+  }
+
+  private static Object[] alignFixedInstances(
+      JsonSubTypesInfo definition, Class<?>[] classes, Object[] fixedInstances) {
+    if (fixedInstances == null) {
+      return null;
+    }
+    if (classes == null || classes.length != fixedInstances.length) {
+      throw new IllegalArgumentException("Subtype fixed values do not match candidate classes");
+    }
+    Object[] accepted = new Object[definition.size()];
+    for (int i = 0; i < classes.length; i++) {
+      int index = definition.classIndex(classes[i]);
+      if (index >= 0) {
+        accepted[index] = fixedInstances[i];
+      }
+    }
+    return accepted;
   }
 
   /** Builds an unresolved object codec from language-module construction metadata. */

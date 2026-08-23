@@ -39,19 +39,20 @@ public data class PlatformAccount(
 @JsonType @JvmInline public value class PlatformId(public val value: Long)
 
 @JsonType
-@JsonSubTypes(
-  value =
-    [
-      JsonSubTypes.Type(value = PlatformCircle::class, name = "circle"),
-      JsonSubTypes.Type(value = PlatformMarker::class, name = "marker"),
-    ],
-  property = "kind",
-)
+@JsonSubTypes(property = "kind")
 public sealed interface PlatformShape
 
 @JsonType public data class PlatformCircle(public val radius: Int) : PlatformShape
 
 @JsonType public data object PlatformMarker : PlatformShape
+
+public sealed interface PlatformBranch : PlatformShape
+
+@JsonType public data class PlatformSquare(public val size: Int) : PlatformBranch
+
+@JsonType public open class PlatformOpen(public val value: Int) : PlatformShape
+
+public class PlatformOpenDescendant(value: Int) : PlatformOpen(value)
 
 public data class PlatformToken(public val value: String)
 

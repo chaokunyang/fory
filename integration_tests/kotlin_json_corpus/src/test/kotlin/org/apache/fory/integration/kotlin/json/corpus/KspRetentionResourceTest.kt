@@ -44,6 +44,9 @@ public class KspRetentionResourceTest {
     val sealed = rules("PlatformShape")
     assertTrue(sealed.contains("class $PACKAGE.PlatformCircle"), sealed)
     assertTrue(sealed.contains("class $PACKAGE.PlatformMarker"), sealed)
+    assertTrue(sealed.contains("class $PACKAGE.PlatformSquare"), sealed)
+    assertTrue(sealed.contains("class $PACKAGE.PlatformOpen"), sealed)
+    assertFalse(sealed.contains("class $PACKAGE.PlatformOpenDescendant"), sealed)
     assertConstructor(rules("PlatformRoot"), "$PACKAGE.PlatformTokenCodec")
     val mixin = mixinRules("PlatformJavaProfileMixin")
     assertTrue(mixin.contains("class $PACKAGE.PlatformJavaProfile"), mixin)
@@ -90,8 +93,10 @@ public class KspRetentionResourceTest {
         "META-INF/proguard/fory-json-$PACKAGE.PlatformCircle.pro",
         "META-INF/proguard/fory-json-$PACKAGE.PlatformId.pro",
         "META-INF/proguard/fory-json-$PACKAGE.PlatformMarker.pro",
+        "META-INF/proguard/fory-json-$PACKAGE.PlatformOpen.pro",
         "META-INF/proguard/fory-json-$PACKAGE.PlatformRoot.pro",
         "META-INF/proguard/fory-json-$PACKAGE.PlatformShape.pro",
+        "META-INF/proguard/fory-json-$PACKAGE.PlatformSquare.pro",
         "META-INF/proguard/fory-json-mixin-$PACKAGE.PlatformJavaProfileMixin.pro",
       )
   }

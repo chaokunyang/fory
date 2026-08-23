@@ -208,6 +208,12 @@ default operations in a minified build. `JsonFormat` keeps the same direct-field
 one-wrapper-level behavior as on the JVM, including `timezone` for `Instant`, `ZonedDateTime`, and
 `OffsetDateTime`.
 
+For an empty `JsonSubTypes.value` on a Java sealed class or interface, run the Fory annotation
+processor on JDK 17 or newer. It writes the permitted concrete closure into a generated subtype
+table because Android API 26 does not expose Java's sealed reflection APIs. Kotlin sealed discovery
+uses Kotlin metadata directly on Android; KSP retains that exact closure and its construction
+metadata for R8/ProGuard builds. Neither path performs package or classpath subtype scanning.
+
 Android Fory JSON requires a retained no-argument constructor for an ordinary mutable class; it may
 be non-public when Android reflection can make it accessible. `JsonCreator` constructor-backed
 classes follow the normal creator rules instead. Retain every field and method used for reflection,

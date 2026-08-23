@@ -255,10 +255,13 @@ stateful object and a companion object require an exact custom codec. `Unit` als
 `Nothing` is rejected, while `Nothing?` accepts only JSON null through its explicit Kotlin type
 token.
 
-Sealed classes are not discovered from input or package metadata. Declare the complete logical-name
-table with `JsonSubTypes`; only listed exact runtime classes are accepted. The input contains a
-logical subtype name, never a JVM class name. See [Annotations](annotations.md#jsonsubtypes) for
-the available property and wrapper shapes.
+Annotate a sealed class or interface with `JsonSubTypes` and leave `value` empty to infer its closed
+hierarchy from Kotlin metadata. Fory recursively includes concrete sealed descendants and stops at
+each concrete open class, admitting that exact class but not its descendants. An open abstract
+branch is rejected. Inferred logical names are source simple names, including object names without
+a trailing `$`. A non-empty `value` remains an exact explicit subset. Input contains a logical
+subtype name, never a JVM class name. See [Annotations](annotations.md#jsonsubtypes) for the
+property and wrapper shapes.
 
 ## Supported Kotlin types
 
@@ -289,7 +292,7 @@ Kotlin-specific behavior is:
 | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
 | ordinary, data, and nested classes                                                         | named JSON object                                                                  |
 | `inner` class, ordinary abstract class/interface                                           | closed `JsonSubTypes` or exact custom codec only                                   |
-| sealed class/interface                                                                     | explicit closed `JsonSubTypes` table only                                          |
+| sealed class/interface                                                                     | inferred or explicit closed `JsonSubTypes` table                                   |
 | enum                                                                                       | quoted enum name                                                                   |
 | stateless `object`, `data object`, `Unit`                                                  | strict `{}`                                                                        |
 | stateful object, companion object                                                          | exact custom codec only                                                            |
@@ -326,7 +329,7 @@ API into a cross-version Kotlin guarantee.
 `jsonTypeRef<T>()`, annotations, Mixins, and codec registrations are application-declared schema.
 JSON input cannot select an arbitrary class, constructor, compiler default, object, companion,
 module, codec, or callable. A sealed hierarchy accepts only the logical subtype names in its
-declared `@JsonSubTypes` table.
+validated inferred or explicit `@JsonSubTypes` table.
 
 Kotlin arrays, collections, maps, and objects use the same `maxDepth`, graph-memory, input-buffer,
 field-name-cache, and type-checker controls as the core JSON runtime. There are no Kotlin-specific
@@ -347,8 +350,10 @@ the interpreted codec. Only exact generic bindings reached through concrete root
 Do not add reflection configuration or package-wide opens.
 
 On Android, use API 26 or later. The runtime reads Kotlin metadata in both debug and release builds,
-and runtime JSON code generation remains disabled. Follow the [installation](#installation) above
-and the [Android guide](android.md) when R8 or ProGuard is enabled.
+including sealed-subclass metadata, and runtime JSON code generation remains disabled. KSP is not
+needed to discover an unminified hierarchy; it emits the exact retention rules required when R8 or
+ProGuard can rename or remove members of that hierarchy. Follow the [installation](#installation)
+above and the [Android guide](android.md) when shrinking is enabled.
 
 Kotlin/Native, Kotlin/JS, and Kotlin/Wasm are not supported by this JVM module.
 

@@ -37,8 +37,10 @@ CORPUS_RULE_MODELS = (
     "PlatformCircle",
     "PlatformId",
     "PlatformMarker",
+    "PlatformOpen",
     "PlatformRoot",
     "PlatformShape",
+    "PlatformSquare",
 )
 CORPUS_MIXIN_TARGETS = {
     "PlatformJavaProfileMixin": "PlatformJavaProfile",

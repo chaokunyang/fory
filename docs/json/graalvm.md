@@ -182,7 +182,9 @@ built with.
 
 The `fory-json` artifact activates its Native Image Feature automatically. `@JsonType` is not
 inherited, so annotate every concrete application model. An annotated base with a class-literal
-`@JsonSubTypes` table registers its listed subtypes automatically. Dedicated supported containers,
+`@JsonSubTypes` table registers its explicit or inferred subtypes automatically. Empty tables are
+resolved from Java sealed metadata, Kotlin metadata, or a Scala 3 derived codec while the image is
+built, and the resulting finite table is embedded for runtime use. Dedicated supported containers,
 including `EnumMap` and `EnumSet`, use their built-in factories. Other reachable concrete
 `Collection` and `Map` root types require a public no-argument constructor. A class referenced only
 by a class name resolved at runtime is not reachable;

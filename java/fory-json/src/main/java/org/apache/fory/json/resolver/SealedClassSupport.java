@@ -17,24 +17,13 @@
  * under the License.
  */
 
-package org.apache.fory.json.scala
+package org.apache.fory.json.resolver;
 
-import org.apache.fory.json.{ForyJsonBuilder, JsonCodecFactory}
+/** Java 8/Android base for Java sealed-hierarchy discovery. */
+final class SealedClassSupport {
+  private SealedClassSupport() {}
 
-import scala.reflect.ClassTag
-
-/** Compile-time JSON schema for a Scala 3 enum or sealed hierarchy. */
-trait ScalaJsonCodec[T] extends JsonCodecFactory
-
-object ScalaJsonCodec {
-  inline def derived[T]: ScalaJsonCodec[T] =
-    ${ org.apache.fory.json.scala.internal.ScalaJsonCodecMacros.derive[T] }
+  static Class<?>[] subtypes(Class<?> baseType) {
+    return null;
+  }
 }
-
-extension (builder: ForyJsonBuilder)
-  /** Derives and registers a closed schema for a third-party Scala 3 enum or sealed hierarchy. */
-  inline def register[T](using tag: ClassTag[T]): ForyJsonBuilder =
-    builder.registerCodec(
-      tag.runtimeClass.asInstanceOf[Class[T]],
-      ScalaJsonCodec.derived[T]
-    )

@@ -267,6 +267,10 @@ public final class ForyJsonBuilder {
    *
    * <p>The checker must be thread-safe because one {@link ForyJson} instance can be used
    * concurrently.
+   *
+   * <p>For an empty {@code JsonSubTypes.value}, the checker filters exact classes from the inferred
+   * sealed closure. Rejecting every candidate is an error. A non-empty subtype table is an exact
+   * declaration and fails if the checker rejects an entry.
    */
   public ForyJsonBuilder withTypeChecker(JsonTypeChecker typeChecker) {
     this.typeChecker = typeChecker;

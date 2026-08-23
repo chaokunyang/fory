@@ -39,14 +39,19 @@ internal class ForyJsonKotlinSymbolProcessor(environment: SymbolProcessorEnviron
   override fun process(resolver: Resolver): List<KSAnnotated> {
     val deferred = ArrayList<KSAnnotated>()
     val modelBuilder = KspModelBuilder(resolver, logger)
-    for (symbol in resolver.getSymbolsWithAnnotation(JSON_TYPE)) {
+    val directSymbols =
+      sequenceOf(JSON_TYPE, JSON_SUB_TYPES).flatMap(resolver::getSymbolsWithAnnotation).distinct()
+    for (symbol in directSymbols) {
       if (!symbol.validate()) {
         deferred += symbol
         continue
       }
       val declaration = symbol as? KSClassDeclaration
       if (declaration == null) {
-        logger.error("@JsonType can only be used on classes, interfaces, and objects", symbol)
+        logger.error(
+          "@JsonType and @JsonSubTypes can only be used on classes, interfaces, and objects",
+          symbol,
+        )
         continue
       }
       val model = modelBuilder.direct(declaration) ?: continue

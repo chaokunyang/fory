@@ -17,24 +17,24 @@
  * under the License.
  */
 
-package org.apache.fory.json.scala
+package org.apache.fory.json.codec;
 
-import org.apache.fory.json.{ForyJsonBuilder, JsonCodecFactory}
+import org.apache.fory.annotation.Internal;
 
-import scala.reflect.ClassTag
+/**
+ * Source-generated sealed-subtype schema metadata.
+ *
+ * <p>This table is trusted build-time schema input, not JSON-controlled class resolution. The
+ * shared registry still validates every class, logical name, and security policy before use.
+ */
+@Internal
+public interface GeneratedJsonSubtypeTable {
+  /** Returns the exact base described by this table. */
+  Class<?> type();
 
-/** Compile-time JSON schema for a Scala 3 enum or sealed hierarchy. */
-trait ScalaJsonCodec[T] extends JsonCodecFactory
+  /** Returns the complete concrete sealed closure in canonical order. */
+  Class<?>[] subtypes();
 
-object ScalaJsonCodec {
-  inline def derived[T]: ScalaJsonCodec[T] =
-    ${ org.apache.fory.json.scala.internal.ScalaJsonCodecMacros.derive[T] }
+  /** Returns source simple names parallel to {@link #subtypes()}. */
+  String[] names();
 }
-
-extension (builder: ForyJsonBuilder)
-  /** Derives and registers a closed schema for a third-party Scala 3 enum or sealed hierarchy. */
-  inline def register[T](using tag: ClassTag[T]): ForyJsonBuilder =
-    builder.registerCodec(
-      tag.runtimeClass.asInstanceOf[Class[T]],
-      ScalaJsonCodec.derived[T]
-    )

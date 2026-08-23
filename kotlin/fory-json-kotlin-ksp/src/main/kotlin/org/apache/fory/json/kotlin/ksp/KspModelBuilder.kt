@@ -44,7 +44,7 @@ import com.google.devtools.ksp.symbol.Origin
 
 internal const val JSON_TYPE: String = "org.apache.fory.json.annotation.JsonType"
 internal const val JSON_MIXIN: String = "org.apache.fory.json.annotation.JsonMixin"
-private const val JSON_SUB_TYPES = "org.apache.fory.json.annotation.JsonSubTypes"
+internal const val JSON_SUB_TYPES: String = "org.apache.fory.json.annotation.JsonSubTypes"
 private const val JSON_SUB_TYPE = "org.apache.fory.json.annotation.JsonSubTypes.Type"
 private const val JSON_CODEC = "org.apache.fory.json.annotation.JsonCodec"
 private const val JSON_BASE64 = "org.apache.fory.json.annotation.JsonBase64"
@@ -78,7 +78,9 @@ internal class KspModelBuilder(
   fun direct(target: KSClassDeclaration): JsonModel? {
     if (target.origin != Origin.KOTLIN || target.containingFile == null) return null
     if (hasAnnotation(target, JSON_MIXIN)) return null
-    return kotlinModel(target, null)
+    return kotlinModel(target, null)?.let { model ->
+      if (emptySubTypes(target, null)) sealedModel(target, null, model) else model
+    }
   }
 
   fun mixin(source: KSClassDeclaration): JsonModel? {
@@ -86,10 +88,77 @@ internal class KspModelBuilder(
     val target = mixinTarget(source) ?: return null
     if (source.origin == Origin.JAVA && !isKotlin(target.origin)) return null
     return if (isKotlin(target.origin)) {
-      kotlinModel(target, source)
+      kotlinModel(target, source)?.let { model ->
+        if (emptySubTypes(target, source)) sealedModel(target, source, model) else model
+      }
     } else {
       javaModel(target, source)
     }
+  }
+
+  private fun emptySubTypes(
+    target: KSClassDeclaration,
+    mixin: KSClassDeclaration?,
+  ): Boolean {
+    val annotation = effectiveAnnotation(target, mixin, JSON_SUB_TYPES) ?: return false
+    val value = annotation.arguments.firstOrNull { it.name?.asString() == "value" }?.value
+    return value == null || value is Iterable<*> && value.none()
+  }
+
+  private fun sealedModel(
+    target: KSClassDeclaration,
+    mixin: KSClassDeclaration?,
+    root: JsonModel,
+  ): JsonModel? {
+    if (Modifier.SEALED !in target.modifiers) {
+      return fail(target, "Empty @JsonSubTypes requires a sealed Kotlin type")
+    }
+    // KSP symbols are trusted build-time schema metadata. Retaining the exact closure keeps
+    // runtime Kotlin metadata discovery finite and stable after R8/ProGuard.
+    val declarations = ArrayList<KSClassDeclaration>()
+    val retained = linkedSetOf<String>()
+    val visited = linkedSetOf<String>()
+    fun collect(sealedType: KSClassDeclaration): Boolean {
+      for (subtype in sealedType.getSealedSubclasses()) {
+        val binary = binaryName(subtype) ?: return false
+        if (!visited.add(binary)) continue
+        retained += binary
+        val concrete =
+          subtype.classKind != ClassKind.INTERFACE && Modifier.ABSTRACT !in subtype.modifiers
+        if (concrete) declarations += subtype
+        if (Modifier.SEALED in subtype.modifiers) {
+          if (!collect(subtype)) return false
+        } else if (!concrete) {
+          fail<Any>(subtype, "Sealed Kotlin JSON hierarchy has an open abstract branch")
+          return false
+        }
+      }
+      return true
+    }
+    if (!collect(target)) return null
+    if (declarations.isEmpty()) {
+      fail<Any>(target, "Sealed Kotlin JSON hierarchy has no concrete subtype")
+      return null
+    }
+    val models = ArrayList<JsonModel>(declarations.size + 1)
+    models += root
+    for (declaration in declarations) {
+      models += kotlinModel(declaration, null) ?: return null
+    }
+    return JsonModel(
+      targetBinaryName = root.targetBinaryName,
+      members = models.flatMap(JsonModel::members).distinct(),
+      mixinBinaryName = root.mixinBinaryName,
+      originatingFiles =
+        (models.flatMap(JsonModel::originatingFiles) +
+            listOfNotNull(target.containingFile, mixin?.containingFile))
+          .distinct(),
+      retainedAnnotations = models.flatMap(JsonModel::retainedAnnotations).toSet(),
+      annotationOwnerTypes = models.flatMap(JsonModel::annotationOwnerTypes).toSet(),
+      retainedTypes = models.flatMap(JsonModel::retainedTypes).toSet() + retained,
+      codecTypes = models.flatMap(JsonModel::codecTypes).toSet(),
+      containerTypes = models.flatMap(JsonModel::containerTypes).toSet(),
+    )
   }
 
   private fun javaModel(

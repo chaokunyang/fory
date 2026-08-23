@@ -95,6 +95,7 @@ public final class ForyJsonExample {
     testCodecs();
     testValueAnnotations();
     testSubtypes();
+    testSubtypeMixin();
     testContainerRoots();
     testGenericProperties();
     testUnwrapped();
@@ -137,6 +138,7 @@ public final class ForyJsonExample {
         .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
         .registerMixin(CoreCompileStateMixin.class)
         .registerMixin(EmptyMixin.class)
+        .registerMixin(SealedShapeMixin.class)
         .registerMixin(StackTraceElementMixin.class)
         .build();
   }
@@ -505,6 +507,15 @@ public final class ForyJsonExample {
     Shape decoded = json.fromJson(encoded, Shape.class);
     Preconditions.checkArgument(decoded instanceof Circle);
     Preconditions.checkArgument(((Circle) decoded).radius == 9);
+  }
+
+  private static void testSubtypeMixin() {
+    ForyJson json = ForyJson.builder().registerMixin(SealedShapeMixin.class).build();
+    MixinShape value = new MixinCircle(7);
+    String encoded = json.toJson(value, MixinShape.class);
+    MixinShape decoded = json.fromJson(encoded, MixinShape.class);
+    Preconditions.checkArgument(decoded instanceof MixinCircle);
+    Preconditions.checkArgument(((MixinCircle) decoded).radius == 7);
   }
 
   private static void testContainerRoots() {
@@ -1594,10 +1605,8 @@ public final class ForyJsonExample {
   }
 
   @JsonType
-  @JsonSubTypes(
-      property = "kind",
-      value = {@JsonSubTypes.Type(value = Circle.class, name = "circle")})
-  public interface Shape {}
+  @JsonSubTypes(property = "kind")
+  public sealed interface Shape permits Circle {}
 
   public static final class Circle implements Shape {
     public int radius;
@@ -1608,6 +1617,22 @@ public final class ForyJsonExample {
       this.radius = radius;
     }
   }
+
+  public sealed interface MixinShape permits MixinCircle {}
+
+  public static final class MixinCircle implements MixinShape {
+    public int radius;
+
+    public MixinCircle() {}
+
+    MixinCircle(int radius) {
+      this.radius = radius;
+    }
+  }
+
+  @JsonMixin(target = MixinShape.class)
+  @JsonSubTypes(property = "kind")
+  public interface SealedShapeMixin {}
 
   @JsonType
   public static final class SqlValues {

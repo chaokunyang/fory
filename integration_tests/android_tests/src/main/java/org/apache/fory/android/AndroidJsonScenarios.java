@@ -214,7 +214,7 @@ public final class AndroidJsonScenarios {
 
     GeneratedJsonModel.resetCodecCalls();
     String encoded = json.toJson(value, GeneratedJsonModel.class);
-    check(encoded.contains("\"kind\":\"generated\""));
+    check(encoded.contains("\"kind\":\"GeneratedJsonSubtype\""));
     check(encoded.contains("\"generated:list\""));
     check(encoded.contains("\"generated:root\""));
     check(encoded.contains("\"generated:property\""));

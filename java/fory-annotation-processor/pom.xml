@@ -95,6 +95,17 @@
         <plugins>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <phase>package</phase>
+                <goals><goal>jar</goal></goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-antrun-plugin</artifactId>
             <version>3.1.0</version>
             <executions>
@@ -144,6 +155,31 @@
                     <jar destfile="${project.build.directory}/${project.build.finalName}.jar" update="true">
                       <zipfileset dir="${fory.processor.mr.classes}/17"
                                   prefix="META-INF/versions/17" includes="**/*.class"/>
+                    </jar>
+                  </target>
+                </configuration>
+              </execution>
+              <execution>
+                <id>patch-multi-release-source-jar</id>
+                <phase>package</phase>
+                <goals><goal>run</goal></goals>
+                <configuration>
+                  <skip>${maven.source.skip}</skip>
+                  <target>
+                    <property
+                        name="multi.release.sources.jar"
+                        value="${project.build.directory}/${project.build.finalName}-sources.jar"/>
+                    <available
+                        file="${multi.release.sources.jar}"
+                        property="multi.release.sources.jar.present"/>
+                    <fail
+                        unless="multi.release.sources.jar.present"
+                        message="Multi-release source patching requires ${multi.release.sources.jar}."/>
+                    <jar destfile="${multi.release.sources.jar}" update="true">
+                      <zipfileset dir="${project.basedir}/src/main/java17"
+                                  prefix="META-INF/versions/17">
+                        <include name="**/*.java"/>
+                      </zipfileset>
                     </jar>
                   </target>
                 </configuration>

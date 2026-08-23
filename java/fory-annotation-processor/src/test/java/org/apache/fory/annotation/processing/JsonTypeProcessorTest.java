@@ -1706,6 +1706,7 @@ public class JsonTypeProcessorTest {
     assertTrue(source.contains("Shape.Circle.class"), source);
     assertTrue(source.contains("Shape.Open.class"), source);
     String rules = result.generatedResource(RULE_PREFIX + "test.Shape.pro");
+    assertTrue(rules.contains("-keep,allowoptimization class test.Shape\n"), rules);
     assertTrue(rules.contains("class test.Shape_ForyJsonSubTypes"), rules);
     assertTrue(rules.contains("int value;"), rules);
 
@@ -1755,6 +1756,9 @@ public class JsonTypeProcessorTest {
     assertTrue(result.success, result.diagnostics());
     String table = "test/ShapeMixin_ForyJsonMixin_test_x2e_MixinShape_ForyJsonSubTypes.java";
     assertTrue(result.hasGeneratedSource(table));
+    String rules = result.generatedResource(MIXIN_RULE_PREFIX + "test.ShapeMixin.pro");
+    assertTrue(rules.contains("-keep,allowoptimization class test.MixinShape\n"), rules);
+    assertTrue(rules.contains("-keep,allowoptimization class test.ShapeMixin\n"), rules);
     ClassLoader loader = result.classLoader();
     Class<?> root = loader.loadClass("test.MixinShape");
     Class<?> valueType = loader.loadClass("test.MixinShape$Value");

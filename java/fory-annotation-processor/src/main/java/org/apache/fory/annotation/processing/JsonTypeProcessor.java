@@ -65,6 +65,8 @@ final class JsonTypeProcessor {
   private static final String JSON_MIXIN_REMOVE = JSON_PACKAGE + ".annotation.JsonMixinRemove";
   private static final String JSON_CODEC = JSON_PACKAGE + ".annotation.JsonCodec";
   private static final String JSON_SUB_TYPES = JSON_PACKAGE + ".annotation.JsonSubTypes";
+  private static final String JSON_SUBTYPE_GENERATION =
+      JSON_PACKAGE + ".codec.GeneratedJsonSubtypeTable.Generation";
   private static final String JSON_CREATOR = JSON_PACKAGE + ".annotation.JsonCreator";
   private static final String JSON_PROPERTY = JSON_PACKAGE + ".annotation.JsonProperty";
   private static final String JSON_VALUE = JSON_PACKAGE + ".annotation.JsonValue";
@@ -102,6 +104,7 @@ final class JsonTypeProcessor {
 
   void process(RoundEnvironment roundEnvironment) {
     validateMixinControls(roundEnvironment);
+    collectSubtypeGenerations(roundEnvironment);
     TypeElement jsonType = elements.getTypeElement(JSON_TYPE);
     TypeElement jsonSubTypes = elements.getTypeElement(JSON_SUB_TYPES);
     if (jsonType == null && jsonSubTypes == null) {
@@ -158,6 +161,7 @@ final class JsonTypeProcessor {
           validateSubtypeRoot(type);
           subtypes = sealedSubtypes(type);
           model.subtypeTableBinaryName = emitSubtypeTable(type, null, subtypes);
+          model.nameTypes.add(model.binaryName);
           mergeSubtypeModels(model, subtypes);
         } else {
           if (subtypesAnnotation != null) {
@@ -182,6 +186,27 @@ final class JsonTypeProcessor {
       }
     }
     processMixins(roundEnvironment);
+  }
+
+  private void collectSubtypeGenerations(RoundEnvironment roundEnvironment) {
+    TypeElement generationType = elements.getTypeElement(JSON_SUBTYPE_GENERATION);
+    if (generationType == null) {
+      return;
+    }
+    for (Element element : roundEnvironment.getElementsAnnotatedWith(generationType)) {
+      AnnotationMirror generation = annotationMirror(element, JSON_SUBTYPE_GENERATION);
+      AnnotationValue value = generation == null ? null : annotationValue(generation, "mixin");
+      TypeElement mixin =
+          value != null && value.getValue() instanceof String
+              ? elements.getTypeElement((String) value.getValue())
+              : null;
+      if (mixin == null) {
+        messager.printMessage(
+            Diagnostic.Kind.ERROR, "Cannot resolve generated JSON subtype Mixin", element);
+        continue;
+      }
+      pendingMixins.put(elements.getBinaryName(mixin).toString(), mixin);
+    }
   }
 
   private void validateMixinControls(RoundEnvironment roundEnvironment) {
@@ -286,6 +311,8 @@ final class JsonTypeProcessor {
             validateSubtypeRoot(target);
             List<TypeElement> subtypes = sealedSubtypes(target);
             model.subtypeTableBinaryName = emitSubtypeTable(target, mixin, subtypes);
+            model.nameTypes.add(model.binaryName);
+            model.nameTypes.add(mixinBinaryName);
             mergeSubtypeModels(model, subtypes);
           } else {
             if (subtypesAnnotation != null) {

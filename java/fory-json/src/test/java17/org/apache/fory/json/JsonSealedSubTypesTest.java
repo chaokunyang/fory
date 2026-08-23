@@ -60,6 +60,15 @@ public class JsonSealedSubTypesTest {
         () -> json.toJson(new OpenDescendant(7), InferredShape.class));
   }
 
+  @Test(dataProvider = "codegen")
+  public void generatedTablePrecedesReflection(boolean codegen) {
+    ForyJson json =
+        ForyJson.builder().withCodegen(codegen).withAsyncCompilation(false).build();
+    String text = json.toJson(new GeneratedLeaf(8), GeneratedShape.class);
+    assertEquals(text, "{\"kind\":\"StableLeaf\",\"value\":8}");
+    assertEquals(json.fromJson(text, GeneratedShape.class).getClass(), GeneratedLeaf.class);
+  }
+
   @Test
   public void checkerNarrowsExactBranches() {
     ForyJson json =
@@ -193,6 +202,19 @@ public class JsonSealedSubTypesTest {
 
     ConcreteLeaf(int value) {
       super(value);
+    }
+  }
+
+  @JsonSubTypes(property = "kind")
+  public sealed interface GeneratedShape permits GeneratedLeaf {}
+
+  public static final class GeneratedLeaf implements GeneratedShape {
+    public int value;
+
+    public GeneratedLeaf() {}
+
+    GeneratedLeaf(int value) {
+      this.value = value;
     }
   }
 

@@ -300,6 +300,16 @@ public final class AndroidJsonScenarios {
     generatedMixinValueRecord();
   }
 
+  public static void generatedSealedMixin() {
+    ForyJson json =
+        ForyJson.builder().registerMixin(GeneratedMixinShapeAnnotations.class).build();
+    String text = json.toJson(new GeneratedMixinShape.Circle(36), GeneratedMixinShape.class);
+    checkEquals("{\"kind\":\"Circle\",\"radius\":36}", text);
+    GeneratedMixinShape decoded = json.fromJson(text, GeneratedMixinShape.class);
+    check(decoded instanceof GeneratedMixinShape.Circle);
+    checkEquals(36, ((GeneratedMixinShape.Circle) decoded).radius);
+  }
+
   private static void generatedMixinRecord() {
     ForyJson json =
         ForyJson.builder().registerMixin(GeneratedJsonMixinRecordAnnotations.class).build();

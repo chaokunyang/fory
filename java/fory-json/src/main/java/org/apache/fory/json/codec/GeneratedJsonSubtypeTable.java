@@ -19,6 +19,10 @@
 
 package org.apache.fory.json.codec;
 
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import org.apache.fory.annotation.Internal;
 
 /**
@@ -37,4 +41,19 @@ public interface GeneratedJsonSubtypeTable {
 
   /** Returns source simple names parallel to {@link #subtypes()}. */
   String[] names();
+
+  /**
+   * Hands a Kotlin-source Mixin for a Java sealed root to Java annotation processing.
+   *
+   * <p>KSP cannot read Java permitted-subclass metadata. This source-only marker keeps Java sealed
+   * discovery in the annotation processor while naming the real Mixin that owns the generated pair
+   * table. It is trusted build metadata and is absent at runtime.
+   */
+  @Internal
+  @Retention(RetentionPolicy.SOURCE)
+  @Target(ElementType.TYPE)
+  @interface Generation {
+    /** Returns the qualified Kotlin Mixin name that requires Java closure generation. */
+    String mixin();
+  }
 }

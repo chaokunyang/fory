@@ -61,8 +61,11 @@ dependencies {
 
 Annotate every Kotlin source model that needs exact minification retention with `@JsonType`. For a
 third-party target, declare an exact `@JsonMixin` in application source instead. Use Kotlin KSP for
-a Mixin when either the Mixin or its exact target is Kotlin. The processor emits only the exact R8
-and ProGuard rules for those declarations; it does not generate codecs or change the JSON mapping.
+a Mixin when either the Mixin or its exact target is Kotlin. If a Kotlin-source Mixin adds an
+inferred `JsonSubTypes` table to a Java sealed target, also enable `fory-annotation-processor` and
+compile on JDK 17 or newer. KSP forwards that source declaration to the Java processor, which emits
+the target's sealed table and exact R8 or ProGuard rules. KSP does not generate codecs or change the
+JSON mapping.
 
 ## Quick start
 
@@ -352,8 +355,10 @@ Do not add reflection configuration or package-wide opens.
 On Android, use API 26 or later. The runtime reads Kotlin metadata in both debug and release builds,
 including sealed-subclass metadata, and runtime JSON code generation remains disabled. KSP is not
 needed to discover an unminified hierarchy; it emits the exact retention rules required when R8 or
-ProGuard can rename or remove members of that hierarchy. Follow the [installation](#installation)
-above and the [Android guide](android.md) when shrinking is enabled.
+ProGuard can rename or remove members of that hierarchy. A Kotlin-source Mixin that requests
+inference for a Java sealed target also requires the Java annotation processor on JDK 17 or newer,
+because Android cannot discover the Java permitted subclasses at runtime. Follow the
+[installation](#installation) above and the [Android guide](android.md) when shrinking is enabled.
 
 Kotlin/Native, Kotlin/JS, and Kotlin/Wasm are not supported by this JVM module.
 

@@ -1869,12 +1869,14 @@ public final class JsonSharedRegistry {
       throw new ForyJsonException(
           "Missing embedded inferred subtype table for " + baseType.getName());
     }
-    if (AndroidSupport.IS_ANDROID) {
-      GeneratedJsonSubtypeTable table = loadGeneratedSubtypeTable(baseType);
-      if (table == null) {
-        throw missingGeneratedSubtypeTable(baseType, mixinType(baseType));
-      }
+    // A generated table owns source-level discriminator names after class-file obfuscation. Prefer
+    // it on every JVM; sealed reflection remains the unprocessed Java 17 fallback.
+    GeneratedJsonSubtypeTable table = loadGeneratedSubtypeTable(baseType);
+    if (table != null) {
       return generatedSubtypes(baseType, table);
+    }
+    if (AndroidSupport.IS_ANDROID) {
+      throw missingGeneratedSubtypeTable(baseType, mixinType(baseType));
     }
     Class<?>[] classes = SealedClassSupport.subtypes(baseType);
     if (classes != null) {
@@ -1883,10 +1885,6 @@ public final class JsonSharedRegistry {
         names[i] = classes[i].getSimpleName();
       }
       return new InferredSubtypes(classes, names);
-    }
-    GeneratedJsonSubtypeTable table = loadGeneratedSubtypeTable(baseType);
-    if (table != null) {
-      return generatedSubtypes(baseType, table);
     }
     throw new ForyJsonException(
         "Empty @JsonSubTypes requires Java 17 sealed metadata or a generated subtype table for "

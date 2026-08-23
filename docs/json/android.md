@@ -64,7 +64,9 @@ dependencies {
 Create the runtime with `ForyJsonKotlin.builder()`. For a minified build, annotate every required
 Kotlin source model with `@JsonType`. For a third-party Kotlin target, declare a source-owned exact
 `@JsonMixin` instead. KSP emits exact R8 and ProGuard retention resources; it does not generate
-codecs or construction operations. Ensure those resources are packaged in the final application.
+codecs or construction operations. If a Kotlin-source Mixin adds inferred `JsonSubTypes` to a Java
+sealed target, also apply `fory-annotation-processor` and compile on JDK 17 or newer. Ensure the
+generated table and retention resources are packaged in the final application.
 
 ## Custom Codecs
 
@@ -164,6 +166,9 @@ Use the processor-generated R8 rules for non-empty Mixins instead of broad packa
 
 If either the Mixin source or its exact target is Kotlin, process the source request with
 `fory-json-kotlin-ksp` instead. KSP emits only the exact retention rules for the target and Mixin.
+When a Kotlin-source Mixin adds an inferred `JsonSubTypes` table to a Java sealed target, apply both
+KSP and `fory-annotation-processor` and compile on JDK 17 or newer. The Java processor emits the
+sealed table and exact rules because Android cannot inspect Java permitted subclasses at runtime.
 
 ## Reflection-Based Models
 
@@ -212,7 +217,9 @@ For an empty `JsonSubTypes.value` on a Java sealed class or interface, run the F
 processor on JDK 17 or newer. It writes the permitted concrete closure into a generated subtype
 table because Android API 26 does not expose Java's sealed reflection APIs. Kotlin sealed discovery
 uses Kotlin metadata directly on Android; KSP retains that exact closure and its construction
-metadata for R8/ProGuard builds. Neither path performs package or classpath subtype scanning.
+metadata for R8/ProGuard builds. A Kotlin-source Mixin targeting a Java sealed root needs both KSP
+and the Java annotation processor; KSP identifies the exact Mixin declaration and the Java processor
+writes the target's table. Neither path performs package or classpath subtype scanning.
 
 Android Fory JSON requires a retained no-argument constructor for an ordinary mutable class; it may
 be non-public when Android reflection can make it accessible. `JsonCreator` constructor-backed

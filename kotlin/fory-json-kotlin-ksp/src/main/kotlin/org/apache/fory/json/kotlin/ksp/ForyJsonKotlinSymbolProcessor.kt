@@ -68,6 +68,12 @@ internal class ForyJsonKotlinSymbolProcessor(environment: SymbolProcessorEnviron
         logger.error("@JsonMixin can only be used on classes and interfaces", symbol)
         continue
       }
+      val generation = modelBuilder.javaSubtypeGeneration(declaration)
+      if (generation != null) {
+        val key = "${generation.packageName}.${generation.simpleName}"
+        if (generatedRequests.add(key)) write(generation)
+        continue
+      }
       val model = modelBuilder.mixin(declaration) ?: continue
       if (!generatedRequests.add(R8RulesWriter.resourcePath(model))) continue
       write(model)
@@ -77,10 +83,22 @@ internal class ForyJsonKotlinSymbolProcessor(environment: SymbolProcessorEnviron
 
   private fun write(model: JsonModel) {
     val dependencies =
-      Dependencies(aggregating = false, sources = model.originatingFiles.toTypedArray())
+      Dependencies(aggregating = model.aggregating, sources = model.originatingFiles.toTypedArray())
     codeGenerator.createNewFileByPath(dependencies, R8RulesWriter.resourcePath(model), "").use {
       output ->
       output.write(R8RulesWriter.write(model).toByteArray(StandardCharsets.UTF_8))
     }
+  }
+
+  private fun write(generation: JavaSubtypeGeneration) {
+    val dependencies =
+      Dependencies(aggregating = true, sources = generation.originatingFiles.toTypedArray())
+    codeGenerator
+      .createNewFile(dependencies, generation.packageName, generation.simpleName, "java")
+      .use { output ->
+        output.write(
+          JavaSubtypeGenerationWriter.write(generation).toByteArray(StandardCharsets.UTF_8)
+        )
+      }
   }
 }

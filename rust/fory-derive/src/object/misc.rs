@@ -21,8 +21,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use syn::Field;
 
 use super::field_codec::{build_bindings, FieldBinding};
-use super::field_meta::parse_field_meta;
-use super::util::{get_filtered_fields_iter, get_sort_fields_ts, get_sorted_field_names};
+use super::util::get_sort_fields_ts;
 use crate::util::SourceField;
 
 // Global type ID counter that auto-grows from 0 at macro processing time
@@ -82,26 +81,4 @@ pub fn gen_field_fields_info(source_fields: &[SourceField<'_>]) -> TokenStream {
         fory_core::meta::sort_fields(&mut field_infos, sorted_field_names)?;
         ::std::result::Result::Ok(field_infos)
     }
-}
-
-pub fn gen_type_meta_field_ids(source_fields: &[SourceField<'_>]) -> TokenStream {
-    let fields: Vec<&Field> = source_fields.iter().map(|source| source.field).collect();
-    let filtered_fields: Vec<&Field> = get_filtered_fields_iter(&fields).collect();
-    let sorted_field_names = get_sorted_field_names(&filtered_fields);
-    // Keep this parallel static slice in the exact protocol order used by fields_info. SourceField
-    // is normally pre-sorted, but deriving the order from the same owner prevents a future caller
-    // from binding a wide tag to a different FieldInfo after group/type sorting.
-    let field_ids = sorted_field_names
-        .iter()
-        .filter_map(|field_name| {
-            let source = source_fields
-                .iter()
-                .find(|source| &source.field_name == field_name)?;
-            let meta = parse_field_meta(source.field).ok()?;
-            let field_id = meta.effective_id();
-            Some(quote! { #field_id })
-        })
-        .collect::<Vec<_>>();
-
-    quote! { &[#(#field_ids),*] }
 }

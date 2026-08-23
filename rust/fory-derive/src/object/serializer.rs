@@ -87,9 +87,7 @@ pub fn derive_serializer(
         actual_type_id,
         sorted_field_names,
         fields_info,
-        type_meta_field_ids,
         variants_fields_info,
-        variants_type_meta_field_ids,
         read_compatible,
         variant_meta_types,
         write_complete,
@@ -133,12 +131,10 @@ pub fn derive_serializer(
                 actual_type_id,
                 misc::gen_get_sorted_field_names(&fields),
                 misc::gen_field_fields_info(&source),
-                misc::gen_type_meta_field_ids(&source),
                 quote! {
                     let _ = type_resolver;
                     Ok(::std::vec::Vec::new())
                 },
-                quote! { &[] },
                 read::gen_read_compatible(&data.fields, &source, &target_path, read_may_recurse),
                 Vec::new(),
                 write::gen_write(),
@@ -164,9 +160,7 @@ pub fn derive_serializer(
                 derive_enum::gen_actual_type_id(data),
                 quote! { &[] },
                 derive_enum::gen_field_fields_info(data),
-                derive_enum::gen_type_meta_field_ids(data),
                 derive_enum::gen_variants_fields_info(name, &ast.generics, data),
-                derive_enum::gen_variants_type_meta_field_ids(data),
                 quote! {
                     let _ = (context, type_info);
                     Err(fory_core::Error::not_allowed(
@@ -240,10 +234,6 @@ pub fn derive_serializer(
                 #fields_info
             }
 
-            fn type_meta_field_ids() -> &'static [i32] {
-                #type_meta_field_ids
-            }
-
             fn variants_fields_info(
                 type_resolver: &fory_core::resolver::TypeResolver,
             ) -> ::std::result::Result<
@@ -255,11 +245,6 @@ pub fn derive_serializer(
                 fory_core::Error,
             > {
                 #variants_fields_info
-            }
-
-            fn variants_type_meta_field_ids(
-            ) -> &'static [&'static [i32]] {
-                #variants_type_meta_field_ids
             }
 
             // Compatible mode enters this for every structural read, so this

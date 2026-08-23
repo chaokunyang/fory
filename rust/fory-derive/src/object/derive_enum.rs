@@ -285,26 +285,6 @@ pub fn gen_field_fields_info(_data_enum: &DataEnum) -> TokenStream {
     }
 }
 
-pub fn gen_type_meta_field_ids(_data_enum: &DataEnum) -> TokenStream {
-    quote! { &[] }
-}
-
-pub fn gen_variants_type_meta_field_ids(data_enum: &DataEnum) -> TokenStream {
-    let variant_field_ids = data_enum
-        .variants
-        .iter()
-        .filter(|variant| !is_runtime_unknown_variant(variant))
-        .map(|variant| match &variant.fields {
-            Fields::Named(fields) => {
-                let fields = syn::Fields::Named(fields.clone());
-                let source = source_fields(&fields);
-                misc::gen_type_meta_field_ids(&source)
-            }
-            _ => quote! { &[] },
-        });
-    quote! { &[#(#variant_field_ids),*] }
-}
-
 pub fn gen_variants_fields_info(
     enum_name: &syn::Ident,
     generics: &syn::Generics,

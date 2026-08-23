@@ -333,24 +333,9 @@ pub trait StructSerializer: Serializer {
 
     fn fields_info(type_resolver: &TypeResolver) -> Result<Vec<FieldInfo>, Error>;
 
-    /// Full protocol tag identities aligned with `fields_info`.
-    ///
-    /// An empty slice derives identities from `FieldInfo`; generated serializers override it to
-    /// preserve protocol tags after compatible matching replaces the field ID with local dispatch.
-    #[doc(hidden)]
-    fn type_meta_field_ids() -> &'static [i32] {
-        &[]
-    }
-
     fn variants_fields_info(
         type_resolver: &TypeResolver,
     ) -> Result<Vec<(String, std::any::TypeId, Vec<FieldInfo>)>, Error>;
-
-    /// Full protocol tag identities aligned with `variants_fields_info`.
-    #[doc(hidden)]
-    fn variants_type_meta_field_ids() -> &'static [&'static [i32]] {
-        &[]
-    }
 
     fn sorted_field_names() -> &'static [&'static str];
 

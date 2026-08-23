@@ -593,8 +593,7 @@ pub(crate) fn gen_read_compatible_target(
                 // local variant, the remote synthetic variant TypeMeta could not be classified by
                 // name during parsing, so the selected local variant owns the field remap here.
                 remapped_fields = remote_meta.get_field_infos().clone();
-                local_variant_type_meta
-                    .remap_remote_fields(remote_meta, &mut remapped_fields)?;
+                local_variant_type_meta.remap_remote_fields(&mut remapped_fields)?;
                 &remapped_fields
             };
             let local_fields_ptr = local_fields.as_ptr();
@@ -639,7 +638,7 @@ pub(crate) fn gen_read_compatible_target(
         // A later RefFlag can target an unmatched earlier Struct field. The selected ordinary
         // codec publishes the same Rc/Arc owner that later retained fields resolve.
         for _field in fields.iter() {
-            match _field.field_id {
+            match _field.matched_field_id {
                 #(#match_arms)*
                 #skip_arm
                 #invalid_arm

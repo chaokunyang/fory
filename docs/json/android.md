@@ -23,8 +23,9 @@ Fory JSON supports ordinary classes on Android API level 26 and later through th
 `fory-json` artifact. Runtime JSON code generation and asynchronous compilation are disabled
 automatically, so `ForyJson.builder().build()` uses the interpreted object mapper.
 
-Kotlin applications use the ordinary `fory-json-kotlin` runtime, which reads Kotlin/JVM metadata
-directly. KSP is needed only when R8 or ProGuard can rename or remove Kotlin model members.
+Kotlin applications use the ordinary `fory-json-kotlin` runtime. KSP is needed when R8 or ProGuard
+can rename or remove Kotlin model members or when a Kotlin-source Mixin adds inferred
+`JsonSubTypes` to a Java sealed target.
 
 ## Installation and Codec Model
 
@@ -48,8 +49,8 @@ dependencies {
 }
 ```
 
-If the application enables R8 or ProGuard, also apply KSP 2.3.8 and add the retention-rule
-processor:
+If the application enables R8 or ProGuard, or if a Kotlin-source Mixin adds inferred `JsonSubTypes`
+to a Java sealed target, also apply KSP 2.3.8:
 
 ```kotlin
 plugins {
@@ -201,9 +202,9 @@ the same direct-field and one-wrapper-level behavior as on the JVM, including `t
 
 Android supports inferred `JsonSubTypes` for Java and Kotlin sealed hierarchies. Java sealed
 inference requires `fory-annotation-processor` and JDK 17 or newer. Kotlin models in minified builds
-require `fory-json-kotlin-ksp`. A Kotlin-source Mixin that adds inferred `JsonSubTypes` to a Java
-sealed target therefore requires both dependencies. Only the sealed hierarchy is considered;
-package and classpath subtype scanning are not supported.
+require `fory-json-kotlin-ksp`. For a Kotlin-source Mixin that adds inferred `JsonSubTypes` to a Java
+sealed target, apply both processors even when shrinking is disabled. Only the sealed hierarchy is
+considered; package and classpath subtype scanning are not supported.
 
 Android Fory JSON requires a retained no-argument constructor for an ordinary mutable class; it may
 be non-public when Android reflection can make it accessible. `JsonCreator` constructor-backed

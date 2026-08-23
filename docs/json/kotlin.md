@@ -45,8 +45,8 @@ dependencies {
 }
 ```
 
-The Kotlin module does not require `kotlin-reflect`. KSP is required only for Android builds that
-use R8 or ProGuard:
+The Kotlin module does not require `kotlin-reflect`. On Android, add KSP when R8 or ProGuard is
+enabled or when a Kotlin-source Mixin adds inferred `JsonSubTypes` to a Java sealed target:
 
 ```kotlin title="build.gradle.kts"
 plugins {
@@ -348,10 +348,10 @@ generic bindings reached through concrete roots are available. Do not add reflec
 or package-wide opens.
 
 On Android, use API 26 or later. Runtime JSON code generation remains disabled. Kotlin sealed
-inference needs no additional setup in an unminified build; enable KSP when R8 or ProGuard is used.
-A Kotlin-source Mixin that adds inferred `JsonSubTypes` to a Java sealed target also requires
-`fory-annotation-processor` and JDK 17 or newer. Follow the [installation](#installation) above and
-the [Android guide](android.md) when shrinking is enabled.
+inference needs no additional setup in an unminified build. Enable KSP when R8 or ProGuard is used
+or when a Kotlin-source Mixin adds inferred `JsonSubTypes` to a Java sealed target. The Mixin case
+also requires `fory-annotation-processor` and JDK 17 or newer. Follow the
+[installation](#installation) above and the [Android guide](android.md) when shrinking is enabled.
 
 Kotlin/Native, Kotlin/JS, and Kotlin/Wasm are not supported by this JVM module.
 

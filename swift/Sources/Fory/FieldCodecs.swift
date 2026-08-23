@@ -593,7 +593,7 @@ public enum SerializerCodec<S: Serializer>: FieldCodec {
         _ context: ReadContext,
         refMode: RefMode
     ) throws -> Target {
-        try S.read(
+        try readField(
             context,
             refMode: refMode,
             readTypeInfo: TypeId.needsTypeInfoForField(S.staticTypeId)
@@ -607,9 +607,7 @@ public enum SerializerCodec<S: Serializer>: FieldCodec {
         readTypeInfo: Bool
     ) throws -> Target {
         try S.read(
-            context,
-            refMode: refMode,
-            readTypeInfo: readTypeInfo
+            context, refMode: refMode, readTypeInfo: readTypeInfo
         )
     }
 }

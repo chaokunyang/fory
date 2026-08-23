@@ -226,11 +226,12 @@ func TestLargeReadCacheOwnership(t *testing.T) {
 	require.Empty(t, resolver.hashToMetaStrBytes)
 }
 
-func TestLargeCacheCollision(t *testing.T) {
+func TestLargeCacheHitUsesHashIdentity(t *testing.T) {
 	resolver := NewMetaStringResolver()
 	data := []byte("0123456789abcdefg")
 	hash := ComputeMetaStringHash(data, meta.UTF_8)
-	resolver.hashToMetaStrBytes[hash] = NewMetaStringBytes([]byte("different-body-value"), hash)
+	existing := NewMetaStringBytes([]byte("different-body-value"), hash)
+	resolver.hashToMetaStrBytes[hash] = existing
 	buffer := NewByteBuffer(nil)
 	buffer.WriteVarUint32Small7(uint32(len(data)) << 1)
 	buffer.WriteInt64(hash)
@@ -238,9 +239,11 @@ func TestLargeCacheCollision(t *testing.T) {
 	buffer.SetReaderIndex(0)
 
 	var readErr Error
-	require.Nil(t, resolver.ReadMetaStringBytes(buffer, &readErr))
-	require.True(t, readErr.HasError())
-	require.Empty(t, resolver.dynamicIDToEnumString)
+	actual := resolver.ReadMetaStringBytes(buffer, &readErr)
+	require.False(t, readErr.HasError())
+	require.Same(t, existing, actual)
+	require.Equal(t, buffer.WriterIndex(), buffer.ReaderIndex())
+	require.Len(t, resolver.dynamicIDToEnumString, 1)
 }
 
 func TestMetadataFieldIdentityValidation(t *testing.T) {

@@ -78,6 +78,7 @@ private indirect enum Token: Equatable {
     case number(Int64)
     case ident(String)
     case other(Int64?)
+    @ForyCase(payload: .with(Token.self))
     case child(Token)
     case map([String: Token])
 }
@@ -238,6 +239,12 @@ func unionReadUsesCompoundDepth() throws {
     try boundary.register(Token.self, id: 1001)
     let decoded: Token = try boundary.deserialize(bytes)
     #expect(decoded == value)
+
+    let limitedReader = Fory(config: .init(trackRef: false, maxDepth: 1))
+    try limitedReader.register(Token.self, id: 1001)
+    #expect(throws: (any Error).self) {
+        let _: Token = try limitedReader.deserialize(bytes)
+    }
 
     func unknownContext(maxDepth: Int) -> ReadContext {
         let buffer = ByteBuffer()

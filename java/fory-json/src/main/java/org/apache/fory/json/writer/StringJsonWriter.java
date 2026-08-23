@@ -19,6 +19,10 @@
 
 package org.apache.fory.json.writer;
 
+import static org.apache.fory.json.writer.JsonAsciiWordPredicates.isJsonAsciiInt;
+import static org.apache.fory.json.writer.JsonAsciiWordPredicates.isJsonAsciiWord;
+import static org.apache.fory.json.writer.JsonAsciiWordPredicates.isJsonAsciiWords;
+
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -32,7 +36,6 @@ import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.UUID;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.JsonConfig;
 import org.apache.fory.json.meta.JsonFieldInfo;
@@ -73,18 +76,6 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
   private static final byte[] NEGATIVE_INFINITY_BYTES =
       "\"-Infinity\"".getBytes(StandardCharsets.ISO_8859_1);
   private static final long DECIMAL_8 = 100_000_000L;
-  private static final long HIGH_BITS = 0x8080808080808080L;
-  private static final int INT_HIGH_BITS = 0x80808080;
-  private static final long ASCII_CONTROL_OFFSET = 0x6060606060606060L;
-  private static final int INT_ASCII_CONTROL_OFFSET = 0x60606060;
-  private static final long ASCII_GT_QUOTE_OFFSET = 0x5D5D5D5D5D5D5D5DL;
-  private static final int INT_ASCII_GT_QUOTE_OFFSET = 0x5D5D5D5D;
-  private static final long ONE_BYTES = 0x0101010101010101L;
-  private static final int INT_ONE_BYTES = 0x01010101;
-  private static final long QUOTE_BYTES_COMPLEMENT = ~0x2222222222222222L;
-  private static final int INT_QUOTE_BYTES_COMPLEMENT = ~0x22222222;
-  private static final long BACKSLASH_BYTES_COMPLEMENT = ~0x5C5C5C5C5C5C5C5CL;
-  private static final int INT_BACKSLASH_BYTES_COMPLEMENT = ~0x5C5C5C5C;
   private static final int[] DIGIT_TRIPLES = new int[1000];
   private static final int[] DIGIT_QUADS = new int[10000];
   private static final long[] UTF16_DIGIT_QUADS = new long[10000];
@@ -210,6 +201,18 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
       return;
     }
     writeLongUtf16(value);
+  }
+
+  @Override
+  public void writeUnsignedLong(long value) {
+    if (value >= 0) {
+      writeLong(value);
+      return;
+    }
+    long quotient = Long.divideUnsigned(value, 10);
+    int remainder = (int) Long.remainderUnsigned(value, 10);
+    writeLong(quotient);
+    writeByteRaw((byte) ('0' + remainder));
   }
 
   private void writeLongLatin1(long value) {
@@ -481,19 +484,44 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
   }
 
   @Override
-  public void writeUuid(UUID value) {
+  public void writeUuid(long high, long low) {
     writeByteRaw((byte) '"');
-    long high = value.getMostSignificantBits();
     writeHex(high, 60, 8);
     writeByteRaw((byte) '-');
     writeHex(high, 28, 4);
     writeByteRaw((byte) '-');
     writeHex(high, 12, 4);
-    long low = value.getLeastSignificantBits();
     writeByteRaw((byte) '-');
     writeHex(low, 60, 4);
     writeByteRaw((byte) '-');
     writeHex(low, 44, 12);
+    writeByteRaw((byte) '"');
+  }
+
+  @Override
+  public void writeIsoInstant(long epochSecond, int nano) {
+    long date = isoDate(epochSecond, nano);
+    int secondOfDay = (int) Math.floorMod(epochSecond, 86_400);
+    int hour = secondOfDay / 3600;
+    int minute = (secondOfDay - hour * 3600) / 60;
+    int second = secondOfDay - hour * 3600 - minute * 60;
+    writeByteRaw((byte) '"');
+    writeIsoYear((int) (date >> 32));
+    writeByteRaw((byte) '-');
+    writeTwoDigits((int) ((date >>> 16) & 0xffff));
+    writeByteRaw((byte) '-');
+    writeTwoDigits((int) date & 0xffff);
+    writeByteRaw((byte) 'T');
+    writeTwoDigits(hour);
+    writeByteRaw((byte) ':');
+    writeTwoDigits(minute);
+    writeByteRaw((byte) ':');
+    writeTwoDigits(second);
+    if (nano != 0) {
+      writeByteRaw((byte) '.');
+      writeNano(nano);
+    }
+    writeByteRaw((byte) 'Z');
     writeByteRaw((byte) '"');
   }
 
@@ -553,8 +581,51 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
 
   @Override
   public void writeDuration(Duration value) {
+    long totalSeconds = value.getSeconds();
+    int nanos = value.getNano();
+    if (totalSeconds >= 0) {
+      long hours = totalSeconds / 3600;
+      int minutes = (int) (totalSeconds % 3600 / 60);
+      int seconds = (int) (totalSeconds % 60);
+      if (matchesIsoDurationShape(hours, minutes, seconds, nanos)) {
+        writeIsoDuration(false, false, hours, minutes, seconds, nanos);
+        return;
+      }
+    }
     writeByteRaw((byte) '"');
     writeDurationBody(value);
+    writeByteRaw((byte) '"');
+  }
+
+  @Override
+  public void writeIsoDuration(
+      boolean infinite, boolean negative, long hours, int minutes, int seconds, int nanos) {
+    checkIsoDuration(infinite, negative, hours, minutes, seconds, nanos);
+    writeByteRaw((byte) '"');
+    if (negative) {
+      writeByteRaw((byte) '-');
+    }
+    writeAscii("PT");
+    long outputHours = infinite ? 9_999_999_999_999L : hours;
+    boolean hasHours = outputHours != 0;
+    boolean hasSeconds = seconds != 0 || nanos != 0;
+    boolean hasMinutes = minutes != 0 || hasSeconds && hasHours;
+    if (hasHours) {
+      writeLong(outputHours);
+      writeByteRaw((byte) 'H');
+    }
+    if (hasMinutes) {
+      writeInt(minutes);
+      writeByteRaw((byte) 'M');
+    }
+    if (hasSeconds || !hasHours && !hasMinutes) {
+      writeInt(seconds);
+      if (nanos != 0) {
+        writeByteRaw((byte) '.');
+        writeNano(nanos);
+      }
+      writeByteRaw((byte) 'S');
+    }
     writeByteRaw((byte) '"');
   }
 
@@ -625,6 +696,32 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
     writeRaw(index == 0 ? field.stringNamePrefix() : field.stringCommaNamePrefix());
   }
 
+  public void writeNullField(
+      byte[] prefix,
+      long utf16Prefix0,
+      long utf16Prefix1,
+      long utf16Prefix2,
+      long utf16Prefix3,
+      int utf16PrefixLength) {
+    if (coder == LATIN1) {
+      int additional = prefix.length + 4;
+      if (position + additional > buffer.length) {
+        grow(additional);
+      }
+      writeRawLatin1NoEnsure(prefix);
+      LittleEndian.putInt32(buffer, position, 0x6c6c756e);
+      position += 4;
+      return;
+    }
+    int additional = Math.max(packedUtf16PrefixSize(utf16PrefixLength), utf16PrefixLength + 8);
+    if (position + additional > buffer.length) {
+      grow(additional);
+    }
+    writePackedUtf16ValueNoEnsure(
+        utf16Prefix0, utf16Prefix1, utf16Prefix2, utf16Prefix3, utf16PrefixLength);
+    writeAsciiUtf16NoEnsure("null", 4);
+  }
+
   @Override
   public void writeIntFieldName(int value) {
     writeByteRaw((byte) '"');
@@ -637,6 +734,14 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
   public void writeLongFieldName(long value) {
     writeByteRaw((byte) '"');
     writeLong(value);
+    writeByteRaw((byte) '"');
+    writeByteRaw((byte) ':');
+  }
+
+  @Override
+  public void writeUnsignedLongFieldName(long value) {
+    writeByteRaw((byte) '"');
+    writeUnsignedLong(value);
     writeByteRaw((byte) '"');
     writeByteRaw((byte) ':');
   }
@@ -2362,60 +2467,6 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
     return ch > 0x1F && ch != '"' && ch != '\\';
   }
 
-  // Keep the exact uncommon fallback outside these per-word predicates. Folding it back in makes
-  // the standalone predicates too large for C2 to inline into the compact-string writers.
-  private static boolean isJsonAsciiWord(long word) {
-    long notBackslash = ((word ^ BACKSLASH_BYTES_COMPLEMENT) + ONE_BYTES) & HIGH_BITS;
-    if ((notBackslash & (word + ASCII_GT_QUOTE_OFFSET)) == HIGH_BITS) {
-      return true;
-    }
-    return isJsonAsciiWordFallback(word);
-  }
-
-  private static boolean isJsonAsciiWordFallback(long word) {
-    long notBackslash = ((word ^ BACKSLASH_BYTES_COMPLEMENT) + ONE_BYTES) & HIGH_BITS;
-    return (((word + ASCII_CONTROL_OFFSET) & ~word) & HIGH_BITS) == HIGH_BITS
-        && (((word ^ QUOTE_BYTES_COMPLEMENT) + ONE_BYTES) & HIGH_BITS) == HIGH_BITS
-        && notBackslash == HIGH_BITS;
-  }
-
-  // Aggregate every exact rejection mask before branching. Splitting this back into per-word
-  // calls adds one common-path branch for each eight bytes written.
-  private static boolean isJsonAsciiWords(long word0, long word1) {
-    long notBackslash =
-        ((word0 ^ BACKSLASH_BYTES_COMPLEMENT) + ONE_BYTES)
-            & ((word1 ^ BACKSLASH_BYTES_COMPLEMENT) + ONE_BYTES)
-            & HIGH_BITS;
-    if ((notBackslash & (word0 + ASCII_GT_QUOTE_OFFSET) & (word1 + ASCII_GT_QUOTE_OFFSET))
-        == HIGH_BITS) {
-      return true;
-    }
-    return isJsonAsciiWordsFallback(word0, word1, notBackslash);
-  }
-
-  private static boolean isJsonAsciiWordsFallback(long word0, long word1, long notBackslash) {
-    return ((word0 + ASCII_CONTROL_OFFSET)
-            & (word1 + ASCII_CONTROL_OFFSET)
-            & ((word0 ^ QUOTE_BYTES_COMPLEMENT) + ONE_BYTES)
-            & ((word1 ^ QUOTE_BYTES_COMPLEMENT) + ONE_BYTES)
-            & notBackslash)
-        == HIGH_BITS;
-  }
-
-  private static boolean isJsonAsciiInt(int word) {
-    int notBackslash = ((word ^ INT_BACKSLASH_BYTES_COMPLEMENT) + INT_ONE_BYTES) & INT_HIGH_BITS;
-    if ((notBackslash & (word + INT_ASCII_GT_QUOTE_OFFSET)) == INT_HIGH_BITS) {
-      return true;
-    }
-    return isJsonAsciiIntFallback(word, notBackslash);
-  }
-
-  private static boolean isJsonAsciiIntFallback(int word, int notBackslash) {
-    return (((word + INT_ASCII_CONTROL_OFFSET) & ~word) & INT_HIGH_BITS) == INT_HIGH_BITS
-        && (((word ^ INT_QUOTE_BYTES_COMPLEMENT) + INT_ONE_BYTES) & INT_HIGH_BITS) == INT_HIGH_BITS
-        && notBackslash == INT_HIGH_BITS;
-  }
-
   private void writeIntNoEnsure(int value) {
     if (coder == LATIN1) {
       writeIntLatin1NoEnsure(value);
@@ -2596,6 +2647,20 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
   private static int writePadded4(byte[] bytes, int pos, int value) {
     LittleEndian.putInt32(bytes, pos, DIGIT_QUADS[value]);
     return pos + 4;
+  }
+
+  private void writeIsoYear(int year) {
+    if (year >= 0 && year <= 9999) {
+      writePadded4(year);
+    } else if (year > 9999) {
+      writeByteRaw((byte) '+');
+      writeInt(year);
+    } else if (year >= -9999) {
+      writeByteRaw((byte) '-');
+      writePadded4(-year);
+    } else {
+      writeInt(year);
+    }
   }
 
   private void writeTwoDigits(int value) {

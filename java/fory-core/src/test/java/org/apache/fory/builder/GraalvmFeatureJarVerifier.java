@@ -54,6 +54,9 @@ public final class GraalvmFeatureJarVerifier {
   private static final String INITIALIZATION_OPTION = "--initialize-at-build-time=";
   private static final String METADATA_HASH_SEED_RUNTIME_OPTION =
       "--initialize-at-run-time=org.apache.fory.collection.MetadataHashSeed";
+  private static final String COMPATIBLE_MODE = "org.apache.fory.config.CompatibleMode";
+  private static final String LANGUAGE = "org.apache.fory.config.Language";
+  private static final String POOLED_ENTRY = "org.apache.fory.pool.ThreadPoolFory$PooledEntry";
   private static final String RECORD_GETTERS =
       "org.apache.fory.util.record.RecordUtils$NativeImageRecordGetters";
 
@@ -96,6 +99,9 @@ public final class GraalvmFeatureJarVerifier {
       check(
           properties.contains(INITIALIZATION_OPTION),
           "Build-time initialization option is missing");
+      check(properties.contains(COMPATIBLE_MODE), "CompatibleMode initialization is missing");
+      check(properties.contains(LANGUAGE), "Language initialization is missing");
+      check(properties.contains(POOLED_ENTRY), "ThreadPoolFory pooled entry is missing");
       check(
           properties.contains(METADATA_HASH_SEED_RUNTIME_OPTION),
           "Metadata hash seed must initialize at runtime");

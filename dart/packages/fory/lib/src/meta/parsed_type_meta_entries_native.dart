@@ -21,6 +21,8 @@ import 'dart:collection';
 
 import 'package:fory/src/types/int64.dart';
 
+const int _typeMetaHashLow32Mask = 0xfffff000;
+
 LinkedHashMap<Int64, V> createParsedTypeMetaEntries<V>() {
   // Native Int64 is an extension type over int, whose deterministic hash can
   // place attacker-selected 52-bit headers in one bucket. Mix the two words
@@ -32,8 +34,11 @@ LinkedHashMap<Int64, V> createParsedTypeMetaEntries<V>() {
 }
 
 @pragma('vm:prefer-inline')
-bool _typeMetaHeadersEqual(Int64 left, Int64 right) => left == right;
+bool _typeMetaHeadersEqual(Int64 left, Int64 right) =>
+    left.high32Unsigned == right.high32Unsigned &&
+    (left.low32 & _typeMetaHashLow32Mask) ==
+        (right.low32 & _typeMetaHashLow32Mask);
 
 @pragma('vm:prefer-inline')
 int typeMetaHeaderHashCode(Int64 header) =>
-    Object.hash(header.low32, header.high32Unsigned);
+    Object.hash(header.low32 & _typeMetaHashLow32Mask, header.high32Unsigned);

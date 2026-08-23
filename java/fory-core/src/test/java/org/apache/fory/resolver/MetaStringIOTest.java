@@ -217,52 +217,43 @@ public class MetaStringIOTest {
   }
 
   @Test
-  public void testBigMetaStringCacheHit() {
+  public void testBigMetaStringHashHit() {
     MetaStringReader reader = new MetaStringReader();
     EncodedMetaString encodedMetaString = newGenericMetaString(StringUtils.random(32, 0));
-    MemoryBuffer buffer = MemoryUtils.buffer(128);
+    MemoryBuffer buffer = MemoryUtils.buffer(256);
 
-    writeBigMetaString(buffer, encodedMetaString);
-    writeBigMetaString(buffer, encodedMetaString);
-    EncodedMetaString first = reader.readMetaString(buffer);
-    EncodedMetaString second = reader.readMetaString(buffer);
+    buffer.writeVarUInt32Small7(encodedMetaString.bytes.length << 1);
+    buffer.writeInt64(encodedMetaString.hash);
+    buffer.writeBytes(encodedMetaString.bytes);
+    int differentFrameLength = 24;
+    buffer.writeVarUInt32Small7(differentFrameLength << 1);
+    buffer.writeInt64(encodedMetaString.hash);
+    buffer.writeBytes(new byte[differentFrameLength]);
 
-    assertSame(first, second);
+    EncodedMetaString checked = reader.readMetaString(buffer);
+    assertSame(reader.readMetaString(buffer), checked);
     assertEquals(buffer.readerIndex(), buffer.writerIndex());
+
+    MemoryBuffer callerCacheBuffer = MemoryUtils.buffer(64);
+    callerCacheBuffer.writeVarUInt32Small7(differentFrameLength << 1);
+    callerCacheBuffer.writeInt64(encodedMetaString.hash);
+    callerCacheBuffer.writeBytes(new byte[differentFrameLength]);
+    assertSame(reader.readMetaString(callerCacheBuffer, checked), checked);
+    assertEquals(callerCacheBuffer.readerIndex(), callerCacheBuffer.writerIndex());
   }
 
   @Test
-  public void testExpectedBigNameIdentity() {
+  public void testExpectedBigNameUsesHashIdentity() {
     MetaStringReader reader = new MetaStringReader();
     EncodedMetaString encodedMetaString = newGenericMetaString(StringUtils.random(32, 0));
     byte[] differentBytes = encodedMetaString.bytes.clone();
     differentBytes[0] ^= 1;
-    EncodedMetaString wrongCache = new EncodedMetaString(differentBytes, encodedMetaString.hash);
+    EncodedMetaString checkedCache = new EncodedMetaString(differentBytes, encodedMetaString.hash);
     MemoryBuffer buffer = newBigMetaStringBuffer(encodedMetaString);
 
-    EncodedMetaString read = reader.readMetaString(buffer, wrongCache);
+    EncodedMetaString read = reader.readMetaString(buffer, checkedCache);
 
-    assertNotSame(read, wrongCache);
-    assertEquals(read.bytes, encodedMetaString.bytes);
-    assertEquals(buffer.readerIndex(), buffer.writerIndex());
-  }
-
-  @Test
-  public void testCachedBigNameIdentity() {
-    MetaStringReader reader = new MetaStringReader();
-    EncodedMetaString encodedMetaString = newGenericMetaString(StringUtils.random(32, 0));
-    byte[] differentBytes = encodedMetaString.bytes.clone();
-    differentBytes[0] ^= 1;
-    EncodedMetaString wrongCache = new EncodedMetaString(differentBytes, encodedMetaString.hash);
-    MetadataLongMap<EncodedMetaString> readCache =
-        TestUtils.getFieldValue(reader, "hash2MetaStringMap");
-    readCache.put(encodedMetaString.hash, wrongCache);
-    MemoryBuffer buffer = newBigMetaStringBuffer(encodedMetaString);
-
-    EncodedMetaString read = reader.readMetaString(buffer);
-
-    assertNotSame(read, wrongCache);
-    assertEquals(read.bytes, encodedMetaString.bytes);
+    assertSame(read, checkedCache);
     assertEquals(buffer.readerIndex(), buffer.writerIndex());
   }
 

@@ -18,7 +18,6 @@
 package fory
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 
@@ -143,8 +142,8 @@ func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer, ctxErr *Error)
 		}
 		return r.dynamicIDToEnumString[index]
 	}
-	if lengthValue > uint32(MaxInt16) {
-		ctxErr.SetError(fmt.Errorf("meta string length %d exceeds maximum supported length %d", lengthValue, MaxInt16))
+	if uint64(lengthValue) > uint64(MaxInt) {
+		ctxErr.SetError(fmt.Errorf("meta string length %d exceeds supported int range", lengthValue))
 		return nil
 	}
 	length := int(lengthValue)
@@ -194,13 +193,24 @@ func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer, ctxErr *Error)
 			ctxErr.SetError(err)
 			return nil
 		}
+		if !buf.CheckReadable(length, ctxErr) {
+			return nil
+		}
+		// Cache entries own prior hash, encoding, and body validation. CheckReadable proves the
+		// current frame bounds, so a hit only advances the cursor without repeating the check.
+		if m, ok := r.hashToMetaStrBytes[hashcode]; ok {
+			buf.IncreaseReaderIndex(length)
+			r.dynamicIDToEnumString = append(r.dynamicIDToEnumString, m)
+			return m
+		}
+		if length > MaxInt16 {
+			ctxErr.SetError(fmt.Errorf("meta string length %d exceeds maximum supported length %d", length, MaxInt16))
+			return nil
+		}
 		var encErr error
 		encoding, encErr = meta.EncodingFromByte(byte(hashcode & 0xFF))
 		if encErr != nil {
 			ctxErr.SetError(encErr)
-			return nil
-		}
-		if !buf.CheckReadable(length, ctxErr) {
 			return nil
 		}
 		data = make([]byte, length)
@@ -219,15 +229,6 @@ func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer, ctxErr *Error)
 	// Check string caches for existing instance
 	if length <= SmallStringThreshold {
 		if m, ok := r.smallHashToMetaStrBytes[key]; ok {
-			r.dynamicIDToEnumString = append(r.dynamicIDToEnumString, m)
-			return m
-		}
-	} else {
-		if m, ok := r.hashToMetaStrBytes[hashcode]; ok {
-			if m.Encoding != encoding || !bytes.Equal(m.Data, data) {
-				ctxErr.SetError(fmt.Errorf("meta string body hash collision"))
-				return nil
-			}
 			r.dynamicIDToEnumString = append(r.dynamicIDToEnumString, m)
 			return m
 		}

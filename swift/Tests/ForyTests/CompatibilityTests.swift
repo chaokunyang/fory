@@ -572,9 +572,8 @@ func containerTrackingChangeRejected() throws {
         expectControlledFailure {
             _ = try resolver.cacheTypeInfo(
                 remoteTypeMeta,
-                forHeader: UInt64(index + 1),
+                forHeaderHash: UInt64(index + 1),
                 localTypeInfo: localTypeInfo,
-                exactLocal: false,
                 config: config
             )
         }

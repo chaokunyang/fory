@@ -21,5 +21,18 @@ import 'dart:collection';
 
 import 'package:fory/src/types/int64.dart';
 
+const int _typeMetaHashLow32Mask = 0xfffff000;
+
 LinkedHashMap<Int64, V> createParsedTypeMetaEntries<V>() =>
-    LinkedHashMap<Int64, V>();
+    LinkedHashMap<Int64, V>(
+      equals: _typeMetaHeadersEqual,
+      hashCode: _typeMetaHeaderHashCode,
+    );
+
+bool _typeMetaHeadersEqual(Int64 left, Int64 right) =>
+    left.high32Unsigned == right.high32Unsigned &&
+    (left.low32 & _typeMetaHashLow32Mask) ==
+        (right.low32 & _typeMetaHashLow32Mask);
+
+int _typeMetaHeaderHashCode(Int64 header) =>
+    header.high32Unsigned ^ (header.low32 & _typeMetaHashLow32Mask);

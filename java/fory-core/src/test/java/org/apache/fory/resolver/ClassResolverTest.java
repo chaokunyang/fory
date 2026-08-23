@@ -326,7 +326,7 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
-  public void testReadTypeDefPublishesValidatedTypeDefById() {
+  public void testReadTypeDefCachesHeaderHash() {
     ForyBuilder builder =
         Fory.builder()
             .withXlang(false)
@@ -375,12 +375,12 @@ public class ClassResolverTest extends ForyTestBase {
     readContext.setMetaReadContext(new MetaReadContext());
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
     readContext.prepare(buffer, null, false);
+    buffer.writeUInt8(resolver.getTypeInfo(BeanB.class).getTypeId());
     buffer.writeVarUInt32(0);
     typeDef.writeTypeDef(buffer);
     buffer.readerIndex(0);
 
-    Assert.assertThrows(
-        InsecureException.class, () -> resolver.readSharedClassMeta(readContext, BeanA.class));
+    Assert.assertThrows(InsecureException.class, () -> resolver.readTypeInfo(readContext));
   }
 
   @Test
@@ -674,7 +674,8 @@ public class ClassResolverTest extends ForyTestBase {
         resolver.readSharedClassMeta(readContext, TestNeedToWriteReferenceClass.class).getType(),
         TestNeedToWriteReferenceClass.class);
     Assert.assertEquals(buffer.readerIndex(), buffer.writerIndex());
-    Assert.assertFalse(sharedRegistry.remoteTypeDefById.containsKey(exact.getId()));
+    Assert.assertFalse(
+        sharedRegistry.remoteTypeDefByHeaderHash.containsKey(TypeDef.headerHash(exact.getId())));
     assertSame(other, sharedRegistry.getOrCreateRemoteTypeDef(other, "test.Enum"));
   }
 
@@ -756,7 +757,7 @@ public class ClassResolverTest extends ForyTestBase {
           constructor.newInstance(
               new ClassSpec(remoteTypeKey, false, false, 0),
               template.getFieldsInfo(),
-              i + 1L,
+              (i + 1L) << 12,
               template.getEncoded());
       assertSame(sharedRegistry.getOrCreateRemoteTypeDef(typeDef, remoteTypeKey), typeDef);
       if (i == 0) {
@@ -769,7 +770,7 @@ public class ClassResolverTest extends ForyTestBase {
         constructor.newInstance(
             new ClassSpec("remote.Type0", false, false, 0),
             template.getFieldsInfo(),
-            8193L,
+            8193L << 12,
             template.getEncoded());
     assertSame(
         existingTypeVersion,
@@ -779,13 +780,14 @@ public class ClassResolverTest extends ForyTestBase {
         constructor.newInstance(
             new ClassSpec("remote.Rejected", false, false, 0),
             template.getFieldsInfo(),
-            8194L,
+            8194L << 12,
             template.getEncoded());
     Assert.assertThrows(
         ForyException.class,
         () -> sharedRegistry.getOrCreateRemoteTypeDef(rejected, "remote.Rejected"));
-    Assert.assertFalse(sharedRegistry.remoteTypeDefById.containsKey(rejected.getId()));
-    Assert.assertFalse(sharedRegistry.typeDefById.containsKey(rejected.getId()));
+    long rejectedHash = TypeDef.headerHash(rejected.getId());
+    Assert.assertFalse(sharedRegistry.remoteTypeDefByHeaderHash.containsKey(rejectedHash));
+    Assert.assertFalse(sharedRegistry.typeDefByHeaderHash.containsKey(rejectedHash));
 
     TypeDef exact = resolver.getTypeDef(BeanA.class, true);
     ReadContext readContext = fory.getReadContext();

@@ -19,6 +19,16 @@
 
 package org.apache.fory.json.writer;
 
+import static org.apache.fory.json.writer.JsonAsciiWordExactPredicates.ASCII_CONTROL_OFFSET;
+import static org.apache.fory.json.writer.JsonAsciiWordExactPredicates.QUOTE_BYTES_COMPLEMENT;
+import static org.apache.fory.json.writer.JsonAsciiWordPredicates.ASCII_GT_QUOTE_OFFSET;
+import static org.apache.fory.json.writer.JsonAsciiWordPredicates.BACKSLASH_BYTES_COMPLEMENT;
+import static org.apache.fory.json.writer.JsonAsciiWordPredicates.HIGH_BITS;
+import static org.apache.fory.json.writer.JsonAsciiWordPredicates.ONE_BYTES;
+import static org.apache.fory.json.writer.JsonAsciiWordPredicates.isJsonAsciiInt;
+import static org.apache.fory.json.writer.JsonAsciiWordPredicates.isJsonAsciiShort;
+import static org.apache.fory.json.writer.JsonAsciiWordPredicates.isJsonAsciiWord;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigDecimal;
@@ -34,7 +44,6 @@ import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.UUID;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.JsonConfig;
@@ -73,26 +82,8 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   private static final byte[] NEGATIVE_INFINITY_BYTES =
       "\"-Infinity\"".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
   private static final long EIGHT_DIGITS = 100_000_000L;
-  private static final long HIGH_BITS = 0x8080808080808080L;
-  private static final int INT_HIGH_BITS = 0x80808080;
-  private static final int SHORT_HIGH_BITS = 0x8080;
-  private static final long ASCII_CONTROL_OFFSET = 0x6060606060606060L;
-  private static final int INT_ASCII_CONTROL_OFFSET = 0x60606060;
-  private static final int SHORT_ASCII_CONTROL_OFFSET = 0x6060;
-  private static final long ASCII_GT_QUOTE_OFFSET = 0x5D5D5D5D5D5D5D5DL;
-  private static final int INT_ASCII_GT_QUOTE_OFFSET = 0x5D5D5D5D;
-  private static final int SHORT_ASCII_GT_QUOTE_OFFSET = 0x5D5D;
-  private static final long ONE_BYTES = 0x0101010101010101L;
-  private static final int INT_ONE_BYTES = 0x01010101;
-  private static final int SHORT_ONE_BYTES = 0x0101;
   private static final byte[] HEX_DIGITS =
       "0123456789abcdef".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
-  private static final long QUOTE_BYTES_COMPLEMENT = ~0x2222222222222222L;
-  private static final int INT_QUOTE_BYTES_COMPLEMENT = ~0x22222222;
-  private static final int SHORT_QUOTE_BYTES_COMPLEMENT = ~0x2222;
-  private static final long BACKSLASH_BYTES_COMPLEMENT = ~0x5C5C5C5C5C5C5C5CL;
-  private static final int INT_BACKSLASH_BYTES_COMPLEMENT = ~0x5C5C5C5C;
-  private static final int SHORT_BACKSLASH_BYTES_COMPLEMENT = ~0x5C5C;
   private static final long UTF16_ASCII_MASK = 0xFF80FF80FF80FF80L;
   private static final int[] DIGIT_TRIPLES = new int[1000];
   private static final int[] DIGIT_QUADS = new int[10000];
@@ -195,6 +186,18 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       grow(20);
     }
     writeLongNoEnsure(value);
+  }
+
+  @Override
+  public void writeUnsignedLong(long value) {
+    if (value >= 0) {
+      writeLong(value);
+      return;
+    }
+    long quotient = Long.divideUnsigned(value, 10);
+    int remainder = (int) Long.remainderUnsigned(value, 10);
+    writeLong(quotient);
+    buffer[position++] = (byte) ('0' + remainder);
   }
 
   @Override
@@ -438,26 +441,51 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   }
 
   @Override
-  public void writeUuid(UUID value) {
+  public void writeUuid(long high, long low) {
     int pos = position;
     if (pos + 38 > buffer.length) {
       grow(38);
     }
     byte[] bytes = buffer;
     bytes[pos++] = (byte) '"';
-    long high = value.getMostSignificantBits();
     pos = writeHex(bytes, pos, high, 60, 8);
     bytes[pos++] = (byte) '-';
     pos = writeHex(bytes, pos, high, 28, 4);
     bytes[pos++] = (byte) '-';
     pos = writeHex(bytes, pos, high, 12, 4);
-    long low = value.getLeastSignificantBits();
     bytes[pos++] = (byte) '-';
     pos = writeHex(bytes, pos, low, 60, 4);
     bytes[pos++] = (byte) '-';
     pos = writeHex(bytes, pos, low, 44, 12);
     bytes[pos++] = (byte) '"';
     position = pos;
+  }
+
+  @Override
+  public void writeIsoInstant(long epochSecond, int nano) {
+    long date = isoDate(epochSecond, nano);
+    int secondOfDay = (int) Math.floorMod(epochSecond, 86_400);
+    int hour = secondOfDay / 3600;
+    int minute = (secondOfDay - hour * 3600) / 60;
+    int second = secondOfDay - hour * 3600 - minute * 60;
+    writeByteRaw((byte) '"');
+    writeIsoYear((int) (date >> 32));
+    writeByteRaw((byte) '-');
+    writeTwoDigitsValue((int) ((date >>> 16) & 0xffff));
+    writeByteRaw((byte) '-');
+    writeTwoDigitsValue((int) date & 0xffff);
+    writeByteRaw((byte) 'T');
+    writeTwoDigitsValue(hour);
+    writeByteRaw((byte) ':');
+    writeTwoDigitsValue(minute);
+    writeByteRaw((byte) ':');
+    writeTwoDigitsValue(second);
+    if (nano != 0) {
+      writeByteRaw((byte) '.');
+      writeNano(nano);
+    }
+    writeByteRaw((byte) 'Z');
+    writeByteRaw((byte) '"');
   }
 
   @Override
@@ -584,8 +612,51 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
 
   @Override
   public void writeDuration(Duration value) {
+    long totalSeconds = value.getSeconds();
+    int nanos = value.getNano();
+    if (totalSeconds >= 0) {
+      long hours = totalSeconds / 3600;
+      int minutes = (int) (totalSeconds % 3600 / 60);
+      int seconds = (int) (totalSeconds % 60);
+      if (matchesIsoDurationShape(hours, minutes, seconds, nanos)) {
+        writeIsoDuration(false, false, hours, minutes, seconds, nanos);
+        return;
+      }
+    }
     writeByteRaw((byte) '"');
     writeDurationBody(value);
+    writeByteRaw((byte) '"');
+  }
+
+  @Override
+  public void writeIsoDuration(
+      boolean infinite, boolean negative, long hours, int minutes, int seconds, int nanos) {
+    checkIsoDuration(infinite, negative, hours, minutes, seconds, nanos);
+    writeByteRaw((byte) '"');
+    if (negative) {
+      writeByteRaw((byte) '-');
+    }
+    writeAscii("PT");
+    long outputHours = infinite ? 9_999_999_999_999L : hours;
+    boolean hasHours = outputHours != 0;
+    boolean hasSeconds = seconds != 0 || nanos != 0;
+    boolean hasMinutes = minutes != 0 || hasSeconds && hasHours;
+    if (hasHours) {
+      writeLong(outputHours);
+      writeByteRaw((byte) 'H');
+    }
+    if (hasMinutes) {
+      writeInt(minutes);
+      writeByteRaw((byte) 'M');
+    }
+    if (hasSeconds || !hasHours && !hasMinutes) {
+      writeInt(seconds);
+      if (nanos != 0) {
+        writeByteRaw((byte) '.');
+        writeNano(nanos);
+      }
+      writeByteRaw((byte) 'S');
+    }
     writeByteRaw((byte) '"');
   }
 
@@ -738,6 +809,16 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     writeRaw(index == 0 ? field.utf8NamePrefix() : field.utf8CommaNamePrefix());
   }
 
+  public void writeNullField(long prefix0, long prefix1, int prefixLength) {
+    int additional = Math.max(packedPrefixSize(prefixLength), prefixLength + 4);
+    if (position + additional > buffer.length) {
+      grow(additional);
+    }
+    writePackedRawNoEnsure(prefix0, prefix1, prefixLength);
+    LittleEndian.putInt32(buffer, position, 0x6c6c756e);
+    position += 4;
+  }
+
   @Override
   public void writeIntFieldName(int value) {
     writeByteRaw((byte) '"');
@@ -750,6 +831,14 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   public void writeLongFieldName(long value) {
     writeByteRaw((byte) '"');
     writeLong(value);
+    writeByteRaw((byte) '"');
+    writeByteRaw((byte) ':');
+  }
+
+  @Override
+  public void writeUnsignedLongFieldName(long value) {
+    writeByteRaw((byte) '"');
+    writeUnsignedLong(value);
     writeByteRaw((byte) '"');
     writeByteRaw((byte) ':');
   }
@@ -1324,7 +1413,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     for (; i < upperBound; i += 16) {
       long word0 = LittleEndian.getInt64(value, i);
       long word1 = LittleEndian.getInt64(value, i + 8);
-      if (!isJsonAsciiWords(word0, word1)) {
+      if (!JsonAsciiWordPredicates.isJsonAsciiWords(word0, word1)) {
         return false;
       }
     }
@@ -1602,6 +1691,60 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       }
     }
     writeByteRaw((byte) '"');
+  }
+
+  private void writeIsoYear(int year) {
+    if (year >= 0 && year <= 9999) {
+      writePadded4Value(year);
+    } else if (year > 9999) {
+      writeByteRaw((byte) '+');
+      writeInt(year);
+    } else if (year >= -9999) {
+      writeByteRaw((byte) '-');
+      writePadded4Value(-year);
+    } else {
+      writeInt(year);
+    }
+  }
+
+  private void writePadded4Value(int value) {
+    if (position + 4 > buffer.length) {
+      grow(4);
+    }
+    position = writePadded4(buffer, position, value);
+  }
+
+  private void writeTwoDigitsValue(int value) {
+    int high = value / 10;
+    writeByteRaw((byte) ('0' + high));
+    writeByteRaw((byte) ('0' + value - high * 10));
+  }
+
+  private void writeNano(int nano) {
+    if (nano % 1_000_000 == 0) {
+      writePadded3Value(nano / 1_000_000);
+      return;
+    }
+    if (nano % 1000 == 0) {
+      int micros = nano / 1000;
+      int high = micros / 1000;
+      writePadded3Value(high);
+      writePadded3Value(micros - high * 1000);
+      return;
+    }
+    int first = nano / 100_000_000;
+    int remainder = nano - first * 100_000_000;
+    int middle = remainder / 10_000;
+    writeByteRaw((byte) ('0' + first));
+    writePadded4Value(middle);
+    writePadded4Value(remainder - middle * 10_000);
+  }
+
+  private void writePadded3Value(int value) {
+    if (position + 3 > buffer.length) {
+      grow(3);
+    }
+    position = writePadded3(buffer, position, value);
   }
 
   private void writeDurationBody(Duration value) {
@@ -1957,39 +2100,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     return ch > 0x1F && ch < 0x80 && ch != '"' && ch != '\\';
   }
 
-  // Keep the exact uncommon fallback outside these per-word predicates. Folding it back in makes
-  // the standalone predicates too large for C2 to inline into the short-string writers.
-  private static boolean isJsonAsciiWord(long word) {
-    long notBackslashMask = ((word ^ BACKSLASH_BYTES_COMPLEMENT) + ONE_BYTES) & HIGH_BITS;
-    // Common unescaped bytes are greater than '"' and not '\\'. The fallback keeps the exact
-    // quote, backslash, control, and high-bit predicate for the remaining byte values.
-    if ((notBackslashMask & (word + ASCII_GT_QUOTE_OFFSET)) == HIGH_BITS) {
-      return true;
-    }
-    return isJsonAsciiWordFallback(word);
-  }
-
-  private static boolean isJsonAsciiWordFallback(long word) {
-    long notBackslashMask = ((word ^ BACKSLASH_BYTES_COMPLEMENT) + ONE_BYTES) & HIGH_BITS;
-    return (((word + ASCII_CONTROL_OFFSET) & ~word) & HIGH_BITS) == HIGH_BITS
-        && (((word ^ QUOTE_BYTES_COMPLEMENT) + ONE_BYTES) & HIGH_BITS) == HIGH_BITS
-        && notBackslashMask == HIGH_BITS;
-  }
-
-  // Aggregate every exact rejection mask before branching. Splitting this back into per-word
-  // calls adds one common-path branch for each eight bytes written.
-  private static boolean isJsonAsciiWords(long word0, long word1) {
-    long notBackslashMask =
-        ((word0 ^ BACKSLASH_BYTES_COMPLEMENT) + ONE_BYTES)
-            & ((word1 ^ BACKSLASH_BYTES_COMPLEMENT) + ONE_BYTES)
-            & HIGH_BITS;
-    if ((notBackslashMask & (word0 + ASCII_GT_QUOTE_OFFSET) & (word1 + ASCII_GT_QUOTE_OFFSET))
-        == HIGH_BITS) {
-      return true;
-    }
-    return isJsonAsciiWordsFallback(word0, word1, notBackslashMask);
-  }
-
+  // Writer-owned aggregate shapes for the source-inlined 17-24-byte path and the 25-31-byte path.
   private static boolean isJsonAsciiWords(long word0, long word1, long word2, long word3) {
     long notBackslashMask =
         ((word0 ^ BACKSLASH_BYTES_COMPLEMENT) + ONE_BYTES)
@@ -2006,15 +2117,6 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       return true;
     }
     return isJsonAsciiWordsFallback(word0, word1, word2, word3, notBackslashMask);
-  }
-
-  private static boolean isJsonAsciiWordsFallback(long word0, long word1, long notBackslashMask) {
-    return ((word0 + ASCII_CONTROL_OFFSET)
-            & (word1 + ASCII_CONTROL_OFFSET)
-            & ((word0 ^ QUOTE_BYTES_COMPLEMENT) + ONE_BYTES)
-            & ((word1 ^ QUOTE_BYTES_COMPLEMENT) + ONE_BYTES)
-            & notBackslashMask)
-        == HIGH_BITS;
   }
 
   private static boolean isJsonAsciiWordsFallback(
@@ -2041,37 +2143,6 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
             & ((word3 ^ QUOTE_BYTES_COMPLEMENT) + ONE_BYTES)
             & notBackslashMask)
         == HIGH_BITS;
-  }
-
-  private static boolean isJsonAsciiInt(int word) {
-    int notBackslashMask =
-        ((word ^ INT_BACKSLASH_BYTES_COMPLEMENT) + INT_ONE_BYTES) & INT_HIGH_BITS;
-    if ((notBackslashMask & (word + INT_ASCII_GT_QUOTE_OFFSET)) == INT_HIGH_BITS) {
-      return true;
-    }
-    return isJsonAsciiIntFallback(word, notBackslashMask);
-  }
-
-  private static boolean isJsonAsciiIntFallback(int word, int notBackslashMask) {
-    return (((word + INT_ASCII_CONTROL_OFFSET) & ~word) & INT_HIGH_BITS) == INT_HIGH_BITS
-        && (((word ^ INT_QUOTE_BYTES_COMPLEMENT) + INT_ONE_BYTES) & INT_HIGH_BITS) == INT_HIGH_BITS
-        && notBackslashMask == INT_HIGH_BITS;
-  }
-
-  private static boolean isJsonAsciiShort(int word) {
-    int notBackslashMask =
-        ((word ^ SHORT_BACKSLASH_BYTES_COMPLEMENT) + SHORT_ONE_BYTES) & SHORT_HIGH_BITS;
-    if ((notBackslashMask & (word + SHORT_ASCII_GT_QUOTE_OFFSET)) == SHORT_HIGH_BITS) {
-      return true;
-    }
-    return isJsonAsciiShortFallback(word, notBackslashMask);
-  }
-
-  private static boolean isJsonAsciiShortFallback(int word, int notBackslashMask) {
-    return (((word + SHORT_ASCII_CONTROL_OFFSET) & ~word) & SHORT_HIGH_BITS) == SHORT_HIGH_BITS
-        && (((word ^ SHORT_QUOTE_BYTES_COMPLEMENT) + SHORT_ONE_BYTES) & SHORT_HIGH_BITS)
-            == SHORT_HIGH_BITS
-        && notBackslashMask == SHORT_HIGH_BITS;
   }
 
   private static int packUtf16Ascii(long word) {

@@ -65,52 +65,6 @@ public sealed class UInt64MapTests
         Assert.False(second.TryGetValue(keys[64], out _));
     }
 
-    [Fact]
-    public void TypeMetaCachesPlaceIndependently()
-    {
-        Config config = Fory.Builder().Build().Config;
-        ReadContext firstContext = new(
-            new ByteReader(Array.Empty<byte>()),
-            new TypeResolver(),
-            config);
-        ReadContext secondContext = new(
-            new ByteReader(Array.Empty<byte>()),
-            new TypeResolver(),
-            config);
-        UInt64Map<TypeMeta> first = TypeMetaCache(firstContext);
-        UInt64Map<TypeMeta> second = TypeMetaCache(secondContext);
-        TypeMeta typeMeta = new(
-            (uint)TypeId.Struct,
-            903,
-            MetaString.Empty('.', '_'),
-            MetaString.Empty('$', '_'),
-            registerByName: false,
-            []);
-        ulong[] keys = LegacyClusterKeys(65);
-        for (int i = 0; i < 64; i++)
-        {
-            firstContext.StoreExactLocalTypeMeta(keys[i], typeMeta);
-            secondContext.StoreExactLocalTypeMeta(keys[i], typeMeta);
-        }
-
-        int[] firstSlots = keys.Select(key => Placement(first, key)).ToArray();
-        int[] secondSlots = keys.Select(key => Placement(second, key)).ToArray();
-        Assert.False(firstSlots.SequenceEqual(secondSlots));
-        Assert.True(firstSlots.Take(64).Distinct().Count() > 32);
-        Assert.True(secondSlots.Take(64).Distinct().Count() > 32);
-
-        for (int i = 0; i < 64; i++)
-        {
-            Assert.True(firstContext.TryGetTypeMetaByHeader(keys[i], out TypeMeta firstValue));
-            Assert.Same(typeMeta, firstValue);
-            Assert.True(secondContext.TryGetTypeMetaByHeader(keys[i], out TypeMeta secondValue));
-            Assert.Same(typeMeta, secondValue);
-        }
-
-        Assert.False(firstContext.TryGetTypeMetaByHeader(keys[64], out _));
-        Assert.False(secondContext.TryGetTypeMetaByHeader(keys[64], out _));
-    }
-
     private static ulong[] LegacyClusterKeys(int count)
     {
         ulong[] keys = new ulong[count];
@@ -133,15 +87,6 @@ public sealed class UInt64MapTests
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
         return Assert.IsType<int>(method.Invoke(map, [key]));
-    }
-
-    private static UInt64Map<TypeMeta> TypeMetaCache(ReadContext context)
-    {
-        FieldInfo? field = typeof(ReadContext).GetField(
-            "_typeMetasByHeader",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(field);
-        return Assert.IsType<UInt64Map<TypeMeta>>(field.GetValue(context));
     }
 
     private static int SimulateMissProbes(int[] initialSlots)

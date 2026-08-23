@@ -28,6 +28,7 @@ import { TypeMeta } from "../meta/TypeMeta";
 
 class UnionSerializerGenerator extends BaseSerializerGenerator {
   typeInfo: TypeInfo;
+  typeMeta: TypeMeta | undefined;
   detectedSerializer: string;
   writerSerializer: string;
   caseTypesVar: string;
@@ -36,6 +37,10 @@ class UnionSerializerGenerator extends BaseSerializerGenerator {
   constructor(typeInfo: TypeInfo, builder: CodecBuilder, scope: Scope) {
     super(typeInfo, builder, scope);
     this.typeInfo = typeInfo;
+    this.typeMeta =
+      typeInfo.typeId === TypeId.NAMED_UNION && builder.resolver.isCompatible()
+        ? TypeMeta.fromTypeInfo(typeInfo, builder.resolver)
+        : undefined;
     this.detectedSerializer = this.scope.declareVar("detectedSerializer", "null");
     this.writerSerializer = this.scope.declareVar("writerSerializer", "null");
 
@@ -233,7 +238,7 @@ class UnionSerializerGenerator extends BaseSerializerGenerator {
         if (this.builder.resolver.isCompatible()) {
           const bytes = this.scope.declare(
             "unionTypeInfoBytes",
-            `new Uint8Array([${TypeMeta.fromTypeInfo(this.typeInfo).toBytes().join(",")}])`,
+            `new Uint8Array([${this.typeMeta!.toBytes().join(",")}])`,
           );
           const serializerExpr = `${this.builder.getTypeResolverName()}.getSerializerByNamedType(${this.builder.resolver.computeTypeId(this.typeInfo)}, ${CodecBuilder.sourceString(this.typeInfo.namespace)}, ${CodecBuilder.sourceString(this.typeInfo.typeName)})`;
           typeMeta = this.builder.typeMetaResolver.writeTypeMeta(
@@ -278,6 +283,7 @@ class UnionSerializerGenerator extends BaseSerializerGenerator {
               TypeId.NAMED_UNION,
               this.typeInfo.namespace,
               this.typeInfo.typeName,
+              "serializer",
             )};
           `;
         } else {
@@ -301,6 +307,11 @@ class UnionSerializerGenerator extends BaseSerializerGenerator {
 
   getTypeId() {
     return this.typeInfo._typeId;
+  }
+
+  getLocalTypeMeta(): TypeMeta | undefined {
+    this.typeMeta?.getHash();
+    return this.typeMeta;
   }
 }
 

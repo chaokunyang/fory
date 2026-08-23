@@ -199,7 +199,7 @@ pub struct MetaStringReaderResolver {
     // `dynamic_read` stores raw pointers into these Box owners (or the static empty value).
     // Boxes keep pointees stable across map/vector growth, and reset invalidates every pointer
     // before dropping a root owner.
-    hash_to_meta_string_bytes: HashMap<(i64, usize), Box<MetaStringBytes>>,
+    hash_to_meta_string_bytes: HashMap<i64, Box<MetaStringBytes>>,
     long_long_byte_map: HashMap<(u64, u64, usize, u8), Box<MetaStringBytes>>,
     #[allow(clippy::vec_box)]
     root_meta_string_bytes: Vec<Box<MetaStringBytes>>,
@@ -306,31 +306,26 @@ impl MetaStringReaderResolver {
         hash_code: i64,
     ) -> Result<&MetaStringBytes, Error> {
         self.check_dynamic_read_capacity()?;
-        let key = (hash_code, len);
-        let bytes = reader.read_bytes(len)?;
-        let mut key_occupied = false;
-        if let Some(mb) = self.hash_to_meta_string_bytes.get(&key) {
-            key_occupied = true;
-            if mb.bytes.as_slice() == bytes {
-                // The cached owner is reusable only after the incoming encoded identity matches.
-                // A fixed wire hash is a validation hint, not a type-name identity.
-                let ptr = mb.as_ref() as *const MetaStringBytes;
-                self.update_dynamic_read(ptr);
-                return Ok(unsafe { &*ptr });
-            }
+        if let Some(mb) = self.hash_to_meta_string_bytes.get(&hash_code) {
+            // The wire hash is the complete identity of a checked big meta string. The current
+            // frame length controls only the bounds-checked skip and never reopens validation.
+            reader.skip(len)?;
+            let ptr = mb.as_ref() as *const MetaStringBytes;
+            self.update_dynamic_read(ptr);
+            return Ok(unsafe { &*ptr });
         }
 
+        let bytes = reader.read_bytes(len)?;
         let encoding = byte_to_encoding((hash_code & HEADER_MASK) as u8)?;
         if compute_meta_string_hash(bytes, encoding) != hash_code {
             return Err(Error::invalid_data("malformed meta string hash"));
         }
         let owner = Box::new(MetaStringBytes::new(bytes.to_vec(), hash_code)?);
         let ptr = owner.as_ref() as *const MetaStringBytes;
-        if !key_occupied
-            && len <= Self::MAX_CACHED_READ_META_STRING_LENGTH
+        if len <= Self::MAX_CACHED_READ_META_STRING_LENGTH
             && self.cached_meta_string_count() < Self::MAX_CACHED_READ_META_STRINGS
         {
-            self.hash_to_meta_string_bytes.insert(key, owner);
+            self.hash_to_meta_string_bytes.insert(hash_code, owner);
         } else {
             self.root_meta_string_bytes.push(owner);
         }

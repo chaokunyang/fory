@@ -510,8 +510,8 @@ public final class ExceptionSerializers {
       }
       return;
     }
-    long typeDefId = buffer.readInt64();
-    TypeDef.skipTypeDef(buffer, typeDefId);
+    long typeDefHeader = buffer.readInt64();
+    TypeDef.skipTypeDef(buffer, typeDefHeader);
     metaReadContext.readTypeInfos.add(null);
   }
 

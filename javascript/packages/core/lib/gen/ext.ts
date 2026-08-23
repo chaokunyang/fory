@@ -111,6 +111,7 @@ class ExtSerializerGenerator extends BaseSerializerGenerator {
             TypeId.NAMED_EXT,
             this.typeInfo.namespace,
             this.typeInfo.typeName,
+            "serializer",
           )};
           `;
         }
@@ -202,7 +203,7 @@ class ExtSerializerGenerator extends BaseSerializerGenerator {
         } else {
           const bytes = this.scope.declare(
             "typeInfoBytes",
-            `new Uint8Array([${TypeMeta.fromTypeInfo(this.typeInfo, this.builder.resolver).toBytes().join(",")}])`,
+            `new Uint8Array([${this.typeMeta.toBytes().join(",")}])`,
           );
           typeMeta = this.builder.typeMetaResolver.writeTypeMeta(this.builder.getTypeInfo(), bytes);
         }
@@ -223,6 +224,14 @@ class ExtSerializerGenerator extends BaseSerializerGenerator {
 
   getHash(): string {
     return "0";
+  }
+
+  getLocalTypeMeta(): TypeMeta | undefined {
+    if (this.typeInfo.typeId !== TypeId.NAMED_EXT || !this.builder.resolver.isCompatible()) {
+      return undefined;
+    }
+    this.typeMeta.getHash();
+    return this.typeMeta;
   }
 }
 

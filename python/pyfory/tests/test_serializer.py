@@ -37,6 +37,7 @@ import pytest
 
 import pyfory
 import pyfory.registry as registry_module
+from pyfory.meta.typedef import _typedef_hash_key
 from pyfory.serialization import Buffer, _bfloat16_from_bits, _bfloat16_to_bits, _float16_from_bits, _float16_to_bits
 from pyfory import Fory, EnumSerializer
 from pyfory.serializer import (
@@ -1176,7 +1177,7 @@ def test_named_metadata_finalizes():
     ):
         assert type_info.type_def is not None
         header = Buffer(type_info.type_def.encoded).read_int64()
-        assert fory.type_resolver._meta_shared_type_info[header] is type_info
+        assert fory.type_resolver._local_type_info_by_hash[_typedef_hash_key(header)] is type_info
 
 
 def test_pre_root_serializer_rebind():
@@ -1184,13 +1185,14 @@ def test_pre_root_serializer_rebind():
     type_info = fory.register_type(FrozenExt, name="test.ReboundExt")
     fory.type_resolver.get_serializer(FrozenExt)
     old_header = Buffer(type_info.type_def.encoded).read_int64()
-    assert fory.type_resolver._meta_shared_type_info[old_header] is type_info
+    old_hash = _typedef_hash_key(old_header)
+    assert fory.type_resolver._local_type_info_by_hash[old_hash] is type_info
     id_map = dict(fory.type_resolver._type_id_to_type_info)
 
     serializer = FrozenExtSerializer(fory.type_resolver, FrozenExt)
     fory.register_serializer(FrozenExt, serializer)
     assert type_info.type_def is None
-    assert old_header not in fory.type_resolver._meta_shared_type_info
+    assert old_hash not in fory.type_resolver._local_type_info_by_hash
     assert fory.type_resolver._type_id_to_type_info == id_map
 
     data = fory.serialize(FrozenExt(9))
@@ -1199,7 +1201,7 @@ def test_pre_root_serializer_rebind():
     assert type_info.type_id == TypeId.NAMED_EXT
     new_header = Buffer(type_info.type_def.encoded).read_int64()
     assert new_header != old_header
-    assert fory.type_resolver._meta_shared_type_info[new_header] is type_info
+    assert fory.type_resolver._local_type_info_by_hash[_typedef_hash_key(new_header)] is type_info
 
 
 def test_named_serializer_id_map():

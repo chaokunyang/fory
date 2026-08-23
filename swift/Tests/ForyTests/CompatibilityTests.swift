@@ -417,6 +417,18 @@ private final class CompatibleGraphContainer {
     }
 }
 
+@Test
+func nestedReferenceMetadata() {
+    let fields = CompatibleGraphContainer.foryFieldsInfo(trackRef: true)
+    let items = fields.first { $0.fieldName == "items" }!.fieldType.generics[0]
+    let byName = fields.first { $0.fieldName == "byName" }!.fieldType.generics[1]
+
+    #expect(!items.nullable)
+    #expect(items.trackRef)
+    #expect(!byName.nullable)
+    #expect(byName.trackRef)
+}
+
 private func compatibleDecode<Writer: Serializer, Reader: Serializer>(
     _ value: Writer,
     as _: Reader.Type,

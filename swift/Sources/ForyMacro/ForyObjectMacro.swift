@@ -3247,6 +3247,34 @@ private func compatibleTypeMetaFieldExpression(
     }
 
     if let fieldCodec = selectedFieldCodecType(field) {
+        if field.isCollection {
+            // The container and its children have independent reference semantics. Let the
+            // carrier codec derive every child from the root setting, then restore the outer
+            // container bit instead of suppressing reference tracking for the whole subtree.
+            return """
+                {
+                    var fieldType = try! \(fieldCodec).fieldType(
+                        nullable: \(field.isOptional ? "true" : "false"),
+                        trackRef: \(trackRefExpression),
+                        resolveSerializerTypeId: { serializerType in
+                            guard let serializer = serializerType as? any Serializer.Type else {
+                                throw ForyError.invalidData("field serializer does not conform to Serializer")
+                            }
+                            switch serializer.staticTypeId {
+                            case .structType:
+                                return .compatibleStruct
+                            case .typedUnion, .namedUnion:
+                                return .union
+                            default:
+                                return serializer.staticTypeId
+                            }
+                        }
+                    )
+                    fieldType.trackRef = \(fieldTrackRefExpression)
+                    return fieldType
+                }()
+                """
+        }
         return """
             try! \(fieldCodec).fieldType(
                 nullable: \(field.isOptional ? "true" : "false"),
@@ -3285,6 +3313,20 @@ private func resolvedTypeMetaFieldExpr(_ field: ParsedField) -> String {
     }
 
     if let fieldCodec = selectedFieldCodecType(field) {
+        if field.isCollection {
+            // See compatibleTypeMetaFieldExpression: children need the root reference setting.
+            return """
+                try {
+                    var fieldType = try \(fieldCodec).fieldType(
+                        nullable: \(field.isOptional ? "true" : "false"),
+                        trackRef: trackRef,
+                        resolveSerializerTypeId: resolveSerializerTypeId
+                    )
+                    fieldType.trackRef = \(fieldTrackRefExpression)
+                    return fieldType
+                }()
+                """
+        }
         return """
             try \(fieldCodec).fieldType(
                 nullable: \(field.isOptional ? "true" : "false"),

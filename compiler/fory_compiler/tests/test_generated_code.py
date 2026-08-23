@@ -935,6 +935,25 @@ def test_java_repeated_float16_generation_uses_float16_list():
     assert "private Float16List vals;" in java_output
 
 
+def test_java_nullable_generics():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            message NullableValues {
+                list<optional float16> values = 1;
+                map<string, optional float16> values_by_name = 2;
+            }
+            """
+        )
+    )
+    java_output = render_files(generate_files(schema, JavaGenerator))
+    assert "import org.apache.fory.annotation.Nullable;" in java_output
+    assert "private List<@Nullable Float16> values;" in java_output
+    assert "private Map<String, @Nullable Float16> valuesByName;" in java_output
+
+
 def test_java_nested_array_values_use_deep_equals_hash_generation():
     schema = parse_fdl(
         dedent(
@@ -1067,7 +1086,7 @@ def test_java_nested_integer_annotations_in_generic_containers():
     java_output = render_files(generate_files(schema, JavaGenerator))
     assert (
         "private Map<@UInt32Type(encoding = Int32Encoding.FIXED) Long, "
-        "List<@UInt64Type(encoding = Int64Encoding.TAGGED) Long>> values;"
+        "List<@Nullable @UInt64Type(encoding = Int64Encoding.TAGGED) Long>> values;"
         in java_output
     )
     go_output = render_files(generate_files(schema, GoGenerator))

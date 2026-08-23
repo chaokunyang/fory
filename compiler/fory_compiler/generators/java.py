@@ -1355,6 +1355,10 @@ class JavaGenerator(JavaServiceGeneratorMixin, BaseGenerator):
                 type_use=True,
                 parent_stack=parent_stack,
             )
+            if child_optional:
+                element_type = self.apply_top_level_type_use_annotation(
+                    element_type, "@Nullable"
+                )
             if self.is_ref_target_type(field_type.element_type, parent_stack):
                 ref_annotation = "@Ref" if child_ref else "@Ref(enable=false)"
                 element_type = f"{ref_annotation} {element_type}"
@@ -1384,6 +1388,10 @@ class JavaGenerator(JavaServiceGeneratorMixin, BaseGenerator):
                 type_use=True,
                 parent_stack=parent_stack,
             )
+            if field_type.value_optional:
+                value_type = self.apply_top_level_type_use_annotation(
+                    value_type, "@Nullable"
+                )
             if self.is_ref_target_type(field_type.value_type, parent_stack):
                 ref_annotation = (
                     "@Ref" if field_type.value_ref else "@Ref(enable=false)"
@@ -1446,6 +1454,8 @@ class JavaGenerator(JavaServiceGeneratorMixin, BaseGenerator):
                             )
                         return
             imports.add("java.util.List")
+            if child_optional:
+                imports.add("org.apache.fory.annotation.Nullable")
             if self.is_ref_target_type(field_type.element_type, parent_stack):
                 imports.add("org.apache.fory.annotation.Ref")
             self.collect_type_imports(
@@ -1474,6 +1484,8 @@ class JavaGenerator(JavaServiceGeneratorMixin, BaseGenerator):
 
         elif isinstance(field_type, MapType):
             imports.add("java.util.Map")
+            if field_type.value_optional:
+                imports.add("org.apache.fory.annotation.Nullable")
             if self.is_ref_target_type(field_type.value_type, parent_stack):
                 imports.add("org.apache.fory.annotation.Ref")
             self.collect_type_imports(

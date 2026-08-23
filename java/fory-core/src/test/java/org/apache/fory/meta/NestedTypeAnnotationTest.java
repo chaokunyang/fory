@@ -34,6 +34,8 @@ import org.apache.fory.annotation.Float16Type;
 import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.annotation.Int64Type;
 import org.apache.fory.annotation.Int8Type;
+import org.apache.fory.annotation.Nullable;
+import org.apache.fory.annotation.Ref;
 import org.apache.fory.annotation.UInt32Type;
 import org.apache.fory.annotation.UInt64Type;
 import org.apache.fory.annotation.UInt8Type;
@@ -75,6 +77,16 @@ public class NestedTypeAnnotationTest extends ForyTestBase {
     public List<@Int32Type(encoding = Int32Encoding.FIXED) Integer> fixed;
 
     public List<@Int32Type Integer> var;
+  }
+
+  public static class NestedNullability {
+    public List<String> required;
+
+    public List<@Nullable String> nullable;
+
+    public List<@Ref(enable = false) String> requiredUntracked;
+
+    public Map<String, @Nullable String> nullableValues;
   }
 
   public static class UInt8OnByte {
@@ -231,6 +243,24 @@ public class NestedTypeAnnotationTest extends ForyTestBase {
         assertCollection(fieldType(typeDef, "fixed"), Types.LIST).getElementType(), Types.INT32);
     assertRegistered(
         assertCollection(fieldType(typeDef, "var"), Types.LIST).getElementType(), Types.VARINT32);
+  }
+
+  @Test
+  public void nestedNullabilityIsExplicit() {
+    Fory fory = xlangFory(false, false);
+    fory.register(NestedNullability.class, 722);
+
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), NestedNullability.class);
+    Assert.assertFalse(
+        assertCollection(fieldType(typeDef, "required"), Types.LIST).getElementType().nullable());
+    Assert.assertTrue(
+        assertCollection(fieldType(typeDef, "nullable"), Types.LIST).getElementType().nullable());
+    FieldType requiredUntracked =
+        assertCollection(fieldType(typeDef, "requiredUntracked"), Types.LIST).getElementType();
+    Assert.assertFalse(requiredUntracked.nullable());
+    Assert.assertFalse(requiredUntracked.trackingRef());
+    Assert.assertTrue(
+        assertMap(fieldType(typeDef, "nullableValues"), Types.MAP).getValueType().nullable());
   }
 
   @Test(dataProvider = "enableCodegen")

@@ -68,14 +68,8 @@ final class JvmTypeUseMetadata implements TypeUseMetadata.Support {
       boolean hasChildMeta = false;
       for (int i = 0; i < args.length; i++) {
         AnnotatedType annotatedArg = i < annotatedArgs.length ? annotatedArgs[i] : null;
-        Class<?> argumentRawType =
-            annotatedArg == null
-                ? TypeUtils.getRawType(args[i])
-                : TypeUtils.getRawType(annotatedArg.getType());
         TypeRef<?> argRef =
-            annotatedArg != null
-                ? typeRef(annotatedArg, true, !argumentRawType.isPrimitive(), true)
-                : TypeRef.of(args[i]);
+            annotatedArg != null ? typeRef(annotatedArg, true, false, true) : TypeRef.of(args[i]);
         if (argRef != null && argRef.hasTypeExtMeta()) {
           hasChildMeta = true;
         }

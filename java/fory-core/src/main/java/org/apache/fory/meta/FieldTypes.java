@@ -249,9 +249,9 @@ public class FieldTypes {
     } else {
       trackingRef = genericType.trackingRef(resolver);
     }
-    // For xlang: nullable is false by default for top-level fields.
-    // Nested element types are nullable by default to align with cross-language collection
-    // semantics.
+    // Xlang nullability is explicit at every schema position. In particular, a Java reference
+    // carrier does not make an unannotated collection element or map value nullable; doing so
+    // would change the declared nested schema and make statically typed peers reject it.
     // Optional types are nullable (like Rust's Option<T>).
     // For native: non-primitive types are nullable by default.
     boolean nullable;
@@ -261,8 +261,7 @@ public class FieldTypes {
       if (typeExtMeta != null) {
         nullable = typeExtMeta.nullable();
       } else {
-        boolean nestedType = descriptor == null;
-        nullable = nestedType || isOptionalType(rawType);
+        nullable = isOptionalType(rawType);
       }
     } else {
       // Primitives are never nullable, non-primitives are nullable by default

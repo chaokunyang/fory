@@ -2003,7 +2003,8 @@ TEST(StructComprehensiveTest,
   auto scalar_result =
       TypeMeta::assign_local_dispatch_ids(&scalar_local, scalar_remote);
   ASSERT_TRUE(scalar_result.ok());
-  EXPECT_EQ(scalar_remote[0].field_id, 1);
+  EXPECT_EQ(scalar_remote[0].field_id, 8);
+  EXPECT_EQ(scalar_remote[0].matched_field_id, 1);
 
   TypeMeta name_mode_local;
   name_mode_local.field_infos = {make_test_field_info(
@@ -2017,7 +2018,8 @@ TEST(StructComprehensiveTest,
   ASSERT_TRUE(
       TypeMeta::assign_local_dispatch_ids(&name_mode_local, mixed_mode_remote)
           .ok());
-  EXPECT_EQ(mixed_mode_remote[0].field_id, -1);
+  EXPECT_EQ(mixed_mode_remote[0].field_id, 7);
+  EXPECT_EQ(mixed_mode_remote[0].matched_field_id, -1);
 
   std::vector<FieldInfo> name_remote = {make_test_field_info(
       "items", -1,
@@ -2037,32 +2039,40 @@ TEST(StructComprehensiveTest,
       make_test_field_info("beta", -1, make_test_field_type(TypeId::VARINT32))};
   ASSERT_TRUE(
       TypeMeta::assign_local_dispatch_ids(&mixed_local, mixed_remote).ok());
-  EXPECT_EQ(mixed_remote[0].field_id, 2);
-  EXPECT_EQ(mixed_remote[1].field_id, 0);
-  EXPECT_EQ(mixed_remote[2].field_id, 4);
+  EXPECT_EQ(mixed_remote[0].field_id, -1);
+  EXPECT_EQ(mixed_remote[0].matched_field_id, 2);
+  EXPECT_EQ(mixed_remote[1].field_id, 3);
+  EXPECT_EQ(mixed_remote[1].matched_field_id, 0);
+  EXPECT_EQ(mixed_remote[2].field_id, -1);
+  EXPECT_EQ(mixed_remote[2].matched_field_id, 4);
 
   std::vector<FieldInfo> untagged_remote_for_tagged_local = {
       make_test_field_info("tagged", -1, make_test_field_type(TypeId::STRING))};
   ASSERT_TRUE(TypeMeta::assign_local_dispatch_ids(
                   &mixed_local, untagged_remote_for_tagged_local)
                   .ok());
-  EXPECT_EQ(untagged_remote_for_tagged_local[0].field_id, 0);
+  EXPECT_EQ(untagged_remote_for_tagged_local[0].field_id, -1);
+  EXPECT_EQ(untagged_remote_for_tagged_local[0].matched_field_id, 0);
 
   std::vector<FieldInfo> name_then_tag = {
       make_test_field_info("tagged", -1, make_test_field_type(TypeId::STRING)),
       make_test_field_info("tagged", 3, make_test_field_type(TypeId::STRING))};
   ASSERT_TRUE(
       TypeMeta::assign_local_dispatch_ids(&mixed_local, name_then_tag).ok());
-  EXPECT_EQ(name_then_tag[0].field_id, 0);
-  EXPECT_EQ(name_then_tag[1].field_id, -1);
+  EXPECT_EQ(name_then_tag[0].field_id, -1);
+  EXPECT_EQ(name_then_tag[0].matched_field_id, 0);
+  EXPECT_EQ(name_then_tag[1].field_id, 3);
+  EXPECT_EQ(name_then_tag[1].matched_field_id, -1);
 
   std::vector<FieldInfo> tag_then_name = {
       make_test_field_info("tagged", 3, make_test_field_type(TypeId::STRING)),
       make_test_field_info("tagged", -1, make_test_field_type(TypeId::STRING))};
   ASSERT_TRUE(
       TypeMeta::assign_local_dispatch_ids(&mixed_local, tag_then_name).ok());
-  EXPECT_EQ(tag_then_name[0].field_id, 0);
+  EXPECT_EQ(tag_then_name[0].field_id, 3);
+  EXPECT_EQ(tag_then_name[0].matched_field_id, 0);
   EXPECT_EQ(tag_then_name[1].field_id, -1);
+  EXPECT_EQ(tag_then_name[1].matched_field_id, -1);
 }
 
 TEST(StructComprehensiveTest, CompatibleSignedToUnsignedStructRead) {

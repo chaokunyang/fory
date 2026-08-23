@@ -198,18 +198,19 @@ bool field_types_compatible_top_level(const FieldType &local,
 // FieldInfo - Field metadata (name, type, id)
 // ============================================================================
 
-/// Field information including name, type, and assigned field ID
+/// Field information including wire identity, type, and compatible dispatch.
 class FieldInfo {
 public:
-  int32_t field_id;       // Tag ID or compatible dispatch ID; -1 means absent
-  std::string field_name; // Field name
-  FieldType field_type;   // Field type information
+  int32_t field_id;         // Wire tag ID; -1 means name-based identity
+  int32_t matched_field_id; // Derived compatible dispatch; -1 means unmatched
+  std::string field_name;   // Field name
+  FieldType field_type;     // Field type information
 
-  FieldInfo() : field_id(-1) {}
+  FieldInfo() : field_id(-1), matched_field_id(-1) {}
 
   FieldInfo(std::string name, FieldType type)
-      : field_id(-1), field_name(std::move(name)), field_type(std::move(type)) {
-  }
+      : field_id(-1), matched_field_id(-1), field_name(std::move(name)),
+        field_type(std::move(type)) {}
 
   /// write field info to buffer (for serialization)
   Result<std::vector<uint8_t>, Error> to_bytes() const;
@@ -330,18 +331,9 @@ private:
   friend class ReadContext;
   template <typename, typename> friend struct Serializer;
 
-  static Result<std::unique_ptr<TypeMeta>, Error> from_bytes_with_wire_ids(
-      Buffer &buffer, int64_t header, uint32_t max_type_fields,
-      uint32_t max_type_meta_bytes, std::vector<int32_t> &wire_ids);
-
   static Result<void, Error>
-  assign_wire_field_ids(const TypeInfo &local_type,
-                        const std::vector<int32_t> &remote_wire_ids,
-                        std::vector<FieldInfo> &remote_fields);
-
-  static int32_t compute_struct_version(const TypeMeta &meta,
-                                        const int32_t *wire_ids,
-                                        size_t num_fields);
+  match_remote_fields(const TypeInfo &local_type,
+                      std::vector<FieldInfo> &remote_fields);
 };
 
 // ============================================================================
@@ -1167,9 +1159,7 @@ inline int compare_field_identity(const FieldInfo &lhs, int32_t lhs_id,
 }
 
 inline std::vector<size_t>
-sort_field_indices(const std::vector<FieldInfo> &fields,
-                   const std::vector<int32_t> &wire_ids) {
-  FORY_CHECK(fields.size() == wire_ids.size());
+sort_field_indices(const std::vector<FieldInfo> &fields) {
   std::vector<size_t> indices(fields.size());
   for (size_t i = 0; i < fields.size(); ++i) {
     indices[i] = i;
@@ -1203,7 +1193,7 @@ sort_field_indices(const std::vector<FieldInfo> &fields,
         return a.field_type.type_id < b.field_type.type_id;
       }
     }
-    return compare_field_identity(a, wire_ids[lhs], b, wire_ids[rhs]) < 0;
+    return compare_field_identity(a, a.field_id, b, b.field_id) < 0;
   });
   return indices;
 }
@@ -1212,16 +1202,6 @@ template <typename T, size_t... Indices>
 constexpr std::array<int32_t, sizeof...(Indices)>
 build_field_ids(std::index_sequence<Indices...>) {
   return {compute_field_id<void, T, Indices>()...};
-}
-
-template <size_t Size>
-std::vector<int32_t> make_wire_ids(const std::array<int32_t, Size> &field_ids) {
-  std::vector<int32_t> wire_ids;
-  wire_ids.reserve(Size);
-  for (int32_t field_id : field_ids) {
-    wire_ids.push_back(field_id);
-  }
-  return wire_ids;
 }
 
 // Helper to check if a type is unsigned integer
@@ -2213,7 +2193,6 @@ TypeResolver::build_struct_type_info(uint32_t type_id, uint32_t user_type_id,
 
   constexpr auto field_ids =
       detail::build_field_ids<T>(std::make_index_sequence<field_count>{});
-  const auto wire_ids = detail::make_wire_ids(field_ids);
   fory::flat_hash_map<std::string, size_t> name_to_index;
   fory::flat_hash_map<int32_t, size_t> tag_to_index;
   name_to_index.reserve(field_count);
@@ -2224,8 +2203,8 @@ TypeResolver::build_struct_type_info(uint32_t type_id, uint32_t user_type_id,
   for (size_t i = 0; i < field_count; ++i) {
     const FieldInfo &field = field_infos[i];
     entry->name_to_index.emplace(field.field_name, i);
-    if (wire_ids[i] != detail::kFieldNameIdentity) {
-      if (!tag_to_index.emplace(wire_ids[i], i).second) {
+    if (field_ids[i] != detail::kFieldNameIdentity) {
+      if (!tag_to_index.emplace(field_ids[i], i).second) {
         return Unexpected(Error::invalid("Duplicate struct field tag"));
       }
     } else if (!name_to_index.emplace(field.field_name, i).second) {
@@ -2234,19 +2213,7 @@ TypeResolver::build_struct_type_info(uint32_t type_id, uint32_t user_type_id,
     }
   }
 
-  entry->sorted_indices = detail::sort_field_indices(field_infos, wire_ids);
-
-  // Before finalization, type_def is the existing registration-owned scratch
-  // owner for exact field identities. Successful finalization replaces these
-  // bytes in both the completed clone and the retained source resolver before
-  // either registry becomes observable as finalized.
-  entry->type_def.reserve(field_count * sizeof(int32_t));
-  for (int32_t wire_id : wire_ids) {
-    const uint32_t encoded = static_cast<uint32_t>(wire_id);
-    for (uint32_t shift = 0; shift < 32; shift += 8) {
-      entry->type_def.push_back(static_cast<uint8_t>(encoded >> shift));
-    }
-  }
+  entry->sorted_indices = detail::sort_field_indices(field_infos);
 
   entry->harness = make_struct_harness<T>();
 
@@ -2526,10 +2493,7 @@ TypeResolver::harness_struct_sorted_fields(TypeResolver &resolver) {
   constexpr size_t field_count = MetaDesc::Size;
   FORY_TRY(fields, detail::build_field_infos_with_resolver<T>(
                        resolver, std::make_index_sequence<field_count>{}));
-  constexpr auto field_ids =
-      detail::build_field_ids<T>(std::make_index_sequence<field_count>{});
-  const auto wire_ids = detail::make_wire_ids(field_ids);
-  const auto indices = detail::sort_field_indices(fields, wire_ids);
+  const auto indices = detail::sort_field_indices(fields);
   std::vector<FieldInfo> sorted;
   sorted.reserve(fields.size());
   for (size_t index : indices) {

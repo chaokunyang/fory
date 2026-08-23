@@ -2244,15 +2244,6 @@ template <typename T> struct CompileTimeFieldHelpers {
   static inline constexpr std::array<size_t, FieldCount> sorted_indices =
       compute_sorted_indices();
 
-  static inline constexpr std::array<int32_t, FieldCount> sorted_field_ids =
-      []() constexpr {
-        std::array<int32_t, FieldCount> ids{};
-        for (size_t i = 0; i < FieldCount; ++i) {
-          ids[i] = field_ids[sorted_indices[i]];
-        }
-        return ids;
-      }();
-
   static inline constexpr std::array<std::string_view, FieldCount>
       sorted_field_names = []() constexpr {
         std::array<std::string_view, FieldCount> arr{};
@@ -3666,7 +3657,7 @@ read_exact_primitive_run(T &obj, ReadContext &ctx,
           static_cast<int16_t>(next_sorted_idx * 2);
       const bool has_exact_next =
           remote_idx + 1 < remote_fields.size() &&
-          remote_fields[remote_idx + 1].field_id == next_matched_id;
+          remote_fields[remote_idx + 1].matched_field_id == next_matched_id;
       constexpr uint32_t next_width =
           varint_decoder_width<T, next_sorted_idx>();
       if constexpr (current_width != 0 && next_width != current_width) {
@@ -4677,9 +4668,10 @@ bool skip_removed_tracked_struct(ReadContext &ctx,
   }
   for (size_t i = remote_idx + 1; i < remote_fields.size(); ++i) {
     const FieldInfo &candidate = remote_fields[i];
-    if (candidate.field_id >= 0 && candidate.field_type == removed_type) {
-      if (skip_removed_struct_owner<T>(ctx, removed_type, candidate.field_id,
-                                       indices)) {
+    if (candidate.matched_field_id >= 0 &&
+        candidate.field_type == removed_type) {
+      if (skip_removed_struct_owner<T>(ctx, removed_type,
+                                       candidate.matched_field_id, indices)) {
         return true;
       }
     }
@@ -4765,7 +4757,7 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
   // Iterate through remote fields in their serialization order
   for (size_t remote_idx = 0; remote_idx < remote_fields.size(); ++remote_idx) {
     const auto &remote_field = remote_fields[remote_idx];
-    int32_t dispatch_id = remote_field.field_id;
+    int32_t dispatch_id = remote_field.matched_field_id;
 
     if (dispatch_id == -1) {
       if (use_exact_offset_reads) {
@@ -4956,10 +4948,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
             Error::type_error("Type metadata not initialized for struct"));
         return;
       }
-      int32_t local_version = TypeMeta::compute_struct_version(
-          *type_info->type_meta,
-          detail::CompileTimeFieldHelpers<T>::sorted_field_ids.data(),
-          detail::CompileTimeFieldHelpers<T>::FieldCount);
+      int32_t local_version =
+          TypeMeta::compute_struct_version(*type_info->type_meta);
       ctx.buffer().write_int32(local_version);
     }
 
@@ -4990,10 +4980,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
             Error::type_error("Type metadata not initialized for struct"));
         return;
       }
-      int32_t local_version = TypeMeta::compute_struct_version(
-          *type_info->type_meta,
-          detail::CompileTimeFieldHelpers<T>::sorted_field_ids.data(),
-          detail::CompileTimeFieldHelpers<T>::FieldCount);
+      int32_t local_version =
+          TypeMeta::compute_struct_version(*type_info->type_meta);
       ctx.buffer().write_int32(local_version);
     }
 
@@ -5211,10 +5199,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
             "Type metadata not initialized for requested struct"));
         return T{};
       }
-      int32_t local_version = TypeMeta::compute_struct_version(
-          *local_type_info->type_meta,
-          detail::CompileTimeFieldHelpers<T>::sorted_field_ids.data(),
-          detail::CompileTimeFieldHelpers<T>::FieldCount);
+      int32_t local_version =
+          TypeMeta::compute_struct_version(*local_type_info->type_meta);
       auto version_res = TypeMeta::check_struct_version(
           read_version, local_version, local_type_info->type_name);
       if (!version_res.ok()) {
@@ -5236,7 +5222,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       }
     }
 
-    // remote_type_info is from the stream, with field_ids already assigned
+    // remote_type_info is from the stream, with compatible dispatch assigned.
     if (!remote_type_info || !remote_type_info->type_meta) {
       ctx.set_error(Error::type_error("Remote type metadata not available"));
       return T{};
@@ -5309,10 +5295,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
             "Type metadata not initialized for requested struct"));
         return T{};
       }
-      int32_t local_version = TypeMeta::compute_struct_version(
-          *local_type_info->type_meta,
-          detail::CompileTimeFieldHelpers<T>::sorted_field_ids.data(),
-          detail::CompileTimeFieldHelpers<T>::FieldCount);
+      int32_t local_version =
+          TypeMeta::compute_struct_version(*local_type_info->type_meta);
       auto version_res = TypeMeta::check_struct_version(
           read_version, local_version, local_type_info->type_name);
       if (!version_res.ok()) {

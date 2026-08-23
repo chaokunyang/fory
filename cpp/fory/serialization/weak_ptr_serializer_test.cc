@@ -239,7 +239,7 @@ TEST(WeakPtrSerializerTest, WeakDepthLimit) {
                     .xlang(true)
                     .compatible(false)
                     .track_ref(true)
-                    .max_dyn_depth(1)
+                    .max_dyn_depth(3)
                     .build();
   ASSERT_TRUE(writer.register_struct<WeakDepthNode>(104).ok());
   ASSERT_TRUE(writer.register_struct<WeakDepthHolder>(105).ok());
@@ -517,7 +517,12 @@ TEST(WeakPtrSerializerTest, DeepNestedGraph) {
   node_a->children.push_back(node_b);
   node_b->children.push_back(node_c);
 
-  auto fory = create_serializer(true);
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .track_ref(true)
+                  .compatible(true)
+                  .max_dyn_depth(32)
+                  .build();
   fory.register_struct<NodeWithParent>(103);
 
   auto bytes_result = fory.serialize(node_a);

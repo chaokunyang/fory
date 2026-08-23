@@ -151,7 +151,9 @@ func skipsStaticReferenceBodies() throws {
 
 @Test
 func skipsStaticValueBody() throws {
-    let config = Config(trackRef: false, compatible: true, maxDepth: 2)
+    // Both the retained root and removed Struct have scalar-only bodies, so
+    // their serializer owners compile or resolve depth bookkeeping away.
+    let config = Config(trackRef: false, compatible: true, maxDepth: 0)
     let writer = Fory(config: config)
     try writer.register(SkippedValueBody.self, id: 9982)
     try writer.register(SkippedValueOwnerV1.self, id: 9983)

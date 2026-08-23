@@ -258,7 +258,9 @@ extension ReadContext {
         _ typeMeta: TypeMeta,
         reservedRefID: UInt32?
     ) throws -> Any {
-        try enterCompoundDepth()
+        if typeMeta.readMayRecurse {
+            try enterCompoundDepth()
+        }
         let owner = SkippedStruct()
         if let reservedRefID {
             // This empty owner is final for the skip path. Publish it before
@@ -268,7 +270,9 @@ extension ReadContext {
         for field in typeMeta.fields {
             try skipFieldValue(field.fieldType)
         }
-        leaveCompoundDepth()
+        if typeMeta.readMayRecurse {
+            leaveCompoundDepth()
+        }
         return owner
     }
 

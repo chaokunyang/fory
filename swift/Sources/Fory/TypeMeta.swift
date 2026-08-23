@@ -88,6 +88,28 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
                 || TypeId(rawValue: typeID)?.readDataAlwaysAdvances == true
         }
 
+        internal var readMayRecurse: Bool {
+            guard let typeID = TypeId(rawValue: typeID) else {
+                return true
+            }
+            switch typeID {
+            case .unknown,
+                .list,
+                .set,
+                .map,
+                .structType,
+                .compatibleStruct,
+                .namedStruct,
+                .namedCompatibleStruct,
+                .union,
+                .typedUnion,
+                .namedUnion:
+                return true
+            default:
+                return false
+            }
+        }
+
         fileprivate func write(
             _ buffer: ByteBuffer,
             writeFlags: Bool,
@@ -357,6 +379,10 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             return true
         }
         return false
+    }
+
+    internal var readMayRecurse: Bool {
+        fields.contains { $0.fieldType.readMayRecurse }
     }
 
     public init(

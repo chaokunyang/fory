@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import types
+
 import pytest
 
 import pyfory
@@ -120,6 +122,8 @@ class ClearingListCapture:
 
 def test_published_list_has_valid_slots():
     fory = pyfory.Fory(xlang=False, ref=True, strict=False, compatible=False)
+    fory.register_type(type)
+    fory.register_type(ListCapture)
     outer = []
     outer.append(ListCapture(outer))
 
@@ -130,6 +134,8 @@ def test_published_list_has_valid_slots():
 
 def test_published_list_failure_cleanup():
     fory = pyfory.Fory(xlang=False, ref=True, strict=False, compatible=False)
+    fory.register_type(FailingListCapture)
+    fory.register_type(types.FunctionType)
     outer = []
     outer.append(FailingListCapture(outer))
     data = fory.serialize(outer)
@@ -141,6 +147,8 @@ def test_published_list_failure_cleanup():
 
 def test_reentrant_list_clear():
     fory = pyfory.Fory(xlang=False, ref=True, strict=False, compatible=False)
+    fory.register_type(ClearingListCapture)
+    fory.register_type(types.FunctionType)
     outer = []
     outer.append(ClearingListCapture(outer))
     data = fory.serialize(outer)

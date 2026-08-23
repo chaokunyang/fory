@@ -711,20 +711,16 @@ def test_same_schema_scalar_read_is_direct():
 def test_integer_widening_direct():
     from pyfory.converter import CompatibleScalarFieldSerializer
 
-    writer, reader, payload = compat_ser(RemoteInt32Scalar, LocalInt64Scalar, RemoteInt32Scalar(42), 751)
+    _, reader, payload = compat_ser(RemoteInt32Scalar, LocalInt64Scalar, RemoteInt32Scalar(42), 751)
     assert reader.deserialize(payload) == LocalInt64Scalar(42)
-    encoded = writer.type_resolver.get_type_info(RemoteInt32Scalar).type_def.encoded
-    remote_header = int.from_bytes(encoded[:8], "little", signed=True)
-    type_info = reader.type_resolver._meta_shared_type_info[remote_header]
+    type_info = next(iter(reader.type_resolver._meta_shared_type_info.values()))
     field_serializer = type_info.serializer._serializers[0]
     assert type(field_serializer).__name__ == "Int32Serializer"
     assert not isinstance(field_serializer, CompatibleScalarFieldSerializer)
 
-    writer, reader, payload = compat_ser(RemoteInt64Scalar, LocalInt8Scalar, RemoteInt64Scalar(42), 752)
+    _, reader, payload = compat_ser(RemoteInt64Scalar, LocalInt8Scalar, RemoteInt64Scalar(42), 752)
     assert reader.deserialize(payload) == LocalInt8Scalar(42)
-    encoded = writer.type_resolver.get_type_info(RemoteInt64Scalar).type_def.encoded
-    remote_header = int.from_bytes(encoded[:8], "little", signed=True)
-    type_info = reader.type_resolver._meta_shared_type_info[remote_header]
+    type_info = next(iter(reader.type_resolver._meta_shared_type_info.values()))
     assert isinstance(type_info.serializer._serializers[0], CompatibleScalarFieldSerializer)
 
 

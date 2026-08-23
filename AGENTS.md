@@ -146,6 +146,12 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - When a user corrects a non-obvious invariant, encode it in the nearest source comment before continuing, and also update `AGENTS.md`, `.agents/**`, docs, or specs when the rule is reusable beyond one file. Do not rely only on chat history, task notes, commit messages, or benchmark logs for corrections that protect security, protocol behavior, ownership, naming, or hot-path performance.
 - Reject semantic hacks. Do not bypass broken semantics by deleting cases, simplifying callers, adding coercion hooks, or using workaround fallbacks; fix the underlying bug and prove it with focused tests.
 - Protect hot paths. Avoid per-call allocations, callback objects, result tuples or records, unnecessary runtime branches, and wrapper-class substitutions in hot codec/runtime paths; prefer conditional imports and allocation-free concrete implementations where they fit the language.
+- Fory JSON declared boolean and numeric scalar targets accept either their native JSON token or
+  the same token text enclosed in quotes without a configuration gate. Keep coercion in the
+  existing reader operation used by root, generated, array, collection, and map paths; dynamic
+  `Object` quoted values remain strings. Quoted scalar common paths must parse directly from reader
+  storage with no intermediate object allocation, reuse the unquoted token parser, and keep larger
+  quoted handling in a separate cold method so native token parsing does not regress.
 - Decoder depth and the generic-type stack paired with that depth use root-operation failure cleanup. Nested decoders decrement depth and pop generic types only after successful child reads; do not add nested `try/finally` to restore them after exceptions. The root operation's `finally`/reset must clear both decoder depth and the generic-type stack.
 - Keep public APIs minimal. Public APIs must match user ownership and mental model, not internal implementation details; generated flows stay type-owned, while custom serializer registration stays explicit.
 - A Fory instance may register types or serializers only before its first root

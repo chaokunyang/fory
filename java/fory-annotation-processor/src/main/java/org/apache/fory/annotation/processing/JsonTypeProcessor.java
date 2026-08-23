@@ -908,13 +908,17 @@ final class JsonTypeProcessor {
         writer.write(
             "  public java.lang.Class<?>[] subtypes() { return new java.lang.Class<?>[] {");
         for (int i = 0; i < subtypes.size(); i++) {
-          if (i != 0) writer.write(", ");
+          if (i != 0) {
+            writer.write(", ");
+          }
           writer.write(subtypes.get(i).getQualifiedName() + ".class");
         }
         writer.write("}; }\n");
         writer.write("  public java.lang.String[] names() { return new java.lang.String[] {");
         for (int i = 0; i < subtypes.size(); i++) {
-          if (i != 0) writer.write(", ");
+          if (i != 0) {
+            writer.write(", ");
+          }
           writer.write("\"" + subtypes.get(i).getSimpleName() + "\"");
         }
         writer.write("}; }\n}\n");

@@ -273,6 +273,7 @@
                   <goal>run</goal>
                 </goals>
                 <configuration>
+                  <skip>${maven.test.skip}</skip>
                   <target>
                     <javac srcdir="${project.basedir}/src/test/java17"
                            destdir="${project.build.testOutputDirectory}"

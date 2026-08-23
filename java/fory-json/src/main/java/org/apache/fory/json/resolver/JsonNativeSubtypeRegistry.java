@@ -84,8 +84,12 @@ public final class JsonNativeSubtypeRegistry {
 
     @Override
     public boolean equals(Object other) {
-      if (this == other) return true;
-      if (!(other instanceof Key)) return false;
+      if (this == other) {
+        return true;
+      }
+      if (!(other instanceof Key)) {
+        return false;
+      }
       Key key = (Key) other;
       return baseType == key.baseType && mixinType == key.mixinType;
     }

@@ -271,6 +271,12 @@ The text of each license is the standard Apache 2.0 license.
     Files:
       scala/fory-json-scala/src/main/java/org/apache/fory/json/scala/JsonEnumeration.java
 
+* wast (https://github.com/wycst/wast)
+    Fory's probability-first printable-ASCII fast-path predicate is based in part on
+    WAST's JSON string escape predicate.
+    Files:
+      java/fory-json/src/main/java/org/apache/fory/json/writer/JsonAsciiWordPredicates.java
+
 
 ================================================================
 BSD-3-Clause licenses

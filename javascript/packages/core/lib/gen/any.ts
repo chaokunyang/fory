@@ -25,10 +25,6 @@ import { RefFlags, Serializer, TypeId } from "../type";
 import { Scope } from "./scope";
 import { ReadContext, WriteContext } from "../context";
 
-function buildNamedTypeKey(ns: string, typeName: string) {
-  return `${ns}$${typeName}`;
-}
-
 type TypeMetaReadContext = {
   readTypeMetaSerializer(expectedWireTypeId: number): Serializer;
 };

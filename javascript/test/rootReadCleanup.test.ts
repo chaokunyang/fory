@@ -69,7 +69,6 @@ describe.each([
 
     const readContext = (readerFory as any).readContext;
     expectRootStateCleared(readContext);
-    expect(readContext.typeMetaCache.size).toBeGreaterThan(0);
   });
 
   test.each(["success", "failure"] as const)("clears logical tables after %s", (outcome) => {

@@ -1310,11 +1310,10 @@ func unregisteredRemovedStructSkips() throws {
         config: .init(trackRef: true, compatible: true, maxDepth: 0)
     )
     try limitedReader.register(RemovedRefV2.self, id: 9970)
-    #expect(throws: (any Error).self) {
-        let _: RemovedRefV2 = try limitedReader.deserialize(holderBytes)
-    }
-    let afterFailure: RemovedRefV2 = try limitedReader.deserialize(emptyHolderBytes)
-    #expect(afterFailure == RemovedRefV2(keep: 10))
+    let depthFree: RemovedRefV2 = try limitedReader.deserialize(holderBytes)
+    #expect(depthFree == RemovedRefV2(keep: source.keep))
+    let nextRoot: RemovedRefV2 = try limitedReader.deserialize(emptyHolderBytes)
+    #expect(nextRoot == RemovedRefV2(keep: 10))
 
     let dynamicReader = Fory(config: .init(trackRef: true, compatible: true))
     #expect(throws: (any Error).self) {

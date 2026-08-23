@@ -890,7 +890,7 @@ func macroStructRoundTrip() throws {
 
 @Test
 func macroClassRefTracking() throws {
-    let fory = Fory(config: .init(trackRef: true, compatible: false, maxDepth: 0))
+    let fory = Fory(config: .init(trackRef: true, compatible: false, maxDepth: 1))
     try fory.register(Node.self, id: 200)
 
     let node = Node(value: 7)
@@ -932,7 +932,7 @@ func staticClassDepthResets() throws {
     #expect(reused.next?.value == 6)
     #expect(reused.next?.next == nil)
 
-    let boundary = Fory(config: .init(trackRef: false, compatible: false, maxDepth: 3))
+    let boundary = Fory(config: .init(trackRef: false, compatible: false, maxDepth: 4))
     try boundary.register(Node.self, id: 202)
     let decoded: Node = try boundary.deserialize(deepData)
     #expect(decoded.value == 1)

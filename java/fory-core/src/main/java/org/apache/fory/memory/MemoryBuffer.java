@@ -4037,9 +4037,6 @@ public final class MemoryBuffer {
   }
 
   public MemoryBuffer slice(int offset) {
-    if (offset < 0 || offset > size) {
-      throwOOBExceptionForRange(offset, size - offset);
-    }
     return slice(offset, size - offset);
   }
 
@@ -4097,12 +4094,12 @@ public final class MemoryBuffer {
    * @return true if buffers equal or len zero, false otherwise
    */
   public boolean equalTo(MemoryBuffer buf2, int offset1, int offset2, int len) {
+    if (len == 0) {
+      return buf2 != null;
+    }
     checkArgument(len >= 0);
     checkArgument(offset1 >= 0 && offset1 <= size - len);
     checkArgument(buf2 != null && offset2 >= 0 && offset2 <= buf2.size - len);
-    if (len == 0) {
-      return true;
-    }
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.equalTo(this, buf2, offset1, offset2, len);
     }

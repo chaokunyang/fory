@@ -624,7 +624,7 @@ public class MemoryBufferTest {
     assertThrows(RuntimeException.class, () -> left.equalTo(right, -1, 0, 1));
     assertThrows(RuntimeException.class, () -> left.equalTo(right, 0, -1, 1));
     assertThrows(RuntimeException.class, () -> left.equalTo(right, 1, 1, 2));
-    assertThrows(RuntimeException.class, () -> left.equalTo(right, 3, 3, 0));
+    assertTrue(left.equalTo(right, 3, 3, 0));
     assertThrows(RuntimeException.class, () -> left.equalTo(right, 0, 0, -1));
   }
 

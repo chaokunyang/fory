@@ -713,7 +713,7 @@ public abstract class JsonReader {
   }
 
   private boolean readQuotedBoolean() {
-    position++;
+    beginQuotedScalar();
     boolean value = readBooleanToken();
     finishQuotedScalar();
     return value;
@@ -812,7 +812,7 @@ public abstract class JsonReader {
   }
 
   private int readQuotedInt() {
-    position++;
+    beginQuotedScalar();
     int value = readIntToken();
     finishQuotedScalar();
     return value;
@@ -874,7 +874,7 @@ public abstract class JsonReader {
   }
 
   private long readQuotedLong() {
-    position++;
+    beginQuotedScalar();
     long value = readLongToken();
     finishQuotedScalar();
     return value;
@@ -995,7 +995,7 @@ public abstract class JsonReader {
   }
 
   private BigInteger readQuotedBigInteger() {
-    position++;
+    beginQuotedScalar();
     BigInteger value = readBigIntegerToken();
     finishQuotedScalar();
     return value;
@@ -1110,6 +1110,15 @@ public abstract class JsonReader {
       throwBigDecimalScaleExceeded();
     }
     return value;
+  }
+
+  protected final void beginQuotedScalar() {
+    position++;
+    // Concrete token parsers also dispatch an opening quote. Reject another raw quote at this
+    // boundary so malformed nested quoting cannot recursively re-enter the quoted cold path.
+    if (position < length() && charAt(position) == '"') {
+      throw error("Expected quoted scalar value");
+    }
   }
 
   protected final void finishQuotedScalar() {

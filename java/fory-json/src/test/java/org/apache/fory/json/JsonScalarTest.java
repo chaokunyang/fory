@@ -1899,6 +1899,18 @@ public class JsonScalarTest extends ForyJsonTestModels {
     assertThrows(ForyJsonException.class, () -> json.fromJson("\"32768\"", short.class));
     assertThrows(ForyJsonException.class, () -> json.fromJson("\"1x\"", double.class));
     assertThrows(ForyJsonException.class, () -> json.fromJson("\"1.5", float.class));
+
+    assertThrows(ForyJsonException.class, () -> json.fromJson("\"\"true\"\"", boolean.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("\"\"1\"\"", int.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("\"\"1\"\"", long.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("\"\"1\"\"", float.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("\"\"1\"\"", double.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("\"\"1\"\"", BigInteger.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("\"\"1\"\"", BigDecimal.class));
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson("\"\"1\"\"".getBytes(StandardCharsets.UTF_8), int.class));
+    assertThrows(ForyJsonException.class, () -> utf16Reader("\"\"1\"\"").readIntValue());
   }
 
   @Test

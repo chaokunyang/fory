@@ -513,7 +513,7 @@ public final class Latin1JsonReader extends JsonReader {
   }
 
   private boolean readQuotedBooleanValue() {
-    position++;
+    beginQuotedScalar();
     boolean value = readBooleanToken();
     finishQuotedScalar();
     return value;
@@ -550,7 +550,7 @@ public final class Latin1JsonReader extends JsonReader {
   }
 
   private int readQuotedIntValue() {
-    position++;
+    beginQuotedScalar();
     int value = readIntToken();
     finishQuotedScalar();
     return value;
@@ -694,7 +694,7 @@ public final class Latin1JsonReader extends JsonReader {
   }
 
   private long readQuotedLongValue() {
-    position++;
+    beginQuotedScalar();
     long value = readLongToken();
     finishQuotedScalar();
     return value;
@@ -870,7 +870,7 @@ public final class Latin1JsonReader extends JsonReader {
   }
 
   private BigDecimal readQuotedBigDecimalValue() {
-    position++;
+    beginQuotedScalar();
     BigDecimal value = readBigDecimalToken();
     finishQuotedScalar();
     return value;
@@ -917,7 +917,7 @@ public final class Latin1JsonReader extends JsonReader {
     if (isQuotedNonFiniteNumber()) {
       return readNonFiniteDoubleLiteral();
     }
-    position++;
+    beginQuotedScalar();
     double value = readDoubleToken();
     finishQuotedScalar();
     return value;
@@ -941,7 +941,7 @@ public final class Latin1JsonReader extends JsonReader {
     if (isQuotedNonFiniteNumber()) {
       return readNonFiniteFloatLiteral();
     }
-    position++;
+    beginQuotedScalar();
     float value = readFloatToken();
     finishQuotedScalar();
     return value;

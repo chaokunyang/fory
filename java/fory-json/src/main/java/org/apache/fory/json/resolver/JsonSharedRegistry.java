@@ -107,9 +107,11 @@ import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonSubTypes.Inclusion;
 import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.codec.ArrayCodec;
+import org.apache.fory.json.codec.ClosedSubtypeCodec;
 import org.apache.fory.json.codec.CodecUtils;
 import org.apache.fory.json.codec.CollectionCodec;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
+import org.apache.fory.json.codec.GeneratedJsonSubtypeTable;
 import org.apache.fory.json.codec.GuavaCodecs;
 import org.apache.fory.json.codec.JsonSubTypesInfo;
 import org.apache.fory.json.codec.JsonValueCodec;
@@ -537,6 +539,19 @@ public final class JsonSharedRegistry {
             + "; enable the Fory annotation processor and preserve its generated R8 rules");
   }
 
+  private static ForyJsonException missingGeneratedSubtypeTable(Class<?> type, Class<?> mixinType) {
+    String name =
+        mixinType == null
+            ? generatedSubtypeTableBinaryName(type)
+            : generatedMixinSubtypeTableBinaryName(mixinType, type);
+    return new ForyJsonException(
+        "Missing generated JSON subtype table "
+            + name
+            + " for "
+            + type.getName()
+            + "; enable the Fory annotation processor and preserve its generated R8 rules");
+  }
+
   private GeneratedJsonCodec<?> loadGeneratedCodec(Class<?> type, Class<?> mixinType) {
     String generatedName =
         mixinType == null
@@ -875,6 +890,10 @@ public final class JsonSharedRegistry {
     return GeneratedClassNames.withSuffix(type.getName(), "_ForyJsonCodec");
   }
 
+  private static String generatedSubtypeTableBinaryName(Class<?> type) {
+    return GeneratedClassNames.withSuffix(type.getName(), "_ForyJsonSubTypes");
+  }
+
   private static String generatedMixinCodecBinaryName(Class<?> mixinType, Class<?> targetType) {
     String sourceName = mixinType.getName();
     int packageEnd = sourceName.lastIndexOf('.');
@@ -885,6 +904,13 @@ public final class JsonSharedRegistry {
         + "_ForyJsonMixin_"
         + GeneratedClassNames.escapeBinarySimpleName(targetType.getName())
         + "_ForyJsonCodec";
+  }
+
+  private static String generatedMixinSubtypeTableBinaryName(
+      Class<?> mixinType, Class<?> targetType) {
+    String codecName = generatedMixinCodecBinaryName(mixinType, targetType);
+    return codecName.substring(0, codecName.length() - "_ForyJsonCodec".length())
+        + "_ForyJsonSubTypes";
   }
 
   public JsonValueCodec<?> createCodec(
@@ -1000,6 +1026,10 @@ public final class JsonSharedRegistry {
     ResolvedCodec resolved = createModuleCodec(typeRef, localResolver, runtimeType);
     if (resolved != null) {
       return resolved;
+    }
+    if (inferredSubTypes(rawType)) {
+      return new ResolvedCodec(
+          new ClosedSubtypeCodec(rawType, subTypesInfo(rawType), typeRef), null);
     }
     if (Number.class.isAssignableFrom(rawType) || CharSequence.class.isAssignableFrom(rawType)) {
       throw new ForyJsonException("Unsupported JSON type " + rawType);
@@ -1551,9 +1581,29 @@ public final class JsonSharedRegistry {
     return cause == null ? new ForyJsonException(message) : new ForyJsonException(message, cause);
   }
 
+  boolean hasSubTypes(Class<?> baseType) {
+    return effectiveSubTypes(baseType) != null;
+  }
+
+  boolean inferredSubTypes(Class<?> baseType) {
+    JsonSubTypes annotation = effectiveSubTypes(baseType);
+    return annotation != null && annotation.value().length == 0;
+  }
+
+  JsonSubTypesInfo explicitSubTypesInfo(Class<?> baseType) {
+    JsonSubTypes annotation = effectiveSubTypes(baseType);
+    return annotation == null || annotation.value().length == 0 ? null : subTypesInfo(baseType);
+  }
+
+  JsonSubTypesInfo cachedSubTypesInfo(Class<?> baseType) {
+    synchronized (subTypesCache) {
+      return subTypesCache.get(baseType);
+    }
+  }
+
   JsonSubTypesInfo subTypesInfo(Class<?> baseType) {
     try {
-      JsonSubTypes annotation = annotation(baseType, baseType, JsonSubTypes.class);
+      JsonSubTypes annotation = effectiveSubTypes(baseType);
       if (annotation == null) {
         return null;
       }
@@ -1562,7 +1612,14 @@ public final class JsonSharedRegistry {
         if (cached != null) {
           return cached;
         }
-        JsonSubTypesInfo resolved = buildSubTypesInfo(baseType, annotation);
+        JsonSubTypesInfo resolved;
+        if (annotation.value().length == 0) {
+          InferredSubtypes inferred = javaInferredSubtypes(baseType);
+          resolved =
+              buildInferredSubTypesInfo(baseType, annotation, inferred.classes, inferred.names);
+        } else {
+          resolved = buildExplicitSubTypesInfo(baseType, annotation);
+        }
         subTypesCache.put(baseType, resolved);
         return resolved;
       }
@@ -1571,7 +1628,34 @@ public final class JsonSharedRegistry {
     }
   }
 
-  private JsonSubTypesInfo buildSubTypesInfo(Class<?> baseType, JsonSubTypes annotation) {
+  JsonSubTypesInfo inferredSubTypesInfo(
+      Class<?> baseType, Class<?>[] candidateClasses, String[] candidateNames) {
+    try {
+      JsonSubTypes annotation = effectiveSubTypes(baseType);
+      if (annotation == null || annotation.value().length != 0) {
+        throw new ForyJsonException(
+            "Inferred subtype metadata requires empty @JsonSubTypes on " + baseType.getName());
+      }
+      synchronized (subTypesCache) {
+        JsonSubTypesInfo cached = subTypesCache.get(baseType);
+        if (cached != null) {
+          return cached;
+        }
+        JsonSubTypesInfo resolved =
+            buildInferredSubTypesInfo(baseType, annotation, candidateClasses, candidateNames);
+        subTypesCache.put(baseType, resolved);
+        return resolved;
+      }
+    } catch (ForyJsonException e) {
+      throw mixinSchemaFailure(baseType, e);
+    }
+  }
+
+  private JsonSubTypes effectiveSubTypes(Class<?> baseType) {
+    return annotation(baseType, baseType, JsonSubTypes.class);
+  }
+
+  private static void validateSubTypesDeclaration(Class<?> baseType, JsonSubTypes annotation) {
     if (!baseType.isInterface() && !Modifier.isAbstract(baseType.getModifiers())) {
       throw new ForyJsonException(
           "@JsonSubTypes requires an interface or abstract type " + baseType);
@@ -1586,10 +1670,13 @@ public final class JsonSharedRegistry {
     } else if (!property.isEmpty()) {
       throw new ForyJsonException(inclusion + " @JsonSubTypes must not declare property");
     }
+  }
+
+  private JsonSubTypesInfo buildExplicitSubTypesInfo(Class<?> baseType, JsonSubTypes annotation) {
+    validateSubTypesDeclaration(baseType, annotation);
+    Inclusion inclusion = annotation.inclusion();
+    String property = annotation.property();
     JsonSubTypes.Type[] entries = annotation.value();
-    if (entries.length == 0) {
-      throw new ForyJsonException("@JsonSubTypes must declare at least one subtype");
-    }
     String[] names = new String[entries.length];
     String[] classNames = new String[entries.length];
     boolean hasStringEntry = false;
@@ -1657,6 +1744,208 @@ public final class JsonSharedRegistry {
       classes[i] = subtype;
     }
     return new JsonSubTypesInfo(inclusion, property, classes, names);
+  }
+
+  private JsonSubTypesInfo buildInferredSubTypesInfo(
+      Class<?> baseType,
+      JsonSubTypes annotation,
+      Class<?>[] candidateClasses,
+      String[] candidateNames) {
+    validateSubTypesDeclaration(baseType, annotation);
+    if (candidateClasses == null || candidateNames == null) {
+      throw new ForyJsonException("Missing inferred subtype metadata for " + baseType.getName());
+    }
+    if (candidateClasses.length == 0 || candidateClasses.length != candidateNames.length) {
+      throw new ForyJsonException("Invalid inferred subtype metadata for " + baseType.getName());
+    }
+    Class<?>[] classes = candidateClasses.clone();
+    String[] names = candidateNames.clone();
+    for (Class<?> subtype : classes) {
+      if (subtype == null) {
+        throw new ForyJsonException(
+            "Inferred subtype metadata contains null for " + baseType.getName());
+      }
+    }
+    sortSubtypes(classes, names);
+    Set<Class<?>> classIdentities =
+        Collections.newSetFromMap(new IdentityHashMap<Class<?>, Boolean>());
+    Set<String> binaryNames = new HashSet<>();
+    for (Class<?> subtype : classes) {
+      validateSubtype(baseType, subtype);
+      if (!classIdentities.add(subtype) || !binaryNames.add(subtype.getName())) {
+        throw new ForyJsonException("Duplicate closed JSON subtype " + subtype.getName());
+      }
+      // The selected static base authorizes its complete sealed closure. The fixed disallow list
+      // can invalidate that schema; the configurable checker below may only narrow exact entries.
+      DisallowedList.checkNotInDisallowedList(subtype.getName());
+    }
+    // Validate the complete static closure before configuration-level narrowing. A checker cannot
+    // turn an ambiguous schema into a valid table by hiding one duplicate or colliding name.
+    validateSubtypeNames(names);
+    JsonNativeSubtypeRegistry.publish(baseType, mixinType(baseType), classes, names);
+    JsonTypeChecker checker = typeChecker;
+    if (checker != null) {
+      int accepted = 0;
+      for (int i = 0; i < classes.length; i++) {
+        boolean allowed;
+        try {
+          allowed = checkType(classes[i].getName(), checker);
+        } catch (InsecureException ignored) {
+          allowed = false;
+        }
+        if (allowed) {
+          classes[accepted] = classes[i];
+          names[accepted] = names[i];
+          accepted++;
+        }
+      }
+      if (accepted == 0) {
+        throw new ForyJsonException(
+            "JsonTypeChecker rejected every inferred subtype of " + baseType.getName());
+      }
+      classes = java.util.Arrays.copyOf(classes, accepted);
+      names = java.util.Arrays.copyOf(names, accepted);
+    }
+    return new JsonSubTypesInfo(annotation.inclusion(), annotation.property(), classes, names);
+  }
+
+  private static void validateSubtype(Class<?> baseType, Class<?> subtype) {
+    if (subtype == null) {
+      throw new ForyJsonException(
+          "Inferred subtype metadata contains null for " + baseType.getName());
+    }
+    int modifiers = subtype.getModifiers();
+    if (subtype == Void.class
+        || subtype.isPrimitive()
+        || subtype.isArray()
+        || subtype.isInterface()
+        || Modifier.isAbstract(modifiers)
+        || !baseType.isAssignableFrom(subtype)) {
+      throw new ForyJsonException(
+          "Invalid closed JSON subtype " + subtype.getName() + " for " + baseType.getName());
+    }
+  }
+
+  private static void validateSubtypeNames(String[] names) {
+    Set<String> logicalNames = new HashSet<>();
+    Set<Long> logicalHashes = new HashSet<>();
+    for (String name : names) {
+      validateJsonName(name, "subtype");
+      if (!logicalNames.add(name)) {
+        throw new ForyJsonException("Invalid or duplicate JSON subtype name " + name);
+      }
+      long hash = org.apache.fory.json.meta.JsonFieldNameHash.hash(name);
+      if (!logicalHashes.add(Long.valueOf(hash))) {
+        throw new ForyJsonException("JSON subtype name hash collision for " + name);
+      }
+    }
+  }
+
+  private static void sortSubtypes(Class<?>[] classes, String[] names) {
+    for (int i = 1; i < classes.length; i++) {
+      Class<?> subtype = classes[i];
+      String name = names[i];
+      int j = i;
+      while (j > 0 && classes[j - 1].getName().compareTo(subtype.getName()) > 0) {
+        classes[j] = classes[j - 1];
+        names[j] = names[j - 1];
+        j--;
+      }
+      classes[j] = subtype;
+      names[j] = name;
+    }
+  }
+
+  private InferredSubtypes javaInferredSubtypes(Class<?> baseType) {
+    JsonNativeSubtypeRegistry.Table nativeTable =
+        JsonNativeSubtypeRegistry.table(baseType, mixinType(baseType));
+    if (nativeTable != null) {
+      return new InferredSubtypes(nativeTable.classes, nativeTable.names);
+    }
+    // Native Image runtime must consume the closure embedded during hosted analysis. Its Java
+    // sealed reflection metadata may be incomplete, so rediscovery here could silently change the
+    // authorized table instead of reporting a missing build-time schema root.
+    if (GraalvmSupport.isGraalRuntime()) {
+      throw new ForyJsonException(
+          "Missing embedded inferred subtype table for " + baseType.getName());
+    }
+    // A generated table owns source-level discriminator names after class-file obfuscation. Prefer
+    // it on every JVM; sealed reflection remains the unprocessed Java 17 fallback.
+    GeneratedJsonSubtypeTable table = loadGeneratedSubtypeTable(baseType);
+    if (table != null) {
+      return generatedSubtypes(baseType, table);
+    }
+    if (AndroidSupport.IS_ANDROID) {
+      throw missingGeneratedSubtypeTable(baseType, mixinType(baseType));
+    }
+    Class<?>[] classes = SealedClassSupport.subtypes(baseType);
+    if (classes != null) {
+      String[] names = new String[classes.length];
+      for (int i = 0; i < classes.length; i++) {
+        names[i] = classes[i].getSimpleName();
+      }
+      return new InferredSubtypes(classes, names);
+    }
+    throw new ForyJsonException(
+        "Empty @JsonSubTypes requires Java 17 sealed metadata or a generated subtype table for "
+            + baseType.getName());
+  }
+
+  private static InferredSubtypes generatedSubtypes(
+      Class<?> baseType, GeneratedJsonSubtypeTable table) {
+    try {
+      if (table.type() != baseType) {
+        throw new ForyJsonException(
+            "Generated JSON subtype table has the wrong base for " + baseType.getName());
+      }
+      return new InferredSubtypes(table.subtypes(), table.names());
+    } catch (RuntimeException | LinkageError e) {
+      if (e instanceof ForyJsonException) {
+        throw (ForyJsonException) e;
+      }
+      throw new ForyJsonException(
+          "Cannot read generated JSON subtype metadata for " + baseType.getName(), e);
+    }
+  }
+
+  private GeneratedJsonSubtypeTable loadGeneratedSubtypeTable(Class<?> baseType) {
+    Class<?> mixinType = mixinType(baseType);
+    String generatedName =
+        mixinType == null
+            ? generatedSubtypeTableBinaryName(baseType)
+            : generatedMixinSubtypeTableBinaryName(mixinType, baseType);
+    Class<?> generatedClass;
+    try {
+      generatedClass =
+          Class.forName(
+              generatedName,
+              false,
+              mixinType == null ? baseType.getClassLoader() : mixinType.getClassLoader());
+    } catch (ClassNotFoundException e) {
+      return null;
+    } catch (LinkageError e) {
+      throw new ForyJsonException("Cannot load generated JSON subtype table " + generatedName, e);
+    }
+    if (!GeneratedJsonSubtypeTable.class.isAssignableFrom(generatedClass)
+        || !Modifier.isPublic(generatedClass.getModifiers())) {
+      throw new ForyJsonException("Invalid generated JSON subtype table " + generatedName);
+    }
+    try {
+      return (GeneratedJsonSubtypeTable) generatedClass.getConstructor().newInstance();
+    } catch (ReflectiveOperationException e) {
+      throw new ForyJsonException(
+          "Cannot construct generated JSON subtype table " + generatedName, unwrap(e));
+    }
+  }
+
+  private static final class InferredSubtypes {
+    private final Class<?>[] classes;
+    private final String[] names;
+
+    private InferredSubtypes(Class<?>[] classes, String[] names) {
+      this.classes = classes;
+      this.names = names;
+    }
   }
 
   private void checkSecureName(String className) {

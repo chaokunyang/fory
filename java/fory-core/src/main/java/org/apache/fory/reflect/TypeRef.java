@@ -44,7 +44,11 @@ import org.apache.fory.type.TypeUtils;
 public class TypeRef<T> {
   private final Type type;
   private final TypeExtMeta typeExtMeta;
+  // This slot holds either immutable explicit metadata arguments or a lazily resolved cache.
+  // Keep the immutable discriminator separate so resolving arguments can never change identity.
+  // A second reference field was measured to enlarge every TypeRef and regress JDK 25 reflection.
   private transient List<TypeRef<?>> typeArguments;
+  private final boolean explicitTypeArguments;
   private final TypeRef<?> componentType;
   private final boolean hasTypeExtMeta;
   private transient Class<? super T> rawType;
@@ -66,6 +70,7 @@ public class TypeRef<T> {
     this.type = capture();
     this.typeExtMeta = null;
     this.typeArguments = null;
+    this.explicitTypeArguments = false;
     this.componentType = null;
     this.hasTypeExtMeta = false;
   }
@@ -74,6 +79,7 @@ public class TypeRef<T> {
     this.type = capture();
     this.typeExtMeta = typeExtMeta;
     this.typeArguments = null;
+    this.explicitTypeArguments = false;
     this.componentType = null;
     this.hasTypeExtMeta = typeExtMeta != null;
   }
@@ -116,6 +122,7 @@ public class TypeRef<T> {
       Set<Class<?>> activeContainerTypes) {
     this.type = type;
     this.typeExtMeta = typeExtMeta;
+    this.explicitTypeArguments = typeArguments != null;
     this.typeArguments =
         typeArguments == null
             ? null
@@ -489,7 +496,7 @@ public class TypeRef<T> {
   }
 
   public boolean hasExplicitTypeArguments() {
-    return typeArguments != null || type instanceof ParameterizedType;
+    return explicitTypeArguments || type instanceof ParameterizedType;
   }
 
   public List<TypeRef<?>> getTypeArguments() {
@@ -531,13 +538,14 @@ public class TypeRef<T> {
       builder.append(':').append(typeExtMeta.nullableWrapper() ? '1' : '0');
       builder.append(':').append(typeExtMeta.covariant() ? '1' : '0');
     }
-    if (typeArguments != null && !typeArguments.isEmpty()) {
+    List<TypeRef<?>> identityArguments = identityTypeArguments();
+    if (identityArguments != null && !identityArguments.isEmpty()) {
       builder.append('<');
-      for (int i = 0; i < typeArguments.size(); i++) {
+      for (int i = 0; i < identityArguments.size(); i++) {
         if (i > 0) {
           builder.append(',');
         }
-        typeArguments.get(i).appendTypeKey(builder);
+        identityArguments.get(i).appendTypeKey(builder);
       }
       builder.append('>');
     }
@@ -1399,7 +1407,7 @@ public class TypeRef<T> {
       }
       return type.equals(that.type)
           && Objects.equals(typeExtMeta, that.typeExtMeta)
-          && Objects.equals(typeArguments, that.typeArguments)
+          && Objects.equals(identityTypeArguments(), that.identityTypeArguments())
           && Objects.equals(componentType, that.componentType);
     }
     return false;
@@ -1410,7 +1418,11 @@ public class TypeRef<T> {
     if (!hasTypeExtMeta) {
       return type.hashCode();
     }
-    return Objects.hash(type, typeExtMeta, typeArguments, componentType);
+    return Objects.hash(type, typeExtMeta, identityTypeArguments(), componentType);
+  }
+
+  private List<TypeRef<?>> identityTypeArguments() {
+    return explicitTypeArguments ? typeArguments : null;
   }
 
   @Override

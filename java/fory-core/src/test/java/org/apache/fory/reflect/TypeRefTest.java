@@ -28,6 +28,7 @@ import java.lang.reflect.WildcardType;
 import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -249,6 +250,25 @@ public class TypeRefTest extends ForyTestBase {
         TypeUtils.collectionOf(NestedElementList.class, new TypeRef<List<String>>() {}, null);
     Assert.assertEquals(
         semanticNestedList.getTypeArguments(), Arrays.asList(new TypeRef<List<String>>() {}));
+  }
+
+  @Test
+  public void resolvedArgumentsKeepIdentityStable() {
+    TypeExtMeta meta = TypeExtMeta.of(Types.LIST, false, true);
+    TypeRef<List<String>> type = new TypeRef<List<String>>(meta) {};
+    TypeRef<List<String>> equalType = new TypeRef<List<String>>(meta) {};
+    String typeKey = type.getTypeKey();
+    int hashCode = type.hashCode();
+    Map<TypeRef<?>, String> types = new HashMap<>();
+    types.put(type, "value");
+
+    Assert.assertEquals(
+        type.getTypeArguments(), Collections.singletonList(TypeRef.of(String.class)));
+    Assert.assertEquals(type.getTypeKey(), typeKey);
+    Assert.assertEquals(type.hashCode(), hashCode);
+    Assert.assertEquals(type, equalType);
+    Assert.assertEquals(types.get(type), "value");
+    Assert.assertEquals(types.get(equalType), "value");
   }
 
   @Test

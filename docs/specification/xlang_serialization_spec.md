@@ -874,7 +874,7 @@ Field names:
 - Tag IDs are signed-32-bit protocol values in the range
   `0 <= tag_id < 2^29` (`0` through `536870911`). The upper bound leaves the
   complete protocol domain representable by every implementation's signed
-  32-bit field-ID type; the extended form still writes `tag_id - 7` with the
+  32-bit field-ID type; the extended form still writes `tag_id - 15` with the
   existing `varuint32` encoding.
 - Otherwise, write the encoded field name bytes as a meta string.
 - For xlang, field names are converted to `snake_case` before encoding for

@@ -461,14 +461,14 @@ public class TypeRefTest extends ForyTestBase {
     TypeRef<?> namesType = TypeRef.ofTypeUse(namesField.getAnnotatedType());
     TypeExtMeta namesElementMeta = namesType.getTypeArguments().get(0).getTypeExtMeta();
     Assert.assertEquals(namesElementMeta.typeId(), Types.UNKNOWN);
-    Assert.assertTrue(namesElementMeta.nullable());
+    Assert.assertFalse(namesElementMeta.nullable());
     Assert.assertFalse(namesElementMeta.trackingRef());
 
     Field codesField = TypeUseMetadataStruct.class.getDeclaredField("codes");
     TypeRef<?> codesType = TypeRef.ofTypeUse(codesField.getAnnotatedType());
     TypeExtMeta codesElementMeta = codesType.getTypeArguments().get(0).getTypeExtMeta();
     Assert.assertEquals(codesElementMeta.typeId(), Types.INT32);
-    Assert.assertTrue(codesElementMeta.nullable());
+    Assert.assertFalse(codesElementMeta.nullable());
     Assert.assertFalse(codesElementMeta.trackingRef());
   }
 

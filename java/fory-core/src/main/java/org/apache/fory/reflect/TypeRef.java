@@ -44,7 +44,7 @@ import org.apache.fory.type.TypeUtils;
 public class TypeRef<T> {
   private final Type type;
   private final TypeExtMeta typeExtMeta;
-  private final List<TypeRef<?>> typeArguments;
+  private transient List<TypeRef<?>> typeArguments;
   private final TypeRef<?> componentType;
   private final boolean hasTypeExtMeta;
   private transient Class<? super T> rawType;
@@ -480,29 +480,6 @@ public class TypeRef<T> {
     return rawType;
   }
 
-  private static Stream<Class<?>> getRawTypes(Type... types) {
-    return Arrays.stream(types)
-        .flatMap(
-            type -> {
-              if (type instanceof TypeVariable) {
-                return getRawTypes(((TypeVariable<?>) type).getBounds());
-              } else if (type instanceof WildcardType) {
-                return getRawTypes(((WildcardType) type).getUpperBounds());
-              } else if (type instanceof ParameterizedType) {
-                return Stream.of((Class<?>) ((ParameterizedType) type).getRawType());
-              } else if (type instanceof Class) {
-                return Stream.of((Class<?>) type);
-              } else if (type instanceof GenericArrayType) {
-                Class<?> rawType =
-                    getArrayClass(
-                        of(((GenericArrayType) type).getGenericComponentType()).getRawType());
-                return Stream.of(rawType);
-              } else {
-                throw new AssertionError("Unknown type: " + type);
-              }
-            });
-  }
-
   public TypeExtMeta getTypeExtMeta() {
     return typeExtMeta;
   }
@@ -520,12 +497,21 @@ public class TypeRef<T> {
       return typeArguments;
     }
     if (type instanceof ParameterizedType) {
+      List<TypeRef<?>> resolved = typeArguments;
+      if (resolved != null) {
+        return resolved;
+      }
       Type[] actualTypeArguments = ((ParameterizedType) type).getActualTypeArguments();
       List<TypeRef<?>> args = new ArrayList<>(actualTypeArguments.length);
       for (Type actualTypeArgument : actualTypeArguments) {
         args.add(TypeRef.of(actualTypeArgument));
       }
-      return immutableTypeArguments(normalizeContainerTypeArguments(type, args));
+      // Schema construction asks the same TypeRef for its arguments from several owner-local
+      // decisions. Cache the deterministic immutable tree here instead of rebuilding parallel
+      // TypeRef trees in each metadata consumer.
+      resolved = immutableTypeArguments(normalizeContainerTypeArguments(type, args));
+      typeArguments = resolved;
+      return resolved;
     }
     return new ArrayList<>();
   }
@@ -1303,7 +1289,38 @@ public class TypeRef<T> {
   }
 
   private boolean anyRawTypeIsSubclassOf(Class<?> supertype) {
-    return getRawTypes(type).anyMatch(supertype::isAssignableFrom);
+    return rawTypeIsSubclassOf(type, supertype);
+  }
+
+  private static boolean rawTypeIsSubclassOf(Type type, Class<?> supertype) {
+    if (type instanceof TypeVariable) {
+      for (Type bound : ((TypeVariable<?>) type).getBounds()) {
+        if (rawTypeIsSubclassOf(bound, supertype)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    if (type instanceof WildcardType) {
+      for (Type bound : ((WildcardType) type).getUpperBounds()) {
+        if (rawTypeIsSubclassOf(bound, supertype)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    if (type instanceof ParameterizedType) {
+      return supertype.isAssignableFrom((Class<?>) ((ParameterizedType) type).getRawType());
+    }
+    if (type instanceof Class) {
+      return supertype.isAssignableFrom((Class<?>) type);
+    }
+    if (type instanceof GenericArrayType) {
+      Class<?> componentType =
+          TypeUtils.getRawType(((GenericArrayType) type).getGenericComponentType());
+      return supertype.isAssignableFrom(getArrayClass(componentType));
+    }
+    throw new AssertionError("Unknown type: " + type);
   }
 
   /** Returns true if this type is a supertype of the given {@code type}. */

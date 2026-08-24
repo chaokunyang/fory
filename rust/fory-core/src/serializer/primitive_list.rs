@@ -206,6 +206,7 @@ where
     write_data_body::<T, C>(values, context)
 }
 
+#[inline]
 fn write_data_body<T, C>(values: &[T], context: &mut WriteContext) -> Result<(), Error>
 where
     T: 'static,

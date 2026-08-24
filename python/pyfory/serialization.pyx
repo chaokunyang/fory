@@ -270,6 +270,9 @@ cdef class TypeResolver:
     cdef flat_hash_map[uint32_t, PyObject *] _c_user_type_id_to_type_info
     cdef flat_hash_map[uint64_t, PyObject *] _c_types_info
     cdef flat_hash_map[pair[int64_t, int64_t], PyObject *] _c_meta_hash_to_type_info
+    # The Python resolver owns registry mutability. This monotonic native cache only
+    # avoids re-entering Python after that owner has completed its first freeze attempt.
+    cdef bint registry_freeze_complete
 
     def __init__(self, Config config, *, shared_registry):
         """
@@ -301,6 +304,7 @@ cdef class TypeResolver:
         self._ns_type_to_type_info = resolver._ns_type_to_type_info
         self._local_type_info_by_hash = resolver._local_type_info_by_hash
         self._meta_shared_type_info = resolver._meta_shared_type_info
+        self.registry_freeze_complete = False
         for typeinfo in resolver._types_info.values():
             self._populate_type_info(typeinfo)
 
@@ -313,9 +317,11 @@ cdef class TypeResolver:
 
     cdef inline void _freeze_registry(self):
         cdef object typeinfo
-        if self.resolver._freeze_registry():
-            for typeinfo in self.resolver._types_info.values():
-                self._populate_type_info(typeinfo)
+        if not self.registry_freeze_complete:
+            if self.resolver._freeze_registry():
+                for typeinfo in self.resolver._types_info.values():
+                    self._populate_type_info(typeinfo)
+            self.registry_freeze_complete = True
 
     def register_type(
         self,
@@ -1265,7 +1271,7 @@ cdef class Fory:
             self.force_flush()
         finally:
             self.buffer.bind_output_stream(None)
-            self.reset_write()
+            self.write_context.reset()
 
     def loads(self, buffer, buffers=None, unsupported_objects=None):
         return self.deserialize(
@@ -1290,7 +1296,7 @@ cdef class Fory:
                 return write_buffer
             return write_buffer.to_bytes(0, write_buffer.get_writer_index())
         finally:
-            self.reset_write()
+            self.write_context.reset()
 
     cdef Buffer _serialize(self, obj, Buffer buffer=None, buffer_callback=None, unsupported_callback=None):
         cdef WriteContext write_context = self.write_context

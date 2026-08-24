@@ -19,7 +19,7 @@ from cpython.unicode cimport (
     PyUnicode_FromKindAndData,
     PyUnicode_DecodeUTF8,
 )
-from cpython.bytes cimport PyBytes_FromStringAndSize, PyBytes_AS_STRING
+from cpython.bytes cimport PyBytes_FromStringAndSize, PyBytes_AS_STRING, PyBytes_GET_SIZE
 from libcpp.memory cimport shared_ptr, unique_ptr
 from libcpp.utility cimport move
 from cython.operator cimport dereference as deref
@@ -131,11 +131,17 @@ cdef class Buffer:
         Py_ssize_t shape[1]
         Py_ssize_t stride[1]
     def __init__(self, data not None, int32_t offset=0, length=None):
-        cdef object view = memoryview(data)
-        cdef Py_ssize_t buffer_len = view.nbytes
+        cdef object view = None
+        cdef bint bytes_input = type(data) is bytes
+        cdef Py_ssize_t buffer_len
         cdef Py_ssize_t py_length
         cdef int32_t length_
         cdef Py_buffer py_buffer
+        if bytes_input:
+            buffer_len = PyBytes_GET_SIZE(data)
+        else:
+            view = memoryview(data)
+            buffer_len = view.nbytes
         if buffer_len > max_buffer_size:
             raise ValueError(f"Buffer size {buffer_len} exceeds the maximum supported size")
         if length is None:
@@ -147,17 +153,24 @@ cdef class Buffer:
         length_ = <int32_t>py_length
         cdef uint8_t* address
         if length_ > 0:
-            if PyObject_GetBuffer(view, &py_buffer, PyBUF_SIMPLE) != 0:
-                raise BufferError(f"Cannot access buffer for {type(data)!r}")
-            try:
-                address = <uint8_t*>py_buffer.buf + offset
-            finally:
-                PyBuffer_Release(&py_buffer)
+            if bytes_input:
+                address = <uint8_t*>PyBytes_AS_STRING(data) + offset
+            else:
+                if PyObject_GetBuffer(view, &py_buffer, PyBUF_SIMPLE) != 0:
+                    raise BufferError(f"Cannot access buffer for {type(data)!r}")
+                try:
+                    address = <uint8_t*>py_buffer.buf + offset
+                finally:
+                    PyBuffer_Release(&py_buffer)
         else:
             address = NULL
-        # Retaining the memoryview keeps resizable exporters locked while the native view exists.
-        self.data = view
-        self.readonly = view.readonly
+        if bytes_input:
+            self.data = data
+            self.readonly = True
+        else:
+            # Retaining the memoryview keeps resizable exporters locked while the native view exists.
+            self.data = view
+            self.readonly = view.readonly
         self.c_buffer_owner.reset(new CBuffer(address, length_, False))
         self.c_buffer = self.c_buffer_owner.get()
         self.c_buffer.reader_index(0)
@@ -514,23 +527,21 @@ cdef class Buffer:
         self._copy_buffer(offset, view, src_offset, size)
 
     cpdef inline write_bytes_and_size(self, bytes value):
-        cdef const unsigned char[:] data = value
-        cdef int32_t length = self._checked_length(data.nbytes, "Binary")
+        cdef int32_t length = self._checked_length(PyBytes_GET_SIZE(value), "Binary")
         self.write_var_uint32(length)
         if length > 0:
             self._prepare_write(length)
-            self.c_buffer.write_bytes(&data[0], length)
+            self.c_buffer.write_bytes(PyBytes_AS_STRING(value), length)
 
     cpdef inline bytes read_bytes_and_size(self):
         cdef int32_t length = self.read_var_uint32()
         return self.read_bytes(length)
 
     cpdef inline write_bytes(self, bytes value):
-        cdef const unsigned char[:] data = value
-        cdef int32_t length = self._checked_length(data.nbytes, "Binary")
+        cdef int32_t length = self._checked_length(PyBytes_GET_SIZE(value), "Binary")
         if length > 0:
             self._prepare_write(length)
-            self.c_buffer.write_bytes(&data[0], length)
+            self.c_buffer.write_bytes(PyBytes_AS_STRING(value), length)
 
     cpdef inline bytes read_bytes(self, int32_t length):
         if length == 0:

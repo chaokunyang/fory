@@ -155,7 +155,7 @@ jobs:
             echo "rust=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if grep -Eq '^(swift/)' <<< "$changed_files"; then
+          if grep -Eq '^(Package\.swift$|swift/)' <<< "$changed_files"; then
             echo "swift=true" >> "$GITHUB_OUTPUT"
           else
             echo "swift=false" >> "$GITHUB_OUTPUT"
@@ -480,6 +480,50 @@ jobs:
           fi
           cd swift
           swift-format lint --configuration .swift-format --recursive --strict Sources Tests Package.swift
+
+  swift_linux:
+    name: Swift Linux CI
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run Swift unit tests
+        env:
+          ENABLE_FORY_DEBUG_OUTPUT: "1"
+        run: |
+          swift --version
+          cd swift
+          swift test
+
+  swift_apple_platforms:
+    name: Swift ${{ matrix.platform }} Build
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: tvOS
+            sdk: appletvos
+            triple: arm64-apple-tvos16.0
+          - platform: watchOS
+            sdk: watchos
+            triple: arm64_32-apple-watchos9.0
+          - platform: visionOS
+            sdk: xros
+            triple: arm64-apple-xros1.0
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build Swift package
+        run: |
+          sdk_path="$(xcrun --sdk "${{ matrix.sdk }}" --show-sdk-path)"
+          swift build \
+            --package-path . \
+            --target Fory \
+            --triple "${{ matrix.triple }}" \
+            --sdk "$sdk_path"
 
   swift_xlang:
     name: Swift Xlang Test

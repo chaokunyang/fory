@@ -453,7 +453,7 @@ private func isDebugEnabled() -> Bool {
 
 private func debugLog(_ message: String) {
     if isDebugEnabled() {
-        fputs("[swift-xlang-peer] \(message)\n", stderr)
+        FileHandle.standardError.write(Data("[swift-xlang-peer] \(message)\n".utf8))
     }
 }
 
@@ -1280,6 +1280,6 @@ private func run() throws {
 do {
     try run()
 } catch {
-    fputs("Swift xlang peer failed: \(error)\n", stderr)
+    FileHandle.standardError.write(Data("Swift xlang peer failed: \(error)\n".utf8))
     exit(1)
 }

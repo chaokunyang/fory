@@ -309,6 +309,16 @@ def _publish_kotlin(mode="release"):
 
 
 def _publish_scala(mode="release"):
+    # GitHub Actions exposes Maven's NEXUS_* variables, while SBT consumes
+    # SONATYPE_* directly. Forward only present values so local SBT credentials
+    # continue to work without requiring publication environment variables.
+    for nexus_name, sonatype_name in (
+        ("NEXUS_USERNAME", "SONATYPE_USERNAME"),
+        ("NEXUS_PASSWORD", "SONATYPE_PASSWORD"),
+    ):
+        value = os.environ.get(nexus_name)
+        if value:
+            os.environ.setdefault(sonatype_name, value)
     commands = SCALA_RELEASE_COMMANDS if mode == "release" else SCALA_SNAPSHOT_COMMANDS
     for command in commands:
         _run_release_cmd(command, "scala")

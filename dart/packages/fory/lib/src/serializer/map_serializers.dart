@@ -165,12 +165,6 @@ final class MapSerializer extends Serializer<Map> {
         context.writeTypeMetaValue(chunkValueTypeInfo);
       }
       var chunkLength = 1;
-      final tracksDepth =
-          tracksNestedPayloadDepth(chunkKeyTypeInfo) ||
-          tracksNestedPayloadDepth(chunkValueTypeInfo);
-      if (tracksDepth) {
-        context.increaseDepth();
-      }
       _writePair(
         context,
         key as Object,
@@ -226,9 +220,6 @@ final class MapSerializer extends Serializer<Map> {
           valueFieldType: valueDeclared ? valueFieldType : null,
         );
         chunkLength += 1;
-      }
-      if (tracksDepth) {
-        context.decreaseDepth();
       }
       bufferWriteUint8At(context.buffer, chunkLengthOffset, chunkLength);
     }

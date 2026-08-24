@@ -84,13 +84,13 @@ Fory uses a functional options pattern for configuration:
 	f := fory.New(
 		fory.WithXlang(true),        // Select xlang mode explicitly
 		fory.WithTrackRef(true),     // Enable reference tracking for circular references
-		fory.WithMaxDepth(30),       // Set maximum nesting depth
+		fory.WithMaxDepth(30),       // Set maximum deserialization depth
 	)
 
 Configuration defaults:
 
   - TrackRef: false (reference tracking disabled)
-  - MaxDepth: 20 (maximum nesting depth)
+  - MaxDepth: 20 (maximum deserialization depth)
   - IsXlang: true (xlang mode enabled)
   - Compatible: true by default in both xlang and native mode
 

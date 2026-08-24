@@ -61,7 +61,6 @@ final class WriteContext {
   final LinkedHashMap<TypeDef, int> _typeDefIds =
       LinkedHashMap<TypeDef, int>.identity();
   bool _rootTrackRef = false;
-  int _depth = 0;
 
   @internal
   WriteContext(
@@ -83,7 +82,6 @@ final class WriteContext {
     _refWriter.reset();
     _metaStringWriter.reset();
     _rootTrackRef = false;
-    _depth = 0;
   }
 
   /// The active output buffer for the current operation.
@@ -97,21 +95,6 @@ final class WriteContext {
 
   @internal
   bool get rootTrackRef => _rootTrackRef;
-
-  int get depth => _depth;
-
-  /// Records entry into one more nested write frame.
-  void increaseDepth() {
-    _depth += 1;
-    if (_depth > config.maxDepth) {
-      throw StateError('Serialization depth exceeded ${config.maxDepth}.');
-    }
-  }
-
-  /// Records exit from a nested write frame.
-  void decreaseDepth() {
-    _depth -= 1;
-  }
 
   /// Writes a boolean value.
   void writeBool(bool value) => _buffer.writeBool(value);
@@ -259,15 +242,7 @@ final class WriteContext {
     TypeInfo resolved,
     Object value,
     FieldType? declaredFieldType,
-  ) {
-    if (!_tracksDepth(resolved)) {
-      _writePayloadValue(resolved, value, declaredFieldType);
-      return;
-    }
-    increaseDepth();
-    _writePayloadValue(resolved, value, declaredFieldType);
-    decreaseDepth();
-  }
+  ) => _writePayloadValue(resolved, value, declaredFieldType);
 
   void _writePayloadValue(
     TypeInfo resolved,
@@ -410,20 +385,5 @@ final class WriteContext {
   @internal
   void writeTypeMetaValue(TypeInfo resolved) {
     _writeTypeMeta(resolved);
-  }
-
-  bool _tracksDepth(TypeInfo resolved) {
-    if (TypeIds.isContainer(resolved.typeId)) {
-      return true;
-    }
-    switch (resolved.kind) {
-      case RegistrationKind.builtin:
-      case RegistrationKind.enumType:
-        return false;
-      case RegistrationKind.struct:
-      case RegistrationKind.ext:
-      case RegistrationKind.union:
-        return true;
-    }
   }
 }

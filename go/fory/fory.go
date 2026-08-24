@@ -109,7 +109,7 @@ func WithRefTracking(enabled bool) Option {
 	return WithTrackRef(enabled)
 }
 
-// WithMaxDepth sets the maximum serialization depth
+// WithMaxDepth sets the maximum deserialization depth.
 func WithMaxDepth(depth int) Option {
 	return func(f *Fory) {
 		f.config.MaxDepth = depth
@@ -245,7 +245,7 @@ func New(opts ...Option) *Fory {
 	f.refResolver = newRefResolver(f.config.TrackRef)
 
 	// Initialize reusable contexts with resolvers
-	f.writeCtx = NewWriteContext(f.config.TrackRef, f.config.MaxDepth)
+	f.writeCtx = NewWriteContext(f.config.TrackRef)
 	f.writeCtx.typeResolver = f.typeResolver
 	f.writeCtx.refResolver = f.refResolver
 	f.writeCtx.compatible = f.config.Compatible

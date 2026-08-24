@@ -451,29 +451,14 @@ void main() {
       },
     );
 
-    test('enforces maxDepth during write and read', () {
+    test('maxDepth only limits reads', () {
       final nested = _nestedList(4);
-      final bytes = Fory().serialize(nested);
+      final bytes = Fory(maxDepth: 3).serialize(nested);
 
-      expect(
-        () => Fory(maxDepth: 3).serialize(nested),
-        throwsA(
-          isA<StateError>().having(
-            (error) => error.toString(),
-            'message',
-            contains('Serialization depth exceeded 3.'),
-          ),
-        ),
-      );
+      expect(Fory().deserialize<Object?>(bytes), equals(nested));
       expect(
         () => Fory(maxDepth: 3).deserialize<Object?>(bytes),
-        throwsA(
-          isA<StateError>().having(
-            (error) => error.toString(),
-            'message',
-            contains('Deserialization depth exceeded 3.'),
-          ),
-        ),
+        throwsA(isA<StateError>()),
       );
     });
 

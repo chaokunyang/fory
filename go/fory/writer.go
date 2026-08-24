@@ -32,11 +32,9 @@ import (
 type WriteContext struct {
 	buffer         *ByteBuffer
 	refWriter      *RefWriter
-	trackRef       bool // Cached flag to avoid indirection
-	xlang          bool // Cross-language serialization mode
-	compatible     bool // Schema evolution compatibility mode
-	depth          int
-	maxDepth       int
+	trackRef       bool                    // Cached flag to avoid indirection
+	xlang          bool                    // Cross-language serialization mode
+	compatible     bool                    // Schema evolution compatibility mode
 	typeResolver   *TypeResolver           // For complex type serialization
 	refResolver    *RefResolver            // For reference tracking in native-mode paths
 	bufferCallback func(BufferObject) bool // Callback for out-of-band buffers
@@ -50,12 +48,11 @@ func (c *WriteContext) IsXlang() bool {
 }
 
 // NewWriteContext creates a new write context
-func NewWriteContext(trackRef bool, maxDepth int) *WriteContext {
+func NewWriteContext(trackRef bool) *WriteContext {
 	return &WriteContext{
 		buffer:    NewByteBuffer(nil),
 		refWriter: NewRefWriter(trackRef),
 		trackRef:  trackRef,
-		maxDepth:  maxDepth,
 	}
 }
 
@@ -63,7 +60,6 @@ func NewWriteContext(trackRef bool, maxDepth int) *WriteContext {
 func (c *WriteContext) Reset() {
 	c.buffer.Reset()
 	c.refWriter.Reset()
-	c.depth = 0
 	c.err = Error{} // Clear error state
 	if c.refResolver != nil {
 		c.refResolver.resetWrite()
@@ -77,7 +73,6 @@ func (c *WriteContext) Reset() {
 // Use this when streaming multiple values to an external buffer.
 func (c *WriteContext) ResetState() {
 	c.refWriter.Reset()
-	c.depth = 0
 	c.bufferCallback = nil
 	c.outOfBand = false
 	if c.refResolver != nil {

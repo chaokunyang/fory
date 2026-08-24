@@ -461,7 +461,7 @@ func TestInterfaceScalarSerializer(t *testing.T) {
 		type_:      int32Type,
 		serializer: encodedInt32Serializer{typeID: VARINT32},
 	}
-	writeCtx := NewWriteContext(false, 1)
+	writeCtx := NewWriteContext(false)
 	var value any = int32(3)
 	serializer.Write(writeCtx, RefModeNullOnly, false, false, reflect.ValueOf(&value).Elem())
 	require.NoError(t, writeCtx.CheckError())

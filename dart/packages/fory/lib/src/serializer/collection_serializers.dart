@@ -1190,10 +1190,6 @@ void _writeSameTypeElements(
   bool trackRef,
   bool hasNull,
 ) {
-  final tracksDepth = tracksNestedPayloadDepth(typeInfo);
-  if (tracksDepth) {
-    context.increaseDepth();
-  }
   for (final value in values) {
     if (value == null) {
       context.buffer.writeByte(RefWriter.nullFlag);
@@ -1211,9 +1207,6 @@ void _writeSameTypeElements(
     } else {
       _writeDirectTypeInfoValue(context, typeInfo, fieldType, value as Object);
     }
-  }
-  if (tracksDepth) {
-    context.decreaseDepth();
   }
 }
 

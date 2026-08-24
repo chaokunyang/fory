@@ -283,7 +283,7 @@ func TestDecimalMagnitudeLimit(t *testing.T) {
 
 func TestDecimalWriteFailureState(t *testing.T) {
 	oversized := decimalMagnitude(maxDecimalMagnitudeBytes + 1)
-	ctx := NewWriteContext(false, 1)
+	ctx := NewWriteContext(false)
 	ctx.Buffer().WriteByte_(0x7f)
 	before := bytes.Clone(ctx.Buffer().Bytes())
 	beforeIndex := ctx.Buffer().WriterIndex()
@@ -294,7 +294,7 @@ func TestDecimalWriteFailureState(t *testing.T) {
 	require.Equal(t, beforeIndex, ctx.Buffer().WriterIndex())
 	require.Equal(t, before, ctx.Buffer().Bytes())
 
-	ctx = NewWriteContext(false, 1)
+	ctx = NewWriteContext(false)
 	ctx.Buffer().WriteByte_(0x7f)
 	before = bytes.Clone(ctx.Buffer().Bytes())
 	beforeIndex = ctx.Buffer().WriterIndex()

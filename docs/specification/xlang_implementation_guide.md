@@ -100,7 +100,7 @@ That operation-local state includes:
 - meta-string state
 - shared type-definition state
 - operation-local scratch state keyed by identity
-- logical object-graph depth
+- decoder-only logical object-graph depth
 
 Generated and hand-written serializers should treat these contexts as the only
 source of operation-local services. Serializers must not keep ambient instance
@@ -115,7 +115,6 @@ state in thread locals, globals, or serializer instance fields.
 - `MetaStringWriter`
 - shared TypeDef write state
 - root `trackRef` mode
-- recursion depth and limits
 
 It exposes one-shot primitive helpers such as:
 

@@ -42,7 +42,7 @@ final class Config {
   /// This flag is forced to `false` when [compatible] is `true`.
   final bool checkStructVersion;
 
-  /// Maximum allowed read or write nesting depth.
+  /// Maximum allowed deserialization nesting depth.
   final int maxDepth;
 
   /// Maximum accepted field count in one received struct TypeDef.

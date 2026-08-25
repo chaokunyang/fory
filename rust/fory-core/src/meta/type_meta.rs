@@ -91,7 +91,6 @@ use std::rc::Rc;
 const SMALL_NUM_FIELDS_THRESHOLD: usize = 0b11111;
 const DEFAULT_MAX_TYPE_FIELDS: usize = 512;
 const DEFAULT_MAX_TYPE_META_BYTES: usize = 4096;
-const MAX_COMPATIBLE_MATCHED_FIELD_INDEX: usize = (i16::MAX as usize - 1) / 2;
 const MAX_TYPE_META_NESTING: usize = 128;
 const REGISTER_BY_NAME_FLAG: u8 = 0b0010_0000;
 const COMPATIBLE_TYPEDEF_FLAG: u8 = 0b0100_0000;
@@ -931,12 +930,6 @@ fn match_remote_field(
             // reserialization and diagnostics tied to the matched local field.
             if field.field_name.is_empty() {
                 field.field_name = local_info.field_name.clone();
-            }
-            if sorted_index > MAX_COMPATIBLE_MATCHED_FIELD_INDEX {
-                return Err(Error::type_error(format!(
-                    "Cannot assign compatible matched id for local field {}: local field index {} exceeds max {}",
-                    local_info.field_name, sorted_index, MAX_COMPATIBLE_MATCHED_FIELD_INDEX
-                )));
             }
             field.matched_field_id = if exact_field {
                 (sorted_index * 2) as i32

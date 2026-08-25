@@ -659,21 +659,11 @@ def verify_java_artifacts():
             f"unexpected={unexpected}, missing={missing}"
         )
 
-    appended_license_path = os.path.join(
-        PROJECT_ROOT_DIR,
-        "java",
-        "src",
-        "main",
-        "appended-resources",
-        "META-INF",
-        "LICENSE",
-    )
-    with open(appended_license_path, "r", encoding="utf-8") as license_file:
-        appended_license = license_file.read().strip()
-    if appended_license not in license_text:
-        raise RuntimeError(
-            f"{archive_path} LICENSE does not contain {appended_license_path}"
-        )
+    license_path = os.path.join(PROJECT_ROOT_DIR, "java", "LICENSE")
+    with open(license_path, "r", encoding="utf-8") as license_file:
+        expected_license = license_file.read()
+    if license_text != expected_license:
+        raise RuntimeError(f"{archive_path} LICENSE does not match {license_path}")
     logger.info(
         "Verified Java source release contains %d tracked and legal files: %s",
         len(packaged_files),

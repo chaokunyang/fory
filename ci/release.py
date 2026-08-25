@@ -52,8 +52,11 @@ FORY_CORE_NATIVE_IMAGE_PROPERTIES = (
 GRAALVM_FEATURE_SERVICE_ENTRY = (
     "META-INF/services/org.graalvm.nativeimage.hosted.Feature"
 )
-MAVEN_RELEASE_CMD = (
-    "mvn -T10 clean deploy --no-transfer-progress -DskipTests -Papache-release"
+JAVA_RELEASE_PACKAGE_CMD = (
+    "mvn -T10 clean package --no-transfer-progress -DskipTests -Papache-release"
+)
+JAVA_RELEASE_DEPLOY_CMD = (
+    "mvn -T10 deploy --no-transfer-progress -DskipTests -Papache-release"
 )
 MAVEN_SNAPSHOT_CMD = (
     "mvn -T10 clean deploy --no-transfer-progress -DskipTests "
@@ -240,6 +243,8 @@ def verify(v):
 def publish_jvm(languages="all", mode="release"):
     """Publish Java, Kotlin, and Scala artifacts through one ordered JVM owner."""
     langs = _jvm_release_langs(languages)
+    if mode == "release":
+        _require_clean_jvm_release_tree()
     _require_publication_authority(mode)
     _ensure_openjdk25()
     if "java" not in langs:
@@ -247,7 +252,6 @@ def publish_jvm(languages="all", mode="release"):
     for lang in langs:
         if lang == "java":
             _publish_java(mode)
-            _verify_fory_core_mr_jar()
         elif lang == "kotlin":
             _publish_kotlin(mode)
         elif lang == "scala":
@@ -275,6 +279,41 @@ def _require_publication_authority(mode):
         raise RuntimeError("JVM release publication requires a GPG secret key")
 
 
+def _require_clean_jvm_release_tree():
+    tracked = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=no"],
+        cwd=PROJECT_ROOT_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    untracked = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "--others",
+            "--directory",
+            "--no-empty-directory",
+            "--",
+            *JVM_RELEASE_LANGS,
+        ],
+        cwd=PROJECT_ROOT_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    changes = tracked.stdout.splitlines()
+    changes.extend(f"?? {path}" for path in untracked.stdout.splitlines())
+    if changes:
+        raise RuntimeError(
+            "JVM release publication requires clean exact-commit sources. "
+            "Commit, move, or remove these files before publishing:\n"
+            + "\n".join(changes)
+        )
+
+
 def _has_gpg_secret_key():
     gpg = shutil.which("gpg")
     if not gpg:
@@ -292,8 +331,13 @@ def _has_gpg_secret_key():
 
 
 def _publish_java(mode="release"):
-    command = MAVEN_RELEASE_CMD if mode == "release" else MAVEN_SNAPSHOT_CMD
-    _run_release_cmd(command, "java")
+    if mode == "release":
+        _run_release_cmd(JAVA_RELEASE_PACKAGE_CMD, "java")
+        verify_java_artifacts()
+        _run_release_cmd(JAVA_RELEASE_DEPLOY_CMD, "java")
+    else:
+        _run_release_cmd(MAVEN_SNAPSHOT_CMD, "java")
+        _verify_fory_core_mr_jar()
 
 
 def _publish_kotlin(mode="release"):
@@ -561,6 +605,72 @@ def _verify_fory_core_mr_jar():
     )
 
 
+def verify_java_artifacts():
+    """Validate Java binary and source-release artifacts before deployment."""
+    _verify_fory_core_mr_jar()
+    version = _read_java_version()
+    archive_path = os.path.join(
+        PROJECT_ROOT_DIR,
+        "java",
+        "target",
+        f"fory-parent-{version}-source-release.zip",
+    )
+    if not os.path.exists(archive_path):
+        raise FileNotFoundError(f"Missing Java source-release artifact: {archive_path}")
+
+    root = f"fory-parent-{version}/"
+    with zipfile.ZipFile(archive_path) as archive:
+        archive_files = [
+            entry.filename for entry in archive.infolist() if not entry.is_dir()
+        ]
+        outside_root = [name for name in archive_files if not name.startswith(root)]
+        if outside_root:
+            raise RuntimeError(
+                f"{archive_path} contains files outside {root}: {outside_root}"
+            )
+        relative_files = [name[len(root) :] for name in archive_files]
+        packaged_files = set()
+        duplicate_files = set()
+        for name in relative_files:
+            if name in packaged_files:
+                duplicate_files.add(name)
+            packaged_files.add(name)
+        if duplicate_files:
+            raise RuntimeError(
+                f"{archive_path} contains duplicate files: {sorted(duplicate_files)}"
+            )
+        license_text = archive.read(f"{root}LICENSE").decode("utf-8")
+
+    tracked = subprocess.run(
+        ["git", "ls-files", "--", "java"],
+        cwd=PROJECT_ROOT_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    expected_files = {path[len("java/") :] for path in tracked}
+    expected_files.update({"DEPENDENCIES", "LICENSE", "NOTICE"})
+    unexpected = sorted(packaged_files.difference(expected_files))
+    missing = sorted(expected_files.difference(packaged_files))
+    if unexpected or missing:
+        raise RuntimeError(
+            f"{archive_path} does not match the tracked Java source tree: "
+            f"unexpected={unexpected}, missing={missing}"
+        )
+
+    license_path = os.path.join(PROJECT_ROOT_DIR, "java", "LICENSE")
+    with open(license_path, "r", encoding="utf-8") as license_file:
+        expected_license = license_file.read()
+    if license_text != expected_license:
+        raise RuntimeError(f"{archive_path} LICENSE does not match {license_path}")
+    logger.info(
+        "Verified Java source release contains %d tracked and legal files: %s",
+        len(packaged_files),
+        archive_path,
+    )
+
+
 def verify_kotlin_artifacts():
     """Open every public Kotlin artifact and validate its publication surface."""
     version = _read_kotlin_version()
@@ -647,6 +757,11 @@ def verify_kotlin_artifacts():
             )
         with zipfile.ZipFile(javadoc_path) as javadocs:
             javadoc_names = javadocs.namelist()
+        for required in ("META-INF/LICENSE", "META-INF/NOTICE"):
+            if javadoc_names.count(required) != 1:
+                raise RuntimeError(
+                    f"{javadoc_path} must contain exactly one {required}"
+                )
         if "index.html" not in javadoc_names or not any(
             name.endswith(".html") and name != "index.html" for name in javadoc_names
         ):
@@ -1664,6 +1779,12 @@ def _parse_args():
         help="release stages signed artifacts; snapshot publishes unsigned snapshots",
     )
     publish_jvm_parser.set_defaults(func=publish_jvm)
+
+    verify_java_parser = subparsers.add_parser(
+        "verify_java_artifacts",
+        description="Verify Java binary and source-release artifacts",
+    )
+    verify_java_parser.set_defaults(func=verify_java_artifacts)
 
     verify_kotlin_parser = subparsers.add_parser(
         "verify_kotlin_artifacts",

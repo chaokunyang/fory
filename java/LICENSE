@@ -1,3 +1,4 @@
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -199,70 +200,81 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
-
 ================================================================
 
-This product includes a number of Dependencies with separate copyright notices
-and license terms. Your use of these submodules is subject to the terms and
-conditions of the following licenses.
-
-================================================================
+This source release includes code derived from third-party projects. The files below are relative
+to the root of the Java source-release archive.
 
 ================================================================
 Apache-2.0 licenses
 ================================================================
-The following components are provided under the Apache-2.0 License. See project link for details.
-The text of each license is the standard Apache 2.0 license.
+The following components are provided under the Apache-2.0 License. See each project link for
+details. The text of each license is the standard Apache 2.0 license included above.
 
 * guava (https://github.com/google/guava)
     Files:
-      java/fory-core/src/main/java/org/apache/fory/util/Preconditions.java
-      java/fory-core/src/main/java/org/apache/fory/reflect/TypeParameter.java
-      java/fory-core/src/main/java/org/apache/fory/reflect/TypeRef.java
-      java/fory-core/src/main/java/org/apache/fory/util/concurrency/DirectExecutorService.java
+      fory-core/src/main/java/org/apache/fory/util/Preconditions.java
+      fory-core/src/main/java/org/apache/fory/reflect/TypeParameter.java
+      fory-core/src/main/java/org/apache/fory/reflect/TypeRef.java
+      fory-core/src/main/java/org/apache/fory/util/concurrency/DirectExecutorService.java
 
 * spark (https://github.com/apache/spark)
     Files:
-      java/fory-core/src/main/java/org/apache/fory/codegen/Code.java
+      fory-core/src/main/java/org/apache/fory/codegen/Code.java
+      fory-format/src/main/java/org/apache/fory/format/vectorized/ArrowWriter.java
 
 * commons-io (https://github.com/apache/commons-io)
     Files:
-      java/fory-core/src/main/java/org/apache/fory/io/ClassLoaderObjectInputStream.java
+      fory-core/src/main/java/org/apache/fory/io/ClassLoaderObjectInputStream.java
 
 * commons-lang3 (https://github.com/apache/commons-lang)
     Files:
-      java/fory-core/src/main/java/org/apache/fory/util/StringUtils.java
+      fory-core/src/main/java/org/apache/fory/util/StringUtils.java
 
+* jackson-annotations (https://github.com/FasterXML/jackson-annotations)
+    Fory JSON implementations of the following annotation APIs are based on Jackson annotations.
+    Files:
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonAnyGetter.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonAnySetter.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonCreator.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonFormat.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonIgnore.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonProperty.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonPropertyOrder.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonRawValue.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonSubTypes.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonUnwrapped.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonValue.java
+
+* wast (https://github.com/wycst/wast)
+    Fory's probability-first printable-ASCII fast-path predicate is based in part on WAST's JSON
+    string escape predicate.
+    Files:
+      fory-json/src/main/java/org/apache/fory/json/writer/JsonAsciiWordPredicates.java
 
 ================================================================
 BSD-3-Clause licenses
 ================================================================
-The following components are provided under the BSD-3-Clause License. See project link for details.
-The text of each license is also included in licenses/LICENSE-[project].txt.
+The full BSD-3-Clause license text is included in
+fory-core/src/main/resources/META-INF/licenses/LICENSE-kryo.txt.
 
 * kryo (https://github.com/EsotericSoftware/kryo)
     Files:
-      java/fory-core/src/main/java/org/apache/fory/collection/ForyObjectMap.java
-      java/fory-core/src/main/java/org/apache/fory/collection/IdentityMap.java
-      java/fory-core/src/main/java/org/apache/fory/collection/IdentityObjectIntMap.java
-      java/fory-core/src/main/java/org/apache/fory/collection/LongMap.java
-      java/fory-core/src/main/java/org/apache/fory/collection/LongLongByteMap.java
-      java/fory-core/src/main/java/org/apache/fory/collection/ObjectIntMap.java
-      java/fory-core/src/main/java/org/apache/fory/type/Generics.java
-
-* janino (https://github.com/janino-compiler/janino)
-    Files:
-      Shaded classes under org/apache/fory/shaded/org/codehaus/janino/*
-      Shaded classes under org/apache/fory/shaded/org/codehaus/commons/*
-
+      fory-core/src/main/java/org/apache/fory/collection/ForyObjectMap.java
+      fory-core/src/main/java/org/apache/fory/collection/IdentityMap.java
+      fory-core/src/main/java/org/apache/fory/collection/IdentityObjectIntMap.java
+      fory-core/src/main/java/org/apache/fory/collection/LongMap.java
+      fory-core/src/main/java/org/apache/fory/collection/LongLongByteMap.java
+      fory-core/src/main/java/org/apache/fory/collection/ObjectIntMap.java
+      fory-core/src/main/java/org/apache/fory/type/Generics.java
+      fory-core/src/test/java/org/apache/fory/type/GenericsTest.java
 
 ================================================================
 Public Domain
 ================================================================
-The following components are placed in the public domain.
-The author hereby disclaims copyright to this source code.
-See project link for details.
+The following component is placed in the public domain. The author disclaims copyright to this
+source code. See the project link for details.
 
 * java_util (https://github.com/yonik/java_util)
     Files:
-      java/fory-core/src/main/java/org/apache/fory/util/MurmurHash3.java
+      fory-core/src/main/java/org/apache/fory/util/MurmurHash3.java

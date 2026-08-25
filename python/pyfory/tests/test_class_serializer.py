@@ -21,7 +21,14 @@ import types
 
 
 def prepare_class_serialization(fory):
-    for cls in (type, types.FunctionType, types.MethodType, staticmethod, classmethod):
+    for cls in (
+        type,
+        types.FunctionType,
+        types.MethodType,
+        types.BuiltinFunctionType,
+        staticmethod,
+        classmethod,
+    ):
         fory.type_resolver.get_type_info(cls)
 
 

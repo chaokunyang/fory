@@ -855,8 +855,9 @@ Field header layout:
   `LOWER_UPPER_DIGIT_SPECIAL`, or `TAG_ID`)
 - Bits 2-5: size
   - For name encoding: `size = (name_bytes_length - 1)`
-  - For tag ID: `size = tag_id`
-  - If `size == 0b1111`, read `varuint32(size - 15)` and add it
+  - For tag ID: write `min(tag_id, 15)` in the header
+  - If the header value is `0b1111`, write `varuint32(tag_id - 15)` after the header; decoding adds
+    that extension to 15
 - Bit 1: nullable flag
 - Bit 0: reference tracking flag
 

@@ -32,14 +32,31 @@ def require_pyarrow(func):
 
 
 def prepare_pandas_types(fory, frame, pandas):
-    for cls in (
+    classes = {
         pandas.DataFrame,
         type(frame._mgr),
         type,
-        type(frame._mgr.blocks[0]),
         type(pandas._libs.internals._unpickle_block),
         type(frame.columns),
         types.FunctionType,
         type(frame.index),
-    ):
+    }
+    values = [block.values for block in frame._mgr.blocks]
+    values.append(pandas.array([""], dtype="string"))
+    classes.update(type(block) for block in frame._mgr.blocks)
+    for value in values:
+        classes.add(type(value))
+        dtype = getattr(value, "dtype", None)
+        if dtype is not None:
+            classes.add(type(dtype))
+        arrow_array = getattr(value, "_pa_array", None)
+        if arrow_array is None:
+            continue
+        classes.add(type(arrow_array))
+        classes.add(type(arrow_array.type))
+        for chunk in arrow_array.chunks:
+            classes.add(type(chunk))
+            classes.add(type(chunk.type))
+            classes.update(type(buffer) for buffer in chunk.buffers() if buffer is not None)
+    for cls in classes:
         fory.type_resolver.get_type_info(cls)

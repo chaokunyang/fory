@@ -624,7 +624,6 @@ cdef class WriteContext:
     cdef public object buffer_callback
     cdef public object unsupported_callback
     cdef dict context_objects
-    cdef public int32_t depth
 
     def __init__(self, Config config, TypeResolver type_resolver):
         self.type_resolver = type_resolver
@@ -642,7 +641,6 @@ cdef class WriteContext:
         self.buffer_callback = None
         self.unsupported_callback = None
         self.context_objects = {}
-        self.depth = 0
 
     cpdef inline prepare(self, Buffer buffer, buffer_callback=None, unsupported_callback=None):
         buffer._check_writable()
@@ -650,7 +648,6 @@ cdef class WriteContext:
         self.c_buffer = buffer.c_buffer
         self.buffer_callback = buffer_callback
         self.unsupported_callback = unsupported_callback
-        self.depth = 0
 
     cpdef inline reset(self):
         self.ref_writer.reset()
@@ -663,7 +660,6 @@ cdef class WriteContext:
         self.c_buffer = NULL
         self.buffer_callback = None
         self.unsupported_callback = None
-        self.depth = 0
 
     cpdef inline add_context_object(self, key, obj):
         self.context_objects[id(key)] = obj
@@ -673,12 +669,6 @@ cdef class WriteContext:
 
     cpdef inline get_context_object(self, key, default=None):
         return self.context_objects.get(id(key), default)
-
-    cpdef inline increase_depth(self, int32_t diff=1):
-        self.depth += diff
-
-    cpdef inline decrease_depth(self, int32_t diff=1):
-        self.depth -= diff
 
     cpdef inline bint write_ref_or_null(self, obj):
         return self.ref_writer.write_ref_or_null(self.c_buffer, obj)

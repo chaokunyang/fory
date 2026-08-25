@@ -604,13 +604,7 @@ pub(crate) fn gen_read_compatible_target(
             let remote_meta = type_info.get_type_meta_ref();
             let remote_type_hash = remote_meta.get_hash();
             #fields_binding
-            if remote_type_hash == local_variant_type_meta.get_hash() {
-                // The payload is still only the variant fields. Reading the whole enum data here
-                // would consume field bytes as a fresh enum tag, so exact variant schemas use the
-                // local sorted field reader directly.
-                #(#same_schema_read_ts)*
-                return #same_schema_construction;
-            }
+            let exact_variant_schema = remote_type_hash == local_variant_type_meta.get_hash();
         }
     } else {
         quote! {
@@ -644,7 +638,18 @@ pub(crate) fn gen_read_compatible_target(
     let compatible_body = if variant_ident.is_none() {
         guard_static_read(compatible_body, may_recurse)
     } else {
-        compatible_body
+        quote! {
+            if exact_variant_schema {
+                // The payload is still only the variant fields. Reading the whole enum data here
+                // would consume field bytes as a fresh enum tag, so exact variant schemas use the
+                // local sorted field reader directly. Keep this as the branch value: a successful
+                // early return would bypass the enum serializer's depth restoration.
+                #(#same_schema_read_ts)*
+                #same_schema_construction
+            } else {
+                #compatible_body
+            }
+        }
     };
 
     quote! {

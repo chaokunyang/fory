@@ -1010,9 +1010,10 @@ fn compatible_variant_reads(
                                 // Variant type mismatch: skip the data and use default
                                 use fory_core::serializer::skip::skip_enum_variant;
                                 skip_enum_variant(context, variant_type, &None)?;
-                                return Ok(#default_value);
+                                Ok(#default_value)
+                            } else {
+                                Ok(#target_path::#ident)
                             }
-                            Ok(#target_path::#ident)
                         }
                     }
                 }
@@ -1031,21 +1032,22 @@ fn compatible_variant_reads(
                                 // Variant type mismatch: skip the data and use default
                                 use fory_core::serializer::skip::skip_enum_variant;
                                 skip_enum_variant(context, variant_type, &None)?;
-                                return Ok(#default_value);
+                                Ok(#default_value)
+                            } else {
+                                // Read collection format (same as tuple)
+                                let len = context.reader.read_var_u32()? as usize;
+                                let _header = context.reader.read_u8()?;
+
+                                #(#read_fields;)*
+
+                                // Skip any extra elements
+                                use fory_core::serializer::skip::skip_any_value;
+                                for _ in #field_count..len {
+                                    skip_any_value(context, true)?;
+                                }
+
+                                Ok(#target_path::#ident( #(#field_idents),* ))
                             }
-                            // Read collection format (same as tuple)
-                            let len = context.reader.read_var_u32()? as usize;
-                            let _header = context.reader.read_u8()?;
-
-                            #(#read_fields;)*
-
-                            // Skip any extra elements
-                            use fory_core::serializer::skip::skip_any_value;
-                            for _ in #field_count..len {
-                                skip_any_value(context, true)?;
-                            }
-
-                            Ok(#target_path::#ident( #(#field_idents),* ))
                         }
                     }
                 }
@@ -1081,13 +1083,14 @@ fn compatible_variant_reads(
                                 // Skip the data and use default
                                 use fory_core::serializer::skip::skip_enum_variant;
                                 skip_enum_variant(context, variant_type, &None)?;
-                                return Ok(#default_value);
+                                Ok(#default_value)
+                            } else {
+                                // Named variant should have variant_type == 0b10
+                                // Read type meta inline using streaming protocol
+                                let type_info = context.read_type_meta()?;
+                                // Use gen_read_compatible logic
+                                #compatible_read_body
                             }
-                            // Named variant should have variant_type == 0b10
-                            // Read type meta inline using streaming protocol
-                            let type_info = context.read_type_meta()?;
-                            // Use gen_read_compatible logic
-                            #compatible_read_body
                         }
                     }
                 }

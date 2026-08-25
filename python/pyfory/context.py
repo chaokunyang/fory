@@ -70,7 +70,7 @@ def hash_meta_string_data(data: bytes, encoding: int) -> int:
 
 
 class EncodedMetaString:
-    __slots__ = ("data", "length", "encoding", "hashcode")
+    __slots__ = ("data", "encoding", "hashcode", "length")
 
     def __init__(self, data: bytes, hashcode: int):
         self.data = data
@@ -126,10 +126,10 @@ class MetaStringWriter:
 
 class MetaStringReader:
     __slots__ = (
-        "shared_registry",
         "_dynamic_id_to_encoded_meta_strings",
         "_hash_to_encoded_meta_strings",
         "_small_encoded_meta_strings",
+        "shared_registry",
     )
 
     def __init__(self, shared_registry):
@@ -227,21 +227,20 @@ class MetaShareReadContext:
 
 class WriteContext:
     __slots__ = (
-        "type_resolver",
-        "xlang",
-        "track_ref",
-        "strict",
-        "compatible",
-        "field_nullable",
-        "policy",
-        "ref_writer",
-        "meta_string_writer",
-        "meta_share_context",
         "buffer",
         "buffer_callback",
-        "unsupported_callback",
+        "compatible",
         "context_objects",
-        "depth",
+        "field_nullable",
+        "meta_share_context",
+        "meta_string_writer",
+        "policy",
+        "ref_writer",
+        "strict",
+        "track_ref",
+        "type_resolver",
+        "unsupported_callback",
+        "xlang",
     )
 
     def __init__(self, config: Config, type_resolver):
@@ -259,7 +258,6 @@ class WriteContext:
         self.buffer_callback = None
         self.unsupported_callback = None
         self.context_objects = {}
-        self.depth = 0
 
     def __getattr__(self, name):
         buffer = object.__getattribute__(self, "buffer")
@@ -271,7 +269,6 @@ class WriteContext:
         self.buffer = buffer
         self.buffer_callback = buffer_callback
         self.unsupported_callback = unsupported_callback
-        self.depth = 0
 
     def reset(self):
         self.ref_writer.reset()
@@ -283,7 +280,6 @@ class WriteContext:
         self.buffer = None
         self.buffer_callback = None
         self.unsupported_callback = None
-        self.depth = 0
 
     def add_context_object(self, key, obj):
         self.context_objects[id(key)] = obj
@@ -293,12 +289,6 @@ class WriteContext:
 
     def get_context_object(self, key, default=None):
         return self.context_objects.get(id(key), default)
-
-    def increase_depth(self, diff=1):
-        self.depth += diff
-
-    def decrease_depth(self, diff=1):
-        self.depth -= diff
 
     def write_ref_or_null(self, obj):
         return self.ref_writer.write_ref_or_null(self.buffer, obj)
@@ -325,9 +315,7 @@ class WriteContext:
 
     def write_non_ref(self, obj, serializer=None, typeinfo=None):
         if serializer is not None:
-            self.increase_depth()
             serializer.write(self, obj)
-            self.decrease_depth()
             return
         cls = type(obj)
         if cls is str:
@@ -349,9 +337,7 @@ class WriteContext:
         if typeinfo is None:
             typeinfo = self.type_resolver.get_type_info(cls)
         self.type_resolver.write_type_info(self, typeinfo)
-        self.increase_depth()
         typeinfo.serializer.write(self, obj)
-        self.decrease_depth()
 
     def write_no_ref(self, obj, serializer=None, typeinfo=None):
         self.write_non_ref(obj, serializer=serializer, typeinfo=typeinfo)
@@ -466,27 +452,27 @@ class WriteContext:
 
 class ReadContext:
     __slots__ = (
-        "type_resolver",
-        "xlang",
-        "track_ref",
-        "strict",
-        "compatible",
-        "field_nullable",
-        "policy",
-        "max_depth",
         "_max_graph_memory_bytes",
-        "_remaining_graph_memory_bytes",
         "_max_unbacked_container_items",
-        "remaining_unbacked_container_items",
-        "ref_reader",
-        "meta_string_reader",
-        "meta_share_context",
+        "_remaining_graph_memory_bytes",
         "buffer",
         "buffers",
-        "unsupported_objects",
-        "peer_out_of_band_enabled",
+        "compatible",
         "context_objects",
         "depth",
+        "field_nullable",
+        "max_depth",
+        "meta_share_context",
+        "meta_string_reader",
+        "peer_out_of_band_enabled",
+        "policy",
+        "ref_reader",
+        "remaining_unbacked_container_items",
+        "strict",
+        "track_ref",
+        "type_resolver",
+        "unsupported_objects",
+        "xlang",
     )
 
     def __init__(self, config: Config, type_resolver):

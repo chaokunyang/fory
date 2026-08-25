@@ -40,6 +40,11 @@ struct LeafStruct {
     ratio: f64,
 }
 
+#[derive(ForyStruct, Debug, PartialEq)]
+struct DepthSibling {
+    child: Option<Box<LeafStruct>>,
+}
+
 #[derive(ForyUnion, Debug, PartialEq)]
 enum LeafEnum {
     #[fory(unknown)]
@@ -137,6 +142,25 @@ enum StaticList {
     #[fory(default)]
     End,
     Next(Box<StaticList>),
+}
+
+#[derive(ForyUnion)]
+enum CompatibleBranch {
+    #[fory(unknown)]
+    Unknown(fory_core::UnknownCase),
+    #[fory(default)]
+    End,
+    Next {
+        next: Option<Box<LeafStruct>>,
+    },
+}
+
+#[derive(ForyStruct)]
+struct CompatibleSiblings {
+    #[fory(id = 0)]
+    first: CompatibleBranch,
+    #[fory(id = 1)]
+    second: DepthSibling,
 }
 
 fn static_node(depth: i32) -> StaticNode {
@@ -267,6 +291,31 @@ fn static_enum_depth_and_reset() {
         fory.deserialize::<StaticList>(&shallow_bytes).unwrap(),
         shallow
     );
+}
+
+#[test]
+fn compatible_enum_restores_depth() {
+    let mut fory = Fory::builder()
+        .xlang(false)
+        .compatible(true)
+        .max_dyn_depth(2)
+        .build();
+    fory.register::<LeafStruct>(205).unwrap();
+    fory.register_union::<CompatibleBranch>(204).unwrap();
+    fory.register::<DepthSibling>(207).unwrap();
+    fory.register::<CompatibleSiblings>(206).unwrap();
+
+    let value = CompatibleSiblings {
+        first: CompatibleBranch::Next { next: None },
+        second: DepthSibling { child: None },
+    };
+    let bytes = fory.serialize(&value).unwrap();
+    let decoded = fory.deserialize::<CompatibleSiblings>(&bytes).unwrap();
+    assert!(matches!(
+        decoded.first,
+        CompatibleBranch::Next { next: None }
+    ));
+    assert!(decoded.second.child.is_none());
 }
 
 #[test]

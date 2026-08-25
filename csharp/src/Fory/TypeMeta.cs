@@ -467,8 +467,9 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             }
         }
 
+        IReadOnlyList<TypeMetaFieldInfo> ownedFields = Array.AsReadOnly(fields.ToArray());
         HashSet<int>? fieldIds = null;
-        foreach (TypeMetaFieldInfo field in fields)
+        foreach (TypeMetaFieldInfo field in ownedFields)
         {
             if (field.FieldId < 0)
             {
@@ -487,10 +488,10 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         NamespaceName = namespaceName;
         TypeName = typeName;
         RegisterByName = registerByName;
-        Fields = fields;
+        Fields = ownedFields;
         Compressed = compressed;
         HeaderHash = headerHash;
-        ReadDataAlwaysAdvances = fields.Any(static field => field.FieldType.FieldReadAlwaysAdvances);
+        ReadDataAlwaysAdvances = ownedFields.Any(static field => field.FieldType.FieldReadAlwaysAdvances);
     }
 
     public uint? TypeId { get; }
@@ -821,22 +822,11 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             }
         }
 
-        HashSet<int>? remoteFieldIds = null;
         HashSet<int> usedLocalFields = [];
         for (int i = 0; i < remoteTypeMeta.Fields.Count; i++)
         {
             TypeMetaFieldInfo remoteField = remoteTypeMeta.Fields[i];
             remoteField.CompatibleScalarRead = null;
-            if (remoteField.FieldId >= 0)
-            {
-                int fieldId = remoteField.FieldId;
-                remoteFieldIds ??= [];
-                if (!remoteFieldIds.Add(fieldId))
-                {
-                    throw new InvalidDataException(
-                        $"duplicate remote field id {fieldId} in compatible type metadata");
-                }
-            }
 
             int localIndex = -1;
             TypeMetaFieldInfo? localMatch = null;

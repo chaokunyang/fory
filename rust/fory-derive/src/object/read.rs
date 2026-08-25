@@ -474,9 +474,9 @@ pub(crate) fn gen_read_compatible_target(
                     == local_variant_type_meta.get_type_name().original.as_str()
             {
                 // Same-name variant TypeMeta is resolved by the synthetic variant TypeInfo during
-                // parsing, so its field ids are already doubled matched dispatch ids. Running
-                // schema matching here again would treat those internal ids as explicit wire ids
-                // and skip every field.
+                // parsing, so matched_field_id already contains local dispatch while field_id
+                // still preserves wire identity. Reuse that owner result instead of rebuilding the
+                // same matching maps and compatibility decisions here.
                 remote_meta.get_field_infos()
             } else {
                 // Compatible enums match variants by tag first. If that tag now names a different

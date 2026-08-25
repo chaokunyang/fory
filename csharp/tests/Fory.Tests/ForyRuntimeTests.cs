@@ -3355,12 +3355,8 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
-    public void TypeMetaAssignFieldIdsThrowsOnDuplicateRemoteFieldId()
+    public void TypeMetaOwnsFields()
     {
-        List<TypeMetaFieldInfo> localFields =
-        [
-            new TypeMetaFieldInfo(9, "value", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
-        ];
         List<TypeMetaFieldInfo> remoteFields =
         [
             new TypeMetaFieldInfo(9, "$tag9a", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
@@ -3372,12 +3368,13 @@ public sealed class ForyRuntimeTests
             MetaString.Empty('$', '_'),
             registerByName: false,
             remoteFields);
+        byte[] encoded = remoteTypeMeta.Encode();
+
         remoteFields.Add(
             new TypeMetaFieldInfo(9, "$tag9b", new TypeMetaFieldType((uint)TypeId.VarInt32, false)));
 
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(
-            () => TypeMeta.AssignFieldIds(remoteTypeMeta, localFields));
-        Assert.Contains("duplicate remote field id 9", exception.Message, StringComparison.Ordinal);
+        Assert.Single(remoteTypeMeta.Fields);
+        Assert.Equal(encoded, remoteTypeMeta.Encode());
     }
 
     private static byte[] RewriteCompatibleTypeMetaTypeId(byte[] payload, uint embeddedTypeId)

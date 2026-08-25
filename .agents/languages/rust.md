@@ -284,8 +284,10 @@ Load this file when changing `rust/` or Rust xlang behavior.
   expose or mutate it, even when the application-owned object graph is recursive. Each serializer
   owns depth introduced by its own read body. Derive-generated structs and unions emit static-depth
   bookkeeping only when their visible field or variant shape may recurse; leaf-only bodies emit no
-  check. An explicitly selected custom serializer owns its opaque read recursion, and a parent or
-  carrier must not compensate for a child serializer that omitted its own guard.
+  check. Transparent carriers recursively fold their statically visible children, so a
+  `Vec<leaf>`, leaf-only map, pointer, tuple, or equivalent carrier tree does not make its generated
+  parent recursive. An explicitly selected custom serializer owns its opaque read recursion, and a
+  parent or carrier must not compensate for a child serializer that omitted its own guard.
 - Read depth and per-root generic/reference state use root reset as their only failure-cleanup
   owner. Nested readers and skippers increment depth before reading children and decrement only
   after every child succeeds; an error must retain the failed path's depth and transient state until

@@ -1635,12 +1635,20 @@ template <typename T> struct CompileTimeFieldHelpers {
       return type_read_may_recurse<nullable_element_t<Type>>();
     } else if constexpr (is_std_array_v<Type>) {
       return type_read_may_recurse<typename Type::value_type>();
-    } else if constexpr (is_fory_serializable_v<Type> || is_vector_v<Type> ||
-                         is_list_v<Type> || is_deque_v<Type> ||
-                         is_forward_list_v<Type> || is_map_like_v<Type> ||
-                         is_set_like_v<Type> || is_tuple_v<Type> ||
-                         is_variant_v<Type> || is_std_shared_ptr_v<Type> ||
-                         is_std_unique_ptr_v<Type> || is_weak_ptr_v<Type> ||
+    } else if constexpr (is_vector_v<Type> || is_list_v<Type> ||
+                         is_deque_v<Type> || is_forward_list_v<Type> ||
+                         is_set_like_v<Type>) {
+      return type_read_may_recurse<typename Type::value_type>();
+    } else if constexpr (is_map_like_v<Type>) {
+      return type_read_may_recurse<typename Type::key_type>() ||
+             type_read_may_recurse<typename Type::mapped_type>();
+    } else if constexpr (is_tuple_v<Type>) {
+      return tuple_read_may_recurse<Type>(
+          std::make_index_sequence<std::tuple_size_v<Type>>{});
+    } else if constexpr (is_variant_v<Type>) {
+      return variant_read_may_recurse<Type>(
+          std::make_index_sequence<std::variant_size_v<Type>>{});
+    } else if constexpr (is_fory_serializable_v<Type> ||
                          std::is_same_v<Type, std::any>) {
       return true;
     } else {
@@ -1648,6 +1656,21 @@ template <typename T> struct CompileTimeFieldHelpers {
       // generated parent must not guess on its behalf.
       return false;
     }
+  }
+
+  template <typename Tuple, size_t... Indices>
+  static constexpr bool
+  tuple_read_may_recurse(std::index_sequence<Indices...>) {
+    return (type_read_may_recurse<std::tuple_element_t<Indices, Tuple>>() ||
+            ... || false);
+  }
+
+  template <typename Variant, size_t... Indices>
+  static constexpr bool
+  variant_read_may_recurse(std::index_sequence<Indices...>) {
+    return (
+        type_read_may_recurse<std::variant_alternative_t<Indices, Variant>>() ||
+        ... || false);
   }
 
   template <size_t Index> static constexpr bool field_read_may_recurse() {

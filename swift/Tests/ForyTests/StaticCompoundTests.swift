@@ -30,6 +30,12 @@ private struct StaticDepthLeaf: Equatable {
     var enabled: Bool = false
 }
 
+@ForyStruct
+private struct StaticDepthArrayLeaf: Equatable {
+    @ForyField(type: .array(element: .int32()))
+    var values: [Int32] = []
+}
+
 @ForyUnion
 private enum StaticDepthLeafUnion: Equatable {
     @ForyUnknownCase
@@ -91,6 +97,7 @@ func leafCompoundReadersSkipDepth() throws {
         let fory = Fory(config: .init(compatible: compatible, maxDepth: 0))
         try fory.register(StaticDepthLeaf.self, id: 11_992)
         try fory.register(StaticDepthLeafUnion.self, id: 11_993)
+        try fory.register(StaticDepthArrayLeaf.self, id: 11_995)
 
         let leaf = StaticDepthLeaf(count: 42, enabled: true)
         let decodedLeaf: StaticDepthLeaf = try fory.deserialize(try fory.serialize(leaf))
@@ -99,6 +106,11 @@ func leafCompoundReadersSkipDepth() throws {
         let union = StaticDepthLeafUnion.count(42)
         let decodedUnion: StaticDepthLeafUnion = try fory.deserialize(try fory.serialize(union))
         #expect(decodedUnion == union)
+
+        let arrayLeaf = StaticDepthArrayLeaf(values: [1, 2, 3])
+        let decodedArrayLeaf: StaticDepthArrayLeaf = try fory.deserialize(
+            try fory.serialize(arrayLeaf))
+        #expect(decodedArrayLeaf == arrayLeaf)
     }
 }
 

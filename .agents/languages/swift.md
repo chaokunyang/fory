@@ -55,8 +55,10 @@ Load this file when changing `swift/` or Swift xlang behavior.
   it, even when the application-owned object graph is recursive. Each generated serializer owns
   depth introduced by its own read body. `@ForyStruct` and `@ForyUnion` macros emit compound-depth
   bookkeeping only when their visible field or payload shape may recurse, and omit it entirely for
-  leaf-only bodies. Explicit custom serializers own opaque read recursion; parent and carrier
-  serializers must not compensate for a child serializer that omitted its own guard.
+  leaf-only bodies. Transparent collection and map hints recursively fold their statically visible
+  children, so a primitive-array or other completely leaf-only carrier tree must not make the
+  generated parent recursive. Explicit custom serializers own opaque read recursion; parent and
+  carrier serializers must not compensate for a child serializer that omitted its own guard.
 - `OptionalSerializer` has `isWrapper == true` because it has no independent registration
   identity. A custom serializer targeting the same Swift shape remains false because it owns an
   independent opaque EXT body.

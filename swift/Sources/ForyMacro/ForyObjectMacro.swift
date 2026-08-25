@@ -3648,13 +3648,37 @@ private func fieldReadMayRecurse(
             // A selected custom serializer owns recursion in its own body;
             // scalar hints are leaves.
             return false
-        case .list, .array, .set, .map:
-            return true
+        case .list(let element), .array(let element), .set(let element):
+            return fieldTypeHintMayRecurse(element)
+        case .map(let key, let value):
+            guard let key, let value else {
+                return true
+            }
+            return fieldTypeHintMayRecurse(key) || fieldTypeHintMayRecurse(value)
         case .inferredEncoding:
             break
         }
     }
     let concreteType = trimKnownModulePrefix(trimType(unwrapOptional(typeText).type))
+    if let element = parseArrayElement(concreteType) ?? parseSetElement(concreteType) {
+        return fieldReadMayRecurse(
+            typeText: element,
+            classification: classifyType(element),
+            typeHint: nil
+        )
+    }
+    if let (key, value) = parseDictionary(concreteType) {
+        return fieldReadMayRecurse(
+            typeText: key,
+            classification: classifyType(key),
+            typeHint: nil
+        )
+            || fieldReadMayRecurse(
+                typeText: value,
+                classification: classifyType(value),
+                typeHint: nil
+            )
+    }
     if classification.isPrimitive
         || (classification.isBuiltIn && !classification.isCollection && !classification.isMap)
     {
@@ -3667,6 +3691,22 @@ private func fieldReadMayRecurse(
     // generated serializer owns the frame around its own body; explicitly
     // selected custom serializers are excluded above and own themselves.
     return true
+}
+
+private func fieldTypeHintMayRecurse(_ typeHint: FieldTypeHint) -> Bool {
+    switch typeHint {
+    case .with, .scalar:
+        return false
+    case .list(let element), .array(let element), .set(let element):
+        return fieldTypeHintMayRecurse(element)
+    case .map(let key, let value):
+        guard let key, let value else {
+            return true
+        }
+        return fieldTypeHintMayRecurse(key) || fieldTypeHintMayRecurse(value)
+    case .inferredEncoding:
+        return true
+    }
 }
 
 private func buildReadProgressDecl(fields: [ParsedField], accessPrefix: String) -> String {

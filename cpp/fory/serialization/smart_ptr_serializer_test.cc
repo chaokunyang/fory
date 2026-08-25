@@ -1038,8 +1038,15 @@ struct LeafDepthValue {
   FORY_STRUCT(LeafDepthValue, count, enabled, kind);
 };
 
+struct LeafContainerDepthValue {
+  std::vector<int32_t> values;
+  std::map<std::string, int32_t> counts;
+  FORY_STRUCT(LeafContainerDepthValue, values, counts);
+};
+
 TEST(SmartPtrSerializerTest, LeafReadsSkipDepth) {
   static_assert(!Serializer<LeafDepthValue>::read_may_recurse);
+  static_assert(!Serializer<LeafContainerDepthValue>::read_may_recurse);
 
   auto fory = Fory::builder()
                   .xlang(true)
@@ -1048,6 +1055,7 @@ TEST(SmartPtrSerializerTest, LeafReadsSkipDepth) {
                   .max_dyn_depth(0)
                   .build();
   ASSERT_TRUE(fory.register_struct<LeafDepthValue>(299).ok());
+  ASSERT_TRUE(fory.register_struct<LeafContainerDepthValue>(298).ok());
 
   LeafDepthValue value;
   value.count = 42;
@@ -1060,6 +1068,17 @@ TEST(SmartPtrSerializerTest, LeafReadsSkipDepth) {
   EXPECT_EQ(decoded_value->count, 42);
   EXPECT_TRUE(decoded_value->enabled);
   EXPECT_EQ(decoded_value->kind, LeafDepthEnum::B);
+
+  LeafContainerDepthValue container;
+  container.values = {1, 2, 3};
+  container.counts = {{"one", 1}, {"two", 2}};
+  auto container_bytes = fory.serialize(container);
+  ASSERT_TRUE(container_bytes.ok()) << container_bytes.error().to_string();
+  auto decoded_container =
+      fory.deserialize<LeafContainerDepthValue>(*container_bytes);
+  ASSERT_TRUE(decoded_container.ok()) << decoded_container.error().to_string();
+  EXPECT_EQ(decoded_container->values, container.values);
+  EXPECT_EQ(decoded_container->counts, container.counts);
 }
 
 TEST(SmartPtrSerializerTest, MaxDynDepthExceeded) {

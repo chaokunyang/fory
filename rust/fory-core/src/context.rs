@@ -389,9 +389,9 @@ pub struct ReadContext<'a> {
     meta_string_resolver: MetaStringReaderResolver,
     pub ref_reader: RefReader,
     current_depth: u32,
-    // Generated static bodies use a separate counter because dynamic dispatch already owns its
+    // Generated static bodies use a separate budget because dynamic dispatch already owns its
     // depth frame. Sharing one counter would double-count every dynamically resolved struct.
-    current_static_depth: u32,
+    remaining_static_depth: u32,
 }
 
 // Safety: ReadContext follows the same invariants as WriteContext—external orchestrators ensure
@@ -421,7 +421,7 @@ impl<'a> ReadContext<'a> {
             meta_string_resolver: MetaStringReaderResolver::default(),
             ref_reader: RefReader::new(),
             current_depth: 0,
-            current_static_depth: 0,
+            remaining_static_depth: config.max_dyn_depth,
         }
     }
 
@@ -724,22 +724,19 @@ impl<'a> ReadContext<'a> {
     #[inline(always)]
     #[doc(hidden)]
     pub fn inc_static_depth(&mut self) -> Result<(), Error> {
-        self.current_static_depth += 1;
-        if self.current_static_depth > self.max_dyn_depth() {
-            return Err(static_depth_exceeded(
-                self.max_dyn_depth(),
-                self.current_static_depth,
-            ));
+        if self.remaining_static_depth == 0 {
+            return Err(static_depth_exceeded(self.max_dyn_depth()));
         }
+        self.remaining_static_depth -= 1;
         Ok(())
     }
 
     #[inline(always)]
     #[doc(hidden)]
     pub fn dec_static_depth(&mut self) {
-        // Generated readers decrement only after the complete body succeeds. Root reset owns the
-        // failed path so nested readers need no Drop guard or failure cleanup.
-        self.current_static_depth = self.current_static_depth.saturating_sub(1);
+        // Generated readers return budget only after the complete body succeeds. Root reset owns
+        // the failed path so nested readers need no Drop guard or failure cleanup.
+        self.remaining_static_depth += 1;
     }
 
     #[inline(always)]
@@ -749,17 +746,17 @@ impl<'a> ReadContext<'a> {
         self.ref_reader.reset();
         // Root reset is the only failure-cleanup owner for read depth.
         self.current_depth = 0;
-        self.current_static_depth = 0;
+        self.remaining_static_depth = self.max_dyn_depth;
         self.remaining_unbacked_container_items = 0;
     }
 }
 
 #[cold]
 #[inline(never)]
-fn static_depth_exceeded(max_depth: u32, current_depth: u32) -> Error {
+fn static_depth_exceeded(max_depth: u32) -> Error {
     Error::depth_exceed(format!(
-        "Maximum static object nesting depth ({max_depth}) exceeded. Current depth: {current_depth}. \
-         Consider increasing max_dyn_depth if this is expected."
+        "Maximum static object nesting depth ({max_depth}) exceeded. Consider increasing \
+         max_dyn_depth if this is expected."
     ))
 }
 

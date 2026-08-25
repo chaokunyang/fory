@@ -38,18 +38,13 @@ pub(crate) fn guard_static_read(body: TokenStream, may_recurse: bool) -> TokenSt
     if !may_recurse {
         return body;
     }
+    // Keep the body in the generated function. Its `?` returns before the budget is restored, so
+    // root reset remains the sole failure-cleanup owner without an extra closure call.
     quote! {
         context.inc_static_depth()?;
-        match (|| { #body })() {
-            ::std::result::Result::Ok(value) => {
-                context.dec_static_depth();
-                ::std::result::Result::Ok(value)
-            }
-            ::std::result::Result::Err(error) => {
-                // Root reset owns the failed path's depth; nested readers must not clean it.
-                ::std::result::Result::Err(error)
-            }
-        }
+        let value = { #body }?;
+        context.dec_static_depth();
+        ::std::result::Result::Ok(value)
     }
 }
 

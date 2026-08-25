@@ -1,6 +1,6 @@
 ---
 name: fory-release
-description: Prepare an Apache Fory release candidate from a clean release branch, including the version bump, JVM staging, RC tag, ASF source artifacts, SVN upload, and vote email. Use when creating or rerunning a Fory release candidate.
+description: Prepare an Apache Fory release candidate from a clean release branch, including the version bump, RC tag, JVM staging, ASF source artifacts, SVN upload, and vote email. Use when creating or rerunning a Fory release candidate.
 ---
 
 # Apache Fory Release
@@ -127,7 +127,25 @@ release_commit="$(git rev-parse HEAD)"
 
 Stage only the version changes produced by the release script.
 
-### 4. Publish JVM artifacts
+### 4. Create and push the RC tag
+
+Confirm that neither the local nor remote tag already exists. An invalid RC gets a new RC number; never move or reuse an RC tag.
+
+```bash
+test -z "$(git tag --list "$rc_tag")"
+test -z "$(git ls-remote --tags apache "refs/tags/${rc_tag}")"
+test "$(git rev-parse HEAD)" = "$release_commit"
+git tag "$rc_tag" && git push apache "$rc_tag"
+test "$(git rev-parse "${rc_tag}^{commit}")" = "$release_commit"
+```
+
+The tag starts the ecosystem package-release workflows. Do not wait for them
+here: start JVM publication immediately so the remote workflows and JVM staging
+run in parallel. Once the tag has been pushed, any JVM or later release failure
+invalidates this RC and requires a higher RC number; never move or reuse the
+tag.
+
+### 5. Publish JVM artifacts
 
 ```bash
 python3 ci/release.py publish_jvm
@@ -152,25 +170,82 @@ gate, close polling, failure inspection, and anonymous artifact checks. Do not
 close any repository ID that was not recorded from this publication. Keep both
 repositories closed during the vote; do not promote them until the vote passes.
 
-### 5. Create and push the RC tag
+### 6. Check the tag-triggered workflows
 
-Confirm that neither the local nor remote tag already exists. An invalid RC gets a new RC number; never move or reuse an RC tag.
+After JVM publication and Nexus closure, inspect the workflows that have been
+running since the tag was pushed. Filter by the tag rather than only by commit
+SHA so main-branch runs at the same commit are not mixed into the result.
 
 ```bash
-test -z "$(git tag --list "$rc_tag")"
-test -z "$(git ls-remote --tags apache "refs/tags/${rc_tag}")"
-test "$(git rev-parse HEAD)" = "$release_commit"
-git tag "$rc_tag" && git push apache "$rc_tag"
-test "$(git rev-parse "${rc_tag}^{commit}")" = "$release_commit"
+workflow_runs_json="$(
+  gh run list \
+    --repo apache/fory \
+    --branch "$rc_tag" \
+    --event push \
+    --limit 100 \
+    --json databaseId,workflowName,status,conclusion,headSha,headBranch,url
+)"
+
+WORKFLOW_RUNS_JSON="$workflow_runs_json" \
+RELEASE_COMMIT="$release_commit" \
+RC_TAG="$rc_tag" \
+python3 - <<'PY'
+import json
+import os
+
+runs = json.loads(os.environ["WORKFLOW_RUNS_JSON"])
+release_commit = os.environ["RELEASE_COMMIT"]
+rc_tag = os.environ["RC_TAG"]
+if not runs:
+    raise SystemExit(f"No tag-triggered workflows found for {rc_tag}")
+wrong_revision = [
+    run
+    for run in runs
+    if run["headSha"] != release_commit or run["headBranch"] != rc_tag
+]
+if wrong_revision:
+    raise SystemExit(f"Unexpected workflow revisions: {wrong_revision}")
+for run in sorted(runs, key=lambda item: item["workflowName"]):
+    print(
+        run["databaseId"],
+        run["workflowName"],
+        run["status"],
+        run["conclusion"] or "-",
+        run["url"],
+    )
+failed = [
+    run
+    for run in runs
+    if run["status"] == "completed" and run["conclusion"] != "success"
+]
+if failed:
+    raise SystemExit(f"Failed tag-triggered workflows: {failed}")
+PY
 ```
 
-The tag starts the ecosystem package-release workflows. Check that the
-tag-triggered workflows complete before sending the vote. If the release
-manager explicitly waives workflow monitoring for a particular RC, record the
-initial workflow IDs and states plus the reason; do not cancel the remote
-workflows, and do not report them as successful.
+By default, wait for every incomplete run and require a successful conclusion:
 
-### 6. Build the ASF source release
+```bash
+printf "%s\n" "$workflow_runs_json" |
+  python3 -c '
+import json
+import sys
+
+for run in json.load(sys.stdin):
+    if run["status"] != "completed":
+        print(run["databaseId"])
+' |
+  while IFS= read -r workflow_id; do
+    gh run watch "$workflow_id" --repo apache/fory --exit-status || exit 1
+  done
+```
+
+Re-query by tag before sending the vote to catch any later-created run. If the
+release manager explicitly waives workflow monitoring for a particular RC,
+record the snapshot IDs, states, and reason; do not cancel the remote workflows
+and do not report incomplete runs as successful.
+
+### 7. Build the ASF source release
 
 Start from the clean release branch. The build temporarily commits release-archive changes and resets them, so verify that it restores the original commit and clean tree.
 
@@ -187,7 +262,7 @@ test -f "dist/apache-fory-${release_version}-src.tar.gz.sha512"
 
 The build command verifies the generated PGP signature and SHA-512 checksum.
 
-### 7. Commit the source release to ASF Subversion
+### 8. Commit the source release to ASF Subversion
 
 Use a clean, updated working copy of the ASF development distribution repository.
 
@@ -206,7 +281,7 @@ svn ls "https://dist.apache.org/repos/dist/dev/fory/${dist_version}/"
 
 Inspect `svn status` before committing. The upload is complete only after `svn commit` returns a revision and the remote `svn ls` shows the three release files; local `A` status alone is not an upload.
 
-### 8. Draft the vote email
+### 9. Draft the vote email
 
 Produce a complete, copyable email from this template. Fill every placeholder from verified output, use an explicit UTC deadline at least 72 hours after sending, and do not send the email unless requested.
 
@@ -279,7 +354,14 @@ Before sending, verify the tag and commit, all URLs, both closed Maven staging r
 
 ## Stop Conditions
 
-Stop before the next irreversible step if the Git tree is dirty, a command fails, an RC tag already exists, the tag and commit differ, either staging repository is not closed and public, or the Subversion commit is not remotely visible. Fix the issue and create a higher RC number instead of mutating a published candidate.
+Before pushing the tag, stop if the Git tree is dirty, a command fails, the RC
+tag already exists, or the tag target would differ from the release commit.
+After pushing the immutable tag, any failed JVM publication, workflow,
+artifact verification, or Subversion publication invalidates that candidate;
+fix the issue and create a higher RC instead of moving or reusing the tag.
+Before sending the vote, require both staging repositories to be closed and
+public, the Subversion commit to be remotely visible, and the tag workflows to
+be successful unless the release manager explicitly waived monitoring.
 
 ## References
 

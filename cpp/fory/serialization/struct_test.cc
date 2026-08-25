@@ -2113,25 +2113,26 @@ TEST(StructComprehensiveTest, CompatibleNegativeSignedToUnsignedFails) {
   EXPECT_FALSE(result.ok());
 }
 
-TEST(StructComprehensiveTest, LocalDispatchRejectsMatchedIdOverflow) {
-  constexpr size_t max_compatible_matched_field_index =
+TEST(StructComprehensiveTest, LocalDispatchExceedsInt16) {
+  constexpr size_t legacy_matched_field_index =
       (static_cast<size_t>(std::numeric_limits<int16_t>::max()) - 1) / 2;
   const FieldType field_type = make_test_field_type(TypeId::INT32);
 
   TypeMeta local_type;
-  local_type.field_infos.reserve(max_compatible_matched_field_index + 2);
-  for (size_t index = 0; index <= max_compatible_matched_field_index + 1;
-       ++index) {
+  local_type.field_infos.reserve(legacy_matched_field_index + 2);
+  for (size_t index = 0; index <= legacy_matched_field_index + 1; ++index) {
     local_type.field_infos.push_back(
         make_test_field_info("field_" + std::to_string(index), -1, field_type));
   }
 
   std::vector<FieldInfo> remote_fields = {make_test_field_info(
-      "field_" + std::to_string(max_compatible_matched_field_index + 1), -1,
+      "field_" + std::to_string(legacy_matched_field_index + 1), -1,
       field_type)};
   auto result = TypeMeta::assign_local_dispatch_ids(&local_type, remote_fields);
 
-  EXPECT_FALSE(result.ok());
+  ASSERT_TRUE(result.ok()) << result.error().to_string();
+  EXPECT_EQ(remote_fields[0].matched_field_id,
+            static_cast<int32_t>((legacy_matched_field_index + 1) * 2));
 }
 
 TEST(StructComprehensiveTest, OptionalFieldsAllEmpty) {

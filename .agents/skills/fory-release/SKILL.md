@@ -14,7 +14,8 @@ Collect these values before starting:
 - `release_version`: final version without `v` or an RC suffix, such as `1.7.0`.
 - `rc`: RC suffix, such as `rc3`.
 - `previous_version`: previous release tag version, such as `1.6.1`.
-- Release discussion URL.
+- Release discussion URL, if already known. If it is not supplied, find the
+  exact release thread in the Fory development-list archive as described below.
 
 Load release-manager details from `.local/fory-release.env`. If it does not exist, ask for the following values once, create the ignored local file, and continue. Never commit this file.
 
@@ -43,6 +44,51 @@ svn_wc="${FORY_DIST_DEV_WC:?missing ASF Subversion working-copy path}"
 ```
 
 Use the same `dist_version` in Subversion and the vote email.
+
+### Find the release discussion
+
+If the release discussion URL was not supplied, search the
+[Fory development-list archive](https://lists.apache.org/list.html?dev@fory.apache.org)
+for the exact release version and a `[DISCUSS]` subject. The following command
+uses the same Apache Pony Mail search endpoint as the archive UI and accepts
+exactly one root discussion thread:
+
+```bash
+discussion_url="$(
+  curl --fail --silent --show-error --get \
+    --data-urlencode "d=lte=1y" \
+    --data-urlencode "list=dev" \
+    --data-urlencode "domain=fory.apache.org" \
+    --data-urlencode "q=${release_version}" \
+    --data-urlencode "header_subject=DISCUSS" \
+    https://lists.apache.org/api/stats.lua |
+    python3 -c '
+import json
+import sys
+
+version = sys.argv[1]
+messages = json.load(sys.stdin).get("emails", [])
+matches = [
+    message
+    for message in messages
+    if not message.get("in-reply-to")
+    and "[DISCUSS]" in str(message.get("subject", "")).upper()
+    and version in str(message.get("subject", ""))
+]
+if len(matches) != 1:
+    raise SystemExit(
+        f"Expected one root discussion for {version}, found {len(matches)}"
+    )
+print("https://lists.apache.org/thread/" + matches[0]["id"])
+' "$release_version"
+)"
+```
+
+Open the resulting URL and verify that its subject and body discuss the exact
+`release_version`. If the automated search finds zero or multiple roots, use
+the archive UI to search the same exact version and `[DISCUSS]`; ask the release
+manager only if the result remains absent or ambiguous. When a URL is supplied,
+open and verify it instead of assuming it matches this release.
 
 ## Release Workflow
 
@@ -87,7 +133,24 @@ Stage only the version changes produced by the release script.
 python3 ci/release.py publish_jvm
 ```
 
-The command publishes from a temporary worktree at the committed `HEAD` and removes that worktree afterward. Record the Java/Kotlin and Scala Nexus staging repository IDs from the output. In Nexus, close both repositories and confirm their public URLs are readable before starting the vote. Do not release them until the vote passes; drop a failed candidate instead.
+The command publishes from a temporary worktree at the committed `HEAD` and
+removes that worktree afterward. Record the distinct Java/Kotlin and Scala
+Nexus staging repository IDs from the output:
+
+```bash
+java_kotlin_staging_id="orgapachefory-..."
+scala_staging_id="orgapachefory-..."
+test -n "$java_kotlin_staging_id"
+test -n "$scala_staging_id"
+test "$java_kotlin_staging_id" != "$scala_staging_id"
+```
+
+After recording both IDs, read and follow
+[Nexus staging closure](references/nexus-staging.md). It contains the
+credential rules, authenticated state checks, `/bulk/close` request, HTTP 201
+gate, close polling, failure inspection, and anonymous artifact checks. Do not
+close any repository ID that was not recorded from this publication. Keep both
+repositories closed during the vote; do not promote them until the vote passes.
 
 ### 5. Create and push the RC tag
 
@@ -101,7 +164,11 @@ git tag "$rc_tag" && git push apache "$rc_tag"
 test "$(git rev-parse "${rc_tag}^{commit}")" = "$release_commit"
 ```
 
-The tag starts the ecosystem package-release workflows. Check that the tag-triggered workflows complete before sending the vote.
+The tag starts the ecosystem package-release workflows. Check that the
+tag-triggered workflows complete before sending the vote. If the release
+manager explicitly waives workflow monitoring for a particular RC, record the
+initial workflow IDs and states plus the reason; do not cancel the remote
+workflows, and do not report them as successful.
 
 ### 6. Build the ASF source release
 
@@ -132,6 +199,8 @@ cp dist/* "$svn_wc/$dist_version/"
 svn add --force "$svn_wc/$dist_version"
 svn status "$svn_wc/$dist_version"
 svn commit "$svn_wc/$dist_version" -m "Prepare Apache Fory ${rc_tag}"
+test -z "$(svn status "$svn_wc/$dist_version")"
+svn log -l 1 "$svn_wc/$dist_version"
 svn ls "https://dist.apache.org/repos/dist/dev/fory/${dist_version}/"
 ```
 
@@ -146,34 +215,34 @@ Subject: [VOTE] Release Apache Fory v${release_version}-${rc}
 
 Hello, Apache Fory Community:
 
-This is a call for vote to release Apache Fory version v${release_version}.
+This is a call for vote to release Apache Fory ${release_version}.
 
-Apache Fory - A blazingly fast multi-language serialization framework
+Apache Fory is a blazingly fast multi-language serialization framework
 for idiomatic domain objects, schema IDL, and cross-language data exchange.
 
 The discussion thread:
 ${discussion_url}
 
-The change list for this release:
+The change list since Apache Fory ${previous_version}:
 https://github.com/apache/fory/compare/v${previous_version}...${rc_tag}
 
-The release candidate:
+The release candidate artifacts:
 https://dist.apache.org/repos/dist/dev/fory/${dist_version}/
 
-The Maven staging repositories for this release:
+The Maven staging repositories:
+Java and Kotlin:
 https://repository.apache.org/content/repositories/${java_kotlin_staging_id}/
-  (Java/Kotlin artifacts)
+Scala:
 https://repository.apache.org/content/repositories/${scala_staging_id}/
-  (Scala artifacts)
 
-Git tag for the release candidate:
+The release tag:
 https://github.com/apache/fory/releases/tag/${rc_tag}
 
-Git commit for the release candidate:
+The release commit:
 https://github.com/apache/fory/commit/${release_commit}
 
 The artifacts are signed with PGP key fingerprint
-${gpg_fingerprint}, corresponding to ${apache_email}, which can be found in
+${gpg_fingerprint}, corresponding to ${apache_email}. The key can be found in
 the KEYS file:
 https://downloads.apache.org/fory/KEYS
 
@@ -184,7 +253,7 @@ Please vote accordingly:
 
 [ ] +1 approve
 [ ] +0 no opinion
-[ ] -1 disapprove with the reason
+[ ] -1 disapprove (please explain why)
 
 To learn more about Fory, please see:
 https://fory.apache.org/
@@ -215,4 +284,6 @@ Stop before the next irreversible step if the Git tree is dirty, a command fails
 ## References
 
 - [Apache Fory release guide](https://fory.apache.org/docs/community/how_to_release)
+- [Fory development-list archive](https://lists.apache.org/list.html?dev@fory.apache.org)
+- [Sonatype Nexus 2 staging REST example](https://support.sonatype.com/hc/en-us/articles/213465448-Automatically-dropping-old-staging-repositories)
 - [Apache OpenDAL release skill](https://github.com/apache/opendal/blob/main/.agents/skills/opendal-release/SKILL.md), used only as secondary operational guidance

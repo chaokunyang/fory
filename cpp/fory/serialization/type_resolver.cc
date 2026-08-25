@@ -1182,6 +1182,8 @@ namespace {
 Result<void, Error>
 assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
                       std::vector<FieldInfo> &remote_fields) {
+  constexpr size_t max_compatible_matched_field_index =
+      (static_cast<size_t>(std::numeric_limits<int16_t>::max()) - 1) / 2;
   const auto invalid_wire_id = [](int32_t wire_id) {
     return wire_id < detail::kFieldNameIdentity ||
            wire_id > detail::kMaxFieldTag;
@@ -1260,12 +1262,26 @@ assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
     const FieldInfo &local_field = local_fields[local_index];
     if (field_types_compatible(local_field.field_type,
                                remote_field.field_type)) {
+      if (local_index > max_compatible_matched_field_index) {
+        return Unexpected(Error::type_error(
+            "Cannot assign compatible matched id for local field " +
+            local_field.field_name + ": local field index " +
+            std::to_string(local_index) + " exceeds max " +
+            std::to_string(max_compatible_matched_field_index)));
+      }
       remote_field.matched_field_id = static_cast<int32_t>(local_index * 2);
       used[local_index] = true;
       return true;
     }
     if (field_types_compatible_top_level(local_field.field_type,
                                          remote_field.field_type)) {
+      if (local_index > max_compatible_matched_field_index) {
+        return Unexpected(Error::type_error(
+            "Cannot assign compatible matched id for local field " +
+            local_field.field_name + ": local field index " +
+            std::to_string(local_index) + " exceeds max " +
+            std::to_string(max_compatible_matched_field_index)));
+      }
       remote_field.matched_field_id = static_cast<int32_t>(local_index * 2 + 1);
       used[local_index] = true;
       return true;

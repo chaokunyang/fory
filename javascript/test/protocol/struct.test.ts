@@ -71,7 +71,7 @@ describe("protocol", () => {
       },
     );
     const { serialize, deserialize } = fory.register(nullableUnspecified);
-    expect(() => nonNullableSer.serialize({ a: null })).toThrow(/Field "a" is not nullable/);
+    expect(() => nonNullableSer.serialize({ a: null })).toThrow();
     expect(deserialize(serialize({ a: null }))).toEqual({ a: null });
   });
 

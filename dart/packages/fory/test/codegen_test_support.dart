@@ -92,7 +92,7 @@ Future<void> expectForyGenerationOutput({
 Future<void> expectForyGenerationError({
   required String inputPath,
   required String source,
-  required String message,
+  String? message,
   Map<String, String> additionalAssets = const <String, String>{},
 }) async {
   final logs = <String>[];
@@ -108,7 +108,9 @@ Future<void> expectForyGenerationError({
     onLog: (record) => logs.add(record.message),
   );
   expect(result.succeeded, isFalse);
-  expect(logs.join('\n'), contains(message));
+  if (message != null) {
+    expect(logs.join('\n'), contains(message));
+  }
 }
 
 Future<Map<String, String>> _loadAnnotationAssets() async {

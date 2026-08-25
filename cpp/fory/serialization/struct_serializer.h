@@ -2030,9 +2030,9 @@ template <typename T> struct CompileTimeFieldHelpers {
         return names;
       }();
 
-  static constexpr size_t tag_id_length(uint64_t value) {
+  static constexpr size_t tag_id_length(uint32_t value) {
     size_t count = 1;
-    uint64_t v = value;
+    uint32_t v = value;
     while (v >= 10) {
       v /= 10;
       ++count;
@@ -2043,7 +2043,7 @@ template <typename T> struct CompileTimeFieldHelpers {
   static constexpr size_t identifier_length(size_t index) {
     int32_t id = field_ids[index];
     if (id >= 0) {
-      return tag_id_length(static_cast<uint64_t>(id));
+      return tag_id_length(static_cast<uint32_t>(id));
     }
     return snake_case_lengths[index];
   }

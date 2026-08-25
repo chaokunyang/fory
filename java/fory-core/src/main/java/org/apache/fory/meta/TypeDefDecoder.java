@@ -225,12 +225,23 @@ class TypeDefDecoder {
       byte header = buffer.readByte();
       int encodingFlags = (header >>> 6) & 0b11;
       boolean useTagID = encodingFlags == 3;
-      long fieldNameSize = (header >>> 2) & 0b1111;
-      if (fieldNameSize == FIELD_NAME_SIZE_THRESHOLD) {
+      int inlineSize = (header >>> 2) & 0b1111;
+      long fieldNameSize = inlineSize;
+      int tagId = useTagID ? inlineSize : -1;
+      if (inlineSize == FIELD_NAME_SIZE_THRESHOLD) {
         int extendedSize = buffer.readVarUInt32Small7();
-        fieldNameSize += Integer.toUnsignedLong(extendedSize);
+        if (useTagID) {
+          if (Integer.compareUnsigned(extendedSize, ForyField.MAX_ID - inlineSize) > 0) {
+            throw new DeserializationException("TypeDef field tag ID out of range");
+          }
+          tagId += extendedSize;
+        } else {
+          fieldNameSize += Integer.toUnsignedLong(extendedSize);
+        }
       }
-      fieldNameSize += 1;
+      if (!useTagID) {
+        fieldNameSize += 1;
+      }
       boolean nullable = (header & 0b10) != 0;
       boolean trackingRef = (header & 0b1) != 0;
       int typeId = buffer.readUInt8();
@@ -239,12 +250,6 @@ class TypeDefDecoder {
 
       // read field name or tag ID
       if (useTagID) {
-        // When useTagID is true, fieldNameSize actually contains the tag ID
-        long wireTagId = fieldNameSize - 1;
-        if (wireTagId > ForyField.MAX_ID) {
-          throw new DeserializationException("TypeDef field tag ID out of range: " + wireTagId);
-        }
-        int tagId = (int) wireTagId;
         if (!tagIds.add(tagId)) {
           throw new DeserializationException("Duplicate TypeDef field tag ID " + tagId);
         }

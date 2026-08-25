@@ -1679,17 +1679,17 @@ private func parseMapFieldTypeHint(args: LabeledExprListSyntax) throws -> FieldT
 
 private func parseFieldIDExpression(_ expr: ExprSyntax) throws -> Int32 {
     let raw = trimType(expr.trimmedDescription)
-    guard let value = Int64(raw) else {
+    guard let value = Int32(raw) else {
         throw MacroExpansionErrorMessage("@ForyField id must be an integer literal")
     }
     if value < 0 {
         throw MacroExpansionErrorMessage("@ForyField id must be non-negative")
     }
-    let maxFieldID: Int64 = (1 << 29) - 1
+    let maxFieldID: Int32 = (1 << 29) - 1
     if value > maxFieldID {
         throw MacroExpansionErrorMessage("@ForyField id must be <= \(maxFieldID)")
     }
-    return Int32(value)
+    return value
 }
 
 private func parseCaseIDExpression(_ expr: ExprSyntax) throws -> Int {

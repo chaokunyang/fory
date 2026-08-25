@@ -99,7 +99,7 @@ const FIELD_NAME_SIZE_THRESHOLD: usize = 0b1111;
 /// Marker value in encoding bits to indicate field ID mode (instead of field name)
 const FIELD_ID_ENCODING_MARKER: u8 = 0b11;
 /// Threshold for field ID that fits in 4-bit size field
-const SMALL_FIELD_ID_THRESHOLD: i16 = 0b1111;
+const SMALL_FIELD_ID_THRESHOLD: i32 = 0b1111;
 const MAX_FIELD_ID: i32 = (1 << 29) - 1;
 
 const BIG_NAME_THRESHOLD: usize = 0b111111;
@@ -484,14 +484,13 @@ impl FieldInfo {
         // Check if this is field ID mode (encoding bits == 0b11)
         if encoding_bits == FIELD_ID_ENCODING_MARKER {
             // Field ID mode: | 0b11:2bits | field_id_low:4bits | nullable:1bit | track_ref:1bit |
-            let mut field_id = ((header >> 2) & FIELD_NAME_SIZE_THRESHOLD as u8) as u64;
-            if field_id == SMALL_FIELD_ID_THRESHOLD as u64 {
-                field_id += u64::from(reader.read_var_u32()?);
-            }
-            if field_id > MAX_FIELD_ID as u64 {
-                return Err(Error::invalid_data(format!(
-                    "field ID {field_id} exceeds maximum {MAX_FIELD_ID}"
-                )));
+            let mut field_id = u32::from((header >> 2) & FIELD_NAME_SIZE_THRESHOLD as u8);
+            if field_id == SMALL_FIELD_ID_THRESHOLD as u32 {
+                let extension = reader.read_var_u32()?;
+                if extension > MAX_FIELD_ID as u32 - field_id {
+                    return Err(Error::invalid_data("field ID exceeds maximum"));
+                }
+                field_id += extension;
             }
             let field_id = field_id as i32;
 
@@ -551,7 +550,7 @@ impl FieldInfo {
                     "field ID {field_id} exceeds maximum {MAX_FIELD_ID}"
                 )));
             }
-            let mut header: u8 = (min(i32::from(SMALL_FIELD_ID_THRESHOLD), field_id) as u8) << 2;
+            let mut header: u8 = (min(SMALL_FIELD_ID_THRESHOLD, field_id) as u8) << 2;
             if track_ref {
                 header |= 1;
             }
@@ -561,8 +560,8 @@ impl FieldInfo {
             // Set encoding bits to 0b11 to indicate field ID mode
             header |= FIELD_ID_ENCODING_MARKER << 6;
             writer.write_u8(header);
-            if field_id >= i32::from(SMALL_FIELD_ID_THRESHOLD) {
-                writer.write_var_u32((field_id - i32::from(SMALL_FIELD_ID_THRESHOLD)) as u32);
+            if field_id >= SMALL_FIELD_ID_THRESHOLD {
+                writer.write_var_u32((field_id - SMALL_FIELD_ID_THRESHOLD) as u32);
             }
             self.field_type.to_bytes(&mut writer, false, nullable)?;
             // No field name written in ID mode

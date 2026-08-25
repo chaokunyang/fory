@@ -361,13 +361,18 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
         byte header = reader.ReadUInt8();
         int encodingFlags = (header >> 6) & 0b11;
         int size = (header >> 2) & 0b1111;
-        ulong? wireFieldId = encodingFlags == 3 ? (ulong)size : null;
+        int fieldId = encodingFlags == 3 ? size : -1;
         if (size == TypeMetaConstants.FieldNameSizeThreshold)
         {
             uint extension = reader.ReadVarUInt32();
             if (encodingFlags == 3)
             {
-                wireFieldId = (ulong)TypeMetaConstants.FieldNameSizeThreshold + extension;
+                if (extension > (uint)(TypeMetaConstants.MaxFieldId - TypeMetaConstants.FieldNameSizeThreshold))
+                {
+                    throw new InvalidDataException("field id exceeds the protocol range");
+                }
+
+                fieldId += (int)extension;
             }
             else
             {
@@ -379,10 +384,6 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
         {
             size = checked(size + 1);
         }
-        else if (wireFieldId!.Value > TypeMetaConstants.MaxFieldId)
-        {
-            throw new InvalidDataException("field id exceeds the protocol range");
-        }
 
         bool nullable = (header & 0b10) != 0;
         bool trackRef = (header & 0b1) != 0;
@@ -390,8 +391,7 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
 
         if (encodingFlags == 3)
         {
-            ulong fieldId = wireFieldId!.Value;
-            return new TypeMetaFieldInfo((int)fieldId, $"$tag{fieldId}", fieldType);
+            return new TypeMetaFieldInfo(fieldId, $"$tag{fieldId}", fieldType);
         }
 
         if (encodingFlags >= TypeMetaEncodings.FieldNameMetaStringEncodings.Length)

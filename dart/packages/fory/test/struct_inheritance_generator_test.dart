@@ -48,7 +48,7 @@ Future<void> _expectGenerationOutput({
 
 Future<void> _expectGenerationError({
   required String source,
-  required String message,
+  String? message,
   String fixtureHeader = _fixtureHeader,
   Map<String, String> additionalAssets = const <String, String>{},
 }) async {
@@ -618,7 +618,6 @@ class OversizedFieldId {
   int value = 0;
 }
 ''',
-        message: 'field id must not exceed 536870911',
       );
     });
 

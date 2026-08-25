@@ -334,23 +334,27 @@ class NativeTypeDefDecoder {
       //  `3 bits size + 2 bits field name encoding + nullability flag + ref tracking flag`
       int encodingFlags = (header >>> 2) & 0b11;
       boolean useTagID = encodingFlags == 3;
-      long size = header >>> 4;
-      if (size == 7) {
+      int inlineSize = header >>> 4;
+      long size = inlineSize;
+      int tagId = useTagID ? inlineSize : -1;
+      if (inlineSize == 7) {
         int extendedSize = buffer.readVarUInt32Small7();
-        size += Integer.toUnsignedLong(extendedSize);
+        if (useTagID) {
+          if (Integer.compareUnsigned(extendedSize, ForyField.MAX_ID - inlineSize) > 0) {
+            throw new DeserializationException("TypeDef field tag ID out of range");
+          }
+          tagId += extendedSize;
+        } else {
+          size += Integer.toUnsignedLong(extendedSize);
+        }
       }
-      size += 1;
+      if (!useTagID) {
+        size += 1;
+      }
 
       // Read field name or tag ID
       String fieldName;
-      int tagId = -1;
       if (useTagID) {
-        // When useTagID is true, size contains the tag ID
-        long wireTagId = size - 1;
-        if (wireTagId > ForyField.MAX_ID) {
-          throw new DeserializationException("TypeDef field tag ID out of range: " + wireTagId);
-        }
-        tagId = (int) wireTagId;
         if (!tagIds.add(tagId)) {
           throw new DeserializationException("Duplicate TypeDef field tag ID " + tagId);
         }

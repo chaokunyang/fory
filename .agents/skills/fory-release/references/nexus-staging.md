@@ -21,152 +21,50 @@ to task logs.
 ```bash
 : "${NEXUS_USERNAME:?export the Apache Nexus username}"
 : "${NEXUS_PASSWORD:?export the Apache Nexus password}"
-nexus_base="https://repository.apache.org"
-
-nexus_api() {
-  curl --fail-with-body --silent --show-error \
-    --user "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" \
-    "$@"
-}
-
-check_nexus_state() {
-  expected_state="$1"
-  nexus_api \
-    --header "Accept: application/json" \
-    "$nexus_base/service/local/staging/profile_repositories" |
-    python3 -c '
-import json
-import sys
-
-expected_state = sys.argv[1]
-wanted = sys.argv[2:]
-repositories = {
-    item.get("repositoryId"): item
-    for item in json.load(sys.stdin).get("data", [])
-}
-missing = [
-    repository_id
-    for repository_id in wanted
-    if repository_id not in repositories
-]
-if missing:
-    raise SystemExit(f"Missing Nexus staging repositories: {missing}")
-states = {
-    repository_id: repositories[repository_id].get("type")
-    for repository_id in wanted
-}
-for repository_id in wanted:
-    print(f"{repository_id}: {states[repository_id]}")
-if any(state != expected_state for state in states.values()):
-    raise SystemExit(1)
-' "$expected_state" "$java_kotlin_staging_id" "$scala_staging_id"
-}
 ```
 
-## Verify the Open Repositories
+## Close and Verify the Repositories
 
-Confirm that both recorded repositories exist and are open. This prevents an
-old or unrelated staging repository from being closed accidentally.
+Run the repository-owned command with both IDs from the current
+`publish_jvm` output:
 
 ```bash
-check_nexus_state open
+python3 ci/release.py close_jvm_staging \
+  -v "$release_version" \
+  --rc-tag "$rc_tag" \
+  --java-kotlin-id "$java_kotlin_staging_id" \
+  --scala-id "$scala_staging_id"
 ```
 
-Stop if either ID is absent or not open. Do not substitute a similarly named
-repository.
+The command requires two distinct `orgapachefory-*` IDs and an RC tag matching
+the final release version. Before mutation, it requires both recorded
+repositories to exist and be `open`. It then sends exactly one authenticated
+`/bulk/close` request, requires HTTP 201, polls both repositories until they are
+`closed`, and verifies anonymous HTTP 200 access to representative Java,
+Kotlin, Scala 2.13, and Scala 3 artifacts.
 
-## Close Both Repositories
+If closure times out, the command retrieves and logs the activity for both
+repositories before stopping. Do not repeatedly submit close requests or
+proceed to the vote while either repository is open or transitioning.
 
-Build the JSON payload from the two recorded IDs and require the Nexus close
-request to return HTTP 201:
+## Read-Only Verification
+
+For recovery or audit work on repositories that are already closed, add
+`--verify-only`:
 
 ```bash
-close_payload="$(
-  python3 -c '
-import json
-import sys
-
-print(json.dumps({
-    "data": {
-        "stagedRepositoryIds": sys.argv[1:3],
-        "description": sys.argv[3],
-    }
-}))
-' \
-    "$java_kotlin_staging_id" \
-    "$scala_staging_id" \
-    "Close Apache Fory ${rc_tag} staging repositories"
-)"
-
-close_http_code="$(
-  nexus_api \
-    --request POST \
-    --header "Accept: application/json" \
-    --header "Content-Type: application/json" \
-    --data "$close_payload" \
-    --output /dev/null \
-    --write-out "%{http_code}" \
-    "$nexus_base/service/local/staging/bulk/close"
-)"
-test "$close_http_code" = 201
+python3 ci/release.py close_jvm_staging \
+  -v "$release_version" \
+  --rc-tag "$rc_tag" \
+  --java-kotlin-id "$java_kotlin_staging_id" \
+  --scala-id "$scala_staging_id" \
+  --verify-only
 ```
 
-Closing performs server-side validation asynchronously. Poll for up to five
-minutes and require both repositories to reach `closed`:
-
-```bash
-nexus_closed=false
-for attempt in $(seq 1 30); do
-  if check_nexus_state closed; then
-    nexus_closed=true
-    break
-  fi
-  sleep 10
-done
-test "$nexus_closed" = true
-```
-
-If the timeout expires, inspect the close activity for both repositories and
-stop. Do not repeatedly submit close requests or proceed to the vote while a
-repository is open or transitioning.
-
-```bash
-for staging_id in "$java_kotlin_staging_id" "$scala_staging_id"; do
-  nexus_api \
-    --header "Accept: application/json" \
-    "$nexus_base/service/local/staging/repository/${staging_id}/activity" |
-    python3 -m json.tool
-done
-```
-
-## Verify Anonymous Artifact Access
-
-Verify anonymous access to the repository roots and representative Java,
-Kotlin, Scala 2.13, and Scala 3 artifacts. HTTP 200 from an authenticated API
-request is not a substitute for these public download checks.
-
-```bash
-java_kotlin_staging_url="${nexus_base}/content/repositories/${java_kotlin_staging_id}/"
-scala_staging_url="${nexus_base}/content/repositories/${scala_staging_id}/"
-
-for artifact_url in \
-  "$java_kotlin_staging_url" \
-  "${java_kotlin_staging_url}org/apache/fory/fory-core/${release_version}/fory-core-${release_version}.jar" \
-  "${java_kotlin_staging_url}org/apache/fory/fory-kotlin/${release_version}/fory-kotlin-${release_version}.jar" \
-  "$scala_staging_url" \
-  "${scala_staging_url}org/apache/fory/fory-scala_2.13/${release_version}/fory-scala_2.13-${release_version}.jar" \
-  "${scala_staging_url}org/apache/fory/fory-json-scala_3/${release_version}/fory-json-scala_3-${release_version}.jar"
-do
-  artifact_http_code="$(
-    curl --location --silent --show-error \
-      --output /dev/null \
-      --write-out "%{http_code}" \
-      "$artifact_url"
-  )"
-  printf "%s %s\n" "$artifact_http_code" "$artifact_url"
-  test "$artifact_http_code" = 200
-done
-```
+This path never submits a close request. It requires both repositories to
+already be `closed` and repeats the anonymous artifact checks. HTTP 200 from an
+authenticated API request is not a substitute for these public download
+checks.
 
 Record both repository IDs, their `closed` states, and the public verification
 results. Keep the repositories closed during the vote. Do not promote/release

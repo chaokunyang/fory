@@ -49,38 +49,13 @@ Use the same `dist_version` in Subversion and the vote email.
 
 If the release discussion URL was not supplied, search the
 [Fory development-list archive](https://lists.apache.org/list.html?dev@fory.apache.org)
-for the exact release version and a `[DISCUSS]` subject. The following command
-uses the same Apache Pony Mail search endpoint as the archive UI and accepts
-exactly one root discussion thread:
+for the exact release version and a `[DISCUSS]` subject. Use the deterministic
+helper, which accepts exactly one root discussion thread:
 
 ```bash
 discussion_url="$(
-  curl --fail --silent --show-error --get \
-    --data-urlencode "d=lte=1y" \
-    --data-urlencode "list=dev" \
-    --data-urlencode "domain=fory.apache.org" \
-    --data-urlencode "q=${release_version}" \
-    --data-urlencode "header_subject=DISCUSS" \
-    https://lists.apache.org/api/stats.lua |
-    python3 -c '
-import json
-import sys
-
-version = sys.argv[1]
-messages = json.load(sys.stdin).get("emails", [])
-matches = [
-    message
-    for message in messages
-    if not message.get("in-reply-to")
-    and "[DISCUSS]" in str(message.get("subject", "")).upper()
-    and version in str(message.get("subject", ""))
-]
-if len(matches) != 1:
-    raise SystemExit(
-        f"Expected one root discussion for {version}, found {len(matches)}"
-    )
-print("https://lists.apache.org/thread/" + matches[0]["id"])
-' "$release_version"
+  python3 .agents/skills/fory-release/scripts/find_discussion.py \
+    "$release_version"
 )"
 ```
 
@@ -174,76 +149,22 @@ repositories closed during the vote; do not promote them until the vote passes.
 
 After JVM publication and Nexus closure, inspect the workflows that have been
 running since the tag was pushed. Filter by the tag rather than only by commit
-SHA so main-branch runs at the same commit are not mixed into the result.
+SHA so main-branch runs at the same commit are not mixed into the result. By
+default, wait for every tag-triggered run and require successful conclusions:
 
 ```bash
-workflow_runs_json="$(
-  gh run list \
-    --repo apache/fory \
-    --branch "$rc_tag" \
-    --event push \
-    --limit 100 \
-    --json databaseId,workflowName,status,conclusion,headSha,headBranch,url
-)"
-
-WORKFLOW_RUNS_JSON="$workflow_runs_json" \
-RELEASE_COMMIT="$release_commit" \
-RC_TAG="$rc_tag" \
-python3 - <<'PY'
-import json
-import os
-
-runs = json.loads(os.environ["WORKFLOW_RUNS_JSON"])
-release_commit = os.environ["RELEASE_COMMIT"]
-rc_tag = os.environ["RC_TAG"]
-if not runs:
-    raise SystemExit(f"No tag-triggered workflows found for {rc_tag}")
-wrong_revision = [
-    run
-    for run in runs
-    if run["headSha"] != release_commit or run["headBranch"] != rc_tag
-]
-if wrong_revision:
-    raise SystemExit(f"Unexpected workflow revisions: {wrong_revision}")
-for run in sorted(runs, key=lambda item: item["workflowName"]):
-    print(
-        run["databaseId"],
-        run["workflowName"],
-        run["status"],
-        run["conclusion"] or "-",
-        run["url"],
-    )
-failed = [
-    run
-    for run in runs
-    if run["status"] == "completed" and run["conclusion"] != "success"
-]
-if failed:
-    raise SystemExit(f"Failed tag-triggered workflows: {failed}")
-PY
+python3 .agents/skills/fory-release/scripts/check_tag_workflows.py \
+  --repo apache/fory \
+  --tag "$rc_tag" \
+  --commit "$release_commit" \
+  --watch
 ```
 
-By default, wait for every incomplete run and require a successful conclusion:
-
-```bash
-printf "%s\n" "$workflow_runs_json" |
-  python3 -c '
-import json
-import sys
-
-for run in json.load(sys.stdin):
-    if run["status"] != "completed":
-        print(run["databaseId"])
-' |
-  while IFS= read -r workflow_id; do
-    gh run watch "$workflow_id" --repo apache/fory --exit-status || exit 1
-  done
-```
-
-Re-query by tag before sending the vote to catch any later-created run. If the
-release manager explicitly waives workflow monitoring for a particular RC,
-record the snapshot IDs, states, and reason; do not cancel the remote workflows
-and do not report incomplete runs as successful.
+The helper re-queries by tag after waiting to catch later-created runs. If the
+release manager explicitly waives workflow monitoring for a particular RC, run
+the same command with `--allow-incomplete` instead of `--watch`, and record the
+snapshot IDs, states, and reason. Do not cancel the remote workflows or report
+incomplete runs as successful.
 
 ### 7. Build the ASF source release
 
@@ -283,72 +204,10 @@ Inspect `svn status` before committing. The upload is complete only after `svn c
 
 ### 9. Draft the vote email
 
-Produce a complete, copyable email from this template. Fill every placeholder from verified output, use an explicit UTC deadline at least 72 hours after sending, and do not send the email unless requested.
-
-```text
-Subject: [VOTE] Release Apache Fory v${release_version}-${rc}
-
-Hello, Apache Fory Community:
-
-This is a call for vote to release Apache Fory ${release_version}.
-
-Apache Fory is a blazingly fast multi-language serialization framework
-for idiomatic domain objects, schema IDL, and cross-language data exchange.
-
-The discussion thread:
-${discussion_url}
-
-The change list since Apache Fory ${previous_version}:
-https://github.com/apache/fory/compare/v${previous_version}...${rc_tag}
-
-The release candidate artifacts:
-https://dist.apache.org/repos/dist/dev/fory/${dist_version}/
-
-The Maven staging repositories:
-Java and Kotlin:
-https://repository.apache.org/content/repositories/${java_kotlin_staging_id}/
-Scala:
-https://repository.apache.org/content/repositories/${scala_staging_id}/
-
-The release tag:
-https://github.com/apache/fory/releases/tag/${rc_tag}
-
-The release commit:
-https://github.com/apache/fory/commit/${release_commit}
-
-The artifacts are signed with PGP key fingerprint
-${gpg_fingerprint}, corresponding to ${apache_email}. The key can be found in
-the KEYS file:
-https://downloads.apache.org/fory/KEYS
-
-The vote will remain open for at least 72 hours and close at
-${vote_deadline_utc}.
-
-Please vote accordingly:
-
-[ ] +1 approve
-[ ] +0 no opinion
-[ ] -1 disapprove (please explain why)
-
-To learn more about Fory, please see:
-https://fory.apache.org/
-
-Checklist for reference:
-
-[ ] The Fory source archive downloads successfully.
-[ ] Checksums and PGP signatures are valid.
-[ ] Source distribution names match the release version.
-[ ] LICENSE and NOTICE files are correct.
-[ ] Files have license headers where required.
-[ ] No compiled archives are bundled in the source archive.
-[ ] The release can be built from source.
-
-How to build and test:
-https://github.com/apache/fory/blob/${rc_tag}/docs/development/index.md
-
-Thanks,
-${release_manager_name}
-```
+Read [the vote email template](assets/vote-email.txt) and produce a complete,
+copyable email. Replace every placeholder from verified output, confirm that no
+`${...}` placeholder remains, use an explicit UTC deadline at least 72 hours
+after sending, and do not send the email unless requested.
 
 Before sending, verify the tag and commit, all URLs, both closed Maven staging repositories, the remote Subversion files, PGP fingerprint, and UTC deadline against the actual release outputs.
 

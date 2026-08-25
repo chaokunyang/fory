@@ -315,13 +315,10 @@ String? _fieldIdentityError(List<FieldInfo> fields) {
   final fieldsByName = <String, FieldInfo>{};
   for (final field in fields) {
     final id = field.id;
-    if (id < -1) {
-      return 'Field id $id is invalid.';
+    if (id < -1 || id > TypeResolver._maxFieldId) {
+      return 'Field id is outside the protocol range.';
     }
     if (id >= 0) {
-      if (id > TypeResolver._maxFieldId) {
-        return 'Field id $id exceeds ${TypeResolver._maxFieldId}.';
-      }
       if (field.identifier != id.toString()) {
         return 'Tagged field ${field.name} has textual identifier '
             '${field.identifier}, which must match field id $id.';

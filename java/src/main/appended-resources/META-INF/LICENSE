@@ -1,0 +1,78 @@
+================================================================
+
+This source release includes code derived from third-party projects. The files below are relative
+to the root of the Java source-release archive.
+
+================================================================
+Apache-2.0 licenses
+================================================================
+The following components are provided under the Apache-2.0 License. See each project link for
+details. The text of each license is the standard Apache 2.0 license included above.
+
+* guava (https://github.com/google/guava)
+    Files:
+      fory-core/src/main/java/org/apache/fory/util/Preconditions.java
+      fory-core/src/main/java/org/apache/fory/reflect/TypeParameter.java
+      fory-core/src/main/java/org/apache/fory/reflect/TypeRef.java
+      fory-core/src/main/java/org/apache/fory/util/concurrency/DirectExecutorService.java
+
+* spark (https://github.com/apache/spark)
+    Files:
+      fory-core/src/main/java/org/apache/fory/codegen/Code.java
+      fory-format/src/main/java/org/apache/fory/format/vectorized/ArrowWriter.java
+
+* commons-io (https://github.com/apache/commons-io)
+    Files:
+      fory-core/src/main/java/org/apache/fory/io/ClassLoaderObjectInputStream.java
+
+* commons-lang3 (https://github.com/apache/commons-lang)
+    Files:
+      fory-core/src/main/java/org/apache/fory/util/StringUtils.java
+
+* jackson-annotations (https://github.com/FasterXML/jackson-annotations)
+    Fory JSON implementations of the following annotation APIs are based on Jackson annotations.
+    Files:
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonAnyGetter.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonAnySetter.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonCreator.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonFormat.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonIgnore.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonProperty.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonPropertyOrder.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonRawValue.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonSubTypes.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonUnwrapped.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonValue.java
+
+* wast (https://github.com/wycst/wast)
+    Fory's probability-first printable-ASCII fast-path predicate is based in part on WAST's JSON
+    string escape predicate.
+    Files:
+      fory-json/src/main/java/org/apache/fory/json/writer/JsonAsciiWordPredicates.java
+
+================================================================
+BSD-3-Clause licenses
+================================================================
+The full BSD-3-Clause license text is included in
+fory-core/src/main/resources/META-INF/licenses/LICENSE-kryo.txt.
+
+* kryo (https://github.com/EsotericSoftware/kryo)
+    Files:
+      fory-core/src/main/java/org/apache/fory/collection/ForyObjectMap.java
+      fory-core/src/main/java/org/apache/fory/collection/IdentityMap.java
+      fory-core/src/main/java/org/apache/fory/collection/IdentityObjectIntMap.java
+      fory-core/src/main/java/org/apache/fory/collection/LongMap.java
+      fory-core/src/main/java/org/apache/fory/collection/LongLongByteMap.java
+      fory-core/src/main/java/org/apache/fory/collection/ObjectIntMap.java
+      fory-core/src/main/java/org/apache/fory/type/Generics.java
+      fory-core/src/test/java/org/apache/fory/type/GenericsTest.java
+
+================================================================
+Public Domain
+================================================================
+The following component is placed in the public domain. The author disclaims copyright to this
+source code. See the project link for details.
+
+* java_util (https://github.com/yonik/java_util)
+    Files:
+      fory-core/src/main/java/org/apache/fory/util/MurmurHash3.java

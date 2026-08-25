@@ -318,9 +318,19 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         fileprivate static func read(_ buffer: ByteBuffer) throws -> FieldInfo {
             let header = try buffer.readUInt8()
             let encodingFlags = Int((header >> 6) & 0b11)
-            var size = UInt64((header >> 2) & 0b1111)
-            if size == UInt64(fieldNameSizeThreshold) {
-                size += UInt64(try buffer.readVarUInt32())
+            let inlineSize = Int32((header >> 2) & 0b1111)
+            var nameSize = Int(inlineSize)
+            var fieldID: Int32 = encodingFlags == 3 ? inlineSize : -1
+            if inlineSize == Int32(fieldNameSizeThreshold) {
+                let extensionSize = try buffer.readVarUInt32()
+                if encodingFlags == 3 {
+                    guard extensionSize <= UInt32(maxTaggedFieldID - inlineSize) else {
+                        throw ForyError.invalidData("tagged field id exceeds protocol maximum")
+                    }
+                    fieldID += Int32(extensionSize)
+                } else {
+                    nameSize += Int(extensionSize)
+                }
             }
 
             let nullable = (header & 0b10) != 0
@@ -333,14 +343,9 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             )
 
             if encodingFlags == 3 {
-                guard size <= UInt64(maxTaggedFieldID) else {
-                    throw ForyError.invalidData(
-                        "tagged field id \(size) exceeds protocol maximum \(maxTaggedFieldID)"
-                    )
-                }
                 return FieldInfo(
-                    fieldID: Int32(size),
-                    fieldName: "$tag\(size)",
+                    fieldID: fieldID,
+                    fieldName: "$tag\(fieldID)",
                     fieldType: fieldType
                 )
             }
@@ -348,7 +353,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             guard encodingFlags < fieldNameMetaStringEncodings.count else {
                 throw ForyError.invalidData("invalid field name encoding id")
             }
-            let nameBytes = try buffer.readBytes(count: Int(size) + 1)
+            let nameBytes = try buffer.readBytes(count: nameSize + 1)
             let name = try MetaStringDecoder.fieldName
                 .decode(bytes: nameBytes, encoding: fieldNameMetaStringEncodings[encodingFlags])
                 .value

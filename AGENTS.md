@@ -187,8 +187,6 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 ## Repo-Wide Hard Rules
 
 - Do not preserve legacy, dead, or useless code, tests, or docs unless the user explicitly requests it.
-- The `java/` Maven aggregator must not contain a top-level `src/` directory. Keep Java
-  source-release legal files, including `LICENSE`, at the `java/` root.
 - Ignore internal API compatibility unless the user explicitly requests it. Do not keep shims, wrappers, or transitional paths only to preserve internal call sites.
 - Performance is the top priority. Do not introduce regressions without explicit justification.
 - "Refactor" means changing structure, ownership, naming, or API shape without changing behavior, wire format, or implementation strategy unless the user explicitly asks for those changes.

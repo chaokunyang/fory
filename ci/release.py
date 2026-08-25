@@ -25,6 +25,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../")
 JVM_RELEASE_LANGS = ("java", "kotlin", "scala")
+JVM_RELEASE_WORKTREE_ENV = "FORY_JVM_RELEASE_WORKTREE"
 HOMEBREW_OPENJDK25 = "openjdk@25"
 HOMEBREW_BREW_PATHS = ("/opt/homebrew/bin/brew", "/usr/local/bin/brew")
 FORY_CORE_JDK25_ENTRY = (
@@ -243,12 +245,22 @@ def verify(v):
 def publish_jvm(languages="all", mode="release"):
     """Publish Java, Kotlin, and Scala artifacts through one ordered JVM owner."""
     langs = _jvm_release_langs(languages)
-    if mode == "release":
-        _require_clean_jvm_release_tree()
+    release_worktree = os.environ.get(JVM_RELEASE_WORKTREE_ENV)
+    if mode == "release" and not release_worktree:
+        _publish_jvm_from_worktree(",".join(langs))
+        return
+    if mode == "release" and os.path.realpath(release_worktree) != os.path.realpath(
+        PROJECT_ROOT_DIR
+    ):
+        raise RuntimeError(f"Invalid {JVM_RELEASE_WORKTREE_ENV}: {release_worktree}")
     _require_publication_authority(mode)
     _ensure_openjdk25()
     if "java" not in langs:
-        _verify_fory_core_mr_jar()
+        if mode == "release":
+            _run_release_cmd(JAVA_RELEASE_PACKAGE_CMD, "java")
+            verify_java_artifacts()
+        else:
+            _verify_fory_core_mr_jar()
     for lang in langs:
         if lang == "java":
             _publish_java(mode)
@@ -279,39 +291,39 @@ def _require_publication_authority(mode):
         raise RuntimeError("JVM release publication requires a GPG secret key")
 
 
-def _require_clean_jvm_release_tree():
-    tracked = subprocess.run(
-        ["git", "status", "--porcelain=v1", "--untracked-files=no"],
-        cwd=PROJECT_ROOT_DIR,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        check=True,
-    )
-    untracked = subprocess.run(
-        [
-            "git",
-            "ls-files",
-            "--others",
-            "--directory",
-            "--no-empty-directory",
-            "--",
-            *JVM_RELEASE_LANGS,
-        ],
-        cwd=PROJECT_ROOT_DIR,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        check=True,
-    )
-    changes = tracked.stdout.splitlines()
-    changes.extend(f"?? {path}" for path in untracked.stdout.splitlines())
-    if changes:
-        raise RuntimeError(
-            "JVM release publication requires clean exact-commit sources. "
-            "Commit, move, or remove these files before publishing:\n"
-            + "\n".join(changes)
+def _publish_jvm_from_worktree(languages):
+    source_root = os.path.abspath(PROJECT_ROOT_DIR)
+    revision = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=source_root, text=True
+    ).strip()
+    with tempfile.TemporaryDirectory(prefix="fory-jvm-release-") as temp_dir:
+        worktree = os.path.join(temp_dir, "worktree")
+        subprocess.check_call(
+            ["git", "worktree", "add", "--detach", worktree, revision],
+            cwd=source_root,
         )
+        try:
+            logger.info("Publishing JVM release from temporary worktree %s", worktree)
+            env = os.environ.copy()
+            env[JVM_RELEASE_WORKTREE_ENV] = worktree
+            subprocess.check_call(
+                [
+                    sys.executable,
+                    os.path.join(worktree, "ci", "release.py"),
+                    "publish_jvm",
+                    "-l",
+                    languages,
+                    "--mode",
+                    "release",
+                ],
+                cwd=worktree,
+                env=env,
+            )
+        finally:
+            subprocess.check_call(
+                ["git", "worktree", "remove", "--force", worktree],
+                cwd=source_root,
+            )
 
 
 def _has_gpg_secret_key():
@@ -334,7 +346,9 @@ def _publish_java(mode="release"):
     if mode == "release":
         _run_release_cmd(JAVA_RELEASE_PACKAGE_CMD, "java")
         verify_java_artifacts()
+        _clean_release_path("java")
         _run_release_cmd(JAVA_RELEASE_DEPLOY_CMD, "java")
+        verify_java_artifacts()
     else:
         _run_release_cmd(MAVEN_SNAPSHOT_CMD, "java")
         _verify_fory_core_mr_jar()
@@ -349,7 +363,11 @@ def _publish_kotlin(mode="release"):
         deploy_command = KOTLIN_SNAPSHOT_DEPLOY_CMD
     _run_release_cmd(package_command, "kotlin")
     verify_kotlin_artifacts()
+    if mode == "release":
+        _clean_release_path("kotlin")
     _run_release_cmd(deploy_command, "kotlin")
+    if mode == "release":
+        verify_kotlin_artifacts()
 
 
 def _publish_scala(mode="release"):
@@ -372,6 +390,12 @@ def _run_release_cmd(command, path):
     cwd = os.path.join(PROJECT_ROOT_DIR, path)
     logger.info("Run release command in %s: %s", cwd, command)
     subprocess.check_call(command, cwd=cwd, shell=True)
+
+
+def _clean_release_path(path):
+    cwd = os.path.join(PROJECT_ROOT_DIR, path)
+    logger.info("Restore temporary release path before deploy: %s", cwd)
+    subprocess.check_call(["git", "clean", "-ffdx", "."], cwd=cwd)
 
 
 def _ensure_openjdk25():

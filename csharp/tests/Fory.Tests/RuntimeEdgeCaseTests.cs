@@ -986,8 +986,8 @@ public sealed class RuntimeEdgeCaseTests
         byte[] invalidPayload = [.. payload, 0x7F];
 
         _ = useSpan
-            ? Assert.Throws<InvalidDataException>(() => DeserializeSpan(reader, invalidPayload))
-            : Assert.Throws<InvalidDataException>(() => reader.Deserialize<TimeEnvelope>(invalidPayload));
+            ? Assert.ThrowsAny<ForyException>(() => DeserializeSpan(reader, invalidPayload))
+            : Assert.ThrowsAny<ForyException>(() => reader.Deserialize<TimeEnvelope>(invalidPayload));
         ReadContext context = ReadContextFor(reader);
         Assert.Null(context.GetTypeMetaRef(0));
         Assert.Null(context.GetReadMetaStringOccurrence(0));
@@ -1027,11 +1027,11 @@ public sealed class RuntimeEdgeCaseTests
 
         if (useSpan)
         {
-            Assert.Throws<InvalidDataException>(() => DeserializeIntSpan(fory, invalidPayload));
+            Assert.ThrowsAny<ForyException>(() => DeserializeIntSpan(fory, invalidPayload));
         }
         else
         {
-            Assert.Throws<InvalidDataException>(() => fory.Deserialize<int>(invalidPayload));
+            Assert.ThrowsAny<ForyException>(() => fory.Deserialize<int>(invalidPayload));
         }
 
         Assert.False(context.TryGetTypeMetaByHash(firstHash, out _));

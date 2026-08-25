@@ -16,20 +16,33 @@ Collect these values before starting:
 - `previous_version`: previous release tag version, such as `1.6.1`.
 - Release discussion URL.
 
-Use the release manager defaults and derive the working-copy path from the repository location:
+Load release-manager details from `.local/fory-release.env`. If it does not exist, ask for the following values once, create the ignored local file, and continue. Never commit this file.
+
+```bash
+FORY_RELEASE_MANAGER_NAME="..."
+FORY_RELEASE_APACHE_EMAIL="..."
+FORY_RELEASE_GPG_FINGERPRINT="..."
+FORY_DIST_DEV_WC="..."
+```
+
+Load the cached values and derive the release values:
 
 ```bash
 repo_root="$(git rev-parse --show-toplevel)"
+release_config="$repo_root/.local/fory-release.env"
+test -f "$release_config"
+. "$release_config"
+
 release_branch="releases-${release_version}"
 rc_tag="v${release_version}-${rc}"
 dist_version="${release_version}"
-release_manager_name="Shawn Yang"
-apache_email="chaokunyang@apache.org"
-gpg_fingerprint="1E2CDAE4C08AD7D694D1CB139D7BE8E45E580BA4"
-svn_wc="${FORY_DIST_DEV_WC:-$(cd "$repo_root/.." && pwd)/fory-dist-dev}"
+release_manager_name="${FORY_RELEASE_MANAGER_NAME:?missing release manager name}"
+apache_email="${FORY_RELEASE_APACHE_EMAIL:?missing Apache email}"
+gpg_fingerprint="${FORY_RELEASE_GPG_FINGERPRINT:?missing GPG fingerprint}"
+svn_wc="${FORY_DIST_DEV_WC:?missing ASF Subversion working-copy path}"
 ```
 
-Use the same `dist_version` in Subversion and the vote email. The default SVN working copy is the `fory-dist-dev` directory next to the Fory repository; set `FORY_DIST_DEV_WC` only when the checkout is elsewhere.
+Use the same `dist_version` in Subversion and the vote email.
 
 ## Release Workflow
 

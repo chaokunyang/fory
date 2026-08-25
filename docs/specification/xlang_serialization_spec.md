@@ -848,7 +848,10 @@ Field header layout:
 - Bits 6-7: field name encoding (`UTF8`, `ALL_TO_LOWER_SPECIAL`,
   `LOWER_UPPER_DIGIT_SPECIAL`, or `TAG_ID`)
 - Bits 2-5: size
-  - For name encoding: `size = (name_bytes_length - 1)`
+  - For name encoding, let `logical_size = name_bytes_length - 1` and store
+    `size = min(logical_size, 15)`. If `logical_size >= 15`, write
+    `varuint32(logical_size - 15)` after the header; decoding adds that
+    extension to `15`, then adds `1` to obtain `name_bytes_length`.
   - For tag ID: `size = min(tag_id, 15)`
   - If a tag ID has `size == 0b1111`, write `varuint32(tag_id - 15)` after the
     header; decoding adds that extension to `15`

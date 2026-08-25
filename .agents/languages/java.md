@@ -5,6 +5,8 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 ## Rules
 
 - Run all Maven commands from within `java/`.
+- The `java/` Maven aggregator must not contain a top-level `src/` directory. Keep Java
+  source-release legal files, including `LICENSE`, at the `java/` root.
 - Changes under `java/` must pass code style checks and tests.
 - When changes are limited to `fory-json` or `fory-format`, do not run `fory-core`
   tests. Install the changed module and its reactor dependencies with

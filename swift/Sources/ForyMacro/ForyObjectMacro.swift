@@ -16,6 +16,7 @@
 // under the License.
 // swiftlint:disable file_length
 
+import Foundation
 import SwiftCompilerPlugin
 import SwiftDiagnostics
 import SwiftSyntax
@@ -1782,7 +1783,7 @@ private func resolveFieldType(
                     isCompressedNumeric: false,
                     primitiveSize: 8
                 ),
-                customCodecType: "Int64FixedCodec"
+                customCodecType: normalized == "Int" ? "IntFixedCodec" : "Int64FixedCodec"
             )
         case .tagged:
             return .init(
@@ -1795,7 +1796,7 @@ private func resolveFieldType(
                     isCompressedNumeric: true,
                     primitiveSize: 8
                 ),
-                customCodecType: "Int64TaggedCodec"
+                customCodecType: normalized == "Int" ? "IntTaggedCodec" : "Int64TaggedCodec"
             )
         }
     case "UInt64", "UInt":
@@ -1813,7 +1814,7 @@ private func resolveFieldType(
                     isCompressedNumeric: false,
                     primitiveSize: 8
                 ),
-                customCodecType: "UInt64FixedCodec"
+                customCodecType: normalized == "UInt" ? "UIntFixedCodec" : "UInt64FixedCodec"
             )
         case .tagged:
             return .init(
@@ -1826,7 +1827,7 @@ private func resolveFieldType(
                     isCompressedNumeric: true,
                     primitiveSize: 8
                 ),
-                customCodecType: "UInt64TaggedCodec"
+                customCodecType: normalized == "UInt" ? "UIntTaggedCodec" : "UInt64TaggedCodec"
             )
         }
     default:
@@ -2966,9 +2967,15 @@ private func buildWriteWrapperDecl(accessPrefix: String) -> String {
     ) throws {
         let __buffer = context.buffer
         if refMode != .none {
-            if refMode == .tracking, Self.isRefType, let object = value as AnyObject? {
-                if context.refWriter.tryWriteRef(buffer: __buffer, object: object) {
-                    return
+            if refMode == .tracking {
+                if Self.isRefType, let object = value as AnyObject? {
+                    if context.refWriter.tryWriteRef(buffer: __buffer, object: object) {
+                        return
+                    }
+                } else {
+                    // Peers that track every object assign this value a ref id too.
+                    __buffer.writeInt8(RefFlag.refValue.rawValue)
+                    context.refWriter.reserveRefID()
                 }
             } else {
                 __buffer.writeInt8(RefFlag.notNullValue.rawValue)

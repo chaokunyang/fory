@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import Foundation
+
 func buildReadDataDecl(
     declaration: ParsedDecl,
     sortedFields: [ParsedField],
@@ -939,7 +941,7 @@ private func primitiveSchemaReadExpr(_ field: ParsedField) -> String? {
     case "Int64":
         return "try __buffer.readVarInt64()"
     case "Int":
-        return "Int(try __buffer.readVarInt64())"
+        return "try IntVarintCodec.readFieldData(context)"
     case "UInt8":
         return "try __buffer.readUInt8()"
     case "UInt16":
@@ -949,7 +951,7 @@ private func primitiveSchemaReadExpr(_ field: ParsedField) -> String? {
     case "UInt64":
         return "try __buffer.readVarUInt64()"
     case "UInt":
-        return "UInt(try __buffer.readVarUInt64())"
+        return "try UIntVarintCodec.readFieldData(context)"
     case "Float":
         return "try __buffer.readFloat32()"
     case "Double":

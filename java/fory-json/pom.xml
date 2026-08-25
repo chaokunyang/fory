@@ -291,6 +291,8 @@
                       <compilerarg value="17"/>
                       <compilerarg value="-sourcepath"/>
                       <compilerarg value=""/>
+                      <!-- The checked-in subtype table simulates processor output. -->
+                      <compilerarg value="-proc:none"/>
                     </javac>
                   </target>
                 </configuration>

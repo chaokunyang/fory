@@ -210,10 +210,13 @@ Result<std::vector<uint8_t>, Error> write_field_info(const FieldInfo &field,
     }
     encoded_name = std::move(encoded.bytes);
   }
-  const uint64_t size_field =
-      use_tag_id ? static_cast<uint32_t>(wire_id) : encoded_name.size() - 1;
-  uint8_t header =
-      (std::min<uint64_t>(FIELD_NAME_SIZE_THRESHOLD, size_field) << 2) & 0x3C;
+  const uint32_t tag_id = use_tag_id ? static_cast<uint32_t>(wire_id) : 0;
+  const size_t name_size_field = use_tag_id ? 0 : encoded_name.size() - 1;
+  const uint8_t inline_size =
+      use_tag_id ? std::min<uint32_t>(FIELD_NAME_SIZE_THRESHOLD, tag_id)
+                 : static_cast<uint8_t>(std::min<size_t>(
+                       FIELD_NAME_SIZE_THRESHOLD, name_size_field));
+  uint8_t header = (inline_size << 2) & 0x3C;
 
   if (field.field_type.track_ref) {
     header |= 1; // bit 0 for ref tracking
@@ -225,9 +228,12 @@ Result<std::vector<uint8_t>, Error> write_field_info(const FieldInfo &field,
 
   buffer.write_uint8(header);
 
-  if (size_field >= FIELD_NAME_SIZE_THRESHOLD) {
+  if (use_tag_id && tag_id >= FIELD_NAME_SIZE_THRESHOLD) {
     buffer.write_var_uint32(
-        static_cast<uint32_t>(size_field - FIELD_NAME_SIZE_THRESHOLD));
+        static_cast<uint32_t>(tag_id - FIELD_NAME_SIZE_THRESHOLD));
+  } else if (!use_tag_id && name_size_field >= FIELD_NAME_SIZE_THRESHOLD) {
+    buffer.write_var_uint32(
+        static_cast<uint32_t>(name_size_field - FIELD_NAME_SIZE_THRESHOLD));
   }
 
   // write field type
@@ -260,18 +266,25 @@ Result<FieldInfo, Error> read_field_info(Buffer &buffer) {
   bool use_tag_id = encoding_idx == 3;
   bool track_ref = (header & 0b01u) != 0;
   bool nullable = (header & 0b10u) != 0;
-  uint64_t size_field = ((header >> 2) & FIELD_NAME_SIZE_THRESHOLD);
-  if (size_field == FIELD_NAME_SIZE_THRESHOLD) {
+  const uint32_t inline_size = (header >> 2) & FIELD_NAME_SIZE_THRESHOLD;
+  uint32_t tag_id = use_tag_id ? inline_size : 0;
+  size_t name_size_field = use_tag_id ? 0 : inline_size;
+  if (inline_size == FIELD_NAME_SIZE_THRESHOLD) {
     uint32_t extra = buffer.read_var_uint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
-    size_field += extra;
-  }
-
-  if (FORY_PREDICT_FALSE(use_tag_id && size_field > detail::kMaxFieldTag)) {
-    return Unexpected(
-        Error::invalid_data("Field tag exceeds the wire TAG_ID range"));
+    if (use_tag_id) {
+      if (FORY_PREDICT_FALSE(extra >
+                             static_cast<uint32_t>(detail::kMaxFieldTag) -
+                                 inline_size)) {
+        return Unexpected(
+            Error::invalid_data("Field tag exceeds the wire TAG_ID range"));
+      }
+      tag_id += extra;
+    } else {
+      name_size_field += extra;
+    }
   }
 
   // Read field type with nullable and track_ref from header
@@ -280,7 +293,7 @@ Result<FieldInfo, Error> read_field_info(Buffer &buffer) {
 
   if (use_tag_id) {
     FieldInfo info("", std::move(field_type));
-    info.field_id = static_cast<int32_t>(size_field);
+    info.field_id = static_cast<int32_t>(tag_id);
     return info;
   }
 
@@ -291,7 +304,7 @@ Result<FieldInfo, Error> read_field_info(Buffer &buffer) {
   // We mirror that here using MetaStringDecoder with '$' and '_' as
   // special characters (same as Encoders.FIELD_NAME_DECODER).
 
-  const size_t name_size = size_field + 1;
+  const size_t name_size = name_size_field + 1;
   if (FORY_PREDICT_FALSE(
           name_size >
           static_cast<size_t>(std::numeric_limits<uint32_t>::max()))) {

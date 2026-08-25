@@ -350,6 +350,13 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     /// so readers do not need to compare the field array again.
     public let headerHash: UInt64
 
+    internal var readDataAlwaysAdvances: Bool {
+        for field in fields where field.fieldType.readDataAlwaysAdvances {
+            return true
+        }
+        return false
+    }
+
     public init(
         typeID: UInt32?,
         userTypeID: UInt32?,
@@ -382,6 +389,13 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         self.fields = fields
         self.compressed = compressed
         self.headerHash = headerHash
+    }
+
+    public static func == (lhs: TypeMeta, rhs: TypeMeta) -> Bool {
+        lhs.typeID == rhs.typeID && lhs.userTypeID == rhs.userTypeID && lhs.namespace == rhs.namespace
+            && lhs.typeName == rhs.typeName && lhs.registerByName == rhs.registerByName
+            && lhs.fields == rhs.fields && lhs.compressed == rhs.compressed
+            && lhs.headerHash == rhs.headerHash
     }
 
     public func encode() throws -> [UInt8] {
@@ -577,6 +591,21 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         }
 
         return Array(buffer.storage.prefix(buffer.count))
+    }
+
+    private static func hashMask() -> UInt64 {
+        UInt64.max << (64 - typeMetaNumHashBits)
+    }
+
+    private static func typeMetaHeaderHash(_ body: [UInt8], headerLowBits: UInt64) -> UInt64 {
+        var hashInput = body
+        hashInput.append(UInt8(truncatingIfNeeded: headerLowBits))
+        hashInput.append(UInt8(truncatingIfNeeded: headerLowBits >> 8))
+        let bodyHash = MurmurHash3.x64_128(hashInput, seed: typeMetaHashSeed).0
+        let shifted = bodyHash << (64 - typeMetaNumHashBits)
+        let signed = Int64(bitPattern: shifted)
+        let absSigned = signed == Int64.min ? signed : Swift.abs(signed)
+        return UInt64(bitPattern: absSigned) & hashMask()
     }
 
     private static func isStructTypeMetaKind(_ typeID: TypeId) -> Bool {
@@ -1048,20 +1077,6 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 }
 
 extension TypeMeta {
-    internal var readDataAlwaysAdvances: Bool {
-        for field in fields where field.fieldType.readDataAlwaysAdvances {
-            return true
-        }
-        return false
-    }
-
-    public static func == (lhs: TypeMeta, rhs: TypeMeta) -> Bool {
-        lhs.typeID == rhs.typeID && lhs.userTypeID == rhs.userTypeID && lhs.namespace == rhs.namespace
-            && lhs.typeName == rhs.typeName && lhs.registerByName == rhs.registerByName
-            && lhs.fields == rhs.fields && lhs.compressed == rhs.compressed
-            && lhs.headerHash == rhs.headerHash
-    }
-
     private static func validateFieldTags(_ fields: [FieldInfo]) throws {
         var fieldIDs = Set<Int32>()
         for field in fields {
@@ -1072,21 +1087,6 @@ extension TypeMeta {
                 throw ForyError.invalidData("duplicate compatible field tag \(field.fieldID)")
             }
         }
-    }
-
-    private static func hashMask() -> UInt64 {
-        UInt64.max << (64 - typeMetaNumHashBits)
-    }
-
-    private static func typeMetaHeaderHash(_ body: [UInt8], headerLowBits: UInt64) -> UInt64 {
-        var hashInput = body
-        hashInput.append(UInt8(truncatingIfNeeded: headerLowBits))
-        hashInput.append(UInt8(truncatingIfNeeded: headerLowBits >> 8))
-        let bodyHash = MurmurHash3.x64_128(hashInput, seed: typeMetaHashSeed).0
-        let shifted = bodyHash << (64 - typeMetaNumHashBits)
-        let signed = Int64(bitPattern: shifted)
-        let absSigned = signed == Int64.min ? signed : Swift.abs(signed)
-        return UInt64(bitPattern: absSigned) & hashMask()
     }
 }
 

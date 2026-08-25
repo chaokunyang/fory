@@ -15,18 +15,21 @@ Collect these values before starting:
 - `rc`: RC suffix, such as `rc3`.
 - `previous_version`: previous release tag version, such as `1.6.1`.
 - Release discussion URL.
-- Release manager name, Apache email, and GPG fingerprint.
-- Existing ASF Subversion working-copy path, or a path for a new checkout.
 
-Derive:
+Use the release manager defaults and derive the working-copy path from the repository location:
 
 ```bash
+repo_root="$(git rev-parse --show-toplevel)"
 release_branch="releases-${release_version}"
 rc_tag="v${release_version}-${rc}"
 dist_version="${release_version}"
+release_manager_name="Shawn Yang"
+apache_email="chaokunyang@apache.org"
+gpg_fingerprint="1E2CDAE4C08AD7D694D1CB139D7BE8E45E580BA4"
+svn_wc="${FORY_DIST_DEV_WC:-$(cd "$repo_root/.." && pwd)/fory-dist-dev}"
 ```
 
-Use the same `dist_version` in Subversion and the vote email.
+Use the same `dist_version` in Subversion and the vote email. The default SVN working copy is the `fory-dist-dev` directory next to the Fory repository; set `FORY_DIST_DEV_WC` only when the checkout is elsewhere.
 
 ## Release Workflow
 

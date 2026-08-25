@@ -227,4 +227,3 @@ be successful unless the release manager explicitly waived monitoring.
 - [Apache Fory release guide](https://fory.apache.org/docs/community/how_to_release)
 - [Fory development-list archive](https://lists.apache.org/list.html?dev@fory.apache.org)
 - [Sonatype Nexus 2 staging REST example](https://support.sonatype.com/hc/en-us/articles/213465448-Automatically-dropping-old-staging-repositories)
-- [Apache OpenDAL release skill](https://github.com/apache/opendal/blob/main/.agents/skills/opendal-release/SKILL.md), used only as secondary operational guidance

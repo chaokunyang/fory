@@ -765,6 +765,23 @@ public class NativeTypeDefEncoderTest {
     private int fieldC;
   }
 
+  public static class ClassWithLargeTagIds {
+    @ForyField(id = 15)
+    private String field15;
+
+    @ForyField(id = 32768)
+    private String field32768;
+
+    @ForyField(id = 65535)
+    private String field65535;
+
+    @ForyField(id = 65551)
+    private String field65551;
+
+    @ForyField(id = ForyField.MAX_ID)
+    private String fieldMax;
+  }
+
   @Data
   public static class ClassWithMixedFields {
     @ForyField(id = 15)
@@ -800,6 +817,20 @@ public class NativeTypeDefEncoderTest {
     for (FieldInfo fieldInfo : fieldsInfo) {
       Assert.assertTrue(fieldInfo.hasFieldId());
     }
+  }
+
+  @Test
+  public void testLargeTagIdsRoundTrip() {
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).withCompatible(true).build();
+
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithLargeTagIds.class);
+    TypeDef decoded =
+        TypeDef.readTypeDef(
+            fory.getTypeResolver(), MemoryBuffer.fromByteArray(typeDef.getEncoded()));
+
+    Assert.assertEquals(
+        decoded.getFieldsInfo().stream().map(FieldInfo::getFieldId).toArray(),
+        new Object[] {15, 32768, 65535, 65551, ForyField.MAX_ID});
   }
 
   @Test

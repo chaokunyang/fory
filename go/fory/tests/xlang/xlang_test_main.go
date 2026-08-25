@@ -290,14 +290,14 @@ type Item1 struct {
 
 type SimpleStruct struct {
 	F1   map[int32]float64
-	F2   int32
+	F2   int32 `fory:"id=15"`
 	F3   Item
 	F4   string
 	F5   Color
 	F6   []string
-	F7   int32
+	F7   int32 `fory:"id=65551"`
 	F8   int32
-	Last int32
+	Last int32 `fory:"id=536870911"`
 }
 
 type EvolvingOverrideStruct struct {

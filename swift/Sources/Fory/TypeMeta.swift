@@ -31,6 +31,7 @@ private let typeMetaNumHashBits: UInt64 = 52
 private let typeMetaHashSeed: UInt64 = 47
 private let noUserTypeID: UInt32 = UInt32.max
 private let typeMetaMaxDepth = 20
+private let maxTaggedFieldID: Int32 = (1 << 29) - 1
 
 @inline(__always)
 internal func typeMetaHashFromHeader(_ header: UInt64) -> UInt64 {
@@ -206,19 +207,32 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     }
 
     public struct FieldInfo: Equatable, Sendable {
-        public var fieldID: Int16?
+        /// The protocol tag ID, or `-1` when the field is identified by name.
+        public var fieldID: Int32
         public var fieldName: String
         public var fieldType: FieldType
+        /// Local compatible-reader dispatch ordinal. This is not part of wire field identity.
+        public internal(set) var matchedFieldID: Int16
 
-        public init(fieldID: Int16?, fieldName: String, fieldType: FieldType) {
+        public init(fieldID: Int32, fieldName: String, fieldType: FieldType) {
             self.fieldID = fieldID
             self.fieldName = fieldName
             self.fieldType = fieldType
+            self.matchedFieldID = -1
+        }
+
+        private init(fieldName: String, fieldType: FieldType) {
+            self.fieldID = -1
+            self.fieldName = fieldName
+            self.fieldType = fieldType
+            self.matchedFieldID = -1
         }
 
         @inline(never)
-        private static func invalidTaggedFieldID(_ fieldID: Int) -> ForyError {
-            ForyError.invalidData("tagged field id \(fieldID) exceeds Int16 range")
+        private static func invalidTaggedFieldID(_ fieldID: Int32) -> ForyError {
+            ForyError.encodingError(
+                "tagged field id \(fieldID) exceeds protocol maximum \(maxTaggedFieldID)"
+            )
         }
 
         fileprivate func write(_ buffer: ByteBuffer) throws {
@@ -230,18 +244,20 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
                 header |= 0b10
             }
 
-            if let fieldID {
-                if fieldID < 0 {
-                    throw ForyError.encodingError("negative field id is invalid")
+            guard fieldID >= -1 else {
+                throw ForyError.encodingError("field id must be -1 or non-negative")
+            }
+            if fieldID >= 0 {
+                guard fieldID <= maxTaggedFieldID else {
+                    throw Self.invalidTaggedFieldID(fieldID)
                 }
-                let size = Int(fieldID)
                 header |= UInt8(0b11 << 6)
-                if size >= fieldNameSizeThreshold {
+                if fieldID >= Int32(fieldNameSizeThreshold) {
                     header |= 0b0011_1100
                     buffer.writeUInt8(header)
-                    buffer.writeVarUInt32(UInt32(size - fieldNameSizeThreshold))
+                    buffer.writeVarUInt32(UInt32(fieldID - Int32(fieldNameSizeThreshold)))
                 } else {
-                    header |= UInt8(size << 2)
+                    header |= UInt8(fieldID << 2)
                     buffer.writeUInt8(header)
                 }
                 fieldType.write(buffer, writeFlags: false)
@@ -273,11 +289,20 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         fileprivate static func read(_ buffer: ByteBuffer) throws -> FieldInfo {
             let header = try buffer.readUInt8()
             let encodingFlags = Int((header >> 6) & 0b11)
-            var size = Int((header >> 2) & 0b1111)
-            if size == fieldNameSizeThreshold {
-                size += Int(try buffer.readVarUInt32())
+            let inlineSize = Int32((header >> 2) & 0b1111)
+            var nameSize = Int(inlineSize)
+            var fieldID: Int32 = encodingFlags == 3 ? inlineSize : -1
+            if inlineSize == Int32(fieldNameSizeThreshold) {
+                let extensionSize = try buffer.readVarUInt32()
+                if encodingFlags == 3 {
+                    guard extensionSize <= UInt32(maxTaggedFieldID - inlineSize) else {
+                        throw ForyError.invalidData("tagged field id exceeds protocol maximum")
+                    }
+                    fieldID += Int32(extensionSize)
+                } else {
+                    nameSize += Int(extensionSize)
+                }
             }
-            size += 1
 
             let nullable = (header & 0b10) != 0
             let trackRef = (header & 0b1) != 0
@@ -289,11 +314,6 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             )
 
             if encodingFlags == 3 {
-                let rawFieldID = size - 1
-                if _slowPath(rawFieldID > Int(Int16.max)) {
-                    throw invalidTaggedFieldID(rawFieldID)
-                }
-                let fieldID = Int16(rawFieldID)
                 return FieldInfo(
                     fieldID: fieldID,
                     fieldName: "$tag\(fieldID)",
@@ -304,12 +324,18 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             guard encodingFlags < fieldNameMetaStringEncodings.count else {
                 throw ForyError.invalidData("invalid field name encoding id")
             }
-            let nameBytes = try buffer.readBytes(count: size)
+            let nameBytes = try buffer.readBytes(count: nameSize + 1)
             let name = try MetaStringDecoder.fieldName
                 .decode(bytes: nameBytes, encoding: fieldNameMetaStringEncodings[encodingFlags])
                 .value
 
-            return FieldInfo(fieldID: nil, fieldName: name, fieldType: fieldType)
+            return FieldInfo(fieldName: name, fieldType: fieldType)
+        }
+
+        public static func == (lhs: FieldInfo, rhs: FieldInfo) -> Bool {
+            lhs.fieldID == rhs.fieldID
+                && lhs.fieldName == rhs.fieldName
+                && lhs.fieldType == rhs.fieldType
         }
     }
 
@@ -323,13 +349,6 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     /// The protocol-defined 52-bit schema identity. Equal values identify the same schema,
     /// so readers do not need to compare the field array again.
     public let headerHash: UInt64
-
-    internal var readDataAlwaysAdvances: Bool {
-        for field in fields where field.fieldType.readDataAlwaysAdvances {
-            return true
-        }
-        return false
-    }
 
     public init(
         typeID: UInt32?,
@@ -353,6 +372,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
                 throw ForyError.encodingError("user type id is required in register-by-id mode")
             }
         }
+        try Self.validateFieldTags(fields)
 
         self.typeID = typeID
         self.userTypeID = userTypeID
@@ -362,13 +382,6 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         self.fields = fields
         self.compressed = compressed
         self.headerHash = headerHash
-    }
-
-    public static func == (lhs: TypeMeta, rhs: TypeMeta) -> Bool {
-        lhs.typeID == rhs.typeID && lhs.userTypeID == rhs.userTypeID && lhs.namespace == rhs.namespace
-            && lhs.typeName == rhs.typeName && lhs.registerByName == rhs.registerByName
-            && lhs.fields == rhs.fields && lhs.compressed == rhs.compressed
-            && lhs.headerHash == rhs.headerHash
     }
 
     public func encode() throws -> [UInt8] {
@@ -566,21 +579,6 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         return Array(buffer.storage.prefix(buffer.count))
     }
 
-    private static func hashMask() -> UInt64 {
-        UInt64.max << (64 - typeMetaNumHashBits)
-    }
-
-    private static func typeMetaHeaderHash(_ body: [UInt8], headerLowBits: UInt64) -> UInt64 {
-        var hashInput = body
-        hashInput.append(UInt8(truncatingIfNeeded: headerLowBits))
-        hashInput.append(UInt8(truncatingIfNeeded: headerLowBits >> 8))
-        let bodyHash = MurmurHash3.x64_128(hashInput, seed: typeMetaHashSeed).0
-        let shifted = bodyHash << (64 - typeMetaNumHashBits)
-        let signed = Int64(bitPattern: shifted)
-        let absSigned = signed == Int64.min ? signed : Swift.abs(signed)
-        return UInt64(bitPattern: absSigned) & hashMask()
-    }
-
     private static func isStructTypeMetaKind(_ typeID: TypeId) -> Bool {
         switch typeID {
         case .structType, .compatibleStruct, .namedStruct, .namedCompatibleStruct:
@@ -699,8 +697,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         guard !localFields.isEmpty else {
             var resolvedFields = fields
             var changed = false
-            for index in resolvedFields.indices where resolvedFields[index].fieldID != -1 {
-                resolvedFields[index].fieldID = -1
+            for index in resolvedFields.indices where resolvedFields[index].matchedFieldID != -1 {
+                resolvedFields[index].matchedFieldID = -1
                 changed = true
             }
             guard changed else {
@@ -719,13 +717,13 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         }
 
         var fieldIndexByName: [String: (Int, FieldInfo)] = [:]
-        var fieldIndexByID: [Int16: (Int, FieldInfo)] = [:]
+        var fieldIndexByID: [Int32: (Int, FieldInfo)] = [:]
         fieldIndexByName.reserveCapacity(localFields.count)
         fieldIndexByID.reserveCapacity(localFields.count)
 
         for (index, localField) in localFields.enumerated() {
-            if let fieldID = localField.fieldID, fieldID >= 0 {
-                fieldIndexByID[fieldID] = (index, localField)
+            if localField.fieldID >= 0 {
+                fieldIndexByID[localField.fieldID] = (index, localField)
             } else {
                 fieldIndexByName[toSnakeCase(localField.fieldName)] = (index, localField)
             }
@@ -739,8 +737,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             let field = resolvedFields[index]
 
             var localMatch: (Int, FieldInfo)?
-            if let fieldID = field.fieldID, fieldID >= 0 {
-                if let candidate = fieldIndexByID[fieldID] {
+            if field.fieldID >= 0 {
+                if let candidate = fieldIndexByID[field.fieldID] {
                     guard Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) else {
                         throw ForyError.invalidData(
                             "compatible field \(field.fieldName) cannot be read as local field \(candidate.1.fieldName)"
@@ -750,7 +748,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
                 }
             }
 
-            if localMatch == nil && field.fieldID == nil {
+            if localMatch == nil && field.fieldID == -1 {
                 if let candidate = fieldIndexByName[toSnakeCase(field.fieldName)] {
                     guard Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) else {
                         throw ForyError.invalidData(
@@ -763,7 +761,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 
             // Only anonymous legacy fields may fall back by exact type. Named or
             // tagged remote-only fields must stay unmatched so the reader skips them.
-            if localMatch == nil && field.fieldID == nil && field.fieldName.isEmpty {
+            if localMatch == nil && field.fieldID == -1 && field.fieldName.isEmpty {
                 for localIndex in localFields.indices where !usedLocalFields[localIndex] {
                     if Self.isCompatibleFieldType(
                         field.fieldType,
@@ -778,8 +776,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             }
 
             guard let (sortedIndex, _) = localMatch else {
-                if field.fieldID != -1 {
-                    resolvedFields[index].fieldID = -1
+                if field.matchedFieldID != -1 {
+                    resolvedFields[index].matchedFieldID = -1
                     changed = true
                 }
                 continue
@@ -798,8 +796,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             let localField = localFields[sortedIndex]
             let exactField = field.fieldType == localField.fieldType
             let resolvedFieldID = Int16(sortedIndex * 2 + (exactField ? 0 : 1))
-            if field.fieldID != resolvedFieldID {
-                resolvedFields[index].fieldID = resolvedFieldID
+            if field.matchedFieldID != resolvedFieldID {
+                resolvedFields[index].matchedFieldID = resolvedFieldID
                 changed = true
             }
             usedLocalFields[sortedIndex] = true
@@ -1046,6 +1044,49 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         default:
             return typeID
         }
+    }
+}
+
+extension TypeMeta {
+    internal var readDataAlwaysAdvances: Bool {
+        for field in fields where field.fieldType.readDataAlwaysAdvances {
+            return true
+        }
+        return false
+    }
+
+    public static func == (lhs: TypeMeta, rhs: TypeMeta) -> Bool {
+        lhs.typeID == rhs.typeID && lhs.userTypeID == rhs.userTypeID && lhs.namespace == rhs.namespace
+            && lhs.typeName == rhs.typeName && lhs.registerByName == rhs.registerByName
+            && lhs.fields == rhs.fields && lhs.compressed == rhs.compressed
+            && lhs.headerHash == rhs.headerHash
+    }
+
+    private static func validateFieldTags(_ fields: [FieldInfo]) throws {
+        var fieldIDs = Set<Int32>()
+        for field in fields {
+            guard field.fieldID >= -1, field.fieldID <= maxTaggedFieldID else {
+                throw ForyError.invalidData("invalid compatible field tag \(field.fieldID)")
+            }
+            if field.fieldID >= 0, !fieldIDs.insert(field.fieldID).inserted {
+                throw ForyError.invalidData("duplicate compatible field tag \(field.fieldID)")
+            }
+        }
+    }
+
+    private static func hashMask() -> UInt64 {
+        UInt64.max << (64 - typeMetaNumHashBits)
+    }
+
+    private static func typeMetaHeaderHash(_ body: [UInt8], headerLowBits: UInt64) -> UInt64 {
+        var hashInput = body
+        hashInput.append(UInt8(truncatingIfNeeded: headerLowBits))
+        hashInput.append(UInt8(truncatingIfNeeded: headerLowBits >> 8))
+        let bodyHash = MurmurHash3.x64_128(hashInput, seed: typeMetaHashSeed).0
+        let shifted = bodyHash << (64 - typeMetaNumHashBits)
+        let signed = Int64(bitPattern: shifted)
+        let absSigned = signed == Int64.min ? signed : Swift.abs(signed)
+        return UInt64(bitPattern: absSigned) & hashMask()
     }
 }
 

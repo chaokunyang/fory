@@ -328,14 +328,14 @@ describe("bool", () => {
     // Define SimpleStruct class with field type registration
     @Type.struct(103, {
       f1: Type.map(Type.int32(), Type.float64()),
-      f2: Type.int32(),
+      f2: Type.int32().setId(15),
       f3: Type.struct(102),
       f4: Type.string(),
       f5: Type.enum(101, Color),
       f6: Type.list(Type.string()),
-      f7: Type.int32(),
+      f7: Type.int32().setId(65551),
       f8: Type.int32(),
-      last: Type.int32(),
+      last: Type.int32().setId(536870911),
     })
     class SimpleStruct {
       f2: number = 0;
@@ -396,14 +396,14 @@ describe("bool", () => {
       { namespace: "demo", typeName: "simple_struct" },
       {
         f1: Type.map(Type.int32(), Type.float64()),
-        f2: Type.int32(),
+        f2: Type.int32().setId(15),
         f3: Type.struct({ namespace: "demo", typeName: "item" }),
         f4: Type.string(),
         f5: Type.enum({ namespace: "demo", typeName: "color" }, Color),
         f6: Type.list(Type.string()),
-        f7: Type.int32(),
+        f7: Type.int32().setId(65551),
         f8: Type.int32(),
-        last: Type.int32(),
+        last: Type.int32().setId(536870911),
       },
     )
     class SimpleStruct {

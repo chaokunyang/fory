@@ -367,7 +367,7 @@ struct ParsedField {
 
     let isOptional: Bool
     let isCollection: Bool
-    let fieldID: Int?
+    let fieldID: Int32
     let schemaIdentifier: String
     let fieldIdentifier: String
 
@@ -435,7 +435,7 @@ private indirect enum FieldTypeHint {
 
 private struct ParsedForyFieldConfiguration {
     let encoding: FieldEncoding?
-    let id: Int?
+    let id: Int32
     let ignore: Bool?
     let typeHint: FieldTypeHint?
     let serializerType: String?
@@ -1008,7 +1008,7 @@ private func parseFields(
             )
         }
         if isIgnored,
-            fieldConfig?.id != nil || fieldConfig?.encoding != nil || fieldTypeHint != nil
+            (fieldConfig?.id ?? -1) >= 0 || fieldConfig?.encoding != nil || fieldTypeHint != nil
         {
             throw MacroExpansionErrorMessage(
                 "@ForyField(ignore: true) cannot be combined with wire or nested field options"
@@ -1081,10 +1081,10 @@ private func parseFields(
                 classification.isCollection || classification.isMap
                 ? try codecTypeExpression(typeText: concreteType, hint: nil)
                 : nil
-            let fieldID = fieldConfig?.id
+            let fieldID = fieldConfig?.id ?? -1
             let baseIdentifier = toSnakeCase(name)
-            let schemaIdentifier = fieldID.map(String.init) ?? baseIdentifier
-            let fieldIdentifier = fieldID.map { "$tag\($0)" } ?? baseIdentifier
+            let schemaIdentifier = fieldID >= 0 ? String(fieldID) : baseIdentifier
+            let fieldIdentifier = fieldID >= 0 ? "$tag\(fieldID)" : baseIdentifier
             let group: Int
             if classification.isPrimitive {
                 group = isOptional ? 2 : 1
@@ -1115,9 +1115,10 @@ private func parseFields(
         }
     }
 
-    var seenFieldIDs: [Int: String] = [:]
+    var seenFieldIDs: [Int32: String] = [:]
     for field in fields {
-        guard let fieldID = field.fieldID else {
+        let fieldID = field.fieldID
+        guard fieldID >= 0 else {
             continue
         }
         if let existing = seenFieldIDs[fieldID], existing != field.name {
@@ -1140,7 +1141,7 @@ private func parseForyFieldConfiguration(
     supportsEncoding: Bool
 ) throws -> ParsedForyFieldConfiguration? {
     var parsedEncoding: FieldEncoding?
-    var parsedID: Int?
+    var parsedID: Int32 = -1
     var parsedIgnore: Bool?
     var parsedTypeHint: FieldTypeHint?
     var parsedSerializerType: String?
@@ -1180,7 +1181,7 @@ private func parseForyFieldConfiguration(
 
             if label == "id" {
                 let idValue = try parseFieldIDExpression(arg.expression)
-                if let existing = parsedID, existing != idValue {
+                if parsedID >= 0 && parsedID != idValue {
                     throw MacroExpansionErrorMessage("conflicting @ForyField id values on the same declaration")
                 }
                 parsedID = idValue
@@ -1238,7 +1239,7 @@ private func parseForyFieldConfiguration(
     }
 
     if parsedEncoding == nil,
-        parsedID == nil,
+        parsedID < 0,
         parsedIgnore == nil,
         parsedTypeHint == nil,
         parsedSerializerType == nil
@@ -1280,7 +1281,7 @@ private func parseForyCaseConfiguration(
         for arg in argList {
             let label = arg.label?.text
             if label == nil || label == "id" {
-                let idValue = try parseFieldIDExpression(arg.expression)
+                let idValue = try parseCaseIDExpression(arg.expression)
                 if let existing = parsedID, existing != idValue {
                     throw MacroExpansionErrorMessage("conflicting @ForyCase id values on the same declaration")
                 }
@@ -1645,16 +1646,30 @@ private func parseMapFieldTypeHint(args: LabeledExprListSyntax) throws -> FieldT
     return .map(key: key, value: value)
 }
 
-private func parseFieldIDExpression(_ expr: ExprSyntax) throws -> Int {
+private func parseFieldIDExpression(_ expr: ExprSyntax) throws -> Int32 {
     let raw = trimType(expr.trimmedDescription)
-    guard let value = Int(raw) else {
+    guard let value = Int32(raw) else {
         throw MacroExpansionErrorMessage("@ForyField id must be an integer literal")
     }
     if value < 0 {
         throw MacroExpansionErrorMessage("@ForyField id must be non-negative")
     }
+    if value >= 1 << 29 {
+        throw MacroExpansionErrorMessage("@ForyField id must be < 2^29")
+    }
+    return value
+}
+
+private func parseCaseIDExpression(_ expr: ExprSyntax) throws -> Int {
+    let raw = trimType(expr.trimmedDescription)
+    guard let value = Int(raw) else {
+        throw MacroExpansionErrorMessage("@ForyCase id must be an integer literal")
+    }
+    if value < 0 {
+        throw MacroExpansionErrorMessage("@ForyCase id must be non-negative")
+    }
     if value > Int(Int16.max) {
-        throw MacroExpansionErrorMessage("@ForyField id must be <= \(Int16.max)")
+        throw MacroExpansionErrorMessage("@ForyCase id must be <= \(Int16.max)")
     }
     return value
 }
@@ -2434,13 +2449,13 @@ private func containsDynamicAny(typeText: String) -> Bool {
 }
 
 private func compareFieldIdentifier(_ lhs: ParsedField, _ rhs: ParsedField) -> Bool? {
-    if let lhsID = lhs.fieldID, let rhsID = rhs.fieldID, lhsID != rhsID {
-        return lhsID < rhsID
+    if lhs.fieldID >= 0 && rhs.fieldID >= 0 && lhs.fieldID != rhs.fieldID {
+        return lhs.fieldID < rhs.fieldID
     }
-    if lhs.fieldID != nil && rhs.fieldID == nil {
+    if lhs.fieldID >= 0 && rhs.fieldID < 0 {
         return true
     }
-    if lhs.fieldID == nil && rhs.fieldID != nil {
+    if lhs.fieldID < 0 && rhs.fieldID >= 0 {
         return false
     }
     if lhs.fieldIdentifier != rhs.fieldIdentifier {
@@ -2450,20 +2465,20 @@ private func compareFieldIdentifier(_ lhs: ParsedField, _ rhs: ParsedField) -> B
 }
 
 private func compareTaggedFieldIdentifier(_ lhs: ParsedField, _ rhs: ParsedField) -> Bool? {
-    switch (lhs.fieldID, rhs.fieldID) {
-    case let (lhsID?, rhsID?):
-        if lhsID != rhsID {
-            return lhsID < rhsID
+    switch (lhs.fieldID >= 0, rhs.fieldID >= 0) {
+    case (true, true):
+        if lhs.fieldID != rhs.fieldID {
+            return lhs.fieldID < rhs.fieldID
         }
         if lhs.fieldIdentifier != rhs.fieldIdentifier {
             return lhs.fieldIdentifier < rhs.fieldIdentifier
         }
         return nil
-    case (_?, nil):
+    case (true, false):
         return true
-    case (nil, _?):
+    case (false, true):
         return false
-    case (nil, nil):
+    case (false, false):
         return nil
     }
 }
@@ -2552,7 +2567,7 @@ private func compatibleTypeMetaFieldsExpr(
 ) -> String {
     let fieldInfos = sortedFields.map { field in
         let fieldTypeExpr = compatibleTypeMetaFieldExpression(field, trackRefExpression: trackRefExpression)
-        return "TypeMeta.FieldInfo(fieldID: \(compatibleFieldIDExpr(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
+        return "TypeMeta.FieldInfo(fieldID: \(field.fieldID), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
     }
     guard !fieldInfos.isEmpty else {
         return "[]"
@@ -2563,19 +2578,12 @@ private func compatibleTypeMetaFieldsExpr(
 private func resolvedTypeMetaFieldsBody(sortedFields: [ParsedField]) -> String {
     let fieldInfos = sortedFields.map { field in
         let fieldTypeExpr = resolvedTypeMetaFieldExpr(field)
-        return "TypeMeta.FieldInfo(fieldID: \(compatibleFieldIDExpr(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
+        return "TypeMeta.FieldInfo(fieldID: \(field.fieldID), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
     }
     guard !fieldInfos.isEmpty else {
         return "return []"
     }
     return "return [\n            \(fieldInfos.joined(separator: ",\n            "))\n        ]"
-}
-
-private func compatibleFieldIDExpr(_ field: ParsedField) -> String {
-    if let fieldID = field.fieldID {
-        return "\(fieldID)"
-    }
-    return "nil"
 }
 
 private func buildSchemaFingerprint(fields: [ParsedField], trackRefExpression: String) throws -> String {

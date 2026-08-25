@@ -636,13 +636,21 @@ public abstract class XlangTestBase extends ForyTestBase {
   @ForyStruct
   static class SimpleStruct {
     HashMap<Integer, Double> f1;
+
+    @ForyField(id = 15)
     int f2;
+
     Item f3;
     String f4;
     Color f5;
     List<String> f6;
+
+    @ForyField(id = 65551)
     int f7;
+
     int f8; // Changed from Integer to int to match Rust
+
+    @ForyField(id = 536870911)
     int last; // Changed from Integer to int to match Rust
   }
 

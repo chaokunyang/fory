@@ -104,14 +104,14 @@ class Item:
 @dataclass
 class SimpleStruct:
     f1: Dict[pyfory.Int32, pyfory.Float64] = None
-    f2: pyfory.Int32 = 0
+    f2: pyfory.Int32 = pyfory.field(15, default=0)
     f3: Item = None
     f4: str = ""
     f5: Color = None
     f6: List[str] = None
-    f7: pyfory.Int32 = 0
+    f7: pyfory.Int32 = pyfory.field(65551, default=0)
     f8: pyfory.Int32 = 0
-    last: pyfory.Int32 = 0
+    last: pyfory.Int32 = pyfory.field(536870911, default=0)
 
 
 @pyfory.dataclass

@@ -865,6 +865,11 @@ Field type info:
 Field names:
 
 - If `TAG_ID` encoding is used, no name bytes are written.
+- Tag IDs are signed-32-bit protocol values in the range
+  `0 <= tag_id < 2^29` (`0` through `536870911`). The upper bound leaves the
+  complete protocol domain representable by every implementation's signed
+  32-bit field-ID type; the extended form still writes `tag_id - 15` with the
+  existing `varuint32` encoding.
 - Otherwise, write the encoded field name bytes as a meta string.
 - For xlang, field names are converted to `snake_case` before encoding for
   cross-language compatibility.
@@ -1718,10 +1723,11 @@ For every field, compute a stable identifier used for ordering:
 - If a non-negative tag ID is configured (e.g., `@ForyField(id=...)`), use the tag ID.
 - Otherwise, use the field name converted to `snake_case`.
 
-Configured tag IDs must be non-negative. A negative configured tag ID is invalid; languages may
-use a negative value only as a default or internal sentinel for "no tag ID configured", which falls
-back to the `snake_case` field name and is not a tag ID. Tag IDs must be unique within a type;
-duplicate tag IDs are invalid.
+Configured tag IDs must satisfy `0 <= tag_id < 2^29`. A negative configured tag ID is invalid;
+languages may use a negative value only as a default or internal sentinel for "no tag ID
+configured", which falls back to the `snake_case` field name and is not a tag ID. Values greater
+than or equal to `2^29` are invalid. Tag IDs must be unique within a type; duplicate tag IDs are
+invalid.
 
 Field identifiers compare as follows:
 

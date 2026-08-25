@@ -84,14 +84,14 @@ final case class Item(name: String) derives ForySerializer
 @ForyStruct
 final case class SimpleStruct(
     f1: util.HashMap[Integer, java.lang.Double],
-    f2: Int,
+    @ForyField(id = 15) f2: Int,
     f3: Item,
     f4: String,
     f5: Color,
     f6: util.List[String],
-    f7: Int,
+    @ForyField(id = 65551) f7: Int,
     f8: Int,
-    last: Int)
+    @ForyField(id = 536870911) last: Int)
     derives ForySerializer
 
 @ForyStruct(evolution = Evolution.ENABLED)

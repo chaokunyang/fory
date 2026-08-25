@@ -810,7 +810,7 @@ func generatedReadProgress() throws {
         registerByName: false,
         fields: [
             TypeMeta.FieldInfo(
-                fieldID: nil,
+                fieldID: -1,
                 fieldName: "value",
                 fieldType: TypeMeta.FieldType(
                     typeID: TypeId.int32.rawValue,

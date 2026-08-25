@@ -887,8 +887,14 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header,
   return meta;
 }
 
-Result<void, Error> TypeMeta::skip_bytes_for_validated_header(Buffer &buffer,
-                                                              int64_t header) {
+// This helper runs on every compatible metadata-cache hit. Keep its entry on a
+// cache-line boundary so growth in unrelated cold metadata codecs cannot change
+// cache-hit throughput through link-layout drift.
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((aligned(64)))
+#endif
+Result<void, Error>
+TypeMeta::skip_bytes_for_validated_header(Buffer &buffer, int64_t header) {
   // Header-cache hits intentionally skip opaque metadata. This path must not
   // allocate or materialize the body from the attacker-declared size.
   Error error;

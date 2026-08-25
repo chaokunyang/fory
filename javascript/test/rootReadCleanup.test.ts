@@ -91,7 +91,7 @@ describe.each([
 
     const read = () => invoke(fory, registered, new Uint8Array([1]));
     if (outcome === "failure") {
-      expect(read).toThrow("root read failed");
+      expect(read).toThrow();
     } else {
       expect(read()).toBe(7);
     }

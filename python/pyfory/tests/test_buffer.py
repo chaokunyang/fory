@@ -237,6 +237,9 @@ def test_buffer_export_mutability():
     assert immutable_view.readonly
     with pytest.raises(TypeError):
         immutable_view[0] = 1
+    with pytest.raises(BufferError):
+        immutable.reserve(32)
+    immutable_view.release()
 
     immutable.reserve(32)
     immutable.grow(1)
@@ -272,6 +275,15 @@ def test_buffer_export_mutability():
     writable.put_uint8(0, ord("x"))
     writable_view[1] = ord("y")
     assert backing == bytearray(b"xycd")
+    writable.set_writer_index(4)
+    with pytest.raises(BufferError):
+        writable.write_uint8(1)
+    assert bytes(writable_view) == b"xycd"
+    writable_view.release()
+    writable.write_uint8(1)
+
+    with pytest.raises(BufferError):
+        memoryview(Buffer.from_stream(OneByteStream(b"x")))
 
 
 def test_write_context_writable_buffer():

@@ -2472,13 +2472,13 @@ template <typename T> struct CompileTimeFieldHelpers {
           total += 4; // fixed 4 bytes
           break;
         case TypeId::VARINT32:
-          total += 5; // varint max for 32-bit
+          total += 8; // five logical bytes use an eight-byte physical store
           break;
         case TypeId::UINT32:
           total += 4; // fixed 4 bytes
           break;
         case TypeId::VAR_UINT32:
-          total += 5; // varint max for 32-bit
+          total += 8; // five logical bytes use an eight-byte physical store
           break;
         case TypeId::FLOAT32:
           total += 4;

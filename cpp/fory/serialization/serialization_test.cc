@@ -428,6 +428,17 @@ TEST(SerializationTest, BoolVectorReadsCheckBodyBeforeAllocation) {
   EXPECT_TRUE(read_ctx.has_error());
 }
 
+TEST(SerializationTest, PrimitiveVectorWriteChecksCompleteRange) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  WriteContext write_ctx(fory.config(), fory.type_resolver().clone());
+
+  EXPECT_FALSE(detail::PrimitiveVectorWriter::reserve(
+      write_ctx, std::numeric_limits<uint32_t>::max()));
+  EXPECT_TRUE(write_ctx.has_error());
+  EXPECT_EQ(write_ctx.buffer().writer_index(), 0U);
+}
+
 TEST(SerializationTest, FixedPrimitiveArrayRejectsWrongByteSize) {
   auto fory =
       Fory::builder().xlang(true).compatible(false).track_ref(false).build();

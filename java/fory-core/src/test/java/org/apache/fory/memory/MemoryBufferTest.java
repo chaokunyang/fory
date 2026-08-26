@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Random;
 import org.apache.fory.TestUtils;
 import org.apache.fory.platform.AndroidSupport;
@@ -1175,48 +1176,36 @@ public class MemoryBufferTest {
 
   @Test
   public void testVarUint36Small() {
-    MemoryBuffer buf = MemoryUtils.buffer(80);
-    int index = 0;
-    {
-      int diff = LittleEndian.putVarUint36Small(buf.getHeapMemory(), index, 10);
-      assertEquals(buf.readVarUint36Small(), 10);
-      buf.increaseReaderIndex(-diff);
-      index += buf._unsafePutVarUint36Small(index, 10);
-      assertEquals(buf.readVarUint36Small(), 10);
-    }
-    {
-      int diff = LittleEndian.putVarUint36Small(buf.getHeapMemory(), index, Short.MAX_VALUE);
-      assertEquals(buf.readVarUint36Small(), Short.MAX_VALUE);
-      buf.increaseReaderIndex(-diff);
-      index += buf._unsafePutVarUint36Small(index, Short.MAX_VALUE);
-      assertEquals(buf.readVarUint36Small(), Short.MAX_VALUE);
-    }
-    {
-      int diff = LittleEndian.putVarUint36Small(buf.getHeapMemory(), index, Integer.MAX_VALUE);
-      assertEquals(buf.readVarUint36Small(), Integer.MAX_VALUE);
-      buf.increaseReaderIndex(-diff);
-      index += buf._unsafePutVarUint36Small(index, Integer.MAX_VALUE);
-      assertEquals(buf.readVarUint36Small(), Integer.MAX_VALUE);
-    }
-    {
-      int diff =
-          LittleEndian.putVarUint36Small(
-              buf.getHeapMemory(), index, 0b111111111111111111111111111111111111L);
-      assertEquals(buf.readVarUint36Small(), 0b111111111111111111111111111111111111L);
-      buf.increaseReaderIndex(-diff);
-      buf._unsafePutVarUint36Small(index, 0b1000000000000000000000000000000000000L);
-      assertEquals(buf.readVarUint36Small(), 0); // overflow
-    }
-    {
-      // With buffer size 9
-      MemoryBuffer buf1 = MemoryBuffer.newHeapBuffer(9);
-      // With buffer size 8
-      MemoryBuffer buf2 = MemoryBuffer.newHeapBuffer(8);
-      long uint36Max = 0b111111111111111111111111111111111111L;
-      buf1._unsafePutVarUint36Small(0, uint36Max);
-      buf2._unsafePutVarUint36Small(0, uint36Max);
-      assertEquals(buf1.readVarUint36Small(), uint36Max);
-      assertEquals(buf2.readVarUint36Small(), uint36Max);
+    long[] values = {
+      0, 127, 128, (1L << 28) - 1, 1L << 28, (1L << 35) - 1, 1L << 35, (1L << 36) - 1
+    };
+    byte[][] expected = {
+      {0},
+      {0x7f},
+      {(byte) 0x80, 0x01},
+      {(byte) 0xff, (byte) 0xff, (byte) 0xff, 0x7f},
+      {(byte) 0x80, (byte) 0x80, (byte) 0x80, (byte) 0x80, 0x01},
+      {(byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff, 0x7f},
+      {(byte) 0x80, (byte) 0x80, (byte) 0x80, (byte) 0x80, (byte) 0x80, 0x01},
+      {(byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff, 0x01}
+    };
+    for (int i = 0; i < values.length; i++) {
+      byte[] bytes = new byte[8];
+      int size = LittleEndian.putVarUint36Small(bytes, 0, values[i]);
+      assertEquals(Arrays.copyOf(bytes, size), expected[i]);
+
+      for (MemoryBuffer buffer :
+          new MemoryBuffer[] {
+            MemoryUtils.buffer(8),
+            MemoryUtils.buffer(9),
+            MemoryUtils.wrap(ByteBuffer.allocateDirect(8)),
+            MemoryUtils.wrap(ByteBuffer.allocateDirect(9))
+          }) {
+        int bufferSize = buffer._unsafePutVarUint36Small(0, values[i]);
+        assertEquals(bufferSize, expected[i].length);
+        assertEquals(buffer.getBytes(0, bufferSize), expected[i]);
+        assertEquals(buffer.readVarUint36Small(), values[i]);
+      }
     }
   }
 

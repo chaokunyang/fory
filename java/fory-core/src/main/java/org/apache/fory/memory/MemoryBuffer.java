@@ -1328,10 +1328,16 @@ public final class MemoryBuffer {
       UNSAFE.putInt(heapMemory, address + index, (int) encoded);
       return 4;
     }
-    // 0xff0000000: 0b11111111 << 28. Note eight `1` here instead of seven.
-    encoded |= ((value & 0xff0000000L) << 4) | 0x80000000L;
+    // The fifth byte carries seven data bits. Bit 35 uses a sixth byte so this
+    // specialized string-header encoding stays standard VarUint64 on the wire.
+    encoded |= ((value & 0x7f0000000L) << 4) | 0x80000000L;
+    if (value >>> 35 == 0) {
+      UNSAFE.putLong(heapMemory, address + index, encoded);
+      return 5;
+    }
+    encoded |= 0x8000000000L | ((value >>> 35) << 40);
     UNSAFE.putLong(heapMemory, address + index, encoded);
-    return 5;
+    return 6;
   }
 
   private int putVarUint36SmallBigEndian(int index, long encoded, long value) {
@@ -1355,10 +1361,14 @@ public final class MemoryBuffer {
       UNSAFE.putInt(heapMemory, address + index, Integer.reverseBytes((int) encoded));
       return 4;
     }
-    // 0xff0000000: 0b11111111 << 28. Note eight `1` here instead of seven.
-    encoded |= ((value & 0xff0000000L) << 4) | 0x80000000L;
+    encoded |= ((value & 0x7f0000000L) << 4) | 0x80000000L;
+    if (value >>> 35 == 0) {
+      UNSAFE.putLong(heapMemory, address + index, Long.reverseBytes(encoded));
+      return 5;
+    }
+    encoded |= 0x8000000000L | ((value >>> 35) << 40);
     UNSAFE.putLong(heapMemory, address + index, Long.reverseBytes(encoded));
-    return 5;
+    return 6;
   }
 
   /**
@@ -2793,8 +2803,11 @@ public final class MemoryBuffer {
       result |= (bulkValue >>> 3) & 0xfe00000;
       if ((bulkValue & 0x80000000L) != 0) {
         readIdx++;
-        // 0xff0000000: 0b11111111 << 28
-        result |= (bulkValue >>> 4) & 0xff0000000L;
+        result |= (bulkValue >>> 4) & 0x7f0000000L;
+        if ((bulkValue & 0x8000000000L) != 0) {
+          readIdx++;
+          result |= (bulkValue >>> 5) & 0x800000000L;
+        }
       }
     }
     readerIndex = readIdx;
@@ -2819,7 +2832,11 @@ public final class MemoryBuffer {
           result |= (b & 0x7F) << 21;
           if ((b & 0x80) != 0) {
             b = readByte();
-            result |= (b & 0xFF) << 28;
+            result |= (b & 0x7F) << 28;
+            if ((b & 0x80) != 0) {
+              b = readByte();
+              result |= (b & 0x01) << 35;
+            }
           }
         }
       }

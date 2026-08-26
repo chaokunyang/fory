@@ -80,6 +80,20 @@ class SimpleStruct {
 }
 
 @ForyStruct()
+class ExactFieldTags {
+  ExactFieldTags();
+
+  @ForyField(id: 15, type: Int32Type())
+  int first = 0;
+
+  @ForyField(id: 65551, type: Int32Type())
+  int second = 0;
+
+  @ForyField(id: 536870911, type: Int32Type())
+  int last = 0;
+}
+
+@ForyStruct()
 class EvolvingOverrideStruct {
   EvolvingOverrideStruct();
 

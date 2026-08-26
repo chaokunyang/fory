@@ -424,7 +424,7 @@ impl FieldType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone)]
 pub struct FieldInfo {
     /// Protocol field tag, or `-1` when the field is identified by name.
     pub field_id: i32,
@@ -434,6 +434,17 @@ pub struct FieldInfo {
     pub field_name: String,
     pub field_type: FieldType,
 }
+
+impl PartialEq for FieldInfo {
+    fn eq(&self, other: &Self) -> bool {
+        // matched_field_id is derived local dispatch state, not protocol metadata identity.
+        self.field_id == other.field_id
+            && self.field_name == other.field_name
+            && self.field_type == other.field_type
+    }
+}
+
+impl Eq for FieldInfo {}
 
 impl FieldInfo {
     pub fn new(field_name: &str, field_type: FieldType) -> FieldInfo {
@@ -1476,9 +1487,11 @@ mod tests {
         let remote_type = FieldType::new(crate::type_id::INT16, false, vec![]);
         let local_fields = [FieldInfo::new("value", local_type)];
         let mut remote_fields = [FieldInfo::new("value", remote_type)];
+        let wire_field = remote_fields[0].clone();
 
         match_remote_fields(&local_fields, &mut remote_fields).unwrap();
 
+        assert_eq!(remote_fields[0], wire_field);
         assert_eq!(remote_fields[0].field_id, -1);
         assert_eq!(remote_fields[0].matched_field_id, 1);
     }

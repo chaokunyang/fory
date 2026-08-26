@@ -4276,7 +4276,7 @@ public final class MemoryBuffer {
       int newSize =
           newCapacity < BUFFER_GROW_STEP_THRESHOLD
               ? newCapacity << 1
-              : (int) Math.min(newCapacity * 1.5d, Integer.MAX_VALUE - 8);
+              : Math.max(newCapacity, (int) Math.min(newCapacity * 1.5d, Integer.MAX_VALUE - 8));
 
       byte[] data = new byte[newSize];
       buffer.get(0, data, 0, buffer.size());

@@ -31,7 +31,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Random;
 import org.apache.fory.TestUtils;
-import org.apache.fory.io.AbstractStreamReader;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.testng.Assert;
@@ -158,34 +157,30 @@ public class MemoryBufferTest {
   public void testPrimitiveWriteRanges() {
     requireRootMemoryBuffer();
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(8);
-    assertThrows(RuntimeException.class, () -> buffer.writeBooleans(new boolean[0], 1, 0));
-    assertThrows(RuntimeException.class, () -> buffer.writeChars(new char[0], 1, 0));
-    assertThrows(RuntimeException.class, () -> buffer.writeShorts(new short[0], 1, 0));
-    assertThrows(RuntimeException.class, () -> buffer.writeInts(new int[0], 1, 0));
-    assertThrows(RuntimeException.class, () -> buffer.writeLongs(new long[0], 1, 0));
-    assertThrows(RuntimeException.class, () -> buffer.writeFloats(new float[0], 1, 0));
-    assertThrows(RuntimeException.class, () -> buffer.writeDoubles(new double[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeBooleans(new boolean[1], 1, 1));
+    assertThrows(RuntimeException.class, () -> buffer.writeChars(new char[1], 1, 1));
+    assertThrows(RuntimeException.class, () -> buffer.writeShorts(new short[1], 1, 1));
+    assertThrows(RuntimeException.class, () -> buffer.writeInts(new int[1], 1, 1));
+    assertThrows(RuntimeException.class, () -> buffer.writeLongs(new long[1], 1, 1));
+    assertThrows(RuntimeException.class, () -> buffer.writeFloats(new float[1], 1, 1));
+    assertThrows(RuntimeException.class, () -> buffer.writeDoubles(new double[1], 1, 1));
     assertEquals(buffer.writerIndex(), 0);
   }
 
   @Test
   public void testArrayBodyRanges() {
     requireRootMemoryBuffer();
-    MemoryBuffer streamBuffer =
-        MemoryBuffer.fromByteArray(new byte[0], 0, 0, new NoOpArrayReader());
+    MemoryBuffer direct = MemoryUtils.wrap(ByteBuffer.allocateDirect(8));
     assertThrows(
-        RuntimeException.class,
-        () -> streamBuffer.readByteArrayBytes(new byte[0], Integer.MIN_VALUE));
-    assertThrows(RuntimeException.class, () -> streamBuffer.readByteArrayBytes(new byte[0], 1));
-    assertThrows(
-        RuntimeException.class, () -> streamBuffer.readBooleanArrayBytes(new boolean[0], 1));
-    assertThrows(RuntimeException.class, () -> streamBuffer.readCharArrayBytes(new char[0], 2));
-    assertThrows(RuntimeException.class, () -> streamBuffer.readInt16ArrayBytes(new short[0], 2));
-    assertThrows(RuntimeException.class, () -> streamBuffer.readInt32ArrayBytes(new int[0], 4));
-    assertThrows(RuntimeException.class, () -> streamBuffer.readInt64ArrayBytes(new long[0], 8));
-    assertThrows(RuntimeException.class, () -> streamBuffer.readFloat32ArrayBytes(new float[0], 4));
-    assertThrows(
-        RuntimeException.class, () -> streamBuffer.readFloat64ArrayBytes(new double[0], 8));
+        RuntimeException.class, () -> direct.readByteArrayBytes(new byte[0], Integer.MIN_VALUE));
+    assertThrows(RuntimeException.class, () -> direct.readByteArrayBytes(new byte[0], 1));
+    assertThrows(RuntimeException.class, () -> direct.readBooleanArrayBytes(new boolean[0], 1));
+    assertThrows(RuntimeException.class, () -> direct.readCharArrayBytes(new char[0], 2));
+    assertThrows(RuntimeException.class, () -> direct.readInt16ArrayBytes(new short[0], 2));
+    assertThrows(RuntimeException.class, () -> direct.readInt32ArrayBytes(new int[0], 4));
+    assertThrows(RuntimeException.class, () -> direct.readInt64ArrayBytes(new long[0], 8));
+    assertThrows(RuntimeException.class, () -> direct.readFloat32ArrayBytes(new float[0], 4));
+    assertThrows(RuntimeException.class, () -> direct.readFloat64ArrayBytes(new double[0], 8));
 
     MemoryBuffer aligned = MemoryBuffer.fromByteArray(new byte[1]);
     assertThrows(RuntimeException.class, () -> aligned.readCharArrayBytes(new char[1], 1));
@@ -204,29 +199,6 @@ public class MemoryBufferTest {
     assertThrows(RuntimeException.class, () -> buffer.readBytesAsInt64(0));
     assertThrows(RuntimeException.class, () -> buffer.readBytesAsInt64(9));
     assertEquals(buffer.readerIndex(), 0);
-  }
-
-  private static final class NoOpArrayReader extends AbstractStreamReader {
-    @Override
-    public void readBooleans(boolean[] dst, int dstIndex, int length) {}
-
-    @Override
-    public void readChars(char[] dst, int dstIndex, int length) {}
-
-    @Override
-    public void readShorts(short[] dst, int dstIndex, int length) {}
-
-    @Override
-    public void readInts(int[] dst, int dstIndex, int length) {}
-
-    @Override
-    public void readLongs(long[] dst, int dstIndex, int length) {}
-
-    @Override
-    public void readFloats(float[] dst, int dstIndex, int length) {}
-
-    @Override
-    public void readDoubles(double[] dst, int dstIndex, int length) {}
   }
 
   @Test
@@ -572,8 +544,8 @@ public class MemoryBufferTest {
   public void testGetBytesRangeChecks() {
     requireRootMemoryBuffer();
     MemoryBuffer buffer = MemoryBuffer.fromByteArray(new byte[8], 0, 4);
-    assertThrows(RuntimeException.class, () -> buffer.getBytes(-1, 0));
-    assertThrows(RuntimeException.class, () -> buffer.getBytes(0, new byte[1], -1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.getBytes(-1, 1));
+    assertThrows(RuntimeException.class, () -> buffer.getBytes(0, new byte[1], -1, 1));
     assertThrows(
         RuntimeException.class, () -> buffer.getBytes(0, new byte[1], 0, Integer.MIN_VALUE));
   }

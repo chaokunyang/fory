@@ -416,8 +416,8 @@ void main() {
           _expectInt64IntHelperMatchesWrapper(
             value: value,
             writeInt: (buffer, value) => buffer.writeTaggedInt64FromInt(value),
-            writeWrapper:
-                (buffer, value) => buffer.writeTaggedInt64(Int64(value)),
+            writeWrapper: (buffer, value) =>
+                buffer.writeTaggedInt64(Int64(value)),
             readInt: (buffer) => buffer.readTaggedInt64AsInt(),
           );
         }
@@ -457,17 +457,15 @@ void main() {
         throwsA(isA<StateError>()),
       );
       expect(
-        () =>
-            Buffer.wrap(
-              Uint8List.fromList(varint.toBytes()),
-            ).readVarInt64AsInt(),
+        () => Buffer.wrap(
+          Uint8List.fromList(varint.toBytes()),
+        ).readVarInt64AsInt(),
         throwsA(isA<StateError>()),
       );
       expect(
-        () =>
-            Buffer.wrap(
-              Uint8List.fromList(tagged.toBytes()),
-            ).readTaggedInt64AsInt(),
+        () => Buffer.wrap(
+          Uint8List.fromList(tagged.toBytes()),
+        ).readTaggedInt64AsInt(),
         throwsA(isA<StateError>()),
       );
     });
@@ -518,6 +516,36 @@ void main() {
           read: (buffer) => buffer.readVarUint36Small(),
         );
       }
+    });
+
+    test('uses canonical varuint36 small framing', () {
+      const cases = <({List<int> bytes, int value})>[
+        (bytes: <int>[0xff, 0xff, 0xff, 0x7f], value: 0x0fffffff),
+        (bytes: <int>[0x80, 0x80, 0x80, 0x80, 0x01], value: 0x10000000),
+        (bytes: <int>[0x80, 0x80, 0x80, 0x80, 0x80, 0x01], value: 0x800000000),
+        (bytes: <int>[0xff, 0xff, 0xff, 0xff, 0xff, 0x01], value: 0xfffffffff),
+      ];
+
+      for (final testCase in cases) {
+        final buffer = Buffer();
+        buffer.writeVarUint36Small(testCase.value);
+        expect(buffer.toBytes(), orderedEquals(testCase.bytes));
+
+        final wrapped = Buffer.wrap(Uint8List.fromList(testCase.bytes));
+        expect(wrapped.readVarUint36Small(), equals(testCase.value));
+        expect(wrapped.readableBytes, equals(0));
+      }
+    });
+
+    test('rejects values outside varuint36 small range', () {
+      for (final value in const <int>[-1, 0x1000000000]) {
+        expect(() => Buffer().writeVarUint36Small(value), throwsA(anything));
+      }
+
+      final malformed = Buffer.wrap(
+        Uint8List.fromList(const <int>[0xff, 0xff, 0xff, 0xff, 0xff, 0x02]),
+      );
+      expect(malformed.readVarUint36Small, throwsA(anything));
     });
   });
 }

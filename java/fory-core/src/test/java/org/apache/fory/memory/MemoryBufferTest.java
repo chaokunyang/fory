@@ -31,6 +31,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Random;
 import org.apache.fory.TestUtils;
+import org.apache.fory.io.AbstractStreamReader;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.testng.Assert;
@@ -38,6 +39,12 @@ import org.testng.SkipException;
 import org.testng.annotations.Test;
 
 public class MemoryBufferTest {
+
+  private static void requireRootMemoryBuffer() {
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      throw new SkipException("The JDK 8-24 MemoryBuffer implementation is replaced on JDK 25+");
+    }
+  }
 
   @Test
   public void testBufferPut() {
@@ -96,6 +103,131 @@ public class MemoryBufferTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> MemoryBuffer.fromDirectByteBuffer(ByteBuffer.allocate(8), 8, null));
+  }
+
+  @Test
+  public void testBackingRangeChecks() {
+    requireRootMemoryBuffer();
+    byte[] bytes = new byte[8];
+    assertThrows(
+        RuntimeException.class, () -> MemoryBuffer.fromByteArray(bytes, Integer.MAX_VALUE, 1));
+    assertThrows(
+        RuntimeException.class, () -> MemoryBuffer.fromByteArray(bytes, 1, Integer.MAX_VALUE));
+
+    MemoryBuffer buffer = MemoryBuffer.fromByteArray(bytes, 0, 4);
+    assertThrows(RuntimeException.class, () -> buffer.pointTo(bytes, Integer.MAX_VALUE, 1));
+    Assert.assertSame(buffer.getHeapMemory(), bytes);
+    assertEquals(buffer.size(), 4);
+
+    assertThrows(RuntimeException.class, () -> buffer.initByteBuffer(ByteBuffer.allocate(4), 5));
+    assertThrows(
+        RuntimeException.class, () -> buffer.initByteBuffer(ByteBuffer.allocateDirect(4), -1));
+    assertThrows(
+        RuntimeException.class,
+        () -> MemoryBuffer.fromDirectByteBuffer(ByteBuffer.allocateDirect(4), 5, null));
+
+    assertThrows(RuntimeException.class, () -> buffer.increaseSize(-1));
+    assertThrows(RuntimeException.class, () -> buffer.increaseSize(5));
+    assertThrows(RuntimeException.class, () -> buffer.increaseSize(Integer.MAX_VALUE));
+    assertEquals(buffer.size(), 4);
+  }
+
+  @Test
+  public void testCursorRangeChecks() {
+    requireRootMemoryBuffer();
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(8);
+    buffer.writerIndex(4);
+    buffer.increaseWriterIndex(-2);
+    assertEquals(buffer.writerIndex(), 2);
+    assertThrows(RuntimeException.class, () -> buffer.increaseWriterIndex(-3));
+    assertThrows(RuntimeException.class, () -> buffer.increaseWriterIndex(Integer.MAX_VALUE));
+    assertEquals(buffer.writerIndex(), 2);
+    assertThrows(RuntimeException.class, () -> buffer.grow(-1));
+    assertThrows(RuntimeException.class, () -> buffer.grow(Integer.MAX_VALUE));
+    assertThrows(RuntimeException.class, () -> buffer.ensure(-1));
+
+    buffer.readerIndex(4);
+    buffer.increaseReaderIndex(-2);
+    assertEquals(buffer.readerIndex(), 2);
+    assertThrows(RuntimeException.class, () -> buffer.increaseReaderIndex(-3));
+    assertThrows(RuntimeException.class, () -> buffer.increaseReaderIndex(Integer.MAX_VALUE));
+    assertThrows(RuntimeException.class, () -> buffer.increaseReaderIndex(7));
+    assertEquals(buffer.readerIndex(), 2);
+  }
+
+  @Test
+  public void testPrimitiveWriteRanges() {
+    requireRootMemoryBuffer();
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(8);
+    assertThrows(RuntimeException.class, () -> buffer.writeBooleans(new boolean[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeChars(new char[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeShorts(new short[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeInts(new int[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeLongs(new long[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeFloats(new float[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeDoubles(new double[0], 1, 0));
+    assertEquals(buffer.writerIndex(), 0);
+  }
+
+  @Test
+  public void testArrayBodyRanges() {
+    requireRootMemoryBuffer();
+    MemoryBuffer streamBuffer =
+        MemoryBuffer.fromByteArray(new byte[0], 0, 0, new NoOpArrayReader());
+    assertThrows(
+        RuntimeException.class,
+        () -> streamBuffer.readByteArrayBytes(new byte[0], Integer.MIN_VALUE));
+    assertThrows(RuntimeException.class, () -> streamBuffer.readByteArrayBytes(new byte[0], 1));
+    assertThrows(
+        RuntimeException.class, () -> streamBuffer.readBooleanArrayBytes(new boolean[0], 1));
+    assertThrows(RuntimeException.class, () -> streamBuffer.readCharArrayBytes(new char[0], 2));
+    assertThrows(RuntimeException.class, () -> streamBuffer.readInt16ArrayBytes(new short[0], 2));
+    assertThrows(RuntimeException.class, () -> streamBuffer.readInt32ArrayBytes(new int[0], 4));
+    assertThrows(RuntimeException.class, () -> streamBuffer.readInt64ArrayBytes(new long[0], 8));
+    assertThrows(RuntimeException.class, () -> streamBuffer.readFloat32ArrayBytes(new float[0], 4));
+    assertThrows(
+        RuntimeException.class, () -> streamBuffer.readFloat64ArrayBytes(new double[0], 8));
+
+    MemoryBuffer aligned = MemoryBuffer.fromByteArray(new byte[1]);
+    assertThrows(RuntimeException.class, () -> aligned.readCharArrayBytes(new char[1], 1));
+    assertThrows(RuntimeException.class, () -> aligned.readInt16ArrayBytes(new short[1], 1));
+    assertThrows(RuntimeException.class, () -> aligned.readInt32ArrayBytes(new int[1], 1));
+    assertThrows(RuntimeException.class, () -> aligned.readInt64ArrayBytes(new long[1], 1));
+    assertThrows(RuntimeException.class, () -> aligned.readFloat32ArrayBytes(new float[1], 1));
+    assertThrows(RuntimeException.class, () -> aligned.readFloat64ArrayBytes(new double[1], 1));
+  }
+
+  @Test
+  public void testInt64ByteLength() {
+    requireRootMemoryBuffer();
+    MemoryBuffer buffer = MemoryBuffer.fromByteArray(new byte[8]);
+    assertThrows(RuntimeException.class, () -> buffer.readBytesAsInt64(-1));
+    assertThrows(RuntimeException.class, () -> buffer.readBytesAsInt64(0));
+    assertThrows(RuntimeException.class, () -> buffer.readBytesAsInt64(9));
+    assertEquals(buffer.readerIndex(), 0);
+  }
+
+  private static final class NoOpArrayReader extends AbstractStreamReader {
+    @Override
+    public void readBooleans(boolean[] dst, int dstIndex, int length) {}
+
+    @Override
+    public void readChars(char[] dst, int dstIndex, int length) {}
+
+    @Override
+    public void readShorts(short[] dst, int dstIndex, int length) {}
+
+    @Override
+    public void readInts(int[] dst, int dstIndex, int length) {}
+
+    @Override
+    public void readLongs(long[] dst, int dstIndex, int length) {}
+
+    @Override
+    public void readFloats(float[] dst, int dstIndex, int length) {}
+
+    @Override
+    public void readDoubles(double[] dst, int dstIndex, int length) {}
   }
 
   @Test
@@ -438,6 +570,29 @@ public class MemoryBufferTest {
   }
 
   @Test
+  public void testGetBytesRangeChecks() {
+    requireRootMemoryBuffer();
+    MemoryBuffer buffer = MemoryBuffer.fromByteArray(new byte[8], 0, 4);
+    assertThrows(RuntimeException.class, () -> buffer.getBytes(0, 5));
+    assertThrows(RuntimeException.class, () -> buffer.getBytes(-1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.getBytes(0, new byte[1], -1, 0));
+    assertThrows(
+        RuntimeException.class, () -> buffer.getBytes(0, new byte[1], 0, Integer.MIN_VALUE));
+  }
+
+  @Test
+  public void testSliceRangeChecks() {
+    requireRootMemoryBuffer();
+    MemoryBuffer heap = MemoryBuffer.fromByteArray(new byte[8], 2, 2);
+    assertThrows(RuntimeException.class, () -> heap.slice(-1));
+    assertThrows(RuntimeException.class, () -> heap.slice(-1, 1));
+    assertThrows(RuntimeException.class, () -> heap.slice(0, -1));
+
+    MemoryBuffer direct = MemoryUtils.wrap(ByteBuffer.allocateDirect(4));
+    assertThrows(RuntimeException.class, () -> direct.slice(Integer.MAX_VALUE, 1));
+  }
+
+  @Test
   public void testEqualTo() {
     MemoryBuffer buf1 = MemoryUtils.buffer(16);
     MemoryBuffer buf2 = MemoryUtils.buffer(16);
@@ -458,6 +613,19 @@ public class MemoryBufferTest {
     MemoryBuffer buf1 = MemoryUtils.buffer(0);
     MemoryBuffer buf2 = MemoryUtils.buffer(0);
     Assert.assertTrue(buf1.equalTo(buf2, 0, 0, buf1.size()));
+  }
+
+  @Test
+  public void testEqualityRangeChecks() {
+    requireRootMemoryBuffer();
+    byte[] bytes = new byte[] {1, 2, 3, 4, 5, 6};
+    MemoryBuffer left = MemoryBuffer.fromByteArray(bytes, 2, 2);
+    MemoryBuffer right = MemoryBuffer.fromByteArray(bytes, 2, 2);
+    assertThrows(RuntimeException.class, () -> left.equalTo(right, -1, 0, 1));
+    assertThrows(RuntimeException.class, () -> left.equalTo(right, 0, -1, 1));
+    assertThrows(RuntimeException.class, () -> left.equalTo(right, 1, 1, 2));
+    assertTrue(left.equalTo(right, 3, 3, 0));
+    assertThrows(RuntimeException.class, () -> left.equalTo(right, 0, 0, -1));
   }
 
   @Test

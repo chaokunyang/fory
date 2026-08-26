@@ -561,6 +561,7 @@ cdef class WriteContext:
         self.depth = 0
 
     cpdef inline prepare(self, Buffer buffer, buffer_callback=None, unsupported_callback=None):
+        buffer._check_writable()
         self.buffer = buffer
         self.c_buffer = buffer.c_buffer
         self.buffer_callback = buffer_callback

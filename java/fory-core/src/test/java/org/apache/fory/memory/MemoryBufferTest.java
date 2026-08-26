@@ -572,7 +572,6 @@ public class MemoryBufferTest {
   public void testGetBytesRangeChecks() {
     requireRootMemoryBuffer();
     MemoryBuffer buffer = MemoryBuffer.fromByteArray(new byte[8], 0, 4);
-    assertThrows(RuntimeException.class, () -> buffer.getBytes(0, 5));
     assertThrows(RuntimeException.class, () -> buffer.getBytes(-1, 0));
     assertThrows(RuntimeException.class, () -> buffer.getBytes(0, new byte[1], -1, 0));
     assertThrows(

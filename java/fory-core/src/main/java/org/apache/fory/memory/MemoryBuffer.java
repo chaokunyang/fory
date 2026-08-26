@@ -4082,12 +4082,13 @@ public final class MemoryBuffer {
   }
 
   public byte[] getBytes(int index, int length) {
+    if (index == 0 && heapMemory != null && heapOffset == 0) {
+      // Keep Arrays.copyOf's zero-padding contract: row-format writers use it for trailing
+      // alignment beyond the buffer's current logical size. Callers own the requested output size.
+      return Arrays.copyOf(heapMemory, length);
+    }
     if (index < 0 || length < 0 || index > size - length) {
       throwOOBException();
-    }
-    if (index == 0 && heapMemory != null && heapOffset == 0) {
-      // Arrays.copyOf is an intrinsics, which is faster
-      return Arrays.copyOf(heapMemory, length);
     }
     byte[] data = new byte[length];
     get(index, data, 0, length);

@@ -2016,9 +2016,8 @@ public final class MemoryBuffer {
 
   /** For off-heap buffer, this will make a heap buffer internally. */
   public void grow(int neededSize) {
-    int length = writerIndex + neededSize;
-    // A positive overflow is negative and therefore greater than every valid size when unsigned.
-    if (Integer.compareUnsigned(length, size) > 0) {
+    if (neededSize > size - writerIndex) {
+      int length = writerIndex + neededSize;
       if (length < 0) {
         throwOOBException();
       }

@@ -1154,22 +1154,22 @@ Use `ref(thread_safe=false)` in Fory IDL (or
 
 ## Field Numbers
 
-Each field must have a unique positive integer identifier:
+Each field must have a unique tag ID in the protocol range:
 
 ```protobuf
 message Example {
-    string first = 1;
-    string second = 2;
-    string third = 3;
+    string first = 0;
+    string second = 1;
+    string third = 2;
 }
 ```
 
 **Rules and best practices:**
 
 - Numbers must be unique within a message.
-- Numbers must be positive integers.
+- Numbers must satisfy `0 <= field_number < 2^29` (`0` through `536870911`).
 - Gaps are allowed and are useful when fields are removed.
-- Prefer sequential numbering from `1`.
+- Prefer sequential numbering.
 - Never reuse a removed field number for a different field.
 
 ## Type System

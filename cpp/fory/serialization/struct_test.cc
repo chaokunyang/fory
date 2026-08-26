@@ -1420,6 +1420,7 @@ TEST(StructComprehensiveTest, FieldTagRange) {
   Buffer invalid_wire;
   invalid_wire.write_uint8(static_cast<uint8_t>((3u << 6) | (15u << 2)));
   invalid_wire.write_var_uint32(536870912u - 15u);
+  invalid_wire.write_uint8(static_cast<uint8_t>(TypeId::INT32));
   EXPECT_FALSE(FieldInfo::from_bytes(invalid_wire).ok());
 
   TypeMeta duplicate;

@@ -185,21 +185,21 @@ public:
   }
 
   FORY_ALWAYS_INLINE void writer_index(uint32_t writer_index) {
-    FORY_CHECK(
-        FORY_PREDICT_TRUE(writer_index < std::numeric_limits<uint32_t>::max() &&
-                          writer_index <= size_))
-        << "Buffer overflow writer_index" << writer_index_
-        << " target writer_index " << writer_index << " size " << size_;
+    if (FORY_PREDICT_FALSE(writer_index >=
+                               std::numeric_limits<uint32_t>::max() ||
+                           writer_index > size_)) {
+      fail_writer_index(writer_index);
+    }
     writer_index_ = writer_index;
   }
 
   FORY_ALWAYS_INLINE void increase_writer_index(uint32_t diff) {
     const uint64_t writer_index = static_cast<uint64_t>(writer_index_) + diff;
-    FORY_CHECK(
-        FORY_PREDICT_TRUE(writer_index < std::numeric_limits<uint32_t>::max() &&
-                          writer_index <= size_))
-        << "Buffer overflow writer_index" << writer_index_ << " diff " << diff
-        << " size " << size_;
+    if (FORY_PREDICT_FALSE(writer_index >=
+                               std::numeric_limits<uint32_t>::max() ||
+                           writer_index > size_)) {
+      fail_writer_index(writer_index);
+    }
     writer_index_ = static_cast<uint32_t>(writer_index);
   }
 
@@ -269,18 +269,19 @@ public:
   }
 
   FORY_ALWAYS_INLINE void put_int24(uint32_t offset, int32_t value) {
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 3)))
-        << "Buffer out of bound: " << offset << " + 3 > " << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, 3))) {
+      fail_range(offset, 3);
+    }
     data_[offset] = static_cast<uint8_t>(value);
     data_[offset + 1] = static_cast<uint8_t>(value >> 8);
     data_[offset + 2] = static_cast<uint8_t>(value >> 16);
   }
 
   template <typename T> FORY_ALWAYS_INLINE T get(uint32_t relative_offset) {
-    FORY_CHECK(FORY_PREDICT_TRUE(
-        range_in_bounds(relative_offset, static_cast<uint32_t>(sizeof(T)))))
-        << "Out of range " << relative_offset << " should be less than "
-        << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(
+            relative_offset, static_cast<uint32_t>(sizeof(T))))) {
+      fail_range(relative_offset, static_cast<uint32_t>(sizeof(T)));
+    }
     T value = load_unaligned<T>(data_ + relative_offset);
     return value;
   }
@@ -307,8 +308,9 @@ public:
   }
 
   FORY_ALWAYS_INLINE int32_t get_int24(uint32_t offset) {
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 3)))
-        << "Out of range " << offset << " should be less than " << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, 3))) {
+      fail_range(offset, 3);
+    }
     int32_t b0 = data_[offset];
     int32_t b1 = data_[offset + 1];
     int32_t b2 = data_[offset + 2];
@@ -367,9 +369,9 @@ public:
                             : value < 0x4000     ? 2
                             : value < 0x10000000 ? 4
                                                  : 8;
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, extent)))
-        << "Buffer out of bound: " << offset << " + " << extent << " > "
-        << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, extent))) {
+      fail_range(offset, extent);
+    }
     return put_var_uint32_unchecked(offset, value);
   }
 
@@ -474,9 +476,9 @@ public:
                             : value < 0x10000000           ? 4
                             : value < 0x100000000000000ULL ? 8
                                                            : 9;
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, extent)))
-        << "Buffer out of bound: " << offset << " + " << extent << " > "
-        << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, extent))) {
+      fail_range(offset, extent);
+    }
     return put_var_uint64_unchecked(offset, value);
   }
 
@@ -581,15 +583,17 @@ public:
   /// - If bit 0 is 1: read 1 byte flag + 8 bytes uint64
   FORY_ALWAYS_INLINE uint64_t get_tagged_uint64(uint32_t offset,
                                                 uint32_t *read_bytes_length) {
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 4)))
-        << "Buffer out of bound: " << offset << " + 4 > " << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, 4))) {
+      fail_range(offset, 4);
+    }
     uint32_t i = load_unaligned<uint32_t>(data_ + offset);
     if ((i & 0b1) != 0b1) {
       *read_bytes_length = 4;
       return static_cast<uint64_t>(i >> 1);
     } else {
-      FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 9)))
-          << "Buffer out of bound: " << offset << " + 9 > " << size_;
+      if (FORY_PREDICT_FALSE(!range_in_bounds(offset, 9))) {
+        fail_range(offset, 9);
+      }
       *read_bytes_length = 9;
       return load_unaligned<uint64_t>(data_ + offset + 1);
     }
@@ -601,15 +605,17 @@ public:
   /// - If bit 0 is 1: read 1 byte flag + 8 bytes int64
   FORY_ALWAYS_INLINE int64_t get_tagged_int64(uint32_t offset,
                                               uint32_t *read_bytes_length) {
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 4)))
-        << "Buffer out of bound: " << offset << " + 4 > " << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, 4))) {
+      fail_range(offset, 4);
+    }
     int32_t i = load_unaligned<int32_t>(data_ + offset);
     if ((i & 0b1) != 0b1) {
       *read_bytes_length = 4;
       return static_cast<int64_t>(i >> 1); // Arithmetic shift for signed
     } else {
-      FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 9)))
-          << "Buffer out of bound: " << offset << " + 9 > " << size_;
+      if (FORY_PREDICT_FALSE(!range_in_bounds(offset, 9))) {
+        fail_range(offset, 9);
+      }
       *read_bytes_length = 9;
       return load_unaligned<int64_t>(data_ + offset + 1);
     }
@@ -623,9 +629,9 @@ public:
                                                 uint64_t value) {
     constexpr uint64_t MAX_SMALL_VALUE = 0x7fffffff; // INT32_MAX as u64
     const uint32_t extent = value <= MAX_SMALL_VALUE ? 4 : 9;
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, extent)))
-        << "Buffer out of bound: " << offset << " + " << extent << " > "
-        << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, extent))) {
+      fail_range(offset, extent);
+    }
     return put_tagged_uint64_unchecked(offset, value);
   }
 
@@ -639,9 +645,9 @@ public:
     constexpr int64_t MAX_SMALL_VALUE = 1073741823;  // 2^30 - 1
     const uint32_t extent =
         value >= MIN_SMALL_VALUE && value <= MAX_SMALL_VALUE ? 4 : 9;
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, extent)))
-        << "Buffer out of bound: " << offset << " + " << extent << " > "
-        << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, extent))) {
+      fail_range(offset, extent);
+    }
     return put_tagged_int64_unchecked(offset, value);
   }
 
@@ -1431,6 +1437,10 @@ private:
 
   FORY_NOINLINE void grow_checked(uint64_t required_size,
                                   uint32_t min_capacity);
+
+  FORY_NOINLINE void fail_range(uint32_t offset, uint32_t length) const;
+
+  FORY_NOINLINE void fail_writer_index(uint64_t target) const;
 
   uint8_t *data_;
   uint32_t size_;

@@ -1123,15 +1123,17 @@ public:
   bool equals(const Buffer &other) const;
 
   FORY_ALWAYS_INLINE void grow(uint32_t min_capacity) {
-    const uint64_t required_size =
-        static_cast<uint64_t>(writer_index_) + min_capacity;
-    if (FORY_PREDICT_TRUE(required_size <= size_ &&
-                          required_size <
-                              std::numeric_limits<uint32_t>::max())) {
+    // writer_index_ is always within size_: public cursor mutation checks it,
+    // and internal writers advance only after proving capacity. Comparing the
+    // requested extent with the remaining capacity keeps the success path to
+    // one primitive branch without allowing uint32 addition to wrap.
+    if (FORY_PREDICT_TRUE(min_capacity <= size_ - writer_index_)) {
       return;
     }
     // Keep overflow reporting and resize arithmetic off scalar write hot paths.
     // The slow owner retains the same checked uint32_t capacity contract.
+    const uint64_t required_size =
+        static_cast<uint64_t>(writer_index_) + min_capacity;
     grow_checked(required_size, min_capacity);
   }
 

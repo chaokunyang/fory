@@ -344,6 +344,22 @@ mixin _BufferMixin {
       _throwInvalidVarUint36();
     }
     ensureWritable(6);
+    if (value > 0x7fffffff) {
+      _writeLargeVarUint36(value);
+      return;
+    }
+    var remaining = value;
+    while (remaining >= 0x80) {
+      _bytes[_writerIndex] = (remaining & 0x7f) | 0x80;
+      _writerIndex += 1;
+      remaining >>>= 7;
+    }
+    _bytes[_writerIndex] = remaining;
+    _writerIndex += 1;
+  }
+
+  @pragma('vm:never-inline')
+  void _writeLargeVarUint36(int value) {
     var remaining = value;
     while (remaining >= 0x80) {
       _bytes[_writerIndex] = (remaining % 0x80) | 0x80;

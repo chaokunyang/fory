@@ -294,7 +294,7 @@ public final class MemoryBuffer {
   }
 
   public void initByteBuffer(ByteBuffer buffer, int size) {
-    if (!AndroidSupport.IS_ANDROID && (size < 0 || size > buffer.capacity())) {
+    if (!AndroidSupport.IS_ANDROID && size > buffer.capacity()) {
       throw new IllegalArgumentException(
           String.format("size %d exceeds ByteBuffer capacity %d", size, buffer.capacity()));
     }
@@ -4355,9 +4355,7 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.directByteBufferUnsupported();
     }
-    checkNotNull(buffer, "buffer is null");
-    checkArgument(buffer.isDirect(), "Can't get address of a non-direct ByteBuffer.");
-    checkArgument(size >= 0 && size <= buffer.capacity() - buffer.position());
+    checkArgument(size <= buffer.remaining());
     long offHeapAddress = getAddress(buffer) + buffer.position();
     return new MemoryBuffer(offHeapAddress, size, buffer, streamReader);
   }

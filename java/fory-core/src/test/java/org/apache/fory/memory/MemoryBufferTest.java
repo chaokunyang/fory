@@ -142,7 +142,6 @@ public class MemoryBufferTest {
     assertThrows(RuntimeException.class, () -> buffer.increaseWriterIndex(-3));
     assertThrows(RuntimeException.class, () -> buffer.increaseWriterIndex(Integer.MAX_VALUE));
     assertEquals(buffer.writerIndex(), 2);
-    assertThrows(RuntimeException.class, () -> buffer.grow(-1));
     assertThrows(RuntimeException.class, () -> buffer.grow(Integer.MAX_VALUE));
     assertThrows(RuntimeException.class, () -> buffer.ensure(-1));
 

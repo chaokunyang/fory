@@ -1686,9 +1686,8 @@ private func parseFieldIDExpression(_ expr: ExprSyntax) throws -> Int32 {
     if value < 0 {
         throw MacroExpansionErrorMessage("@ForyField id must be non-negative")
     }
-    let maxFieldID: Int32 = (1 << 29) - 1
-    if value > maxFieldID {
-        throw MacroExpansionErrorMessage("@ForyField id must be <= \(maxFieldID)")
+    if value >= 1 << 29 {
+        throw MacroExpansionErrorMessage("@ForyField id must be < 2^29")
     }
     return value
 }
@@ -2617,7 +2616,7 @@ private func compatibleTypeMetaFieldsExpr(
 ) -> String {
     let fieldInfos = sortedFields.map { field in
         let fieldTypeExpr = compatibleTypeMetaFieldExpression(field, trackRefExpression: trackRefExpression)
-        return "TypeMeta.FieldInfo(\(compatibleFieldIDArgument(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
+        return "TypeMeta.FieldInfo(fieldID: \(field.fieldID), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
     }
     guard !fieldInfos.isEmpty else {
         return "[]"
@@ -2628,16 +2627,12 @@ private func compatibleTypeMetaFieldsExpr(
 private func resolvedTypeMetaFieldsBody(sortedFields: [ParsedField]) -> String {
     let fieldInfos = sortedFields.map { field in
         let fieldTypeExpr = resolvedTypeMetaFieldExpr(field)
-        return "TypeMeta.FieldInfo(\(compatibleFieldIDArgument(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
+        return "TypeMeta.FieldInfo(fieldID: \(field.fieldID), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
     }
     guard !fieldInfos.isEmpty else {
         return "return []"
     }
     return "return [\n            \(fieldInfos.joined(separator: ",\n            "))\n        ]"
-}
-
-private func compatibleFieldIDArgument(_ field: ParsedField) -> String {
-    "fieldID: \(field.fieldID)"
 }
 
 private func buildSchemaFingerprint(fields: [ParsedField], trackRefExpression: String) throws -> String {

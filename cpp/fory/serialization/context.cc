@@ -796,7 +796,7 @@ ReadContext::read_type_meta_owner(const TypeInfo *expected_type_info) {
 
   FORY_TRY(remote_schema_key, check_remote_type_meta_limit(*parsed_meta));
 
-  // Create TypeInfo with compatible dispatch assigned.
+  // Create TypeInfo with local compatible dispatch IDs assigned.
   auto cached = std::make_unique<CachedTypeInfo>();
   TypeInfo *type_info = &cached->type_info;
   cached->concrete_owner = local_type_info;

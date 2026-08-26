@@ -241,6 +241,9 @@ class TypeDefDecoder {
       }
       if (!useTagID) {
         fieldNameSize += 1;
+        if (fieldNameSize > Integer.MAX_VALUE) {
+          throw new DeserializationException("Invalid TypeDef field name size");
+        }
       }
       boolean nullable = (header & 0b10) != 0;
       boolean trackingRef = (header & 0b1) != 0;

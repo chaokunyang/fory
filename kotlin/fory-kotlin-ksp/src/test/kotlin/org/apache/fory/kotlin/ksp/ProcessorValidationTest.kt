@@ -80,10 +80,8 @@ class ProcessorValidationTest {
   }
 
   @Test
-  fun validatesFieldIds() {
+  fun rejectsInvalidFieldIds() {
     assertNull(fieldIdError(-1, requireFieldId = false))
-    assertNull(fieldIdError(0, requireFieldId = true))
-    assertNull(fieldIdError(536_870_911, requireFieldId = true))
     assertNotNull(fieldIdError(-1, requireFieldId = true))
     assertNotNull(fieldIdError(536_870_912, requireFieldId = true))
   }

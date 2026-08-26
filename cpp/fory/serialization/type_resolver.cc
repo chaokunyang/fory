@@ -686,8 +686,17 @@ parse_type_meta_body(Buffer &body, const TypeMeta *local_type_info,
   }
   std::vector<FieldInfo> field_infos;
   field_infos.reserve(num_fields);
+  std::unordered_set<int32_t> field_tags;
   for (size_t i = 0; i < num_fields; ++i) {
     FORY_TRY(field, read_field_info(body));
+    if (local_type_info == nullptr && field.field_id >= 0) {
+      if (field_tags.empty()) {
+        field_tags.reserve(num_fields);
+      }
+      if (!field_tags.emplace(field.field_id).second) {
+        return Unexpected(Error::invalid_data("Duplicate field tag"));
+      }
+    }
     field_infos.push_back(std::move(field));
   }
 
@@ -743,6 +752,17 @@ Result<std::vector<uint8_t>, Error> write_type_meta(const TypeMeta &meta) {
   if (FORY_PREDICT_FALSE(!is_struct && num_fields != 0)) {
     return Unexpected(
         Error::invalid_data("Non-struct TypeMeta cannot carry field metadata"));
+  }
+  std::unordered_set<int32_t> field_tags;
+  for (const auto &field : meta.field_infos) {
+    if (field.field_id >= 0) {
+      if (field_tags.empty()) {
+        field_tags.reserve(num_fields);
+      }
+      if (!field_tags.emplace(field.field_id).second) {
+        return Unexpected(Error::invalid("Duplicate field tag"));
+      }
+    }
   }
 
   if (is_struct) {
@@ -900,8 +920,14 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header,
   return meta;
 }
 
-Result<void, Error> TypeMeta::skip_bytes_for_validated_header(Buffer &buffer,
-                                                              int64_t header) {
+// This helper runs on every compatible metadata-cache hit. Keep its entry on a
+// cache-line boundary so growth in unrelated cold metadata codecs cannot change
+// cache-hit throughput through link-layout drift.
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((aligned(64)))
+#endif
+Result<void, Error>
+TypeMeta::skip_bytes_for_validated_header(Buffer &buffer, int64_t header) {
   // Header-cache hits intentionally skip opaque metadata. This path must not
   // allocate or materialize the body from the attacker-declared size.
   Error error;
@@ -1282,7 +1308,7 @@ assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
             std::to_string(local_index) + " exceeds max " +
             std::to_string(max_compatible_matched_field_index)));
       }
-      remote_field.matched_field_id = static_cast<int32_t>(local_index * 2);
+      remote_field.matched_field_id = static_cast<int16_t>(local_index * 2);
       used[local_index] = true;
       return true;
     }
@@ -1295,7 +1321,7 @@ assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
             std::to_string(local_index) + " exceeds max " +
             std::to_string(max_compatible_matched_field_index)));
       }
-      remote_field.matched_field_id = static_cast<int32_t>(local_index * 2 + 1);
+      remote_field.matched_field_id = static_cast<int16_t>(local_index * 2 + 1);
       used[local_index] = true;
       return true;
     }

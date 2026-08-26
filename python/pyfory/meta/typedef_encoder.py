@@ -39,6 +39,7 @@ from pyfory.meta.typedef import (
 )
 from pyfory.meta.metastring import MetaStringEncoder
 from pyfory._fory import NO_USER_TYPE_ID
+from pyfory.field import MAX_FIELD_ID
 from pyfory.types import TypeId
 from pyfory.field import MAX_FIELD_ID
 from pyfory.serialization import Buffer

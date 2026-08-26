@@ -1266,10 +1266,20 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 
 	// ReadData fields information
 	fieldInfos := make([]FieldDef, fieldCount)
+	var fieldTagIDs map[int32]struct{}
 	for i := 0; i < fieldCount; i++ {
 		fieldInfo, err := readFieldDef(fory.typeResolver, metaBuffer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read field def %d: %w", i, err)
+		}
+		if fieldInfo.tagID >= 0 {
+			if fieldTagIDs == nil {
+				fieldTagIDs = make(map[int32]struct{})
+			}
+			if _, exists := fieldTagIDs[fieldInfo.tagID]; exists {
+				return nil, fmt.Errorf("duplicate TypeDef field tag ID %d", fieldInfo.tagID)
+			}
+			fieldTagIDs[fieldInfo.tagID] = struct{}{}
 		}
 		fieldInfos[i] = fieldInfo
 	}

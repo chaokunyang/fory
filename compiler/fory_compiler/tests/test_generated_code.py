@@ -697,7 +697,7 @@ def test_generated_registration_uses_single_name_for_dart_python_swift():
     assert "namespace:" not in swift_output
 
 
-def test_dart_proto_union_uses_signed_field_sentinel():
+def test_dart_union_field_sentinel():
     schema = parse_proto(
         """
         syntax = "proto3";

@@ -1306,7 +1306,10 @@ void main() {
           _taggedInt32FieldBytes(maxFieldId + 1),
         ),
       );
-      expect(() => _readTypeMeta(reader, malformed), throwsA(anything));
+      expect(
+        () => _readTypeMeta(reader, malformed),
+        throwsA(isA<StateError>()),
+      );
     });
 
     test('rejects duplicate remote field names before caching', () {

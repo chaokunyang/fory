@@ -467,15 +467,31 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             }
         }
 
+        IReadOnlyList<TypeMetaFieldInfo> ownedFields = Array.AsReadOnly(fields.ToArray());
+        HashSet<int>? fieldIds = null;
+        foreach (TypeMetaFieldInfo field in ownedFields)
+        {
+            if (field.FieldId < 0)
+            {
+                continue;
+            }
+
+            fieldIds ??= [];
+            if (!fieldIds.Add(field.FieldId))
+            {
+                throw new EncodingException($"duplicate field id {field.FieldId}");
+            }
+        }
+
         TypeId = typeId;
         UserTypeId = userTypeId;
         NamespaceName = namespaceName;
         TypeName = typeName;
         RegisterByName = registerByName;
-        Fields = fields;
+        Fields = ownedFields;
         Compressed = compressed;
         HeaderHash = headerHash;
-        ReadDataAlwaysAdvances = fields.Any(static field => field.FieldType.FieldReadAlwaysAdvances);
+        ReadDataAlwaysAdvances = ownedFields.Any(static field => field.FieldType.FieldReadAlwaysAdvances);
     }
 
     public uint? TypeId { get; }

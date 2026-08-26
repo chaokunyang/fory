@@ -202,7 +202,7 @@ bool field_types_compatible_top_level(const FieldType &local,
 class FieldInfo {
 public:
   int32_t field_id;         // Wire tag ID; -1 means name-based identity
-  int32_t matched_field_id; // Derived compatible dispatch; -1 means unmatched
+  int16_t matched_field_id; // Local compatible dispatch; -1 means unmatched
   std::string field_name;   // Field name
   FieldType field_type;     // Field type information
 
@@ -281,8 +281,7 @@ public:
   /// get sorted field infos (sorted according to xlang spec)
   static std::vector<FieldInfo> sort_field_infos(std::vector<FieldInfo> fields);
 
-  /// Assign field IDs by comparing with local type
-  /// This is the key function for schema evolution!
+  /// Assign local compatible-reader dispatch IDs without changing wire tags.
   static Result<void, Error>
   assign_local_dispatch_ids(const TypeMeta *local_type,
                             std::vector<FieldInfo> &remote_fields);

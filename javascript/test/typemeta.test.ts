@@ -338,6 +338,32 @@ describe("typemeta", () => {
     });
   });
 
+  test("bounds field ids to the signed int32 protocol domain", () => {
+    const maxTypeInfo = Type.struct(7014, {
+      value: Type.string().setId(MAX_FIELD_ID),
+    });
+    const maxBytes = TypeMeta.fromTypeInfo(maxTypeInfo).toBytes();
+    const maxReader = new BinaryReader({});
+    maxReader.reset(maxBytes);
+    expect(TypeMeta.fromBytes(maxReader).getFieldInfo()[0].fieldId).toBe(MAX_FIELD_ID);
+
+    const validTag = new BinaryWriter({});
+    validTag.writeVarUint32Small7(MAX_FIELD_ID - 15);
+    const invalidTag = new BinaryWriter({});
+    invalidTag.writeVarUint32Small7(MAX_FIELD_ID + 1 - 15);
+    const invalidBody = replaceFirstBytes(maxBytes.subarray(8), validTag.dump(), invalidTag.dump());
+    const invalidMeta = new BinaryWriter({});
+    invalidMeta.writeUint64((TypeMeta as any).buildHeader(invalidBody, false).header);
+    invalidMeta.buffer(invalidBody);
+    const invalidReader = new BinaryReader({});
+    invalidReader.reset(invalidMeta.dump());
+    expect(() => TypeMeta.fromBytes(invalidReader)).toThrow();
+
+    expect(() => Type.string().setId(MAX_FIELD_ID + 1)).toThrow();
+    expect(() => Type.string().setId(1.5)).toThrow();
+    expect(() => Type.string().setId(Number.NaN)).toThrow();
+  });
+
   test("orders name-based identifiers with ordinal comparison", () => {
     const typeMeta = TypeMeta.fromTypeInfo(
       Type.struct(7011, {

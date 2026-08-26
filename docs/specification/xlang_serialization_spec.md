@@ -846,18 +846,25 @@ Field info list:
 Each field is encoded as:
 
 ```
-| field header (1 byte) | field type info | [field name bytes] |
+| field header (1 byte) | [extended name or tag value] | field type info | [field name bytes] |
 ```
+
+The optional extended value is a `varuint32`. It is present when the four-bit
+size field is saturated for a long encoded name or an extended tag ID, as
+defined below.
 
 Field header layout:
 
 - Bits 6-7: field name encoding (`UTF8`, `ALL_TO_LOWER_SPECIAL`,
   `LOWER_UPPER_DIGIT_SPECIAL`, or `TAG_ID`)
 - Bits 2-5: size
-  - For name encoding: `size = (name_bytes_length - 1)`
-  - For tag ID: write `min(tag_id, 15)` in the header
-  - If the header value is `0b1111`, write `varuint32(tag_id - 15)` after the header; decoding adds
-    that extension to 15
+  - For name encoding, let `logical_size = name_bytes_length - 1` and store
+    `size = min(logical_size, 15)`. If `logical_size >= 15`, write
+    `varuint32(logical_size - 15)` after the header; decoding adds that
+    extension to `15`, then adds `1` to obtain `name_bytes_length`.
+  - For tag ID: `size = min(tag_id, 15)`
+  - If a tag ID has `size == 0b1111`, write `varuint32(tag_id - 15)` after the
+    header; decoding adds that extension to `15`
 - Bit 1: nullable flag
 - Bit 0: reference tracking flag
 

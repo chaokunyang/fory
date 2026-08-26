@@ -96,6 +96,12 @@ struct FieldIdConfigured: Equatable {
 }
 
 @ForyStruct
+struct MaximumFieldId: Equatable {
+    @ForyField(id: 536870911)
+    var value: Int32
+}
+
+@ForyStruct
 struct FieldIdSource: Equatable {
     @ForyField(id: 1)
     var value: Int32
@@ -580,6 +586,52 @@ func typeMetaBodyLimitRejectsLargeMetadata() throws {
 
     #expect(throws: (any Error).self) {
         _ = try TypeMeta.decode(encoded, maxTypeMetaBytes: 1)
+    }
+}
+
+@Test
+func typeMetaFieldTagDomain() throws {
+    let fieldType = TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false)
+    let meta = try TypeMeta(
+        typeID: TypeId.compatibleStruct.rawValue,
+        userTypeID: 1,
+        namespace: .empty(specialChar1: ".", specialChar2: "_"),
+        typeName: .empty(specialChar1: "$", specialChar2: "_"),
+        registerByName: false,
+        fields: [
+            TypeMeta.FieldInfo(fieldID: 536_870_911, fieldName: "maximum", fieldType: fieldType)
+        ]
+    )
+    let decoded = try TypeMeta.decode(meta.encode())
+    #expect(decoded.fields.map(\.fieldID) == [536_870_911])
+
+    let body = ByteBuffer()
+    body.writeUInt8(0b1000_0001)
+    body.writeVarUInt32(1)
+    body.writeUInt8(0b1111_1100)
+    body.writeVarUInt32(536_870_912 - 0b1111)
+    body.writeUInt8(UInt8(TypeId.int32.rawValue))
+
+    let encoded = ByteBuffer()
+    encoded.writeUInt64(UInt64(body.count))
+    encoded.writeBytes(body.storage)
+
+    #expect(throws: (any Error).self) {
+        _ = try TypeMeta.decode(encoded)
+    }
+
+    #expect(throws: (any Error).self) {
+        _ = try TypeMeta(
+            typeID: TypeId.compatibleStruct.rawValue,
+            userTypeID: 1,
+            namespace: .empty(specialChar1: ".", specialChar2: "_"),
+            typeName: .empty(specialChar1: "$", specialChar2: "_"),
+            registerByName: false,
+            fields: [
+                TypeMeta.FieldInfo(fieldID: 7, fieldName: "first", fieldType: fieldType),
+                TypeMeta.FieldInfo(fieldID: 7, fieldName: "second", fieldType: fieldType)
+            ]
+        )
     }
 }
 
@@ -1467,6 +1519,11 @@ func macroFieldIDsPopulateCompatibleTypeMeta() {
     #expect(byID[2]?.fieldType.typeID == TypeId.varint32.rawValue)
     #expect(byID[5]?.fieldName == "fixedValue")
     #expect(byID[5]?.fieldType.typeID == TypeId.int32.rawValue)
+}
+
+@Test
+func macroAcceptsMaximumFieldID() {
+    #expect(MaximumFieldId.foryFieldsInfo(trackRef: false).map(\.fieldID) == [536_870_911])
 }
 
 @Test

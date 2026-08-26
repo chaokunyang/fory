@@ -1971,6 +1971,22 @@ template <typename T> struct CompileTimeFieldHelpers {
   static inline constexpr std::array<int32_t, FieldCount> field_ids =
       make_field_ids(std::make_index_sequence<FieldCount>{});
 
+  static constexpr bool field_tags_unique() {
+    for (size_t i = 0; i < FieldCount; ++i) {
+      if (field_ids[i] < 0) {
+        continue;
+      }
+      for (size_t j = i + 1; j < FieldCount; ++j) {
+        if (field_ids[i] == field_ids[j]) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  static_assert(field_tags_unique(), "Fory field ids must be unique");
+
   /// Flags for fields whose types are nullable wrappers (optional/shared_ptr/
   /// unique_ptr/weak_ptr), which require ref/null flags in the wire format.
   static inline constexpr std::array<bool, FieldCount> nullable_type_flags =
@@ -2086,7 +2102,7 @@ template <typename T> struct CompileTimeFieldHelpers {
             size_t length = identifier_lengths[i];
             if (field_ids[i] >= 0) {
               uint32_t value = static_cast<uint32_t>(field_ids[i]);
-              uint64_t divisor = 1;
+              uint32_t divisor = 1;
               for (size_t j = 1; j < length; ++j) {
                 divisor *= 10;
               }
@@ -4669,6 +4685,8 @@ bool skip_removed_struct_case(ReadContext &ctx,
   }
 }
 
+/// Read struct fields with schema evolution (compatible mode)
+/// Reads fields in remote schema order, dispatching by the matched local ID.
 template <typename T, size_t... Indices>
 bool skip_removed_struct_owner(ReadContext &ctx,
                                const FieldType &remote_field_type,
@@ -4780,7 +4798,7 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
   // Iterate through remote fields in their serialization order
   for (size_t remote_idx = 0; remote_idx < remote_fields.size(); ++remote_idx) {
     const auto &remote_field = remote_fields[remote_idx];
-    int32_t dispatch_id = remote_field.matched_field_id;
+    int16_t dispatch_id = remote_field.matched_field_id;
 
     if (dispatch_id == -1) {
       if (use_exact_offset_reads) {
@@ -5245,7 +5263,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       }
     }
 
-    // remote_type_info is from the stream, with compatible dispatch assigned.
+    // remote_type_info is from the stream, with dispatch IDs already assigned.
     if (!remote_type_info || !remote_type_info->type_meta) {
       ctx.set_error(Error::type_error("Remote type metadata not available"));
       return T{};

@@ -132,7 +132,7 @@ public sealed class ForyFieldAttribute : Attribute
     }
 
     /// <summary>
-    /// Optional stable field tag id used for compatible metadata dispatch.
+    /// Stable field tag id used for compatible metadata dispatch.
     /// Use a value from <c>0</c> through <c>536870911</c> to emit a numeric field id
     /// instead of a field name.
     /// </summary>

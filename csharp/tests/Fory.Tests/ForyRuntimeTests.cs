@@ -1390,6 +1390,27 @@ public sealed class ForyRuntimeTests
         Assert.Equal(536_870_911, new ForyFieldAttribute(536_870_911).Id);
         Assert.Throws<ArgumentOutOfRangeException>(() => new ForyFieldAttribute(-1));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ForyFieldAttribute(536_870_912));
+
+        TypeMeta typeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            515,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            [new TypeMetaFieldInfo(536_870_911, "value", new TypeMetaFieldType((uint)TypeId.VarInt32, false))]);
+        Assert.Equal(536_870_911, Assert.Single(TypeMeta.Decode(typeMeta.Encode()).Fields).FieldId);
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new TypeMetaFieldInfo(536_870_912, "value", new TypeMetaFieldType((uint)TypeId.VarInt32, false)));
+        Assert.Throws<EncodingException>(() => new TypeMeta(
+            (uint)TypeId.CompatibleStruct,
+            516,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            [
+                new TypeMetaFieldInfo(7, "first", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+                new TypeMetaFieldInfo(7, "second", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+            ]));
     }
 
     [Fact]
@@ -3220,15 +3241,6 @@ public sealed class ForyRuntimeTests
         Assert.Equal(-1, decoded.Fields[0].AssignedFieldId);
         Assert.Equal(2, decoded.Fields[1].AssignedFieldId);
 
-        TypeMeta duplicate = new(
-            decoded.TypeId,
-            decoded.UserTypeId,
-            decoded.NamespaceName,
-            decoded.TypeName,
-            decoded.RegisterByName,
-            [decoded.Fields[0], decoded.Fields[0]]);
-        Assert.ThrowsAny<ForyException>(
-            () => TypeMeta.AssignFieldIds(duplicate, localFields));
     }
 
     [Theory]
@@ -3448,16 +3460,11 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
-    public void TypeMetaAssignFieldIdsThrowsOnDuplicateRemoteFieldId()
+    public void TypeMetaOwnsFields()
     {
-        List<TypeMetaFieldInfo> localFields =
-        [
-            new TypeMetaFieldInfo(9, "value", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
-        ];
         List<TypeMetaFieldInfo> remoteFields =
         [
             new TypeMetaFieldInfo(9, "$tag9a", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
-            new TypeMetaFieldInfo(9, "$tag9b", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
         ];
         TypeMeta remoteTypeMeta = new(
             (uint)TypeId.CompatibleStruct,
@@ -3466,10 +3473,13 @@ public sealed class ForyRuntimeTests
             MetaString.Empty('$', '_'),
             registerByName: false,
             remoteFields);
+        byte[] encoded = remoteTypeMeta.Encode();
 
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(
-            () => TypeMeta.AssignFieldIds(remoteTypeMeta, localFields));
-        Assert.Contains("duplicate remote field id 9", exception.Message, StringComparison.Ordinal);
+        remoteFields.Add(
+            new TypeMetaFieldInfo(9, "$tag9b", new TypeMetaFieldType((uint)TypeId.VarInt32, false)));
+
+        Assert.Single(remoteTypeMeta.Fields);
+        Assert.Equal(encoded, remoteTypeMeta.Encode());
     }
 
     private static byte[] RewriteCompatibleTypeMetaTypeId(byte[] payload, uint embeddedTypeId)

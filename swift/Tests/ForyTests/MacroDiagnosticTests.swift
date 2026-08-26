@@ -158,7 +158,7 @@ func duplicateFieldIDsAreRejected() {
 }
 
 @Test
-func fieldIDOutsideProtocolDomainIsRejected() {
+func rejectsFieldIDOutsideDomain() {
     assertForyDiagnostic(
         """
         @ForyStruct
@@ -173,7 +173,7 @@ func fieldIDOutsideProtocolDomainIsRejected() {
                 var value: Int32 = 0
             }
             """,
-        message: "@ForyField id must be <= 536870911"
+        message: "@ForyField id must be < 2^29"
     )
 }
 

@@ -531,6 +531,9 @@ func (r *TypeResolver) RegisterStruct(type_ reflect.Type, typeID TypeId, userTyp
 
 	switch type_.Kind() {
 	case reflect.Struct:
+		if err := validateForyTags(type_); err != nil {
+			return err
+		}
 		if err := validateOptionalFields(type_); err != nil {
 			return err
 		}

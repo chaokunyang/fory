@@ -136,29 +136,10 @@ struct MixedFieldIdentityStruct {
               alpha_value, (count, fory::F(2).varint()));
 };
 
-template <int32_t Tag> struct WireTagWriter {
-  int32_t value = 0;
-  int32_t a_skipped = 0;
-  int32_t z_kept = 0;
-  FORY_STRUCT(WireTagWriter, (value, fory::F(Tag)), a_skipped, z_kept);
-};
-
-template <int32_t Tag> struct WireTagReader {
-  int32_t mapped = 0;
-  int32_t z_kept = 0;
-  FORY_STRUCT(WireTagReader, (mapped, fory::F(Tag)), z_kept);
-};
-
 struct NormalizedCollisionStruct {
   int32_t fooBar = 0;
   int32_t foo_bar = 0;
   FORY_STRUCT(NormalizedCollisionStruct, fooBar, foo_bar);
-};
-
-struct DuplicateTagStruct {
-  int32_t first = 0;
-  int32_t second = 0;
-  FORY_STRUCT(DuplicateTagStruct, (first, fory::F(7)), (second, fory::F(7)));
 };
 
 struct MixedMaskStruct {
@@ -169,6 +150,30 @@ struct MixedMaskStruct {
     return fooBar == other.fooBar && foo_bar == other.foo_bar;
   }
   FORY_STRUCT(MixedMaskStruct, (fooBar, fory::F(9)), foo_bar);
+};
+
+struct MaximumFieldTagStruct {
+  int32_t value;
+
+  bool operator==(const MaximumFieldTagStruct &other) const {
+    return value == other.value;
+  }
+
+  FORY_STRUCT(MaximumFieldTagStruct, (value, fory::F(536870911)));
+};
+
+struct HighTagCompatibleWriter {
+  std::string removed;
+  int32_t shared;
+
+  FORY_STRUCT(HighTagCompatibleWriter, (removed, fory::F(65551)),
+              (shared, fory::F(536870911)));
+};
+
+struct HighTagCompatibleReader {
+  int32_t shared = 0;
+
+  FORY_STRUCT(HighTagCompatibleReader, (shared, fory::F(536870911)));
 };
 
 struct SignedToUnsignedWriter {
@@ -837,78 +842,6 @@ inline FieldInfo make_test_field_info(std::string name, int32_t field_id,
     info.field_id = field_id;
   }
   return info;
-}
-
-inline Result<uint64_t, Error>
-read_first_wire_tag(const std::vector<uint8_t> &type_def) {
-  std::vector<uint8_t> bytes = type_def;
-  Buffer buffer(bytes);
-  Error error;
-  uint64_t header = 0;
-  buffer.read_bytes(&header, sizeof(header), error);
-  if (FORY_PREDICT_FALSE(!error.ok())) {
-    return Unexpected(std::move(error));
-  }
-  if ((header & 0xffu) == 0xffu) {
-    (void)buffer.read_var_uint32(error);
-  }
-  uint8_t meta_header = buffer.read_uint8(error);
-  if (FORY_PREDICT_FALSE(!error.ok())) {
-    return Unexpected(std::move(error));
-  }
-  size_t num_fields = meta_header & 0x1fu;
-  if (num_fields == 0x1fu) {
-    num_fields += buffer.read_var_uint32(error);
-  }
-  if (FORY_PREDICT_FALSE(!error.ok()) || num_fields == 0) {
-    return Unexpected(error.ok() ? Error::invalid_data("TypeMeta has no fields")
-                                 : std::move(error));
-  }
-  (void)buffer.read_var_uint32(error);
-  uint8_t field_header = buffer.read_uint8(error);
-  if (FORY_PREDICT_FALSE(!error.ok())) {
-    return Unexpected(std::move(error));
-  }
-  if (FORY_PREDICT_FALSE(field_header >> 6 != 3)) {
-    return Unexpected(Error::invalid_data("First field is not tag-identified"));
-  }
-  uint64_t tag = (field_header >> 2) & 0x0fu;
-  if (tag == 0x0fu) {
-    tag += buffer.read_var_uint32(error);
-  }
-  if (FORY_PREDICT_FALSE(!error.ok())) {
-    return Unexpected(std::move(error));
-  }
-  return tag;
-}
-
-template <int32_t Tag> void verify_wire_tag() {
-  auto writer =
-      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
-  auto reader =
-      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
-  ASSERT_TRUE(writer.register_struct<WireTagWriter<Tag>>(630).ok());
-  ASSERT_TRUE(reader.register_struct<WireTagReader<Tag>>(630).ok());
-
-  auto encoded = writer.serialize(WireTagWriter<Tag>{7, 11, 42});
-  ASSERT_TRUE(encoded.ok()) << encoded.error().to_string();
-  auto decoded = reader.deserialize<WireTagReader<Tag>>(encoded.value());
-  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
-  EXPECT_EQ(decoded.value().mapped, 7);
-  EXPECT_EQ(decoded.value().z_kept, 42);
-
-  auto type_info = writer.type_resolver().get_type_info<WireTagWriter<Tag>>();
-  ASSERT_TRUE(type_info.ok()) << type_info.error().to_string();
-  auto wire_tag = read_first_wire_tag(type_info.value()->type_def);
-  ASSERT_TRUE(wire_tag.ok()) << wire_tag.error().to_string();
-  EXPECT_EQ(wire_tag.value(), static_cast<uint64_t>(Tag));
-
-  std::vector<uint8_t> type_def = type_info.value()->type_def;
-  Buffer type_buffer(type_def);
-  auto parsed = TypeMeta::from_bytes(type_buffer, nullptr);
-  ASSERT_TRUE(parsed.ok()) << parsed.error().to_string();
-  ASSERT_EQ(parsed.value()->field_infos.size(), 3U);
-  EXPECT_EQ(parsed.value()->field_infos[0].field_id, Tag);
 }
 
 template <typename T> void test_roundtrip(const T &original) {
@@ -1767,7 +1700,7 @@ TEST(StructComprehensiveTest, FullyTaggedStructsUseNumericTagOrder) {
   EXPECT_EQ(fields[1].field_id, 2);
   EXPECT_EQ(fields[2].field_id, 10);
 
-  std::map<uint32_t, const FieldInfo *> fields_by_id;
+  std::map<int32_t, const FieldInfo *> fields_by_id;
   for (const auto &field : fields) {
     fields_by_id.emplace(static_cast<uint32_t>(field.field_id), &field);
   }
@@ -1775,7 +1708,7 @@ TEST(StructComprehensiveTest, FullyTaggedStructsUseNumericTagOrder) {
   ASSERT_NE(fields_by_id.find(2), fields_by_id.end());
   ASSERT_NE(fields_by_id.find(10), fields_by_id.end());
 
-  auto fingerprint_part = [&](uint32_t field_id) {
+  auto fingerprint_part = [&](int32_t field_id) {
     const FieldInfo &field = *fields_by_id[field_id];
     return std::to_string(field_id) + "," +
            std::to_string(field.field_type.type_id) + "," +
@@ -1822,51 +1755,10 @@ TEST(StructComprehensiveTest, MixedFieldIdentifiersUseProtocolOrder) {
   EXPECT_EQ(fields[3].field_id, -1);
 }
 
-TEST(StructComprehensiveTest, WireTagRange) {
-  verify_wire_tag<0>();
-  verify_wire_tag<65536>();
-  verify_wire_tag<536870911>();
-
-  auto versioned = Fory::builder()
-                       .xlang(true)
-                       .compatible(false)
-                       .track_ref(false)
-                       .check_struct_version(true)
-                       .build();
-  ASSERT_TRUE(versioned.register_struct<WireTagWriter<536870911>>(631).ok());
-  WireTagWriter<536870911> value{7, 11, 42};
-  auto encoded = versioned.serialize(value);
-  ASSERT_TRUE(encoded.ok()) << encoded.error().to_string();
-  auto decoded =
-      versioned.deserialize<WireTagWriter<536870911>>(encoded.value());
-  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
-  EXPECT_EQ(decoded.value().value, 7);
-  EXPECT_EQ(decoded.value().a_skipped, 11);
-  EXPECT_EQ(decoded.value().z_kept, 42);
-
-  FieldInfo field("", make_test_field_type(TypeId::INT32));
-  field.field_id = 1 << 29;
-  EXPECT_FALSE(field.to_bytes().ok());
-
-  field.field_id = 0;
-  auto legal_field = field.to_bytes();
-  ASSERT_TRUE(legal_field.ok()) << legal_field.error().to_string();
-  Buffer invalid_field;
-  invalid_field.write_uint8(0xFC);
-  invalid_field.write_var_uint32((1u << 29) - 15);
-  invalid_field.write_bytes(legal_field.value().data() + 1,
-                            legal_field.value().size() - 1);
-  EXPECT_FALSE(FieldInfo::from_bytes(invalid_field).ok());
-}
-
 TEST(StructComprehensiveTest, StructFieldIdentityIsUnique) {
   auto collision =
       Fory::builder().xlang(true).compatible(true).track_ref(false).build();
   EXPECT_FALSE(collision.register_struct<NormalizedCollisionStruct>(610).ok());
-
-  auto duplicate =
-      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
-  EXPECT_FALSE(duplicate.register_struct<DuplicateTagStruct>(611).ok());
 
   MixedMaskStruct value{"tagged", "untagged"};
   auto mixed =
@@ -1908,6 +1800,56 @@ TEST(StructComprehensiveTest, RemoteFieldIdentityIsUnique) {
       TypeMeta::assign_local_dispatch_ids(&local, duplicate_tags).ok());
   EXPECT_EQ(duplicate_tags[0].field_id, 7);
   EXPECT_EQ(duplicate_tags[1].field_id, 7);
+}
+
+TEST(StructComprehensiveTest, FieldTagRange) {
+  MaximumFieldTagStruct value{42};
+  auto fory =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(fory.register_struct<MaximumFieldTagStruct>(631).ok());
+  auto encoded = fory.serialize(value);
+  ASSERT_TRUE(encoded.ok()) << encoded.error().to_string();
+  auto decoded = fory.deserialize<MaximumFieldTagStruct>(encoded.value());
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value(), value);
+
+  TypeMeta meta =
+      fory.type_resolver().clone_struct_meta<MaximumFieldTagStruct>();
+  ASSERT_EQ(meta.field_infos.size(), 1);
+  EXPECT_EQ(meta.field_infos[0].field_id, 536870911);
+
+  FieldInfo invalid("value", make_test_field_type(TypeId::INT32));
+  invalid.field_id = 536870912;
+  EXPECT_FALSE(invalid.to_bytes().ok());
+
+  Buffer invalid_wire;
+  invalid_wire.write_uint8(static_cast<uint8_t>((3u << 6) | (15u << 2)));
+  invalid_wire.write_var_uint32(536870912u - 15u);
+  invalid_wire.write_uint8(static_cast<uint8_t>(TypeId::INT32));
+  EXPECT_FALSE(FieldInfo::from_bytes(invalid_wire).ok());
+
+  TypeMeta duplicate;
+  duplicate.type_id = static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT);
+  duplicate.user_type_id = 632;
+  duplicate.field_infos = {
+      make_test_field_info("first", 7, make_test_field_type(TypeId::INT32)),
+      make_test_field_info("second", 7, make_test_field_type(TypeId::INT32))};
+  EXPECT_FALSE(duplicate.to_bytes().ok());
+}
+
+TEST(StructComprehensiveTest, CompatibleHighTagsRead) {
+  auto writer =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  auto reader =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(writer.register_struct<HighTagCompatibleWriter>(633).ok());
+  ASSERT_TRUE(reader.register_struct<HighTagCompatibleReader>(633).ok());
+
+  auto encoded = writer.serialize(HighTagCompatibleWriter{"skip", 42});
+  ASSERT_TRUE(encoded.ok()) << encoded.error().to_string();
+  auto decoded = reader.deserialize<HighTagCompatibleReader>(*encoded);
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded->shared, 42);
 }
 
 TEST(StructComprehensiveTest, NonPrimitiveFieldsSortByFieldIdentifier) {

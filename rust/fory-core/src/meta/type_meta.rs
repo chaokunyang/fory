@@ -85,7 +85,7 @@ fn compatible_scalar_type_id(type_id: u32) -> bool {
 }
 use std::clone::Clone;
 use std::cmp::min;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 const SMALL_NUM_FIELDS_THRESHOLD: usize = 0b11111;
@@ -434,7 +434,7 @@ impl FieldType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone)]
 pub struct FieldInfo {
     /// Protocol field tag, or `-1` when the field is identified by name.
     pub field_id: i32,
@@ -444,6 +444,17 @@ pub struct FieldInfo {
     pub field_name: String,
     pub field_type: FieldType,
 }
+
+impl PartialEq for FieldInfo {
+    fn eq(&self, other: &Self) -> bool {
+        // matched_field_id is derived local dispatch state, not protocol metadata identity.
+        self.field_id == other.field_id
+            && self.field_name == other.field_name
+            && self.field_type == other.field_type
+    }
+}
+
+impl Eq for FieldInfo {}
 
 impl FieldInfo {
     pub fn new(field_name: &str, field_type: FieldType) -> FieldInfo {
@@ -539,12 +550,9 @@ impl FieldInfo {
         let nullable = self.field_type.nullable;
         let track_ref = self.field_type.track_ref;
 
-        // An empty name can occur only for a decoded ID-encoded field. Keep that wire shape even
-        // if a caller constructed inconsistent metadata with the name-encoding sentinel.
-        if self.field_id >= 0 || self.field_name.is_empty() {
+        if self.field_id >= 0 {
             // Field ID mode: | 0b11:2bits | field_id_low:4bits | nullable:1bit | track_ref:1bit |
-            // Use max(0, field_id) to handle unmatched fields that have field_id = -1
-            let field_id = self.field_id.max(0);
+            let field_id = self.field_id;
             if field_id > MAX_FIELD_ID {
                 return Err(Error::invalid_data(format!(
                     "field ID {field_id} exceeds maximum {MAX_FIELD_ID}"
@@ -566,6 +574,11 @@ impl FieldInfo {
             self.field_type.to_bytes(&mut writer, false, nullable)?;
             // No field name written in ID mode
         } else {
+            if self.field_name.is_empty() {
+                return Err(Error::invalid_data(
+                    "name-identified field must have a non-empty name",
+                ));
+            }
             // Field name mode (original behavior)
             // field_bytes: | header | type_info | field_name |
             // header: | field_name_encoding:2bits | size:4bits | nullability:1bit | track_ref:1bit |
@@ -987,12 +1000,16 @@ impl TypeMeta {
         register_by_name: bool,
         field_infos: Vec<FieldInfo>,
     ) -> Result<TypeMeta, Error> {
+        let mut field_ids = HashSet::new();
         for field in &field_infos {
             if field.field_id < -1 || field.field_id > MAX_FIELD_ID {
                 return Err(Error::invalid_data(format!(
                     "field ID {} must be -1 or within [0, {MAX_FIELD_ID}]",
                     field.field_id
                 )));
+            }
+            if field.field_id >= 0 && !field_ids.insert(field.field_id) {
+                return Err(Error::invalid_data("duplicate field ID"));
             }
         }
         let schema_hash = compute_schema_hash(&field_infos);
@@ -1500,11 +1517,24 @@ mod tests {
         assert!(FieldInfo::new_with_id(-2, "value", field_type.clone())
             .to_bytes()
             .is_err());
+        assert!(FieldInfo::new("", field_type.clone()).to_bytes().is_err());
         assert!(
-            FieldInfo::new_with_id(MAX_FIELD_ID + 1, "value", field_type)
+            FieldInfo::new_with_id(MAX_FIELD_ID + 1, "value", field_type.clone())
                 .to_bytes()
                 .is_err()
         );
+        assert!(TypeMeta::new(
+            STRUCT,
+            1,
+            MetaString::get_empty().clone(),
+            MetaString::get_empty().clone(),
+            false,
+            vec![
+                FieldInfo::new_with_id(7, "first", field_type.clone()),
+                FieldInfo::new_with_id(7, "second", field_type),
+            ],
+        )
+        .is_err());
     }
 
     #[test]
@@ -1534,9 +1564,12 @@ mod tests {
         let remote_type = FieldType::new(crate::type_id::INT16, false, vec![]);
         let local_fields = [FieldInfo::new("value", local_type)];
         let mut remote_fields = [FieldInfo::new("value", remote_type)];
+        let wire_field = remote_fields[0].clone();
 
         match_remote_fields(&local_fields, &mut remote_fields).unwrap();
 
+        assert_eq!(remote_fields[0], wire_field);
+        assert_eq!(remote_fields[0].field_id, -1);
         assert_eq!(remote_fields[0].matched_field_id, 1);
     }
 
@@ -1551,6 +1584,7 @@ mod tests {
         )];
 
         match_remote_fields(&local_fields, &mut remote_fields).unwrap();
+        assert_eq!(remote_fields[0].field_id, -1);
         assert_eq!(remote_fields[0].matched_field_id, 1);
 
         let nullable_int = FieldType::new(crate::type_id::INT32, true, vec![]);
@@ -1559,6 +1593,7 @@ mod tests {
             FieldType::new(crate::type_id::LIST, false, vec![nullable_int]),
         )];
         match_remote_fields(&local_fields, &mut nullable_remote).unwrap();
+        assert_eq!(nullable_remote[0].field_id, -1);
         assert_eq!(nullable_remote[0].matched_field_id, 1);
 
         let tracked_int = FieldType::new_with_ref(crate::type_id::INT32, false, true, vec![]);
@@ -1607,6 +1642,7 @@ mod tests {
 
         match_remote_fields(&local_fields, &mut remote_fields).unwrap();
 
+        assert_eq!(remote_fields[0].field_id, 0);
         assert_eq!(remote_fields[0].matched_field_id, 1);
     }
 
@@ -1623,6 +1659,7 @@ mod tests {
 
         match_remote_fields(&local_fields, &mut remote_fields).unwrap();
 
+        assert_eq!(remote_fields[0].field_id, -1);
         assert_eq!(remote_fields[0].matched_field_id, 1);
     }
 
@@ -1634,6 +1671,7 @@ mod tests {
 
         match_remote_fields(&local_fields, &mut remote_fields).unwrap();
 
+        assert_eq!(remote_fields[0].field_id, -1);
         assert_eq!(remote_fields[0].matched_field_id, -1);
     }
 

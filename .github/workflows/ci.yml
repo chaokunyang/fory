@@ -559,7 +559,7 @@ jobs:
             ~/.swiftpm
             ~/Library/Caches/org.swift.swiftpm
             swift/.build
-          key: ${{ runner.os }}-${{ runner.arch }}-swiftpm-xlang-release-${{ steps.swift-package-cache.outputs.toolchain }}-${{ hashFiles('swift/Package.resolved', 'swift/Package.swift', 'swift/Sources/**') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-swiftpm-xlang-release-${{ steps.swift-package-cache.outputs.toolchain }}-${{ hashFiles('swift/Package.resolved', 'swift/Package.swift', 'swift/Sources/**', 'swift/Tests/ForyXlangTests/**') }}
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-swiftpm-xlang-release-${{ steps.swift-package-cache.outputs.toolchain }}-
       - name: Prebuild Swift xlang peer for cache reuse

@@ -618,6 +618,7 @@ class OversizedFieldId {
   int value = 0;
 }
 ''',
+        message: 'Fory field id must not exceed 536870911.',
       );
     });
 

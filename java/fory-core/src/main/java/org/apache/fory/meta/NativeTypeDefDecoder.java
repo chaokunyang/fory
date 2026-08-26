@@ -224,6 +224,7 @@ class NativeTypeDefDecoder {
       List<FieldInfo> fieldInfos = readFieldsInfo(typeDefBuf, resolver, className, numFields);
       classFields.addAll(fieldInfos);
     }
+    validateTagIds(classFields);
     Preconditions.checkNotNull(classSpec);
     boolean hasFieldMetadata = !classFields.isEmpty();
     // Native TypeDef can carry class-layer fields even when the root wire type is an enum,
@@ -350,6 +351,9 @@ class NativeTypeDefDecoder {
       }
       if (!useTagID) {
         size += 1;
+        if (size > Integer.MAX_VALUE) {
+          throw new DeserializationException("Invalid TypeDef field name size");
+        }
       }
 
       // Read field name or tag ID
@@ -382,6 +386,21 @@ class NativeTypeDefDecoder {
       }
     }
     return fieldInfos;
+  }
+
+  private static void validateTagIds(List<FieldInfo> fields) {
+    Set<Integer> tagIds = null;
+    for (FieldInfo field : fields) {
+      if (field.hasFieldId()) {
+        if (tagIds == null) {
+          tagIds = new HashSet<>();
+        }
+        if (!tagIds.add(field.getFieldId())) {
+          throw new DeserializationException(
+              "Duplicate TypeDef field tag ID " + field.getFieldId());
+        }
+      }
+    }
   }
 
   static String readPkgName(MemoryBuffer buffer) {

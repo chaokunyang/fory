@@ -505,9 +505,48 @@ impl<'a> Writer<'a> {
         );
         if value < 0x80 {
             self.bf.push(value as u8);
+        } else if value < 0x4000 {
+            let b0 = ((value as u8) & 0x7f) | 0x80;
+            let b1 = (value >> 7) as u8;
+            self.write_u16(((b1 as u16) << 8) | b0 as u16);
+        } else if value < 0x200000 {
+            let b0 = ((value as u8) & 0x7f) | 0x80;
+            let b1 = (((value >> 7) as u8) & 0x7f) | 0x80;
+            let b2 = (value >> 14) as u8;
+            self.write_u24(((b2 as u32) << 16) | ((b1 as u32) << 8) | b0 as u32);
+        } else if value < 0x10000000 {
+            let b0 = ((value as u8) & 0x7f) | 0x80;
+            let b1 = (((value >> 7) as u8) & 0x7f) | 0x80;
+            let b2 = (((value >> 14) as u8) & 0x7f) | 0x80;
+            let b3 = (value >> 21) as u8;
+            self.write_u32(
+                ((b3 as u32) << 24) | ((b2 as u32) << 16) | ((b1 as u32) << 8) | b0 as u32,
+            );
+        } else if value < (1u64 << 35) {
+            let b0 = ((value as u8) & 0x7f) | 0x80;
+            let b1 = (((value >> 7) as u8) & 0x7f) | 0x80;
+            let b2 = (((value >> 14) as u8) & 0x7f) | 0x80;
+            let b3 = (((value >> 21) as u8) & 0x7f) | 0x80;
+            let b4 = (value >> 28) as u8;
+            self.write_u40(
+                ((b4 as u64) << 32)
+                    | ((b3 as u64) << 24)
+                    | ((b2 as u64) << 16)
+                    | ((b1 as u64) << 8)
+                    | b0 as u64,
+            );
         } else {
-            // Xlang keeps standard seven-bit varuint framing, so 36-bit values need up to six bytes.
-            self._write_var_u64(value);
+            // Standard seven-bit varuint framing needs a sixth byte for bit 35.
+            let b0 = ((value as u8) & 0x7f) | 0x80;
+            let b1 = (((value >> 7) as u8) & 0x7f) | 0x80;
+            let b2 = (((value >> 14) as u8) & 0x7f) | 0x80;
+            let b3 = (((value >> 21) as u8) & 0x7f) | 0x80;
+            let b4 = (((value >> 28) as u8) & 0x7f) | 0x80;
+            let b5 = (value >> 35) as u8;
+            self.write_u32(
+                ((b3 as u32) << 24) | ((b2 as u32) << 16) | ((b1 as u32) << 8) | b0 as u32,
+            );
+            self.write_u16(((b5 as u16) << 8) | b4 as u16);
         }
     }
 }

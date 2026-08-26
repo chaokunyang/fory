@@ -262,7 +262,7 @@ type User struct {
 }
 ```
 
-2. **Use field IDs for consistent ordering**: Field IDs (non-negative integers) act as aliases for field names, used for both sorting and field matching during deserialization:
+2. **Use field IDs for consistent ordering**: Field IDs in the protocol range act as aliases for field names, used for both sorting and field matching during deserialization:
 
 ```go
 type User struct {

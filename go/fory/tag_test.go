@@ -305,9 +305,14 @@ func TestValidateForyTagsStrict(t *testing.T) {
 	type OversizedID struct {
 		Field1 string `fory:"id=536870912"`
 	}
+	type UnexportedInvalid struct {
+		Field1 string
+		hidden string `fory:"id=invalid"`
+	}
 
 	require.NoError(t, New().RegisterStruct(Valid{}, 100))
 	require.NoError(t, New().RegisterStructByName(IgnoredDuplicate{}, "test.IgnoredDuplicate"))
+	require.NoError(t, New().RegisterStructByName(UnexportedInvalid{}, "test.UnexportedInvalid"))
 
 	byID := New()
 	require.Error(t, byID.RegisterStruct(DuplicateIDs{}, 101))

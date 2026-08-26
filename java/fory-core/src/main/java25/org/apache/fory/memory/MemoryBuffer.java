@@ -3853,13 +3853,16 @@ public final class MemoryBuffer {
       int newSize =
           newCapacity < BUFFER_GROW_STEP_THRESHOLD
               ? newCapacity << 1
-              : Math.max(
-                  newCapacity,
-                  (int) Math.min(newCapacity * 1.5d, Integer.MAX_VALUE - 8));
+              : largeGrowthCapacity(newCapacity);
 
       byte[] data = new byte[newSize];
       buffer.get(0, data, 0, buffer.size());
       buffer.initHeapBuffer(data, 0, data.length);
+    }
+
+    private static int largeGrowthCapacity(int newCapacity) {
+      return Math.max(
+          newCapacity, (int) Math.min(newCapacity * 1.5d, Integer.MAX_VALUE - 8));
     }
   }
 

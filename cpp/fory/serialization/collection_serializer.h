@@ -48,6 +48,24 @@ constexpr uint8_t COLL_HAS_NULL = 0b0010;
 constexpr uint8_t COLL_DECL_ELEMENT_TYPE = 0b0100;
 constexpr uint8_t COLL_IS_SAME_TYPE = 0b1000;
 
+namespace detail {
+
+/// Primitive vectors reserve their header and complete body before writing.
+/// Commit that proven range directly so public random-access safety checks do
+/// not expand every generated vector-field write.
+struct PrimitiveVectorWriter {
+  FORY_ALWAYS_INLINE static uint32_t put_size(Buffer &buffer, uint32_t offset,
+                                              uint32_t size) {
+    return buffer.put_var_uint32_unchecked(offset, size);
+  }
+
+  FORY_ALWAYS_INLINE static void commit(Buffer &buffer, uint32_t offset) {
+    buffer.writer_index_ = offset;
+  }
+};
+
+} // namespace detail
+
 // ============================================================================
 // Collection Header
 // ============================================================================
@@ -993,13 +1011,14 @@ struct Serializer<
     size_t max_size = 8 + total_bytes;
     buffer.grow(static_cast<uint32_t>(max_size));
     uint32_t writer_index = buffer.writer_index();
-    writer_index +=
-        buffer.put_var_uint32(writer_index, static_cast<uint32_t>(total_bytes));
+    writer_index += detail::PrimitiveVectorWriter::put_size(
+        buffer, writer_index, static_cast<uint32_t>(total_bytes));
     if (total_bytes > 0) {
       buffer.unsafe_put(writer_index, vec.data(),
                         static_cast<uint32_t>(total_bytes));
     }
-    buffer.writer_index(writer_index + static_cast<uint32_t>(total_bytes));
+    detail::PrimitiveVectorWriter::commit(
+        buffer, writer_index + static_cast<uint32_t>(total_bytes));
   }
 
   static inline void write_data_generic(const std::vector<T, Alloc> &vec,
@@ -1108,13 +1127,14 @@ template <typename Alloc> struct Serializer<std::vector<float16_t, Alloc>> {
     size_t max_size = 8 + total_bytes;
     buffer.grow(static_cast<uint32_t>(max_size));
     uint32_t writer_index = buffer.writer_index();
-    writer_index +=
-        buffer.put_var_uint32(writer_index, static_cast<uint32_t>(total_bytes));
+    writer_index += detail::PrimitiveVectorWriter::put_size(
+        buffer, writer_index, static_cast<uint32_t>(total_bytes));
     if (total_bytes > 0) {
       buffer.unsafe_put(writer_index, vec.data(),
                         static_cast<uint32_t>(total_bytes));
     }
-    buffer.writer_index(writer_index + static_cast<uint32_t>(total_bytes));
+    detail::PrimitiveVectorWriter::commit(
+        buffer, writer_index + static_cast<uint32_t>(total_bytes));
   }
 
   static inline void
@@ -1215,13 +1235,14 @@ template <typename Alloc> struct Serializer<std::vector<bfloat16_t, Alloc>> {
     size_t max_size = 8 + total_bytes;
     buffer.grow(static_cast<uint32_t>(max_size));
     uint32_t writer_index = buffer.writer_index();
-    writer_index +=
-        buffer.put_var_uint32(writer_index, static_cast<uint32_t>(total_bytes));
+    writer_index += detail::PrimitiveVectorWriter::put_size(
+        buffer, writer_index, static_cast<uint32_t>(total_bytes));
     if (total_bytes > 0) {
       buffer.unsafe_put(writer_index, vec.data(),
                         static_cast<uint32_t>(total_bytes));
     }
-    buffer.writer_index(writer_index + static_cast<uint32_t>(total_bytes));
+    detail::PrimitiveVectorWriter::commit(
+        buffer, writer_index + static_cast<uint32_t>(total_bytes));
   }
 
   static inline void
@@ -1507,13 +1528,14 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
     size_t max_size = 8 + vec.size();
     buffer.grow(static_cast<uint32_t>(max_size));
     uint32_t writer_index = buffer.writer_index();
-    writer_index +=
-        buffer.put_var_uint32(writer_index, static_cast<uint32_t>(vec.size()));
+    writer_index += detail::PrimitiveVectorWriter::put_size(
+        buffer, writer_index, static_cast<uint32_t>(vec.size()));
     for (size_t i = 0; i < vec.size(); ++i) {
       buffer.unsafe_put_byte(writer_index + i,
                              static_cast<uint8_t>(vec[i] ? 1 : 0));
     }
-    buffer.writer_index(writer_index + vec.size());
+    detail::PrimitiveVectorWriter::commit(
+        buffer, writer_index + static_cast<uint32_t>(vec.size()));
   }
 
   static inline void write_data_generic(const std::vector<bool, Alloc> &vec,

@@ -40,6 +40,8 @@ namespace fory {
 class StdInputStream;
 class PyInputStream;
 namespace serialization::detail {
+struct PrimitiveVectorWriter;
+struct StructFieldWriter;
 struct StringFieldWriter;
 } // namespace serialization::detail
 
@@ -620,19 +622,11 @@ public:
   FORY_ALWAYS_INLINE uint32_t put_tagged_uint64(uint32_t offset,
                                                 uint64_t value) {
     constexpr uint64_t MAX_SMALL_VALUE = 0x7fffffff; // INT32_MAX as u64
-    if (value <= MAX_SMALL_VALUE) {
-      FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 4)))
-          << "Buffer out of bound: " << offset << " + 4 > " << size_;
-      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(value)
-                                                    << 1);
-      return 4;
-    } else {
-      FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 9)))
-          << "Buffer out of bound: " << offset << " + 9 > " << size_;
-      data_[offset] = 0b1;
-      store_unaligned<uint64_t>(data_ + offset + 1, value);
-      return 9;
-    }
+    const uint32_t extent = value <= MAX_SMALL_VALUE ? 4 : 9;
+    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, extent)))
+        << "Buffer out of bound: " << offset << " + " << extent << " > "
+        << size_;
+    return put_tagged_uint64_unchecked(offset, value);
   }
 
   /// write int64_t using tagged encoding at given offset. Returns bytes
@@ -643,20 +637,12 @@ public:
   FORY_ALWAYS_INLINE uint32_t put_tagged_int64(uint32_t offset, int64_t value) {
     constexpr int64_t MIN_SMALL_VALUE = -1073741824; // -2^30
     constexpr int64_t MAX_SMALL_VALUE = 1073741823;  // 2^30 - 1
-    if (value >= MIN_SMALL_VALUE && value <= MAX_SMALL_VALUE) {
-      FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 4)))
-          << "Buffer out of bound: " << offset << " + 4 > " << size_;
-      const uint32_t encoded =
-          static_cast<uint32_t>(static_cast<int32_t>(value)) << 1;
-      store_unaligned<uint32_t>(data_ + offset, encoded);
-      return 4;
-    } else {
-      FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 9)))
-          << "Buffer out of bound: " << offset << " + 9 > " << size_;
-      data_[offset] = 0b1;
-      store_unaligned<int64_t>(data_ + offset + 1, value);
-      return 9;
-    }
+    const uint32_t extent =
+        value >= MIN_SMALL_VALUE && value <= MAX_SMALL_VALUE ? 4 : 9;
+    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, extent)))
+        << "Buffer out of bound: " << offset << " + " << extent << " > "
+        << size_;
+    return put_tagged_int64_unchecked(offset, value);
   }
 
   /// write uint8_t value to buffer at current writer index.
@@ -1209,6 +1195,8 @@ public:
   std::string hex() const;
 
 private:
+  friend struct serialization::detail::PrimitiveVectorWriter;
+  friend struct serialization::detail::StructFieldWriter;
   friend struct serialization::detail::StringFieldWriter;
   friend class StdInputStream;
   friend class PyInputStream;
@@ -1380,6 +1368,34 @@ private:
     encoded |= 0x8000000000000000ULL;
     store_unaligned<uint64_t>(data_ + offset, encoded);
     data_[offset + 8] = static_cast<uint8_t>(value >> 56);
+    return 9;
+  }
+
+  FORY_ALWAYS_INLINE uint32_t put_tagged_uint64_unchecked(uint32_t offset,
+                                                          uint64_t value) {
+    constexpr uint64_t MAX_SMALL_VALUE = 0x7fffffff;
+    if (value <= MAX_SMALL_VALUE) {
+      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(value)
+                                                    << 1);
+      return 4;
+    }
+    data_[offset] = 0b1;
+    store_unaligned<uint64_t>(data_ + offset + 1, value);
+    return 9;
+  }
+
+  FORY_ALWAYS_INLINE uint32_t put_tagged_int64_unchecked(uint32_t offset,
+                                                         int64_t value) {
+    constexpr int64_t MIN_SMALL_VALUE = -1073741824;
+    constexpr int64_t MAX_SMALL_VALUE = 1073741823;
+    if (value >= MIN_SMALL_VALUE && value <= MAX_SMALL_VALUE) {
+      const uint32_t encoded =
+          static_cast<uint32_t>(static_cast<int32_t>(value)) << 1;
+      store_unaligned<uint32_t>(data_ + offset, encoded);
+      return 4;
+    }
+    data_[offset] = 0b1;
+    store_unaligned<int64_t>(data_ + offset + 1, value);
     return 9;
   }
 

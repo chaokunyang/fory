@@ -416,8 +416,8 @@ void main() {
           _expectInt64IntHelperMatchesWrapper(
             value: value,
             writeInt: (buffer, value) => buffer.writeTaggedInt64FromInt(value),
-            writeWrapper: (buffer, value) =>
-                buffer.writeTaggedInt64(Int64(value)),
+            writeWrapper:
+                (buffer, value) => buffer.writeTaggedInt64(Int64(value)),
             readInt: (buffer) => buffer.readTaggedInt64AsInt(),
           );
         }
@@ -457,15 +457,17 @@ void main() {
         throwsA(isA<StateError>()),
       );
       expect(
-        () => Buffer.wrap(
-          Uint8List.fromList(varint.toBytes()),
-        ).readVarInt64AsInt(),
+        () =>
+            Buffer.wrap(
+              Uint8List.fromList(varint.toBytes()),
+            ).readVarInt64AsInt(),
         throwsA(isA<StateError>()),
       );
       expect(
-        () => Buffer.wrap(
-          Uint8List.fromList(tagged.toBytes()),
-        ).readTaggedInt64AsInt(),
+        () =>
+            Buffer.wrap(
+              Uint8List.fromList(tagged.toBytes()),
+            ).readTaggedInt64AsInt(),
         throwsA(isA<StateError>()),
       );
     });

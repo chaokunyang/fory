@@ -976,6 +976,11 @@ Fields define the properties of a message.
 field_type field_name = field_number;
 ```
 
+`field_number` is the field tag ID. It must be unique within the message and
+satisfy `0 <= field_number < 2^29` (`0` through `536870911`). Keep
+assigned field numbers stable and reserve removed numbers instead of reusing
+them for different fields.
+
 ### With Modifiers
 
 ```protobuf

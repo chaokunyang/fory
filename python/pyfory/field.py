@@ -51,7 +51,7 @@ class ForyFieldMeta:
     Fory field metadata extracted from field.metadata.
 
     Attributes:
-        id: Field tag ID. -1 is the internal sentinel for no configured ID; >=0 means use tag ID.
+        id: Field tag ID in [0, 2^29), or -1 as the internal no-ID sentinel.
         nullable: Whether null flag is written. Default False.
         ref: Whether reference tracking is enabled for this field. Default False.
         ignore: Whether to ignore this field during serialization. Default False.
@@ -129,8 +129,9 @@ def field(
     Args:
         id: Field tag ID (optional).
             - omitted: Use field name with meta string encoding
-            - >=0: Use numeric tag ID (more compact, stable across renames)
-            Must be unique within the class. Negative configured IDs are invalid.
+            - 0 <= id < 2^29: Use numeric tag ID (more compact, stable across renames)
+            Must be unique within the class. Negative configured IDs and values
+            greater than or equal to 2^29 are invalid.
 
         nullable: Whether to write null flag for this field.
             - False (default): Skip null flag, field cannot be None

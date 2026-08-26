@@ -1565,7 +1565,7 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.writeVarInt64(this, value);
     }
-    ensure(writerIndex + 9);
+    grow(9);
     return _unsafeWriteVarUInt64((value << 1) ^ (value >> 63));
   }
 
@@ -1585,7 +1585,7 @@ public final class MemoryBuffer {
     }
     // Var long encoding algorithm is based kryo UnsafeMemoryOutput.writeVarInt64.
     // var long are written using little endian byte order.
-    ensure(writerIndex + 9);
+    grow(9);
     return _unsafeWriteVarUInt64(value);
   }
 
@@ -2096,15 +2096,19 @@ public final class MemoryBuffer {
 
   /** For off-heap buffer, this will make a heap buffer internally. */
   public void ensure(int length) {
-    // Bulk writers use non-negative int extents whose overflow is necessarily negative; keep
-    // their hot paths free of a duplicate addExact and reject the overflow here before Unsafe use.
+    // Negative extents are overflowed writer positions. Compare as unsigned so the common path
+    // keeps one branch while overflow rejection and allocation stay cold before any Unsafe access.
+    if (Integer.compareUnsigned(length, size) > 0) {
+      ensureSlow(length);
+    }
+  }
+
+  private void ensureSlow(int length) {
     if (length < 0) {
       throwOOBException();
     }
-    if (length > size) {
-      // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
-      globalAllocator.grow(this, length);
-    }
+    // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
+    globalAllocator.grow(this, length);
   }
 
   // -------------------------------------------------------------------------

@@ -57,6 +57,7 @@ struct Item {
 struct SimpleStruct {
     // field_order != sorted_order
     f1: HashMap<i32, f64>,
+    #[fory(id = 15)]
     f2: i32,
     f3: Item,
     // Use String (not Option<String>) to match Java's non-nullable String field
@@ -64,8 +65,10 @@ struct SimpleStruct {
     f5: Color,
     // Use Vec<String> to match Java's List<String> with non-nullable elements
     f6: Vec<String>,
+    #[fory(id = 65551)]
     f7: i32,
     f8: i32,
+    #[fory(id = 536870911)]
     last: i32,
 }
 

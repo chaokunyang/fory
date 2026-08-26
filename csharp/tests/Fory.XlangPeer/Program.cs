@@ -1269,13 +1269,16 @@ public sealed class Item
 public sealed class SimpleStruct
 {
     public Dictionary<int, double> F1 { get; set; } = [];
+    [ForyField(15)]
     public int F2 { get; set; }
     public Item F3 { get; set; } = new();
     public string F4 { get; set; } = string.Empty;
     public Color F5 { get; set; }
     public List<string> F6 { get; set; } = [];
+    [ForyField(65551)]
     public int F7 { get; set; }
     public int F8 { get; set; }
+    [ForyField(536870911)]
     public int Last { get; set; }
 }
 

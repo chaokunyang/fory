@@ -133,7 +133,8 @@ struct SimpleStruct {
            f4 == other.f4 && f5 == other.f5 && f6 == other.f6 &&
            f7 == other.f7 && f8 == other.f8 && last == other.last;
   }
-  FORY_STRUCT(SimpleStruct, f1, f2, f3, f4, f5, f6, f7, f8, last);
+  FORY_STRUCT(SimpleStruct, f1, (f2, fory::F(15)), f3, f4, f5, f6,
+              (f7, fory::F(65551)), f8, (last, fory::F(536870911)));
 };
 
 struct EvolvingOverrideStruct {

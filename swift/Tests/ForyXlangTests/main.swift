@@ -46,13 +46,16 @@ private struct SimpleStruct {
     // schema marks map keys/values and list elements nullable even when the
     // sample payload contains only non-null values.
     var f1: [Int32?: Double?] = [:]
+    @ForyField(id: 15)
     var f2: Int32 = 0
     var f3: Item = Item()
     var f4: String = ""
     var f5: PeerColor = .green
     var f6: [String?] = []
+    @ForyField(id: 65551)
     var f7: Int32 = 0
     var f8: Int32 = 0
+    @ForyField(id: 536870911)
     var last: Int32 = 0
 }
 

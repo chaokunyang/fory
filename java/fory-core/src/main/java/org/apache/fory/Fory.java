@@ -52,7 +52,6 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeChecker;
@@ -334,19 +333,6 @@ public final class Fory implements BaseFory {
     return bytes;
   }
 
-  private byte[] copyWrittenBytes(MemoryBuffer buffer) {
-    int length = buffer.writerIndex();
-    if (JdkVersion.MAJOR_VERSION >= 25) {
-      // Keep the overlay-owned array, ByteBuffer, and VarHandle bounds path on JDK 25.
-      return buffer.getBytes(0, length);
-    }
-    if (buffer.isHeapFullyWriteable()) {
-      // Fory owns this writer index; keep public arbitrary-range validation out of the root path.
-      return Arrays.copyOf(buffer.getHeapMemory(), length);
-    }
-    return buffer.getBytes(0, length);
-  }
-
   @Override
   public MemoryBuffer serialize(MemoryBuffer buffer, Object obj) {
     return serialize(buffer, obj, null);
@@ -387,6 +373,15 @@ public final class Fory implements BaseFory {
   @Override
   public void serialize(OutputStream outputStream, Object obj, BufferCallback callback) {
     serializeToStream(outputStream, buf -> serialize(buf, obj, callback));
+  }
+
+  private byte[] copyWrittenBytes(MemoryBuffer buffer) {
+    int length = buffer.writerIndex();
+    if (buffer.isHeapFullyWriteable()) {
+      // Fory owns this writer index; keep public arbitrary-range validation out of the root path.
+      return Arrays.copyOf(buffer.getHeapMemory(), length);
+    }
+    return buffer.getBytes(0, length);
   }
 
   private ForyException processSerializationError(Throwable e) {

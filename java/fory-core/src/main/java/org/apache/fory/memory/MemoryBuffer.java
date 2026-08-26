@@ -2016,14 +2016,18 @@ public final class MemoryBuffer {
 
   /** For off-heap buffer, this will make a heap buffer internally. */
   public void grow(int neededSize) {
-    if (neededSize > size - writerIndex) {
-      int length = writerIndex + neededSize;
-      if (length < 0) {
-        throwOOBException();
-      }
-      // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
-      globalAllocator.grow(this, length);
+    long length = (long) writerIndex + neededSize;
+    if (length > size) {
+      growSlow(length);
     }
+  }
+
+  private void growSlow(long length) {
+    if (length > Integer.MAX_VALUE) {
+      throwOOBException();
+    }
+    // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
+    globalAllocator.grow(this, (int) length);
   }
 
   /** For off-heap buffer, this will make a heap buffer internally. */

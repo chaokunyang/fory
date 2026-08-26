@@ -517,7 +517,7 @@ public class NativeTypeDefEncoderTest {
   }
 
   @Test
-  public void testDecodeRejectsInheritedDuplicateTag() {
+  public void testRejectsInheritedDuplicateTag() {
     Fory fory =
         Fory.builder()
             .withXlang(false)

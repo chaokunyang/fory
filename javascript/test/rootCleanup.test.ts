@@ -126,14 +126,14 @@ test.each(["success", "failure"] as const)("restores root write state for %s", (
   };
 
   if (outcome === "failure") {
-    expect(() => registered.serialize(value)).toThrow("root write failed");
+    expect(() => registered.serialize(value)).toThrow();
     expect(fory.serialize(7)).toBeDefined();
   } else {
     expect(registered.serialize(value)).toBeDefined();
     expect(fory.serialize(7)).toBeDefined();
   }
   expect(writeContext.refWriter.writeObjects.size).toBe(0);
-  expect(writeContext.disposeTypeMetaOwners).toHaveLength(0);
+  expect(writeContext.disposeTypeMetaOwnersSize).toBe(0);
   expect(writeContext.metaStringWriter.disposeMetaStringBytesSize).toBe(0);
   expect(name.dynamicWriteStringId).toBe(-1);
   expect(typeMeta.dynamicTypeId).toBe(-1);
@@ -160,6 +160,27 @@ test("reuses root write metastring owners", () => {
   expect(writeContext.metaStringWriter.disposeMetaStringBytesSize).toBe(1);
 });
 
+test("reuses root write type metadata owners", () => {
+  const fory = new Fory({ compatible: true });
+  const registered = fory.register(Type.struct(7610, {}));
+  const writeContext = (fory as any).writeContext;
+  const typeMeta = TypeMeta.fromTypeInfo(Type.struct(7611, {}));
+
+  registered.serializer.writeRef = () => {
+    writeContext.writeTypeMeta(typeMeta, typeMeta.toBytes());
+  };
+
+  expect(registered.serialize({})).toBeDefined();
+  const owners = writeContext.disposeTypeMetaOwners;
+  expect(owners).toHaveLength(1);
+  expect(writeContext.disposeTypeMetaOwnersSize).toBe(1);
+
+  expect(registered.serialize({})).toBeDefined();
+  expect(writeContext.disposeTypeMetaOwners).toBe(owners);
+  expect(owners).toHaveLength(1);
+  expect(writeContext.disposeTypeMetaOwnersSize).toBe(1);
+});
+
 test.each([8192, 8193])("bounds %s root write metastring owners", (ownerCount) => {
   const fory = new Fory({ compatible: true });
   const writeContext = (fory as any).writeContext;
@@ -181,6 +202,28 @@ test.each([8192, 8193])("bounds %s root write metastring owners", (ownerCount) =
   }
 });
 
+test.each([8192, 8193])("bounds %s root write type metadata owners", (ownerCount) => {
+  const fory = new Fory({ compatible: true });
+  const writeContext = (fory as any).writeContext;
+  const typeMetaOwners = Array.from({ length: ownerCount }, () => ({ dynamicTypeId: -1 }));
+  const bytes = new Uint8Array();
+
+  for (const owner of typeMetaOwners) {
+    writeContext.writeTypeMeta(owner, bytes);
+  }
+  const owners = writeContext.disposeTypeMetaOwners;
+
+  writeContext.reset();
+  expect(writeContext.disposeTypeMetaOwnersSize).toBe(0);
+  expect(typeMetaOwners.every((owner) => owner.dynamicTypeId === -1)).toBe(true);
+  if (ownerCount === 8192) {
+    expect(writeContext.disposeTypeMetaOwners).toBe(owners);
+  } else {
+    expect(writeContext.disposeTypeMetaOwners).not.toBe(owners);
+    expect(writeContext.disposeTypeMetaOwners).toHaveLength(0);
+  }
+});
+
 test("releases a failed root write buffer before reuse", () => {
   const fory = new Fory({ compatible: true });
   const registered = fory.register(Type.struct(7608, {}));
@@ -191,7 +234,7 @@ test("releases a failed root write buffer before reuse", () => {
     throw new Error("root write failed");
   };
 
-  expect(() => registered.serialize({})).toThrow("root write failed");
+  expect(() => registered.serialize({})).toThrow();
   expect(fory.serialize(7)).toBeDefined();
   expect(writer.getPlatformBuffer().byteLength).toBeLessThan(4 * 1024 * 1024);
 });

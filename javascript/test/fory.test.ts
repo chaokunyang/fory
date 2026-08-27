@@ -137,6 +137,102 @@ describe("fory", () => {
     expect(generated).toBe(generatedBefore);
   });
 
+  test("keeps codegen callbacks from publishing registration", () => {
+    let reenterRoot = false;
+    let fory: Fory;
+    fory = new Fory({
+      compatible: false,
+      hooks: {
+        afterCodeGenerated(code) {
+          if (reenterRoot) {
+            reenterRoot = false;
+            fory.serialize(1);
+          }
+          return code;
+        },
+      },
+    });
+    const typeResolver = fory.typeResolver as any;
+    const internalBefore = Array.from(typeResolver.internalSerializer);
+    const customBefore = Array.from(typeResolver.customSerializer.entries());
+    const childType = Type.struct(8109, {
+      value: Type.int32(),
+    });
+    const rootType = Type.struct(8110, {
+      child: childType,
+    });
+
+    reenterRoot = true;
+    expect(() => fory.register(rootType)).toThrow();
+
+    expect(Array.from(typeResolver.internalSerializer)).toEqual(internalBefore);
+    expect(Array.from(typeResolver.customSerializer.entries())).toEqual(customBefore);
+    expect(typeResolver.getSerializerById(TypeId.STRUCT, childType.userTypeId)).toBeUndefined();
+    expect(typeResolver.getSerializerById(TypeId.STRUCT, rootType.userTypeId)).toBeUndefined();
+    rootType.setNullable(true);
+    expect(rootType.nullable).toBe(true);
+  });
+
+  test("keeps failed generated factories local", () => {
+    let failFactory = false;
+    const fory = new Fory({
+      compatible: false,
+      hooks: {
+        afterCodeGenerated(code) {
+          if (!failFactory) {
+            return code;
+          }
+          return code.replace(
+            /return function \(typeResolver, serializerLookup, external, typeInfo, options([^)]*)\) \{/,
+            (signature) => `${signature}\nthrow new Error("factory failure");`,
+          );
+        },
+      },
+    });
+    const typeResolver = fory.typeResolver as any;
+    const internalBefore = Array.from(typeResolver.internalSerializer);
+    const customBefore = Array.from(typeResolver.customSerializer.entries());
+    const childType = Type.struct(8111, {
+      value: Type.int32(),
+    });
+    const rootType = Type.struct(8112, {
+      child: childType,
+    });
+
+    failFactory = true;
+    expect(() => fory.register(rootType)).toThrow();
+
+    expect(Array.from(typeResolver.internalSerializer)).toEqual(internalBefore);
+    expect(Array.from(typeResolver.customSerializer.entries())).toEqual(customBefore);
+    expect(typeResolver.getSerializerById(TypeId.STRUCT, childType.userTypeId)).toBeUndefined();
+    expect(typeResolver.getSerializerById(TypeId.STRUCT, rootType.userTypeId)).toBeUndefined();
+    rootType.setNullable(true);
+    expect(rootType.nullable).toBe(true);
+  });
+
+  test("initializes a published forward owner in place", () => {
+    const fory = new Fory({ compatible: false });
+    const forwardType = Type.struct(8113);
+    const parent = fory.register(
+      Type.struct(8114, {
+        child: forwardType,
+      }),
+    );
+    const forwardOwner = fory.typeResolver.getSerializerById(TypeId.STRUCT, forwardType.userTypeId);
+
+    fory.register(
+      Type.struct(8113, {
+        value: Type.int32(),
+      }),
+    );
+
+    expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, forwardType.userTypeId)).toBe(
+      forwardOwner,
+    );
+    const value = { child: { value: 7 } };
+    expect(parent.deserialize(parent.serialize(value))).toEqual(value);
+  });
+
   test.each(["serialize", "deserialize"] as const)(
     "freezes registration after registered %s succeeds",
     (operation) => {

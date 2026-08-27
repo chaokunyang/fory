@@ -20,7 +20,7 @@
 import { TypeId, Serializer } from "../type";
 import { TypeInfo } from "../typeInfo";
 import { CodegenRegistry } from "./router";
-import { CodecBuilder } from "./builder";
+import { CodecBuilder, SerializerLookup } from "./builder";
 import { Scope } from "./scope";
 import { CompatibleScalarConverter } from "../compatible/scalar";
 import "./array";
@@ -50,6 +50,7 @@ CodegenRegistry.registerExternal(CompatibleScalarConverter);
 
 type SerializerFactoryBuilder = () => (
   typeResolver: TypeResolver,
+  serializerLookup: SerializerLookup,
   external: unknown,
   typeInfo: TypeInfo,
   options: { [key: string]: unknown },
@@ -59,15 +60,35 @@ type SerializerFactoryBuilder = () => (
   checkedTypeMetaWireTypeIdSymbol: symbol,
 ) => Serializer;
 
+type SerializerCreator = (serializerLookup: SerializerLookup) => Serializer;
+
+interface GeneratedRegistration {
+  typeInfo: TypeInfo;
+  serializer: Serializer;
+  captureOwner: Serializer;
+  preparing: boolean;
+}
+
 export class Gen {
   static external = CodegenRegistry.getExternal();
+
+  private generatedRegistrations: GeneratedRegistration[] = [];
+  private readonly serializerLookup: SerializerLookup;
 
   constructor(
     private typeResolver: TypeResolver,
     private regOptions: { [key: string]: any } = {},
-  ) {}
+  ) {
+    // Generator-time TypeInfo queries see initialized local serializers for codegen decisions.
+    // Factory-init ID/name queries instead return the stable owner captured by runtime closures.
+    this.serializerLookup = {
+      getSerializerByTypeInfo: (typeInfo) => this.getGeneratedSerializer(typeInfo),
+      getSerializerById: (id, userTypeId) => this.getCapturedSerializerById(id, userTypeId),
+      getSerializerByName: (name) => this.getCapturedSerializerByName(name),
+    };
+  }
 
-  private generate(typeInfo: TypeInfo): Serializer {
+  private prepare(typeInfo: TypeInfo, serializerLookup: SerializerLookup): SerializerCreator {
     const InnerGeneratorClass = CodegenRegistry.get(typeInfo.typeId);
     if (!InnerGeneratorClass) {
       throw new Error(`${typeInfo.typeId} generator not exists`);
@@ -75,7 +96,7 @@ export class Gen {
     const scope = new Scope();
     const generator = new InnerGeneratorClass(
       typeInfo,
-      new CodecBuilder(scope, this.typeResolver),
+      new CodecBuilder(scope, this.typeResolver, serializerLookup),
       scope,
     );
 
@@ -91,20 +112,20 @@ export class Gen {
     } else {
       factoryBuilder = new Function(funcString) as SerializerFactoryBuilder;
     }
-    return factoryBuilder()(
-      this.typeResolver,
-      Gen.external,
-      typeInfo,
-      this.regOptions,
-      generator.getLocalTypeMeta(),
-      localTypeMetaSymbol,
-      checkedTypeMetaSerializerSymbol,
-      checkedTypeMetaWireTypeIdSymbol,
-    );
-  }
-
-  private register(typeInfo: TypeInfo, serializer?: Serializer) {
-    this.typeResolver.registerSerializer(typeInfo, serializer);
+    const factory = factoryBuilder();
+    const localTypeMeta = generator.getLocalTypeMeta();
+    return (factoryLookup) =>
+      factory(
+        this.typeResolver,
+        factoryLookup,
+        Gen.external,
+        typeInfo,
+        this.regOptions,
+        localTypeMeta,
+        localTypeMetaSymbol,
+        checkedTypeMetaSerializerSymbol,
+        checkedTypeMetaWireTypeIdSymbol,
+      );
   }
 
   private isRegistered(typeInfo: TypeInfo) {
@@ -112,8 +133,97 @@ export class Gen {
   }
 
   private isFullyGenerated(typeInfo: TypeInfo) {
-    const ser = this.typeResolver.getSerializerByTypeInfo(typeInfo);
+    const ser = this.getGeneratedSerializer(typeInfo);
     return ser && ser._initialized;
+  }
+
+  private sameRegistration(left: TypeInfo, right: TypeInfo) {
+    const leftTypeId = this.typeResolver.computeTypeId(left);
+    const rightTypeId = this.typeResolver.computeTypeId(right);
+    if (leftTypeId !== rightTypeId) {
+      return false;
+    }
+    if (TypeId.isNamedType(leftTypeId)) {
+      return left.named === right.named;
+    }
+    if (TypeId.needsUserTypeId(leftTypeId)) {
+      return left.userTypeId === right.userTypeId;
+    }
+    return true;
+  }
+
+  private findRegistration(typeInfo: TypeInfo) {
+    return this.generatedRegistrations.find((entry) =>
+      this.sameRegistration(entry.typeInfo, typeInfo),
+    );
+  }
+
+  private addRegistration(typeInfo: TypeInfo) {
+    const owner = this.typeResolver.createSerializerPlaceholder();
+    const entry: GeneratedRegistration = {
+      typeInfo,
+      serializer: owner,
+      captureOwner: this.typeResolver.getSerializerByTypeInfo(typeInfo) ?? owner,
+      preparing: false,
+    };
+    this.generatedRegistrations.push(entry);
+    return entry;
+  }
+
+  private getGeneratedSerializer(typeInfo: TypeInfo) {
+    return (
+      this.findRegistration(typeInfo)?.serializer ??
+      this.typeResolver.getSerializerByTypeInfo(typeInfo)
+    );
+  }
+
+  private getCapturedSerializerById(id: number, userTypeId?: number) {
+    const entry = this.generatedRegistrations.find((candidate) => {
+      const typeId = this.typeResolver.computeTypeId(candidate.typeInfo);
+      if (typeId !== id || TypeId.isNamedType(typeId)) {
+        return false;
+      }
+      if (TypeId.needsUserTypeId(typeId)) {
+        if (userTypeId !== undefined && userTypeId !== -1) {
+          return candidate.typeInfo.userTypeId === userTypeId;
+        }
+        return candidate.typeInfo.userTypeId === -1;
+      }
+      return true;
+    });
+    return entry?.captureOwner ?? this.typeResolver.getSerializerById(id, userTypeId);
+  }
+
+  private getCapturedSerializerByName(name: number | string) {
+    const entry = this.generatedRegistrations.find(
+      (candidate) =>
+        typeof name === "string" &&
+        TypeId.isNamedType(this.typeResolver.computeTypeId(candidate.typeInfo)) &&
+        candidate.typeInfo.named === name,
+    );
+    return entry?.captureOwner ?? this.typeResolver.getSerializerByName(name);
+  }
+
+  private prepareRegistration(typeInfo: TypeInfo, children: TypeInfo[]) {
+    let entry = this.findRegistration(typeInfo);
+    if (entry?.serializer._initialized || entry?.preparing) {
+      return;
+    }
+    if (entry === undefined) {
+      entry = this.addRegistration(typeInfo);
+    } else {
+      entry.typeInfo = typeInfo;
+    }
+    entry.preparing = true;
+    try {
+      for (const child of children) {
+        this.traversalContainer(child);
+      }
+      const serializer = this.prepare(typeInfo, this.serializerLookup)(this.serializerLookup);
+      Object.assign(entry.serializer, serializer);
+    } finally {
+      entry.preparing = false;
+    }
   }
 
   private traversalContainer(typeInfo: TypeInfo) {
@@ -127,26 +237,19 @@ export class Gen {
         typeInfo.typeId === TypeId.TYPED_UNION ||
         typeInfo.typeId === TypeId.NAMED_UNION;
       if (unionType && options?.cases && Object.keys(options.cases).length > 0) {
-        this.register(typeInfo);
-        Object.values(options.cases).forEach((x) => {
-          this.traversalContainer(x);
-        });
-        this.register(typeInfo, this.generate(typeInfo));
+        this.prepareRegistration(typeInfo, Object.values(options.cases));
         return;
       } else if (options?.props && Object.keys(options.props).length > 0) {
-        this.register(typeInfo);
-        Object.values(options.props).forEach((x) => {
-          this.traversalContainer(x);
-        });
-        this.register(typeInfo, this.generate(typeInfo));
+        this.prepareRegistration(typeInfo, Object.values(options.props));
       } else if (!this.isRegistered(typeInfo) && TypeId.structType(typeInfo.typeId)) {
-        // Forward reference to a struct type not yet fully defined — register a
-        // placeholder so that serializer factories can capture the object
-        // reference.  The placeholder will be filled in via Object.assign
-        // when the real serializer is generated later.
-        this.register(typeInfo);
+        // Keep the recursive owner local until every generated factory has completed. If a prior
+        // registration published a forward owner, factory captures use that owner without mutating
+        // it; commit initializes it in place so earlier serializers keep the same identity.
+        if (this.findRegistration(typeInfo) === undefined) {
+          this.addRegistration(typeInfo);
+        }
       } else if (TypeId.enumType(typeInfo.typeId) && !this.isRegistered(typeInfo)) {
-        this.register(typeInfo, this.generate(typeInfo));
+        this.prepareRegistration(typeInfo, []);
       }
     }
     if (typeInfo.typeId === TypeId.LIST) {
@@ -170,15 +273,25 @@ export class Gen {
   }
 
   reGenerateSerializer(typeInfo: TypeInfo) {
-    return this.generate(typeInfo);
+    return this.prepare(typeInfo, this.typeResolver)(this.typeResolver);
   }
 
   generateSerializer(typeInfo: TypeInfo) {
     this.traversalContainer(typeInfo);
     const serializer = this.typeResolver.getSerializerByTypeInfo(typeInfo);
-    if (serializer?._initialized) {
-      return serializer;
+    if (!serializer?._initialized) {
+      let registration = this.findRegistration(typeInfo);
+      if (registration === undefined) {
+        registration = this.addRegistration(typeInfo);
+      }
+      if (!registration.serializer._initialized) {
+        this.prepareRegistration(typeInfo, []);
+      }
     }
-    return this.reGenerateSerializer(typeInfo);
+
+    // Generated factories may execute application-transformed code, so every factory completes
+    // against local owners before the resolver performs the only global publication step.
+    this.typeResolver.commitGeneratedSerializers(typeInfo, this.generatedRegistrations);
+    return this.typeResolver.getSerializerByTypeInfo(typeInfo)!;
   }
 }

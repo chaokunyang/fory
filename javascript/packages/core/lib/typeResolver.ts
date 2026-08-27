@@ -193,7 +193,7 @@ export default class TypeResolver {
 
   private initInternalSerializer() {
     const registerSerializer = (typeInfo: TypeInfo) => {
-      return this.registerSerializer(typeInfo, new Gen(this).generateSerializer(typeInfo));
+      return new Gen(this).generateSerializer(typeInfo);
     };
     registerSerializer(Type.string());
     registerSerializer(new TypeInfo(TypeId.ENUM));
@@ -278,6 +278,57 @@ export default class TypeResolver {
   ensureRegistrationOpen() {
     if (this.registrationFrozen) {
       throw new Error("types and serializers must be registered before the first root operation");
+    }
+  }
+
+  createSerializerPlaceholder(): Serializer {
+    return { ...uninitSerialize };
+  }
+
+  commitGeneratedSerializers(
+    rootTypeInfo: TypeInfo,
+    entries: readonly { typeInfo: TypeInfo; serializer: Serializer }[],
+  ) {
+    const publications = entries.map((entry) => {
+      const typeId = this.computeTypeId(entry.typeInfo);
+      let internalTypeId: number | undefined;
+      let customTypeKey: number | string | undefined;
+      if (TypeId.isNamedType(typeId)) {
+        customTypeKey = entry.typeInfo.named!;
+      } else if (TypeId.needsUserTypeId(typeId) && entry.typeInfo.userTypeId !== -1) {
+        customTypeKey = this.makeUserTypeKey(entry.typeInfo.userTypeId);
+      } else if (typeId <= 0xff) {
+        internalTypeId = typeId;
+      } else {
+        customTypeKey = typeId;
+      }
+      const existingSerializer =
+        internalTypeId === undefined
+          ? this.customSerializer.get(customTypeKey!)
+          : this.internalSerializer[internalTypeId];
+      return {
+        entry,
+        internalTypeId,
+        customTypeKey,
+        existingSerializer,
+        descriptors:
+          existingSerializer === undefined
+            ? undefined
+            : Object.getOwnPropertyDescriptors(entry.serializer),
+      };
+    });
+    this.ensureRegistrationOpen();
+    rootTypeInfo.freeze();
+    for (const publication of publications) {
+      if (publication.existingSerializer !== undefined) {
+        // Published forward owners are plain resolver-owned placeholders. Define their prepared
+        // data properties in place so earlier generated serializers retain the same owner.
+        Object.defineProperties(publication.existingSerializer, publication.descriptors!);
+      } else if (publication.internalTypeId !== undefined) {
+        this.internalSerializer[publication.internalTypeId] = publication.entry.serializer;
+      } else {
+        this.customSerializer.set(publication.customTypeKey!, publication.entry.serializer);
+      }
     }
   }
 

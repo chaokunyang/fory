@@ -367,11 +367,14 @@ export class MetaStringReader {
 }
 
 export class WriteContext {
+  private static readonly MAX_RETAINED_TYPE_META_OWNERS = 8192;
+
   readonly writer: BinaryWriter;
   readonly refWriter: RefWriter;
   readonly metaStringWriter: MetaStringWriter;
 
   private disposeTypeMetaOwners: Array<{ dynamicTypeId: number }> = [];
+  private disposeTypeMetaOwnersSize = 0;
   private dynamicTypeId = 0;
 
   constructor(
@@ -387,10 +390,17 @@ export class WriteContext {
     this.writer.reset();
     this.refWriter.reset();
     this.metaStringWriter.reset();
-    this.disposeTypeMetaOwners.forEach((owner) => {
-      owner.dynamicTypeId = -1;
-    });
-    this.disposeTypeMetaOwners = [];
+    const owners = this.disposeTypeMetaOwners;
+    const size = this.disposeTypeMetaOwnersSize;
+    for (let i = 0; i < size; i++) {
+      owners[i].dynamicTypeId = -1;
+    }
+    // The logical size is the current root's visibility boundary. Reuse bounded backing and
+    // release only an unusual root's oversized owner table.
+    if (size > WriteContext.MAX_RETAINED_TYPE_META_OWNERS) {
+      this.disposeTypeMetaOwners = [];
+    }
+    this.disposeTypeMetaOwnersSize = 0;
     this.dynamicTypeId = 0;
   }
 
@@ -434,7 +444,7 @@ export class WriteContext {
     const index = this.dynamicTypeId;
     owner.dynamicTypeId = index;
     this.dynamicTypeId += 1;
-    this.disposeTypeMetaOwners.push(owner);
+    this.disposeTypeMetaOwners[this.disposeTypeMetaOwnersSize++] = owner;
     this.writer.writeVarUInt32(index << 1);
     this.writer.buffer(bytes);
   }

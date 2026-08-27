@@ -303,6 +303,7 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
     this.scope.assertNameNotDuplicate("write");
     this.scope.assertNameNotDuplicate("writeInner");
     this.scope.assertNameNotDuplicate("typeResolver");
+    this.scope.assertNameNotDuplicate("serializerLookup");
     this.scope.assertNameNotDuplicate("external");
     this.scope.assertNameNotDuplicate("options");
     this.scope.assertNameNotDuplicate("typeInfo");
@@ -372,7 +373,7 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
     // Append read-only capability metadata so existing writer properties keep
     // their object-layout order on serialization hot paths.
     return `
-        return function (typeResolver, external, typeInfo, options${localTypeMetaParams}) {
+        return function (typeResolver, serializerLookup, external, typeInfo, options${localTypeMetaParams}) {
             ${this.scope.generate()}
             ${serializerDeclaration}
             ${declare}

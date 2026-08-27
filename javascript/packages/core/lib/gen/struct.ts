@@ -587,6 +587,12 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     return JS_STRUCT_OWNER_BYTES + this.sortedProps.length * REFERENCE_BYTES;
   }
 
+  private serializerCaptureExpr(): string {
+    return TypeId.isNamedType(this.typeInfo.typeId)
+      ? this.builder.typeResolver.getSerializerByName(this.typeInfo.named!)
+      : this.builder.typeResolver.getSerializerById(this.typeInfo.typeId, this.typeInfo.userTypeId);
+  }
+
   readDataAlwaysAdvances(): boolean {
     if (!this.builder.resolver.isCompatible()) {
       return true;
@@ -603,7 +609,8 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
       // recursive placeholder remains unknown and selects the guarded loop;
       // do not recursively walk the schema graph here.
       if (
-        this.builder.resolver.getSerializerByTypeInfo(typeInfo)?.readDataAlwaysAdvances === true
+        this.builder.serializerLookup.getSerializerByTypeInfo(typeInfo)?.readDataAlwaysAdvances ===
+        true
       ) {
         return true;
       }
@@ -1230,11 +1237,11 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     // Hoist the serializer lookup into a scope-level const, evaluated once during
     // factory init. Self-recursive structs may still point at a placeholder, so
     // only the fully generated serializer path can hoist derived values below.
-    const hoisted = this.scope.declare("ser", this.serializerExpr);
+    const hoisted = this.scope.declare("ser", this.serializerCaptureExpr());
     const scope = this.scope;
     const builder = this.builder;
     const internalTypeId = this.getInternalTypeId();
-    const serializer = builder.resolver.getSerializerByTypeInfo(this.typeInfo);
+    const serializer = builder.serializerLookup.getSerializerByTypeInfo(this.typeInfo);
     const canInlineCompatibleTypeInfo =
       internalTypeId === TypeId.COMPATIBLE_STRUCT ||
       internalTypeId === TypeId.NAMED_COMPATIBLE_STRUCT ||
@@ -1348,7 +1355,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
   writeEmbed() {
     // Hoist the serializer lookup — safe because writeEmbed() is used by
     // the parent struct whose factory runs after child serializers exist.
-    const hoisted = this.scope.declare("ser", this.serializerExpr);
+    const hoisted = this.scope.declare("ser", this.serializerCaptureExpr());
     const scope = this.scope;
     return new Proxy(
       {},
@@ -1445,7 +1452,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
         fixedSize += propGenerator.getFixedSize();
       });
     } else {
-      fixedSize += this.builder.resolver.getSerializerByName(typeInfo.named!)!.fixedSize;
+      fixedSize += this.builder.serializerLookup.getSerializerByTypeInfo(typeInfo)!.fixedSize;
     }
     return fixedSize;
   }

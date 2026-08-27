@@ -140,9 +140,9 @@ print(result)  # Person(name='Bob', age=25, ...)
 
 Register every application type and native carrier type before the first root serialization or
 deserialization call. The first root operation permanently freezes that `Fory` instance's registry,
-even when the operation fails. `strict=False` relaxes deserialization policy; it does not permit late
-type discovery or registration. If the first operation exposes incomplete or invalid registration,
-configure a new instance before retrying.
+even when the operation fails. `strict=False` may authorize module-global resolution while reading
+a trusted native payload, but it does not permit late type or serializer registration. If the first
+operation exposes incomplete or invalid registration, configure a new instance before retrying.
 
 **Security Warning**: Configured native carriers can import modules and construct Python objects
 when `strict=False`. Use this mode only with trusted payloads, and provide a

@@ -18,11 +18,10 @@ Load this file when changing `scala/`.
   construction before type registration or add rollback, staging, or a parallel registration path.
   Union construction is the exception because it does not require canonical registration: finish
   its serializer-owned callbacks and recheck the freeze before publishing the union type.
-- Bootstrap installation markers must be published only after every nested registration completes
-  and an authoritative lifecycle recheck succeeds. A failed or root-reentered installation leaves
-  the marker absent naturally; do not publish early and add rollback or staging state. Use the
-  concrete `Fory` as the per-runtime monitor for the complete bootstrap, and reject same-runtime
-  same-thread reentry instead of recursively starting a second installation.
+- `Fory.register(ForyModule)` is the only owner of bootstrap identity, cycle breaking, and
+  idempotence. Scala bootstrap code must not add a marker, monitor, or separate reentry policy.
+  Keep the install body replay-safe and append its serializer factory only after all repeatable
+  per-runtime registrations succeed.
 - Install modules for thread-safe facades through `ForyBuilder.withModule` before building them.
   Runtime registration extensions target concrete `Fory` instances and must not recreate a
   thread-safe module-registration wrapper.

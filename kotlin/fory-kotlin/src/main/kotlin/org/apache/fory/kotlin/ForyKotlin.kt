@@ -28,6 +28,6 @@ public object ForyKotlin : ForyModule {
   @JvmStatic public fun builder(): ForyBuilder = Fory.builder().withModule(this)
 
   override fun install(fory: Fory) {
-    KotlinSerializers.registerSerializers(fory)
+    KotlinSerializers.installSerializers(fory)
   }
 }

@@ -27,5 +27,5 @@ import org.apache.fory.serializer.scala.ScalaSerializers
 object ForyScala extends ForyModule {
   def builder(): ForyBuilder = Fory.builder().withModule(this)
 
-  override def install(fory: Fory): Unit = ScalaSerializers.registerSerializers(fory)
+  override def install(fory: Fory): Unit = ScalaSerializers.installSerializers(fory)
 }

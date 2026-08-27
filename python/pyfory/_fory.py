@@ -692,6 +692,8 @@ class ThreadSafeFory:
         self._fory_factory = fory_factory
         self._callbacks = []
         self._lock = threading.Lock()
+        self._registration_lock = threading.Lock()
+        self._registration_fory = None
         self._pool = []
         if fory_factory is not None:
             self._fory_class = None
@@ -703,30 +705,53 @@ class ThreadSafeFory:
             self._fory_class = Fory
         self._instances_created = False
 
+    def _build_fory(self):
+        if self._fory_factory is not None:
+            fory = self._fory_factory()
+        else:
+            fory = self._fory_class(**self._config)
+        for callback in self._callbacks:
+            callback(fory)
+        return fory
+
     def _get_fory(self):
         with self._lock:
             if self._pool:
                 return self._pool.pop()
             self._instances_created = True
-            if self._fory_factory is not None:
-                fory = self._fory_factory()
-            else:
-                fory = self._fory_class(**self._config)
-            for callback in self._callbacks:
-                callback(fory)
+            fory = self._registration_fory
+            self._registration_fory = None
+        if fory is not None:
+            # The validation instance already contains every published registration.
             return fory
+        # Factories and registration callbacks are application code. Keep them outside the
+        # non-reentrant pool lock so a callback can enter the same facade root.
+        return self._build_fory()
 
     def _return_fory(self, fory):
         with self._lock:
             self._pool.append(fory)
 
     def _register_callback(self, callback):
-        with self._lock:
-            if self._instances_created:
-                raise RuntimeError(
-                    "Cannot register types after Fory instances have been created. Please register all types before calling serialize/deserialize."
-                )
-            self._callbacks.append(callback)
+        with self._registration_lock:
+            with self._lock:
+                self._check_registration_open()
+                registration_fory = self._registration_fory
+                # A concurrent root must not reuse this instance while the callback mutates it.
+                self._registration_fory = None
+            if registration_fory is None:
+                registration_fory = self._build_fory()
+            callback(registration_fory)
+            with self._lock:
+                self._check_registration_open()
+                self._callbacks.append(callback)
+                self._registration_fory = registration_fory
+
+    def _check_registration_open(self):
+        if self._instances_created:
+            raise RuntimeError(
+                "Cannot register types after Fory instances have been created. Please register all types before calling serialize/deserialize."
+            )
 
     def register(
         self,

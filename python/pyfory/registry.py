@@ -639,30 +639,28 @@ class TypeResolver:
             raise TypeError("register_union requires a serializer")
         if typename is not None and type_id is not None:
             raise TypeError(f"type name {typename} and id {type_id} should not be set at the same time")
-        previous_type_id_counter = self._type_id_counter
-        automatic_type_id = typename is None and type_id is None
-        if typename is None and type_id is None:
-            type_id = self._next_type_id()
-        if type_id not in {0, None}:
+        if type_id is None:
+            if typename is None:
+                user_type_id = None
+                type_id = TypeId.TYPED_UNION
+            else:
+                user_type_id = NO_USER_TYPE_ID
+                type_id = TypeId.NAMED_UNION
+        elif type_id != 0:
             user_type_id = type_id
             type_id = TypeId.TYPED_UNION
         else:
             user_type_id = NO_USER_TYPE_ID
             type_id = TypeId.NAMED_UNION
-        try:
-            return self.__register_type(
-                cls,
-                type_id=type_id,
-                user_type_id=user_type_id,
-                namespace=namespace,
-                typename=typename,
-                serializer=serializer,
-                internal=False,
-            )
-        except BaseException:
-            if automatic_type_id and self._type_id_counter == user_type_id:
-                self._type_id_counter = previous_type_id_counter
-            raise
+        return self.__register_type(
+            cls,
+            type_id=type_id,
+            user_type_id=user_type_id,
+            namespace=namespace,
+            typename=typename,
+            serializer=serializer,
+            internal=False,
+        )
 
     def _register_type(
         self,
@@ -692,26 +690,17 @@ class TypeResolver:
             if typeinfo is not None:
                 return typeinfo
         n_params = len({typename, type_id, None}) - 1
-        previous_type_id_counter = self._type_id_counter
-        automatic_type_id = n_params == 0 and typename is None
-        if n_params == 0 and typename is None:
-            type_id = self._next_type_id()
         if n_params == 2:
             raise TypeError(f"type name {typename} and id {type_id} should not be set at the same time")
-        try:
-            return self._register_xtype(
-                cls,
-                type_id=type_id,
-                user_type_id=user_type_id,
-                namespace=namespace,
-                typename=typename,
-                serializer=serializer,
-                internal=internal,
-            )
-        except BaseException:
-            if automatic_type_id and self._type_id_counter == type_id:
-                self._type_id_counter = previous_type_id_counter
-            raise
+        return self._register_xtype(
+            cls,
+            type_id=type_id,
+            user_type_id=user_type_id,
+            namespace=namespace,
+            typename=typename,
+            serializer=serializer,
+            internal=internal,
+        )
 
     def _register_xtype(
         self,
@@ -731,8 +720,12 @@ class TypeResolver:
         if serializer is None:
             if issubclass(cls, enum.Enum):
                 if type_id is None:
-                    type_id = TypeId.NAMED_ENUM
-                    user_type_id = NO_USER_TYPE_ID
+                    if typename is None:
+                        type_id = TypeId.ENUM
+                        user_type_id = None
+                    else:
+                        type_id = TypeId.NAMED_ENUM
+                        user_type_id = NO_USER_TYPE_ID
                 else:
                     user_type_id = type_id
                     type_id = TypeId.ENUM
@@ -740,22 +733,34 @@ class TypeResolver:
                 serializer = None
                 if self.meta_share and evolving:
                     if type_id is None:
-                        type_id = TypeId.NAMED_COMPATIBLE_STRUCT
-                        user_type_id = NO_USER_TYPE_ID
+                        if typename is None:
+                            type_id = TypeId.COMPATIBLE_STRUCT
+                            user_type_id = None
+                        else:
+                            type_id = TypeId.NAMED_COMPATIBLE_STRUCT
+                            user_type_id = NO_USER_TYPE_ID
                     else:
                         user_type_id = type_id
                         type_id = TypeId.COMPATIBLE_STRUCT
                 else:
                     if type_id is None:
-                        type_id = TypeId.NAMED_STRUCT
-                        user_type_id = NO_USER_TYPE_ID
+                        if typename is None:
+                            type_id = TypeId.STRUCT
+                            user_type_id = None
+                        else:
+                            type_id = TypeId.NAMED_STRUCT
+                            user_type_id = NO_USER_TYPE_ID
                     else:
                         user_type_id = type_id
                         type_id = TypeId.STRUCT
         elif not internal:
             if type_id is None:
-                type_id = TypeId.NAMED_EXT
-                user_type_id = NO_USER_TYPE_ID
+                if typename is None:
+                    type_id = TypeId.EXT
+                    user_type_id = None
+                else:
+                    type_id = TypeId.NAMED_EXT
+                    user_type_id = NO_USER_TYPE_ID
             else:
                 user_type_id = type_id
                 type_id = TypeId.EXT
@@ -781,7 +786,6 @@ class TypeResolver:
         serializer: Serializer = None,
         internal: bool = False,
     ):
-        dynamic_type = type_id is not None and type_id < 0
         namespace_metastr = None
         typename_metastr = None
         if typename is not None:
@@ -795,9 +799,13 @@ class TypeResolver:
                 namespace = namespace or ""
             if not typename:
                 raise ValueError("type name must not be empty")
-        if not internal and needs_user_type_id(type_id):
-            if not isinstance(user_type_id, int) or isinstance(user_type_id, bool) or user_type_id < 0 or user_type_id > 0xFFFFFFFE:
-                raise ValueError(f"user_type_id must be an integer in range [0, 0xfffffffe], got {user_type_id}")
+        if (
+            not internal
+            and needs_user_type_id(type_id)
+            and user_type_id is not None
+            and (not isinstance(user_type_id, int) or isinstance(user_type_id, bool) or user_type_id < 0 or user_type_id > 0xFFFFFFFE)
+        ):
+            raise ValueError(f"user_type_id must be an integer in range [0, 0xfffffffe], got {user_type_id}")
         self._preflight_registration(
             cls,
             type_id=type_id,
@@ -824,6 +832,13 @@ class TypeResolver:
         # Serializer construction can run application code and start a root. Recheck before
         # publishing any type, serializer, name, or id state.
         self._check_registry_mutable()
+        # Allocate automatic IDs only at the common commit point. Nested registrations therefore
+        # receive IDs in publication order without reservations or rollback state.
+        if type_id is None:
+            type_id = self._next_type_id()
+        elif not internal and needs_user_type_id(type_id) and user_type_id is None:
+            user_type_id = self._next_type_id()
+        dynamic_type = type_id < 0
         if serializer is not None and type_id in _NO_REF_NUMERIC_TYPE_IDS:
             serializer.need_to_write_ref = False
 

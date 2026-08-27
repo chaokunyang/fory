@@ -18,7 +18,9 @@
 import threading
 from dataclasses import dataclass
 
+import pytest
 
+import pyfory
 from pyfory import ThreadSafeFory
 
 
@@ -193,3 +195,78 @@ def test_thread_safe_fory_register_after_use():
         assert False, "Should raise RuntimeError"
     except RuntimeError as e:
         assert "Cannot register types after Fory instances have been created" in str(e)
+
+
+def test_invalid_registration():
+    failed_constructions = 0
+    valid_constructions = 0
+
+    class BrokenSerializer:
+        def __init__(self, *_args):
+            nonlocal failed_constructions
+            failed_constructions += 1
+            raise ValueError("serializer construction failed")
+
+    class AddressSerializer(pyfory.Serializer):
+        def write(self, write_context, value):
+            write_context.write_string(value.city)
+            write_context.write_string(value.country)
+
+        def read(self, read_context):
+            return Address(read_context.read_string(), read_context.read_string())
+
+    def serializer_factory(type_resolver, cls):
+        nonlocal valid_constructions
+        valid_constructions += 1
+        return AddressSerializer(type_resolver, cls)
+
+    fory = ThreadSafeFory(xlang=False, compatible=False)
+    with pytest.raises(ValueError):
+        fory.register_type(Address, serializer=BrokenSerializer)
+    assert failed_constructions == 1
+
+    fory.register_type(Address, serializer=serializer_factory)
+    address = Address(city="Oslo", country="Norway")
+    assert fory.deserialize(fory.serialize(address)) == address
+    assert failed_constructions == 1
+    assert valid_constructions == 1
+
+
+def test_reentrant_registration():
+    class AddressSerializer(pyfory.Serializer):
+        def write(self, write_context, value):
+            write_context.write_string(value.city)
+            write_context.write_string(value.country)
+
+        def read(self, read_context):
+            return Address(read_context.read_string(), read_context.read_string())
+
+    fory = ThreadSafeFory(xlang=False, compatible=False)
+    constructions = 0
+    errors = []
+
+    def serializer_factory(type_resolver, cls):
+        nonlocal constructions
+        constructions += 1
+        fory.serialize(None)
+        return AddressSerializer(type_resolver, cls)
+
+    def register():
+        try:
+            fory.register_type(Address, serializer=serializer_factory)
+        except RuntimeError as exc:
+            errors.append(exc)
+
+    thread = threading.Thread(target=register, daemon=True)
+    thread.start()
+    thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    assert constructions == 1
+    assert len(errors) == 1
+    assert isinstance(errors[0], RuntimeError)
+    assert not fory._callbacks
+    assert fory._registration_fory is None
+    assert fory.deserialize(fory.serialize(None)) is None
+    with pytest.raises(RuntimeError):
+        fory.register_type(Person)

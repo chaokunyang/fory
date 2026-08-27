@@ -15,11 +15,20 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
   completion of the one Python-owner dispatch needed to populate native resolver tables, but the
   `Fory` facade must not mirror that state. Cython roots call the resolver owner directly.
   Serializer construction may reenter a root, so the resolver rechecks its frozen state after
-  construction and before publishing type, serializer, name, or ID state.
+  construction and before publishing type, serializer, name, or ID state. Allocate automatic type
+  IDs only at that common publication point; do not reserve IDs before callbacks or maintain
+  rollback state. `ThreadSafeFory` validates registrations before retaining their replay callbacks,
+  and it must not execute application factories or callbacks while holding its pool lock.
 - In non-strict native mode, public unqualified `register_type` for a built-in native carrier uses
   the same reserved type identity as pre-root discovery. Ordinary application classes and
   dataclasses retain their struct registration identity. Configure both through public registration;
   do not prewarm private resolver state or enumerate version-specific transitive object shapes.
+- Function serialization writes captured globals as a data-only exact `dict`. Keep the reader's
+  exact-type check before sizing or merging the namespace; a dict subclass or other mapping must not
+  introduce runtime behavior into function reconstruction.
+- Pandas `RangeIndex` owns its dtype wire slot. Encode `dtype.str` and reconstruct it with
+  `numpy.dtype`; do not serialize the dtype object as a reference because concrete NumPy dtype
+  classes vary across versions and would make the wire depend on version-specific registration.
 - Use explicit Cython fields and methods for fixed hot-path shapes. Avoid `__getattr__`, generic `object` fields, public bridge internals, or `Fory` backreferences where ownership can stay explicit.
 - Keep Python and Cython context/ref-tracking branch conditions and stack mutations semantically aligned unless a documented intentional difference exists.
 - Root deserialization graph memory budget state belongs to pure-Python and Cython `ReadContext`.

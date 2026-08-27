@@ -79,14 +79,13 @@ classes. Register application classes before serializing or deserializing
 payloads, and keep the same registration IDs or names on every peer that shares
 those payloads.
 
-The first root serialization or deserialization attempt permanently freezes the
-instance's registry, including when that attempt fails. `strict=False` relaxes
+The first root serialization or deserialization attempt permanently closes
+registration, including when that attempt fails. `strict=False` relaxes
 the deserialization policy for registered Python-native carriers; it does not
 permit late discovery or registration. Register callable, class, method, and
 reduction carriers together with the application types that can appear in the
 graph before the first root operation.
-If a custom serializer factory starts a root operation, that root freezes the registry and the
-in-progress registration fails without publishing the serializer or type mapping.
+Later registration attempts fail.
 
 Compatible metadata has one data-only exception: when a remote Struct has no
 local registration, deserialization returns the fixed framework

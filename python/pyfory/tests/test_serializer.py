@@ -1050,7 +1050,7 @@ def test_reentrant_freeze(registration):
             return FrozenExtSerializer(type_resolver, cls)
         return UnionSerializer(type_resolver, cls, {0: str})
 
-    with pytest.raises(RuntimeError, match="first root operation"):
+    with pytest.raises(RuntimeError):
         if registration == "type":
             fory.register_type(target, type_id=725, serializer=serializer_factory)
         else:
@@ -1059,7 +1059,7 @@ def test_reentrant_freeze(registration):
     assert constructions == 1
     assert fory.type_resolver.get_type_info(target, create=False) is None
     assert registration_state(fory) == before
-    with pytest.raises(RuntimeError, match="first root operation"):
+    with pytest.raises(RuntimeError):
         fory.register_type(RejectedRegistration, type_id=726)
 
 
@@ -1517,6 +1517,27 @@ def test_failed_registration_keeps_id(registration):
     expected_fory = Fory(xlang=True, compatible=False)
     expected = expected_fory.register_type(NextValue)
     assert actual.user_type_id == expected.user_type_id
+
+
+@pytest.mark.parametrize("registration", ["type", "union"])
+def test_nested_registration_ids(registration):
+    fory = Fory(xlang=True, compatible=False)
+    nested_info = None
+    target = FrozenExt if registration == "type" else FrozenUnion
+
+    def serializer_factory(type_resolver, cls):
+        nonlocal nested_info
+        nested_info = fory.register_type(FrozenSecondExt)
+        if registration == "type":
+            return FrozenExtSerializer(type_resolver, cls)
+        return UnionSerializer(type_resolver, cls, {0: str})
+
+    if registration == "type":
+        type_info = fory.register_type(target, serializer=serializer_factory)
+    else:
+        type_info = fory.register_union(target, serializer=serializer_factory)
+
+    assert nested_info.user_type_id + 1 == type_info.user_type_id
 
 
 def test_duplicate_type_keeps_id():

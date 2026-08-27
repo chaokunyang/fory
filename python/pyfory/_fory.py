@@ -695,7 +695,7 @@ class ThreadSafeFory:
         self._registration_lock = threading.RLock()
         self._registration_depth = 0
         self._registration_fory = None
-        self._fory_factory_running = False
+        self._fory_building = False
         self._pool = []
         if fory_factory is not None:
             self._fory_class = None
@@ -709,21 +709,19 @@ class ThreadSafeFory:
 
     def _build_fory(self):
         with self._registration_lock:
-            if self._fory_factory is not None:
-                if self._fory_factory_running:
-                    raise RuntimeError(
-                        "Cannot start a root serialization or deserialization operation while the Fory factory is creating an instance."
-                    )
-                self._fory_factory_running = True
-                try:
+            if self._fory_building:
+                raise RuntimeError("Cannot start a root serialization or deserialization operation while a Fory instance is being built.")
+            self._fory_building = True
+            try:
+                if self._fory_factory is not None:
                     fory = self._fory_factory()
-                finally:
-                    self._fory_factory_running = False
-            else:
-                fory = self._fory_class(**self._config)
-            for callback in self._callbacks:
-                callback(fory)
-            return fory
+                else:
+                    fory = self._fory_class(**self._config)
+                for callback in self._callbacks:
+                    callback(fory)
+                return fory
+            finally:
+                self._fory_building = False
 
     def _get_fory(self):
         with self._lock:

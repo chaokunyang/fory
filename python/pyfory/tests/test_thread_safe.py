@@ -330,3 +330,36 @@ def test_factory_root_reentry():
     assert fory._registration_fory is None
     with pytest.raises(RuntimeError):
         fory.register_type(Address)
+
+
+def test_callback_root_reentry():
+    class AddressSerializer(pyfory.Serializer):
+        def write(self, write_context, value):
+            write_context.write_string(value.city)
+            write_context.write_string(value.country)
+
+        def read(self, read_context):
+            return Address(read_context.read_string(), read_context.read_string())
+
+    fory = pyfory.ThreadSafeFory(xlang=False, compatible=False)
+    constructions = 0
+    reenter_root = False
+
+    def serializer_factory(type_resolver, cls):
+        nonlocal constructions, reenter_root
+        constructions += 1
+        if reenter_root:
+            fory.serialize(None)
+        return AddressSerializer(type_resolver, cls)
+
+    fory.register_type(Address, type_id=100, serializer=serializer_factory)
+    initial_constructions = constructions
+    with pytest.raises(TypeError):
+        fory.register_type(Person, type_id=100)
+
+    reenter_root = True
+    with pytest.raises(RuntimeError):
+        fory.serialize(None)
+
+    assert constructions == initial_constructions + 1
+    assert fory._root_started

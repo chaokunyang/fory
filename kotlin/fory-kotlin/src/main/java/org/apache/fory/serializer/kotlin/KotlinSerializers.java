@@ -256,6 +256,7 @@ public class KotlinSerializers {
   private static void registerSerializerAfterType(Fory fory, Class<?> cls) {
     TypeResolver resolver = fory.getTypeResolver();
     Serializer serializer = newGeneratedSerializer(resolver, cls);
+    checkRegistrationOpen(resolver);
     resolver.setSerializer(cls, serializer);
   }
 

@@ -412,6 +412,26 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
       runtime.getSerializer(classOf[Person]) shouldBe theSameInstanceAs(originalSerializer)
     }
 
+    "reject combined registration frozen during creation" in {
+      val runtime = xlangFory()
+      val factory = summon[ForySerializer[StoredState]]
+      val reentrantFactory = new ForySerializer[StoredState] {
+        override def createSerializer(
+            typeResolver: org.apache.fory.resolver.TypeResolver,
+            typeDef: TypeDef): org.apache.fory.serializer.Serializer[StoredState] = {
+          val generatedSerializer = factory.createSerializer(typeResolver, typeDef)
+          runtime.serialize("freeze")
+          generatedSerializer
+        }
+      }
+
+      intercept[ForyException] {
+        ForySerializer.register(runtime, classOf[StoredState], "scala_test.ReentrantStoredState")(
+          using reentrantFactory)
+      }
+      runtime.getTypeResolver.isRegistered(classOf[StoredState]) shouldBe true
+    }
+
     "serialize derived case classes with Scala collection fields" in {
       val fory = xlangFory()
       val box = CollectionBox(List("a", "b"), Set("x", "y"), Map("a" -> 1, "b" -> 2))

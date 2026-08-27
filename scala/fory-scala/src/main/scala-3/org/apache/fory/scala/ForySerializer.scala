@@ -166,7 +166,9 @@ object ForySerializer {
       }
     } else {
       registerType(fory, cls, typeId, namespace, typeName)
-      resolver.setSerializer(cls, serializer.createSerializer(resolver))
+      val generatedSerializer = serializer.createSerializer(resolver)
+      checkRegistrationOpen(resolver)
+      resolver.setSerializer(cls, generatedSerializer)
     }
   }
 

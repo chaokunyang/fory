@@ -34,11 +34,33 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import org.apache.fory.Fory
+import org.apache.fory.context.ReadContext
+import org.apache.fory.context.WriteContext
 import org.apache.fory.exception.ForyException
 import org.apache.fory.kotlin.ForyKotlin
+import org.apache.fory.resolver.TypeResolver
+import org.apache.fory.serializer.Serializer
 import org.apache.fory.util.DefaultValueUtils
 import org.testng.Assert
 import org.testng.Assert.assertThrows
+
+private object ReentrantRegistration {
+  var fory: Fory? = null
+}
+
+class ReentrantStruct
+
+@Suppress("UNCHECKED_CAST")
+class ReentrantStruct_ForySerializer(resolver: TypeResolver, cls: Class<*>) :
+  Serializer<ReentrantStruct>(resolver.config, cls as Class<ReentrantStruct>) {
+  init {
+    checkNotNull(ReentrantRegistration.fory).serialize("freeze")
+  }
+
+  override fun write(writeContext: WriteContext, value: ReentrantStruct) = Unit
+
+  override fun read(readContext: ReadContext): ReentrantStruct = ReentrantStruct()
+}
 
 class BuiltinClassSerializerTests {
   @Test
@@ -49,6 +71,26 @@ class BuiltinClassSerializerTests {
 
     assertThrows(ForyException::class.java) { KotlinSerializers.registerSerializers(fory) }
     Assert.assertSame(DefaultValueUtils.getKotlinDefaultValueSupport(), defaultValueSupport)
+  }
+
+  @Test
+  fun testCombinedFreezeRecheck() {
+    val fory =
+      ForyKotlin.builder()
+        .withXlang(true)
+        .requireClassRegistration(true)
+        .withRefTracking(false)
+        .build()
+    ReentrantRegistration.fory = fory
+
+    try {
+      assertThrows(ForyException::class.java) {
+        KotlinSerializers.register(fory, ReentrantStruct::class.java, "kotlin.ReentrantStruct")
+      }
+      Assert.assertTrue(fory.typeResolver.isRegistered(ReentrantStruct::class.java))
+    } finally {
+      ReentrantRegistration.fory = null
+    }
   }
 
   @Test

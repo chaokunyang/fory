@@ -67,9 +67,21 @@ Name-based custom serializer registration is also supported:
 fory.Register<MyType, MyTypeSerializer>("com.example.MyType");
 ```
 
+## Registration Lifecycle
+
+A `Fory` instance accepts registration only before its first root serialization or deserialization
+attempt. Starting that operation permanently freezes the instance's registry, even when the
+operation fails. Every later registration throws `InvalidOperationException`.
+
+To configure additional types, build a new `Fory` instance, complete its registrations, and then
+use that new instance for serialization or deserialization.
+
 ## Thread-Safe Registration
 
-`ThreadSafeFory` exposes the same registration APIs. Registrations are propagated to all per-thread Fory instances.
+`ThreadSafeFory` exposes the same registration APIs. Register every type before the first
+serialization or deserialization attempt. Starting the first root permanently freezes
+registration, even when the root fails. A later registration throws `InvalidOperationException`
+before changing any per-thread runtime.
 
 ```csharp
 using ThreadSafeFory fory = Fory.Builder().BuildThreadSafe();
@@ -90,7 +102,7 @@ fory.Register<Order>(101);
   Registering a derived class does not make an unannotated base class
   serializable.
 - For the split overloads, `typeName` must be non-empty and must not contain dots.
-- Register before high-volume serialization workloads to avoid missing type metadata.
+- Complete registration before the first root serialization or deserialization attempt.
 
 ## Related Topics
 

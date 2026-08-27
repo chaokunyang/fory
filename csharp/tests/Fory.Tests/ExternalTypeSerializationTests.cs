@@ -411,7 +411,7 @@ public sealed class ExternalTypeSerializationTests
         Assert.NotEqual(generatedBytes, customBytes);
         Assert.Equal(value.Count, decoded.Count);
         Assert.Equal(value.Name, decoded.Name);
-        Assert.Throws<InvalidDataException>(
+        Assert.Throws<InvalidOperationException>(
             () => generated.Register<ExternalFields, ExternalFieldsCustomSerializer>(6107));
     }
 

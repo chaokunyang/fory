@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System.Buffers;
 using System.Numerics;
 using Apache.Fory;
 using ForyRuntime = Apache.Fory.Fory;
@@ -74,6 +75,58 @@ public sealed class CustomPayloadSerializer : Serializer<CustomPayload>
             Id = context.Reader.ReadVarInt32() - 7,
             Marker = "custom",
         };
+    }
+}
+
+[ForyStruct]
+public sealed class FrozenPayload
+{
+    public int Value { get; set; }
+}
+
+public sealed class FrozenPayloadSerializer : Serializer<FrozenPayload>
+{
+    public static int Constructions;
+
+    public FrozenPayloadSerializer()
+    {
+        Interlocked.Increment(ref Constructions);
+    }
+
+    public override FrozenPayload DefaultValue => null!;
+
+    public override void WriteData(WriteContext context, in FrozenPayload value, bool hasGenerics)
+    {
+        _ = hasGenerics;
+        context.Writer.WriteVarInt32(value.Value);
+    }
+
+    public override FrozenPayload ReadData(ReadContext context)
+    {
+        return new FrozenPayload { Value = context.Reader.ReadVarInt32() };
+    }
+}
+
+[ForyStruct]
+public sealed class FailingWritePayload
+{
+    public int Value { get; set; }
+}
+
+public sealed class FailingWriteSerializer : Serializer<FailingWritePayload>
+{
+    public override void WriteData(WriteContext context, in FailingWritePayload value, bool hasGenerics)
+    {
+        _ = context;
+        _ = value;
+        _ = hasGenerics;
+        throw new InvalidOperationException("write failure");
+    }
+
+    public override FailingWritePayload ReadData(ReadContext context)
+    {
+        _ = context;
+        return new();
     }
 }
 
@@ -739,10 +792,9 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
-    public void ThreadSafeDottedSerializerNameRoundTrip()
+    public void ThreadSafeDottedNameRoundTrip()
     {
         using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
-        _ = fory.Serialize(1);
         fory.Register<CustomPayload, CustomPayloadSerializer>("test.custom_payload");
 
         CustomPayload decoded = fory.Deserialize<CustomPayload>(
@@ -753,14 +805,245 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
-    public void DeserializeRejectsTrailingBytes()
+    public void RegistryFreezesAfterSuccessfulRoot()
     {
         ForyRuntime fory = ForyRuntime.Builder().Build();
-        byte[] payload = fory.Serialize(123);
+        Assert.Equal(1, fory.Deserialize<int>(fory.Serialize(1)));
+
+        Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(710));
+    }
+
+    [Fact]
+    public void FrozenRegistryRejectsBeforeMutation()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+        _ = fory.Serialize(1);
+        FrozenPayloadSerializer.Constructions = 0;
+
+        Action[] registrations =
+        [
+            () => fory.Register<FrozenPayload>(711),
+            () => fory.Register<FrozenPayload>(string.Empty),
+            () => fory.Register<FrozenPayload>("test", "bad.name"),
+            () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(712),
+            () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(string.Empty),
+            () => fory.Register<FrozenPayload, FrozenPayloadSerializer>("test", "bad.name"),
+        ];
+
+        foreach (Action registration in registrations)
+        {
+            Assert.Throws<InvalidOperationException>(registration);
+        }
+
+        Assert.Equal(0, FrozenPayloadSerializer.Constructions);
+    }
+
+    [Fact]
+    public void FailedRootFreezesRegistry()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+
+        Assert.ThrowsAny<ForyException>(() => fory.Deserialize<int>(Array.Empty<byte>()));
+        Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(713));
+    }
+
+    [Fact]
+    public void FailedWriteClearsRootState()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().TrackRef(true).Build();
+        fory.Register<FailingWritePayload, FailingWriteSerializer>(718);
+        FailingWritePayload value = new() { Value = 1 };
+
+        Assert.Throws<InvalidOperationException>(() => fory.Serialize(value));
+        Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(719));
+
+        ByteWriter probe = new();
+        Assert.False(WriteContextFor(fory).RefWriter.TryWriteRef(probe, value));
+        Assert.Equal(7, fory.Deserialize<int>(fory.Serialize(7)));
+    }
+
+    [Fact]
+    public void FailedReaderRootFreezesRegistry()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+
+        Assert.ThrowsAny<ForyException>(
+            () => fory.DeserializeFromReader<int>(new ByteReader(Array.Empty<byte>())));
+        Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(714));
+    }
+
+    [Fact]
+    public void ThreadSafeFailedRootFreezesRegistry()
+    {
+        using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
+
+        Assert.ThrowsAny<ForyException>(() => fory.Deserialize<int>(Array.Empty<byte>()));
+        Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(715));
+        FrozenPayloadSerializer.Constructions = 0;
+        Assert.Throws<InvalidOperationException>(
+            () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(string.Empty));
+        Assert.Equal(0, FrozenPayloadSerializer.Constructions);
+    }
+
+    [Fact]
+    public void ThreadSafeOutputFreezesRegistry()
+    {
+        using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
+        ArrayBufferWriter<byte> output = new();
+
+        fory.Serialize(output, 1);
+
+        Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(720));
+    }
+
+    [Fact]
+    public async Task ThreadSafeRootAndRegistrationRace()
+    {
+        using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
+        using Barrier start = new(2);
+        Exception? registrationError = null;
+
+        Task root = Task.Run(() =>
+        {
+            start.SignalAndWait();
+            _ = fory.Serialize(1);
+        });
+        Task registration = Task.Run(() =>
+        {
+            start.SignalAndWait();
+            try
+            {
+                fory.Register<FrozenPayload>(716);
+            }
+            catch (Exception error)
+            {
+                registrationError = error;
+            }
+        });
+
+        await Task.WhenAll(root, registration);
+        Assert.True(registrationError is null or InvalidOperationException);
+        Assert.Throws<InvalidOperationException>(() => fory.Register<TimeEnvelope>(717));
+
+        if (registrationError is null)
+        {
+            FrozenPayload value = new() { Value = 42 };
+            Assert.Equal(value.Value, fory.Deserialize<FrozenPayload>(fory.Serialize(value)).Value);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TrailingBytesResetReadState(bool useSpan)
+    {
+        ForyRuntime writer = NewCompatibleTimeFory();
+        byte[] payload = writer.Serialize(new TimeEnvelope { Dates = [new DateOnly(2024, 1, 2)] });
+        ForyRuntime probe = NewCompatibleTimeFory();
+        _ = probe.DeserializeFromReader<TimeEnvelope>(new ByteReader(payload));
+        Assert.NotNull(ReadContextFor(probe).GetTypeMetaRef(0));
+
+        ForyRuntime reader = NewCompatibleTimeFory();
         byte[] invalidPayload = [.. payload, 0x7F];
 
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() => fory.Deserialize<int>(invalidPayload));
-        Assert.Contains("unexpected trailing bytes", exception.Message, StringComparison.Ordinal);
+        _ = useSpan
+            ? Assert.ThrowsAny<ForyException>(() => DeserializeSpan(reader, invalidPayload))
+            : Assert.ThrowsAny<ForyException>(() => reader.Deserialize<TimeEnvelope>(invalidPayload));
+        ReadContext context = ReadContextFor(reader);
+        Assert.Null(context.GetTypeMetaRef(0));
+        Assert.Null(context.GetReadMetaString(0));
+    }
+
+    [Fact]
+    public void RootHeaderFailureClearsMetaCache()
+    {
+        ForyRuntime fory = ForyRuntime.Builder()
+            .Compatible(false)
+            .MaxSchemaVersionsPerType(1)
+            .Build();
+        ReadContext context = ReadContextFor(fory);
+        TypeMeta first = ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "first"));
+        ulong firstHash = EncodedTypeMetaHash(first);
+
+        Assert.ThrowsAny<ForyException>(() => fory.Deserialize<int>([0]));
+
+        Assert.False(context.TryGetTypeMetaByHash(firstHash, out _));
+        TypeMeta second = ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "second"));
+        Assert.True(context.TryGetTypeMetaByHash(EncodedTypeMetaHash(second), out _));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TrailingFailureClearsTypeMetaCache(bool useSpan)
+    {
+        ForyRuntime fory = ForyRuntime.Builder()
+            .Compatible(false)
+            .MaxSchemaVersionsPerType(1)
+            .Build();
+        ReadContext context = ReadContextFor(fory);
+        TypeMeta first = ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "first"));
+        ulong firstHash = EncodedTypeMetaHash(first);
+        byte[] invalidPayload = [.. fory.Serialize(123), 0x7F];
+
+        if (useSpan)
+        {
+            Assert.ThrowsAny<ForyException>(() => DeserializeIntSpan(fory, invalidPayload));
+        }
+        else
+        {
+            Assert.ThrowsAny<ForyException>(() => fory.Deserialize<int>(invalidPayload));
+        }
+
+        Assert.False(context.TryGetTypeMetaByHash(firstHash, out _));
+        TypeMeta second = ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "second"));
+        Assert.True(context.TryGetTypeMetaByHash(EncodedTypeMetaHash(second), out _));
+    }
+
+    private static ForyRuntime NewCompatibleTimeFory()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(true).Build();
+        fory.Register<TimeEnvelope>(701);
+        return fory;
+    }
+
+    private static void DeserializeSpan(ForyRuntime fory, byte[] payload)
+    {
+        _ = fory.Deserialize<TimeEnvelope>(payload.AsSpan());
+    }
+
+    private static void DeserializeIntSpan(ForyRuntime fory, byte[] payload)
+    {
+        _ = fory.Deserialize<int>(payload.AsSpan());
+    }
+
+    private static ReadContext ReadContextFor(ForyRuntime fory)
+    {
+        System.Reflection.FieldInfo? field = typeof(ForyRuntime).GetField(
+            "_readContext",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return Assert.IsType<ReadContext>(field.GetValue(fory));
+    }
+
+    private static WriteContext WriteContextFor(ForyRuntime fory)
+    {
+        System.Reflection.FieldInfo? field = typeof(ForyRuntime).GetField(
+            "_writeContext",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return Assert.IsType<WriteContext>(field.GetValue(fory));
+    }
+
+    [Fact]
+    public void DeserializeFromReaderReadsFrames()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+        ByteReader reader = new([.. fory.Serialize(123), .. fory.Serialize(456)]);
+
+        Assert.Equal(123, fory.DeserializeFromReader<int>(reader));
+        Assert.Equal(456, fory.DeserializeFromReader<int>(reader));
+        Assert.Equal(0, reader.Remaining);
     }
 
     [Fact]

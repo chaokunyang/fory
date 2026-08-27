@@ -30,6 +30,7 @@ public sealed class Fory
     private readonly TypeResolver _typeResolver;
     private WriteContext _writeContext;
     private ReadContext _readContext;
+    private bool _registryFrozen;
 
     internal Fory(Config config)
     {
@@ -67,8 +68,11 @@ public sealed class Fory
     /// <typeparam name="T">Type to register.</typeparam>
     /// <param name="typeId">Numeric type identifier used on the wire.</param>
     /// <returns>The same runtime instance.</returns>
+    /// <remarks>Registration closes permanently when the first serialization or deserialization attempt begins, including an attempt that fails.</remarks>
+    /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public Fory Register<T>(uint typeId)
     {
+        EnsureRegistrationOpen();
         _typeResolver.Register(typeof(T), typeId);
         return this;
     }
@@ -79,8 +83,11 @@ public sealed class Fory
     /// <typeparam name="T">Type to register.</typeparam>
     /// <param name="name">Name used on the wire. A dotted name is split at the last dot.</param>
     /// <returns>The same runtime instance.</returns>
+    /// <remarks>Registration closes permanently when the first serialization or deserialization attempt begins, including an attempt that fails.</remarks>
+    /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public Fory Register<T>(string name)
     {
+        EnsureRegistrationOpen();
         (string namespaceName, string typeName) = TypeResolver.SplitTypeName(name);
         _typeResolver.Register(typeof(T), namespaceName, typeName);
         return this;
@@ -93,8 +100,11 @@ public sealed class Fory
     /// <param name="typeNamespace">Namespace used on the wire.</param>
     /// <param name="typeName">Type name used on the wire.</param>
     /// <returns>The same runtime instance.</returns>
+    /// <remarks>Registration closes permanently when the first serialization or deserialization attempt begins, including an attempt that fails.</remarks>
+    /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public Fory Register<T>(string typeNamespace, string typeName)
     {
+        EnsureRegistrationOpen();
         _typeResolver.Register(typeof(T), typeNamespace, typeName);
         return this;
     }
@@ -106,9 +116,12 @@ public sealed class Fory
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>
     /// <param name="typeId">Numeric type identifier used on the wire.</param>
     /// <returns>The same runtime instance.</returns>
+    /// <remarks>Registration closes permanently when the first serialization or deserialization attempt begins, including an attempt that fails.</remarks>
+    /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public Fory Register<T, TSerializer>(uint typeId)
         where TSerializer : Serializer<T>, new()
     {
+        EnsureRegistrationOpen();
         TypeInfo typeInfo = _typeResolver.RegisterSerializer<T, TSerializer>();
         _typeResolver.Register(typeof(T), typeId, typeInfo);
         return this;
@@ -121,9 +134,12 @@ public sealed class Fory
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>
     /// <param name="name">Name used on the wire. A dotted name is split at the last dot.</param>
     /// <returns>The same runtime instance.</returns>
+    /// <remarks>Registration closes permanently when the first serialization or deserialization attempt begins, including an attempt that fails.</remarks>
+    /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public Fory Register<T, TSerializer>(string name)
         where TSerializer : Serializer<T>, new()
     {
+        EnsureRegistrationOpen();
         (string namespaceName, string typeName) = TypeResolver.SplitTypeName(name);
         TypeInfo typeInfo = _typeResolver.RegisterSerializer<T, TSerializer>();
         _typeResolver.Register(typeof(T), namespaceName, typeName, typeInfo);
@@ -138,9 +154,12 @@ public sealed class Fory
     /// <param name="typeNamespace">Namespace used on the wire.</param>
     /// <param name="typeName">Type name used on the wire.</param>
     /// <returns>The same runtime instance.</returns>
+    /// <remarks>Registration closes permanently when the first serialization or deserialization attempt begins, including an attempt that fails.</remarks>
+    /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public Fory Register<T, TSerializer>(string typeNamespace, string typeName)
         where TSerializer : Serializer<T>, new()
     {
+        EnsureRegistrationOpen();
         TypeResolver.ValidateSplitTypeName(typeNamespace, typeName);
         TypeInfo typeInfo = _typeResolver.RegisterSerializer<T, TSerializer>();
         _typeResolver.Register(typeof(T), typeNamespace, typeName, typeInfo);
@@ -155,14 +174,25 @@ public sealed class Fory
     /// <returns>Serialized bytes.</returns>
     public byte[] Serialize<T>(in T value)
     {
+        FreezeRegistry();
         ByteWriter writer = _writeContext.Writer;
         writer.Reset();
         Serializer<T> serializer = _typeResolver.GetSerializer<T>();
         WriteHead(writer);
         _writeContext.ResetFor(writer);
-        RefMode refMode = Config.TrackRef ? RefMode.Tracking : RefMode.NullOnly;
-        serializer.Write(_writeContext, value, refMode, true, false);
-        _writeContext.RefWriter.Reset();
+        try
+        {
+            RefMode refMode = Config.TrackRef ? RefMode.Tracking : RefMode.NullOnly;
+            serializer.Write(_writeContext, value, refMode, true, false);
+            _writeContext.RefWriter.Reset();
+        }
+        catch
+        {
+            // A custom serializer can fail after reference and metadata publication. The root
+            // facade must release that operation-local state before the runtime is reused.
+            _writeContext.Reset();
+            throw;
+        }
 
         return writer.ToArray();
     }
@@ -188,11 +218,13 @@ public sealed class Fory
     /// <exception cref="InvalidDataException">Thrown when trailing bytes remain after decoding.</exception>
     public T Deserialize<T>(ReadOnlySpan<byte> payload)
     {
+        FreezeRegistry();
         ByteReader reader = _readContext.Reader;
         reader.Reset(payload);
-        T value = DeserializeFromReader<T>(reader);
+        T value = DeserializeFromReaderCore<T>(reader);
         if (reader.Remaining != 0)
         {
+            _readContext.ResetAfterFailure();
             ThrowUnexpectedTrailingBytes<T>();
         }
 
@@ -208,11 +240,13 @@ public sealed class Fory
     /// <exception cref="InvalidDataException">Thrown when trailing bytes remain after decoding.</exception>
     public T Deserialize<T>(byte[] payload)
     {
+        FreezeRegistry();
         ByteReader reader = _readContext.Reader;
         reader.Reset(payload);
-        T value = DeserializeFromReader<T>(reader);
+        T value = DeserializeFromReaderCore<T>(reader);
         if (reader.Remaining != 0)
         {
+            _readContext.ResetAfterFailure();
             ThrowUnexpectedTrailingBytes<T>();
         }
 
@@ -258,6 +292,13 @@ public sealed class Fory
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal T DeserializeFromReader<T>(ByteReader reader)
     {
+        FreezeRegistry();
+        return DeserializeFromReaderCore<T>(reader);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private T DeserializeFromReaderCore<T>(ByteReader reader)
+    {
         ReadContext readContext = _readContext;
         readContext.ResetFor(reader);
         readContext._remainingGraphMemoryBytes = Config.MaxGraphMemoryBytes;
@@ -283,9 +324,40 @@ public sealed class Fory
         {
             // Failed roots can leave partially published refs, metadata refs, or graph-budget state.
             // Keep the success path minimal, but fully reset failed reads before this context is reused.
-            readContext.Reset();
+            readContext.ResetAfterFailure();
             throw;
         }
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void FreezeRegistry()
+    {
+        // Generated descriptors and serializers become operation-visible at the first root, so
+        // failed roots freeze registration just as successful roots do.
+        if (!_registryFrozen)
+        {
+            FreezeRegistrySlow();
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void FreezeRegistrySlow()
+    {
+        _registryFrozen = true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void EnsureRegistrationOpen()
+    {
+        if (_registryFrozen)
+        {
+            ThrowRegistryFrozen();
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowRegistryFrozen() =>
+        throw new InvalidOperationException(
+            "types and serializers must be registered before the first serialization or deserialization operation");
 
 }

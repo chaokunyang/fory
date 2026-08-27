@@ -16,6 +16,7 @@
 // under the License.
 
 using System.Buffers;
+using System.Runtime.CompilerServices;
 
 namespace Apache.Fory;
 
@@ -28,6 +29,8 @@ public sealed class ThreadSafeFory : IDisposable
     private readonly object _registrationLock = new();
     private readonly List<Action<Fory>> _registrations = [];
     private readonly ThreadLocal<Fory> _threadLocalFory;
+    private Fory? _registrationFory;
+    private int _registryFrozen;
     private bool _disposed;
 
     internal ThreadSafeFory(Config config)
@@ -42,11 +45,13 @@ public sealed class ThreadSafeFory : IDisposable
     public Config Config => _config;
 
     /// <summary>
-    /// Registers a user type by numeric type identifier for all current and future thread-local runtimes.
+    /// Registers a user type by numeric type identifier.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <param name="typeId">Numeric type identifier used on the wire.</param>
     /// <returns>The same runtime instance.</returns>
+    /// <remarks>Registration closes permanently when the first serialization or deserialization attempt begins, including an attempt that fails.</remarks>
+    /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public ThreadSafeFory Register<T>(uint typeId)
     {
         ApplyRegistration(fory => fory.Register<T>(typeId));
@@ -54,39 +59,43 @@ public sealed class ThreadSafeFory : IDisposable
     }
 
     /// <summary>
-    /// Registers a user type by name for all current and future thread-local runtimes.
+    /// Registers a user type by name.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <param name="name">Name used on the wire. A dotted name is split at the last dot.</param>
     /// <returns>The same runtime instance.</returns>
+    /// <remarks>Registration closes permanently when the first serialization or deserialization attempt begins, including an attempt that fails.</remarks>
+    /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public ThreadSafeFory Register<T>(string name)
     {
-        _ = TypeResolver.SplitTypeName(name);
         ApplyRegistration(fory => fory.Register<T>(name));
         return this;
     }
 
     /// <summary>
-    /// Registers a user type by namespace and name for all current and future thread-local runtimes.
+    /// Registers a user type by namespace and name.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <param name="typeNamespace">Namespace used on the wire.</param>
     /// <param name="typeName">Type name used on the wire.</param>
     /// <returns>The same runtime instance.</returns>
+    /// <remarks>Registration closes permanently when the first serialization or deserialization attempt begins, including an attempt that fails.</remarks>
+    /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public ThreadSafeFory Register<T>(string typeNamespace, string typeName)
     {
-        TypeResolver.ValidateSplitTypeName(typeNamespace, typeName);
         ApplyRegistration(fory => fory.Register<T>(typeNamespace, typeName));
         return this;
     }
 
     /// <summary>
-    /// Registers a user type by numeric type identifier with a custom serializer for all thread-local runtimes.
+    /// Registers a user type by numeric type identifier with a custom serializer.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>
     /// <param name="typeId">Numeric type identifier used on the wire.</param>
     /// <returns>The same runtime instance.</returns>
+    /// <remarks>Registration closes permanently when the first serialization or deserialization attempt begins, including an attempt that fails.</remarks>
+    /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public ThreadSafeFory Register<T, TSerializer>(uint typeId)
         where TSerializer : Serializer<T>, new()
     {
@@ -95,32 +104,34 @@ public sealed class ThreadSafeFory : IDisposable
     }
 
     /// <summary>
-    /// Registers a user type by name with a custom serializer for all thread-local runtimes.
+    /// Registers a user type by name with a custom serializer.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>
     /// <param name="name">Name used on the wire. A dotted name is split at the last dot.</param>
     /// <returns>The same runtime instance.</returns>
+    /// <remarks>Registration closes permanently when the first serialization or deserialization attempt begins, including an attempt that fails.</remarks>
+    /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public ThreadSafeFory Register<T, TSerializer>(string name)
         where TSerializer : Serializer<T>, new()
     {
-        _ = TypeResolver.SplitTypeName(name);
         ApplyRegistration(fory => fory.Register<T, TSerializer>(name));
         return this;
     }
 
     /// <summary>
-    /// Registers a user type by namespace and name with a custom serializer for all thread-local runtimes.
+    /// Registers a user type by namespace and name with a custom serializer.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>
     /// <param name="typeNamespace">Namespace used on the wire.</param>
     /// <param name="typeName">Type name used on the wire.</param>
     /// <returns>The same runtime instance.</returns>
+    /// <remarks>Registration closes permanently when the first serialization or deserialization attempt begins, including an attempt that fails.</remarks>
+    /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public ThreadSafeFory Register<T, TSerializer>(string typeNamespace, string typeName)
         where TSerializer : Serializer<T>, new()
     {
-        TypeResolver.ValidateSplitTypeName(typeNamespace, typeName);
         ApplyRegistration(fory => fory.Register<T, TSerializer>(typeNamespace, typeName));
         return this;
     }
@@ -133,6 +144,7 @@ public sealed class ThreadSafeFory : IDisposable
     /// <returns>Serialized bytes.</returns>
     public byte[] Serialize<T>(in T value)
     {
+        BeginRoot();
         return Current.Serialize(in value);
     }
 
@@ -144,6 +156,7 @@ public sealed class ThreadSafeFory : IDisposable
     /// <param name="value">Value to serialize.</param>
     public void Serialize<T>(IBufferWriter<byte> output, in T value)
     {
+        BeginRoot();
         Current.Serialize(output, in value);
     }
 
@@ -155,6 +168,7 @@ public sealed class ThreadSafeFory : IDisposable
     /// <returns>Deserialized value.</returns>
     public T Deserialize<T>(ReadOnlySpan<byte> payload)
     {
+        BeginRoot();
         return Current.Deserialize<T>(payload);
     }
 
@@ -172,6 +186,7 @@ public sealed class ThreadSafeFory : IDisposable
 
             _threadLocalFory.Dispose();
             _registrations.Clear();
+            _registrationFory = null;
             _disposed = true;
         }
     }
@@ -209,13 +224,65 @@ public sealed class ThreadSafeFory : IDisposable
         lock (_registrationLock)
         {
             ThrowIfDisposed();
-            _registrations.Add(registration);
-            foreach (Fory fory in _threadLocalFory.Values)
+            if (_registryFrozen != 0)
             {
-                registration(fory);
+                ThrowRegistryFrozen();
+            }
+
+            try
+            {
+                registration(_registrationFory ??= new Fory(_config));
+            }
+            catch
+            {
+                _registrationFory = _registrations.Count == 0 ? null : RebuildRegistrationFory();
+                throw;
+            }
+
+            _registrations.Add(registration);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void BeginRoot()
+    {
+        // Freeze before Current can create a per-thread runtime so roots and registrations
+        // linearize against one boundary and every runtime replays the same immutable log.
+        if (Volatile.Read(ref _registryFrozen) == 0)
+        {
+            FreezeRegistry();
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void FreezeRegistry()
+    {
+        lock (_registrationLock)
+        {
+            ThrowIfDisposed();
+            if (_registryFrozen == 0)
+            {
+                _registrationFory = null;
+                Volatile.Write(ref _registryFrozen, 1);
             }
         }
     }
+
+    private Fory RebuildRegistrationFory()
+    {
+        Fory fory = new(_config);
+        foreach (Action<Fory> registration in _registrations)
+        {
+            registration(fory);
+        }
+
+        return fory;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowRegistryFrozen() =>
+        throw new InvalidOperationException(
+            "types and serializers must be registered before the first serialization or deserialization operation");
 
     private void ThrowIfDisposed()
     {

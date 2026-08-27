@@ -184,19 +184,9 @@ public sealed class Fory
         Serializer<T> serializer = _typeResolver.GetSerializer<T>();
         WriteHead(writer);
         _writeContext.ResetFor(writer);
-        try
-        {
-            RefMode refMode = Config.TrackRef ? RefMode.Tracking : RefMode.NullOnly;
-            serializer.Write(_writeContext, value, refMode, true, false);
-            _writeContext.RefWriter.Reset();
-        }
-        catch
-        {
-            // A custom serializer can fail after reference and metadata publication. The root
-            // facade must release that operation-local state before the runtime is reused.
-            _writeContext.Reset();
-            throw;
-        }
+        RefMode refMode = Config.TrackRef ? RefMode.Tracking : RefMode.NullOnly;
+        serializer.Write(_writeContext, value, refMode, true, false);
+        _writeContext.RefWriter.Reset();
 
         return writer.ToArray();
     }

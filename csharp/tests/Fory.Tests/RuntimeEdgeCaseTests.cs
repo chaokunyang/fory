@@ -1015,7 +1015,7 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
-    public void FailedWriteClearsRootState()
+    public void FailedWriteRestoresNextRoot()
     {
         ForyRuntime fory = ForyRuntime.Builder().TrackRef(true).Build();
         fory.Register<FailingWritePayload, FailingWriteSerializer>(718);
@@ -1024,8 +1024,7 @@ public sealed class RuntimeEdgeCaseTests
         Assert.Throws<InvalidOperationException>(() => fory.Serialize(value));
         Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(719));
 
-        ByteWriter probe = new();
-        Assert.False(WriteContextFor(fory).RefWriter.TryWriteRef(probe, value));
+        Assert.Throws<InvalidOperationException>(() => fory.Serialize(value));
         Assert.Equal(7, fory.Deserialize<int>(fory.Serialize(7)));
     }
 
@@ -1191,15 +1190,6 @@ public sealed class RuntimeEdgeCaseTests
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(field);
         return Assert.IsType<ReadContext>(field.GetValue(fory));
-    }
-
-    private static WriteContext WriteContextFor(ForyRuntime fory)
-    {
-        System.Reflection.FieldInfo? field = typeof(ForyRuntime).GetField(
-            "_writeContext",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        Assert.NotNull(field);
-        return Assert.IsType<WriteContext>(field.GetValue(fory));
     }
 
     private static ForyRuntime? RegistrationForyFor(ThreadSafeFory fory)

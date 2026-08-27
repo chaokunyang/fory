@@ -1080,7 +1080,8 @@ impl<'a> Reader<'a> {
         let slice = self.slice_after_cursor();
 
         if slice.len() >= 8 {
-            let bulk = self.read_u64()?;
+            // Decode speculatively without advancing so malformed input leaves the cursor intact.
+            let bulk = LittleEndian::read_u64(&slice[..8]);
             let mut result = bulk & 0x7F;
             let mut read_idx = start;
 

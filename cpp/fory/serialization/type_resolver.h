@@ -28,6 +28,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
@@ -1372,6 +1373,9 @@ public:
   /// 3. Builds complete TypeMeta and serializes it to bytes
   /// 4. Returns a new TypeResolver with all type infos fully initialized
   ///
+  /// Calling this method permanently freezes registration on the source
+  /// resolver before construction starts, including when construction fails.
+  ///
   /// @return A new TypeResolver with all type infos fully initialized and ready
   /// for use.
   Result<std::unique_ptr<TypeResolver>, Error> build_final_type_resolver();
@@ -1516,7 +1520,10 @@ private:
   void register_type_internal_runtime(const std::type_index &type_index,
                                       TypeInfo *info);
 
-  void check_registration_thread();
+  /// Validate registration state while registration_mutex_ is held.
+  Result<void, Error> check_registration();
+
+  static FORY_NOINLINE Result<void, Error> registration_frozen_error();
 
   void register_builtin_types();
 
@@ -1526,7 +1533,8 @@ private:
   bool track_ref_;
 
   std::thread::id registration_thread_id_;
-  bool finalized_;
+  bool registry_frozen_;
+  std::mutex registration_mutex_;
 
   // Primary storage - owns all TypeInfo objects
   std::vector<std::unique_ptr<TypeInfo>> type_infos_;
@@ -1554,7 +1562,7 @@ private:
 inline TypeResolver::TypeResolver()
     : compatible_(false), xlang_(false), check_struct_version_(true),
       track_ref_(true), registration_thread_id_(std::this_thread::get_id()),
-      finalized_(false) {
+      registry_frozen_(false) {
   register_builtin_types();
 }
 
@@ -1565,12 +1573,14 @@ inline void TypeResolver::apply_config(const Config &config) {
   track_ref_ = config.track_ref;
 }
 
-inline void TypeResolver::check_registration_thread() {
+inline Result<void, Error> TypeResolver::check_registration() {
+  if (FORY_PREDICT_FALSE(registry_frozen_)) {
+    return registration_frozen_error();
+  }
   FORY_CHECK(std::this_thread::get_id() == registration_thread_id_)
       << "TypeResolver registration methods must be called from the same "
          "thread that created the TypeResolver";
-  FORY_CHECK(!finalized_)
-      << "TypeResolver has been finalized, cannot register more types";
+  return Result<void, Error>();
 }
 
 template <typename Source, typename Target>
@@ -1752,7 +1762,8 @@ get_type_info_with_resolver(TypeResolver &resolver) {
 }
 
 template <typename T> Result<void, Error> TypeResolver::register_any_type() {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   using ChronoTimestamp = std::chrono::time_point<std::chrono::system_clock,
                                                   std::chrono::nanoseconds>;
   if constexpr (std::is_same_v<T, std::chrono::nanoseconds> ||
@@ -1790,7 +1801,8 @@ template <typename T> Result<void, Error> TypeResolver::register_any_type() {
 
 template <typename T>
 Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   if (type_id == kInvalidUserTypeId) {
     return Unexpected(Error::invalid(
         "type_id must be in range [0, 0xfffffffe] for register_by_id"));
@@ -1845,7 +1857,8 @@ template <typename T>
 Result<void, Error>
 TypeResolver::register_by_name(const std::string &ns,
                                const std::string &type_name) {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   if (type_name.empty()) {
     return Unexpected(
         Error::invalid("type_name must be non-empty for register_by_name"));
@@ -1897,7 +1910,8 @@ TypeResolver::register_by_name(const std::string &ns,
 
 template <typename T>
 Result<void, Error> TypeResolver::register_ext_type_by_id(uint32_t type_id) {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   if (type_id == kInvalidUserTypeId) {
     return Unexpected(Error::invalid("type_id must be in range [0, 0xfffffffe] "
                                      "for register_ext_type_by_id"));
@@ -1921,7 +1935,8 @@ template <typename T>
 Result<void, Error>
 TypeResolver::register_ext_type_by_name(const std::string &ns,
                                         const std::string &type_name) {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   if (type_name.empty()) {
     return Unexpected(Error::invalid(
         "type_name must be non-empty for register_ext_type_by_name"));
@@ -1945,7 +1960,8 @@ TypeResolver::register_ext_type_by_name(const std::string &ns,
 
 template <typename T>
 Result<void, Error> TypeResolver::register_union_by_id(uint32_t type_id) {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   if (type_id == kInvalidUserTypeId) {
     return Unexpected(Error::invalid(
         "type_id must be in range [0, 0xfffffffe] for register_union_by_id"));
@@ -1968,7 +1984,8 @@ template <typename T>
 Result<void, Error>
 TypeResolver::register_union_by_name(const std::string &ns,
                                      const std::string &type_name) {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   if (type_name.empty()) {
     return Unexpected(Error::invalid(
         "type_name must be non-empty for register_union_by_name"));

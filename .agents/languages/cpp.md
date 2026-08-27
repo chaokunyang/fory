@@ -18,6 +18,11 @@ Load this file when changing `cpp/`, Cython build plumbing, or C++ xlang behavio
   resource amplification, publish reference or cache state that survives root cleanup, or return
   success past the required safepoint. Do not add per-field checks, cursor rollback, or tests that
   pin the first detection point solely to make an error earlier or more precise.
+- Every public `Fory` and `ThreadSafeFory` root overload freezes facade registration as its first
+  action, before constructing stream wrappers, accessing stream buffers, validating arguments, or
+  acquiring pooled instances. `BaseFory` and the source `TypeResolver` keep separate owner-local
+  freeze gates so direct resolver registration cannot bypass the facade gate. Both reject before
+  mutation; do not collapse these gates or describe permanent registry freeze as finalization.
 - Put private methods last in class definitions, immediately before private fields.
 - Do not redesign alias-based or low-level public type shapes to add convenience methods unless the user explicitly asks for that API change.
 - For cross-language feature ports, match protocol behavior but use idiomatic C++ ownership and layering instead of mirroring Java structure literally.

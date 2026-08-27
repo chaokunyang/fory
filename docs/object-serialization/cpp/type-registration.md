@@ -29,6 +29,12 @@ Apache Fory™ requires explicit type registration for struct types. This design
 - **Type Safety**: Detects type mismatches at deserialization time
 - **Polymorphic Serialization**: Enables serialization of polymorphic objects via smart pointers
 
+## Registration Lifecycle
+
+Complete all registrations before the first root serialization or deserialization call. The first
+root attempt permanently freezes that Fory instance's registry, even when the operation fails.
+Create a new Fory instance when a different registry is required.
+
 ## Registering Structs
 
 Use `register_struct<T>(type_id)` to register a struct type:

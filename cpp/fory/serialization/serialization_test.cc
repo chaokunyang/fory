@@ -181,6 +181,45 @@ inline std::vector<uint8_t> buffer_bytes(Buffer &buffer) {
                               buffer.data() + buffer.writer_index());
 }
 
+class RegistryProbeInputStream final : public InputStream {
+public:
+  explicit RegistryProbeInputStream(Fory &fory) : fory_(fory) {}
+
+  Result<void, Error> fill_buffer(uint32_t) override {
+    return Unexpected(Error::io_error("No input available"));
+  }
+
+  Result<void, Error> read_to(uint8_t *, uint32_t) override {
+    return Unexpected(Error::io_error("No input available"));
+  }
+
+  Result<void, Error> skip(uint32_t) override {
+    return Unexpected(Error::io_error("No input available"));
+  }
+
+  Result<void, Error> unread(uint32_t) override {
+    return Unexpected(Error::io_error("No input available"));
+  }
+
+  void shrink_buffer() override {}
+
+  Buffer &get_buffer() override {
+    auto result = fory_.register_struct<::SimpleStruct>(1);
+    registration_rejected_ = !result.ok();
+    return active_buffer_ == nullptr ? buffer_ : *active_buffer_;
+  }
+
+  void bind_buffer(Buffer *buffer) override { active_buffer_ = buffer; }
+
+  bool registration_rejected() const { return registration_rejected_; }
+
+private:
+  Fory &fory_;
+  Buffer buffer_;
+  Buffer *active_buffer_ = nullptr;
+  bool registration_rejected_ = false;
+};
+
 template <typename T>
 void test_roundtrip(const T &original, bool should_equal = true) {
   auto fory =
@@ -932,6 +971,30 @@ TEST(SerializationTest, SkipNoneListConsumesBudget) {
                  {FieldType(static_cast<uint32_t>(TypeId::NONE), false)});
   skip_field_value(ctx, list, RefMode::None);
   ASSERT_TRUE(ctx.has_error());
+}
+
+TEST(SerializationTest, LastElementErrorSafepoints) {
+  Config config;
+
+  std::vector<uint8_t> declared_bytes{2};
+  Buffer declared_buffer(declared_bytes);
+  ReadContext declared_ctx(config, std::make_unique<TypeResolver>());
+  declared_ctx.attach(declared_buffer);
+  std::vector<int32_t> declared_values;
+  EXPECT_FALSE(read_declared_same_type_collection<int32_t>(declared_values,
+                                                           declared_ctx, 2));
+  EXPECT_TRUE(declared_ctx.has_error());
+
+  std::vector<uint8_t> type_info_bytes{2};
+  Buffer type_info_buffer(type_info_bytes);
+  ReadContext type_info_ctx(config, std::make_unique<TypeResolver>());
+  type_info_ctx.attach(type_info_buffer);
+  TypeInfo type_info;
+  type_info.harness.read_data_always_advances = true;
+  std::vector<int32_t> type_info_values;
+  EXPECT_FALSE(read_same_type_info_collection<int32_t>(
+      type_info_values, type_info_ctx, 2, type_info));
+  EXPECT_TRUE(type_info_ctx.has_error());
 }
 
 // ============================================================================
@@ -2443,6 +2506,97 @@ TEST(SerializationTest, ConfigurationBuilder) {
 // Thread Safety Tests
 // ============================================================================
 
+static void expect_finalized_source(TypeResolver &resolver) {
+  auto source_info = resolver.get_type_info<::SimpleStruct>();
+  ASSERT_TRUE(source_info.ok()) << source_info.error().to_string();
+  ASSERT_NE(source_info.value()->type_meta, nullptr);
+  ASSERT_FALSE(source_info.value()->type_def.empty());
+
+  std::vector<uint8_t> source_type_def = source_info.value()->type_def;
+  Buffer source_bytes(source_type_def);
+  auto parsed_source = TypeMeta::from_bytes(source_bytes, nullptr);
+  ASSERT_TRUE(parsed_source.ok()) << parsed_source.error().to_string();
+  EXPECT_EQ(source_bytes.remaining_size(), 0u);
+  EXPECT_EQ(parsed_source.value()->field_infos.size(), 2u);
+
+  auto cloned = resolver.clone();
+  auto cloned_info = cloned->get_type_info<::SimpleStruct>();
+  ASSERT_TRUE(cloned_info.ok()) << cloned_info.error().to_string();
+  ASSERT_NE(cloned_info.value()->type_meta, nullptr);
+  EXPECT_EQ(cloned_info.value()->type_def, source_info.value()->type_def);
+  EXPECT_EQ(cloned_info.value()->type_meta->field_infos.size(), 2u);
+
+  auto rebuilt = resolver.build_final_type_resolver();
+  ASSERT_TRUE(rebuilt.ok()) << rebuilt.error().to_string();
+  auto rebuilt_info = rebuilt.value()->get_type_info<::SimpleStruct>();
+  ASSERT_TRUE(rebuilt_info.ok()) << rebuilt_info.error().to_string();
+  ASSERT_NE(rebuilt_info.value()->type_meta, nullptr);
+  EXPECT_EQ(rebuilt_info.value()->type_def, source_info.value()->type_def);
+}
+
+TEST(SerializationTest, SourceResolverFinalizes) {
+  auto source_resolver = std::make_shared<TypeResolver>();
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .type_resolver(source_resolver)
+                  .build();
+  ASSERT_TRUE(fory.register_struct<::SimpleStruct>(1).ok());
+  auto pending = source_resolver->get_type_info<::SimpleStruct>();
+  ASSERT_TRUE(pending.ok()) << pending.error().to_string();
+  EXPECT_EQ(pending.value()->type_meta, nullptr);
+
+  auto bytes = fory.serialize(::SimpleStruct{1, 2});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  expect_finalized_source(*source_resolver);
+}
+
+TEST(SerializationTest, DirectFailedRootFreezes) {
+  auto source_resolver = std::make_shared<TypeResolver>();
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .type_resolver(source_resolver)
+                  .build();
+
+  auto root_result = fory.deserialize<int32_t>(nullptr, 0);
+  ASSERT_FALSE(root_result.ok());
+
+  auto facade_registration = fory.register_struct<::SimpleStruct>(1);
+  ASSERT_FALSE(facade_registration.ok());
+
+  auto type_info = source_resolver->get_type_info_by_id(
+      static_cast<uint32_t>(TypeId::STRING));
+  ASSERT_TRUE(type_info.ok());
+  ASSERT_EQ(type_info.value()->harness.any_write_fn, nullptr);
+  ASSERT_EQ(type_info.value()->harness.any_read_fn, nullptr);
+
+  auto late_registration = register_any_type<std::string>(*source_resolver);
+  ASSERT_FALSE(late_registration.ok());
+  EXPECT_EQ(type_info.value()->harness.any_write_fn, nullptr);
+  EXPECT_EQ(type_info.value()->harness.any_read_fn, nullptr);
+  EXPECT_FALSE(
+      source_resolver->get_type_info(std::type_index(typeid(std::string)))
+          .ok());
+}
+
+TEST(SerializationTest, ThreadSafeSourceFinalizes) {
+  auto source_resolver = std::make_shared<TypeResolver>();
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .type_resolver(source_resolver)
+                  .build_thread_safe();
+  ASSERT_TRUE(fory.register_struct<::SimpleStruct>(1).ok());
+
+  auto bytes = fory.serialize(::SimpleStruct{1, 2});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  expect_finalized_source(*source_resolver);
+}
+
 TEST(SerializationTest, ThreadSafeForyMultiThread) {
   auto fory = Fory::builder()
                   .xlang(true)
@@ -2484,7 +2638,7 @@ TEST(SerializationTest, ThreadSafeForyMultiThread) {
   EXPECT_EQ(success_count.load(), k_num_threads * k_iterations_per_thread);
 }
 
-TEST(SerializationTest, ThreadSafeForyRejectsRegistrationAfterFirstSerialize) {
+TEST(SerializationTest, ThreadSafeRegistrationFreezes) {
   auto fory = Fory::builder()
                   .xlang(true)
                   .compatible(false)
@@ -2499,10 +2653,45 @@ TEST(SerializationTest, ThreadSafeForyRejectsRegistrationAfterFirstSerialize) {
 
   auto late_registration = fory.register_struct<::SimpleStruct>(2);
   EXPECT_FALSE(late_registration.ok());
+}
+
+TEST(SerializationTest, InputStreamFreezesBeforeAccess) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  RegistryProbeInputStream input_stream(fory);
+
+  EXPECT_FALSE(fory.deserialize<int32_t>(input_stream).ok());
+  EXPECT_TRUE(input_stream.registration_rejected());
+}
+
+TEST(SerializationTest, ThreadSafeFailedRootFreezes) {
+  auto source_resolver = std::make_shared<TypeResolver>();
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .type_resolver(source_resolver)
+                  .build_thread_safe();
+
+  auto root_result = fory.deserialize<int32_t>(nullptr, 0);
+  ASSERT_FALSE(root_result.ok());
+
+  auto facade_registration = fory.register_struct<::SimpleStruct>(1);
+  ASSERT_FALSE(facade_registration.ok());
+
+  auto type_info = source_resolver->get_type_info_by_id(
+      static_cast<uint32_t>(TypeId::STRING));
+  ASSERT_TRUE(type_info.ok());
+  ASSERT_EQ(type_info.value()->harness.any_write_fn, nullptr);
+  ASSERT_EQ(type_info.value()->harness.any_read_fn, nullptr);
+
+  auto late_registration = register_any_type<std::string>(*source_resolver);
   ASSERT_FALSE(late_registration.ok());
-  EXPECT_EQ(late_registration.error().code(), ErrorCode::Invalid);
-  EXPECT_NE(late_registration.error().to_string().find("Cannot register types"),
-            std::string::npos);
+  EXPECT_EQ(type_info.value()->harness.any_write_fn, nullptr);
+  EXPECT_EQ(type_info.value()->harness.any_read_fn, nullptr);
+  EXPECT_FALSE(
+      source_resolver->get_type_info(std::type_index(typeid(std::string)))
+          .ok());
 }
 
 TEST(SerializationTest, TemporalCarriersAreHashable) {

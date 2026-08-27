@@ -510,7 +510,7 @@ private:
   template <typename RegisterFn>
   Result<void, Error> register_type(RegisterFn &&fn) {
     std::lock_guard<std::mutex> lock(registration_mutex_);
-    if (FORY_PREDICT_FALSE(registration_locked_)) {
+    if (FORY_PREDICT_FALSE(registration_frozen_)) {
       return Unexpected(Error::invalid(
           "Cannot register types after first serialize/deserialize call"));
     }
@@ -518,9 +518,10 @@ private:
   }
 
 protected:
-  void lock_registration() const {
+  Result<std::unique_ptr<TypeResolver>, Error> finalize_type_resolver() const {
     std::lock_guard<std::mutex> lock(registration_mutex_);
-    registration_locked_ = true;
+    registration_frozen_ = true;
+    return type_resolver_->build_final_type_resolver();
   }
 
   /// Protected constructor - only derived classes can instantiate.
@@ -539,7 +540,7 @@ protected:
   Config config_;
   std::shared_ptr<TypeResolver> type_resolver_;
   mutable std::mutex registration_mutex_;
-  mutable bool registration_locked_{false};
+  mutable bool registration_frozen_{false};
 };
 
 // ============================================================================
@@ -595,27 +596,7 @@ public:
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
-    WriteContextGuard guard(*write_ctx_);
-    output_stream.reset();
-    write_ctx_->set_output_stream(&output_stream);
-    Buffer &buffer = write_ctx_->buffer();
-    buffer.bind_output_stream(&output_stream);
-    auto serialize_result = serialize_impl(obj, buffer);
-    if (FORY_PREDICT_FALSE(!serialize_result.ok())) {
-      buffer.clear_output_stream();
-      write_ctx_->set_output_stream(nullptr);
-      return Unexpected(std::move(serialize_result).error());
-    }
-    output_stream.force_flush();
-    buffer.clear_output_stream();
-    write_ctx_->set_output_stream(nullptr);
-    if (FORY_PREDICT_FALSE(output_stream.has_error())) {
-      return Unexpected(output_stream.error());
-    }
-    if (FORY_PREDICT_FALSE(write_ctx_->has_error())) {
-      return Unexpected(write_ctx_->take_error());
-    }
-    return output_stream.flushed_bytes();
+    return serialize_stream(output_stream, obj);
   }
 
   /// Serialize an object to a std::ostream.
@@ -626,8 +607,11 @@ public:
   /// @return Number of bytes written, or error.
   template <typename T>
   Result<size_t, Error> serialize(std::ostream &ostream, const T &obj) {
+    if (FORY_PREDICT_FALSE(!finalized_)) {
+      ensure_finalized();
+    }
     StdOutputStream output_stream(ostream);
-    return serialize(output_stream, obj);
+    return serialize_stream(output_stream, obj);
   }
 
   /// Serialize an object to an existing Buffer (fastest path).
@@ -642,13 +626,7 @@ public:
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
-    // Swap in the caller's buffer so all writes go there.
-    buffer.swap(write_ctx_->buffer());
-    auto result = serialize_impl(obj, write_ctx_->buffer());
-    buffer.swap(write_ctx_->buffer());
-    // reset internal state after use without clobbering caller buffer.
-    write_ctx_->reset();
-    return result;
+    return serialize_buffer(buffer, obj);
   }
 
   /// Serialize an object to an existing byte vector (zero-copy).
@@ -664,12 +642,14 @@ public:
   template <typename T>
   Result<size_t, Error> serialize_to(std::vector<uint8_t> &output,
                                      const T &obj) {
+    if (FORY_PREDICT_FALSE(!finalized_)) {
+      ensure_finalized();
+    }
     // Wrap the output vector in a Buffer for zero-copy serialization
     // writer_index starts at output.size() for appending
     Buffer buffer(output);
 
-    // Forward to Buffer version
-    auto result = serialize_to(buffer, obj);
+    auto result = serialize_buffer(buffer, obj);
 
     // Resize vector to actual written size
     output.resize(buffer.writer_index());
@@ -687,16 +667,7 @@ public:
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
-    if (data == nullptr) {
-      return Unexpected(Error::invalid("Data pointer is null"));
-    }
-    if (size == 0) {
-      return Unexpected(Error::invalid("Data size is zero"));
-    }
-
-    Buffer buffer(const_cast<uint8_t *>(data), static_cast<uint32_t>(size),
-                  false);
-    return deserialize_buffer<T>(buffer);
+    return deserialize_bytes<T>(data, size);
   }
 
   /// Deserialize an object from a byte vector.
@@ -706,7 +677,10 @@ public:
   /// @return Deserialized object, or error.
   template <typename T>
   Result<T, Error> deserialize(const std::vector<uint8_t> &data) {
-    return deserialize<T>(data.data(), data.size());
+    if (FORY_PREDICT_FALSE(!finalized_)) {
+      ensure_finalized();
+    }
+    return deserialize_bytes<T>(data.data(), data.size());
   }
 
   /// Deserialize an object from a Buffer, updating the buffer's reader_index.
@@ -735,20 +709,10 @@ public:
   /// @return Deserialized object, or error.
   template <typename T>
   Result<T, Error> deserialize(InputStream &input_stream) {
-    struct StreamShrinkGuard {
-      InputStream *input_stream = nullptr;
-      ~StreamShrinkGuard() {
-        if (input_stream != nullptr) {
-          input_stream->shrink_buffer();
-        }
-      }
-    };
-    StreamShrinkGuard shrink_guard{&input_stream};
-    Buffer &buffer = input_stream.get_buffer();
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
-    return deserialize_buffer<T>(buffer);
+    return deserialize_stream<T>(input_stream);
   }
 
   /// Deserialize an object from StdInputStream.
@@ -757,7 +721,10 @@ public:
   /// @param stream Input stream wrapper to read from.
   /// @return Deserialized object, or error.
   template <typename T> Result<T, Error> deserialize(StdInputStream &stream) {
-    return deserialize<T>(static_cast<InputStream &>(stream));
+    if (FORY_PREDICT_FALSE(!finalized_)) {
+      ensure_finalized();
+    }
+    return deserialize_stream<T>(stream);
   }
 
   // ==========================================================================
@@ -795,8 +762,7 @@ private:
   /// Finalize the type resolver on first use.
   void ensure_finalized() {
     if (!finalized_) {
-      lock_registration();
-      auto final_result = type_resolver_->build_final_type_resolver();
+      auto final_result = finalize_type_resolver();
       FORY_CHECK(final_result.ok())
           << "Failed to build finalized TypeResolver: "
           << final_result.error().to_string();
@@ -835,6 +801,73 @@ private:
         "Protocol mismatch: payload xlang=" +
         std::string(payload_xlang ? "true" : "false") +
         ", local xlang=" + std::string(config_.xlang ? "true" : "false"));
+  }
+
+  template <typename T>
+  Result<size_t, Error> serialize_stream(OutputStream &output_stream,
+                                         const T &obj) {
+    WriteContextGuard guard(*write_ctx_);
+    output_stream.reset();
+    write_ctx_->set_output_stream(&output_stream);
+    Buffer &buffer = write_ctx_->buffer();
+    buffer.bind_output_stream(&output_stream);
+    auto serialize_result = serialize_impl(obj, buffer);
+    if (FORY_PREDICT_FALSE(!serialize_result.ok())) {
+      buffer.clear_output_stream();
+      write_ctx_->set_output_stream(nullptr);
+      return Unexpected(std::move(serialize_result).error());
+    }
+    output_stream.force_flush();
+    buffer.clear_output_stream();
+    write_ctx_->set_output_stream(nullptr);
+    if (FORY_PREDICT_FALSE(output_stream.has_error())) {
+      return Unexpected(output_stream.error());
+    }
+    if (FORY_PREDICT_FALSE(write_ctx_->has_error())) {
+      return Unexpected(write_ctx_->take_error());
+    }
+    return output_stream.flushed_bytes();
+  }
+
+  template <typename T>
+  FORY_ALWAYS_INLINE Result<size_t, Error> serialize_buffer(Buffer &buffer,
+                                                            const T &obj) {
+    // Swap in the caller's buffer so all writes go there.
+    buffer.swap(write_ctx_->buffer());
+    auto result = serialize_impl(obj, write_ctx_->buffer());
+    buffer.swap(write_ctx_->buffer());
+    // reset internal state after use without clobbering caller buffer.
+    write_ctx_->reset();
+    return result;
+  }
+
+  template <typename T>
+  Result<T, Error> deserialize_bytes(const uint8_t *data, size_t size) {
+    if (data == nullptr) {
+      return Unexpected(Error::invalid("Data pointer is null"));
+    }
+    if (size == 0) {
+      return Unexpected(Error::invalid("Data size is zero"));
+    }
+
+    Buffer buffer(const_cast<uint8_t *>(data), static_cast<uint32_t>(size),
+                  false);
+    return deserialize_buffer<T>(buffer);
+  }
+
+  template <typename T>
+  Result<T, Error> deserialize_stream(InputStream &input_stream) {
+    struct StreamShrinkGuard {
+      InputStream *input_stream = nullptr;
+      ~StreamShrinkGuard() {
+        if (input_stream != nullptr) {
+          input_stream->shrink_buffer();
+        }
+      }
+    };
+    StreamShrinkGuard shrink_guard{&input_stream};
+    Buffer &buffer = input_stream.get_buffer();
+    return deserialize_buffer<T>(buffer);
   }
 
   /// Core serialization implementation.
@@ -962,24 +995,28 @@ class ThreadSafeFory : public BaseFory {
 public:
   template <typename T>
   Result<std::vector<uint8_t>, Error> serialize(const T &obj) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize(obj);
   }
 
   template <typename T>
   Result<size_t, Error> serialize(OutputStream &output_stream, const T &obj) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize(output_stream, obj);
   }
 
   template <typename T>
   Result<size_t, Error> serialize(std::ostream &ostream, const T &obj) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize(ostream, obj);
   }
 
   template <typename T>
   Result<size_t, Error> serialize_to(Buffer &buffer, const T &obj) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize_to(buffer, obj);
   }
@@ -987,28 +1024,34 @@ public:
   template <typename T>
   Result<size_t, Error> serialize_to(std::vector<uint8_t> &output,
                                      const T &obj) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize_to(output, obj);
   }
 
   template <typename T>
   Result<T, Error> deserialize(const uint8_t *data, size_t size) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->template deserialize<T>(data, size);
   }
 
   template <typename T>
   Result<T, Error> deserialize(const std::vector<uint8_t> &data) {
-    return deserialize<T>(data.data(), data.size());
+    ensure_finalized();
+    auto fory_handle = fory_pool_.acquire();
+    return fory_handle->template deserialize<T>(data.data(), data.size());
   }
 
   template <typename T>
   Result<T, Error> deserialize(InputStream &input_stream) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->template deserialize<T>(input_stream);
   }
 
   template <typename T> Result<T, Error> deserialize(StdInputStream &stream) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->template deserialize<T>(stream);
   }
@@ -1022,15 +1065,18 @@ private:
               config_, get_finalized_resolver(), Fory::PreFinalized{}));
         }) {}
 
-  std::shared_ptr<TypeResolver> get_finalized_resolver() const {
+  void ensure_finalized() const {
     std::call_once(finalized_once_flag_, [this]() {
-      lock_registration();
-      auto final_result = type_resolver_->build_final_type_resolver();
+      auto final_result = finalize_type_resolver();
       FORY_CHECK(final_result.ok())
           << "Failed to build finalized TypeResolver: "
           << final_result.error().to_string();
       finalized_resolver_ = std::move(final_result).value();
     });
+  }
+
+  std::shared_ptr<TypeResolver> get_finalized_resolver() const {
+    ensure_finalized();
     return finalized_resolver_->clone();
   }
 

@@ -101,14 +101,6 @@ describe("fory", () => {
     },
   );
 
-  test("freezes direct resolver registration", () => {
-    const fory = new Fory({ compatible: false });
-    fory.serialize(1);
-
-    expect(() => fory.typeResolver.registerSerializer(Type.struct(8105, {}))).toThrow();
-    expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8105)).toBeUndefined();
-  });
-
   test("keeps rejected descriptor mutable", () => {
     const fory = new Fory({ compatible: false });
     const typeInfo = Type.struct(8106, {});
@@ -117,24 +109,6 @@ describe("fory", () => {
     expect(() => fory.register(typeInfo)).toThrow();
     typeInfo.setNullable(true);
     expect(typeInfo.nullable).toBe(true);
-  });
-
-  test("rejects regeneration before codegen", () => {
-    let generated = 0;
-    const fory = new Fory({
-      compatible: false,
-      hooks: {
-        afterCodeGenerated(code) {
-          generated++;
-          return code;
-        },
-      },
-    });
-    fory.serialize(1);
-    const generatedBefore = generated;
-
-    expect(() => fory.typeResolver.regenerateReadSerializer(Type.struct(8107, {}))).toThrow();
-    expect(generated).toBe(generatedBefore);
   });
 
   test("keeps codegen callbacks from publishing registration", () => {
@@ -208,27 +182,68 @@ describe("fory", () => {
     expect(() => rootType.setNullable(true)).toThrow();
   });
 
-  test("initializes a published forward owner in place", () => {
+  test("rejects an unresolved nested schema", () => {
     const fory = new Fory({ compatible: false });
+    const typeResolver = fory.typeResolver as any;
+    const internalBefore = Array.from(typeResolver.internalSerializer);
+    const customBefore = Array.from(typeResolver.customSerializer.entries());
     const forwardType = Type.struct(8113);
-    const parent = fory.register(
-      Type.struct(8114, {
-        child: forwardType,
-      }),
-    );
-    const forwardOwner = fory.typeResolver.getSerializerById(TypeId.STRUCT, forwardType.userTypeId);
+    const parentType = Type.struct(8114, { child: forwardType });
+
+    expect(() => fory.register(parentType)).toThrow();
+
+    expect(Array.from(typeResolver.internalSerializer)).toEqual(internalBefore);
+    expect(Array.from(typeResolver.customSerializer.entries())).toEqual(customBefore);
+    expect(typeResolver.getSerializerById(TypeId.STRUCT, forwardType.userTypeId)).toBeUndefined();
+    expect(typeResolver.getSerializerById(TypeId.STRUCT, parentType.userTypeId)).toBeUndefined();
 
     fory.register(
       Type.struct(8113, {
         value: Type.int32(),
       }),
     );
-
-    expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, forwardType.userTypeId)).toBe(
-      forwardOwner,
+    const parent = fory.register(
+      Type.struct(8114, {
+        child: Type.struct(8113),
+      }),
     );
     const value = { child: { value: 7 } };
     expect(parent.deserialize(parent.serialize(value))).toEqual(value);
+  });
+
+  test("registers an empty root schema", () => {
+    const registered = new Fory({ compatible: false }).register(Type.struct(8122, {}));
+
+    expect(registered.deserialize(registered.serialize({}))).toEqual({});
+  });
+
+  test("registers a self-recursive schema", () => {
+    const nodeType = Type.struct(8123, {
+      value: Type.int32(),
+      next: Type.struct(8123).setNullable(true).setTrackingRef(true),
+    });
+    const registered = new Fory({ compatible: false, ref: true }).register(nodeType);
+    const value: any = { value: 7 };
+    value.next = value;
+
+    const result: any = registered.deserialize(registered.serialize(value));
+    expect(result.value).toBe(7);
+    expect(result.next).toBe(result);
+  });
+
+  test("registers a mutually recursive schema", () => {
+    const rightType = Type.struct(8125, {
+      value: Type.string(),
+      left: Type.struct(8124).setNullable(true),
+    });
+    const leftType = Type.struct(8124, {
+      value: Type.int32(),
+      right: rightType,
+    });
+    const registered = new Fory({ compatible: false }).register(leftType);
+    const value = { value: 7, right: { value: "right", left: null } };
+
+    expect(registered.deserialize(registered.serialize(value))).toEqual(value);
   });
 
   test.each(["userTypeId", "name", "options"] as const)(

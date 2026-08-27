@@ -60,7 +60,63 @@ type SerializerFactoryBuilder = () => (
   checkedTypeMetaWireTypeIdSymbol: symbol,
 ) => Serializer;
 
-type SerializerCreator = (serializerLookup: SerializerLookup) => Serializer;
+const uninitializedSerializer: Serializer = {
+  _initialized: false,
+  fixedSize: 0,
+  getTypeInfo: () => {
+    throw new Error("serializer is not initialized");
+  },
+  getTypeId: () => {
+    throw new Error("serializer is not initialized");
+  },
+  getUserTypeId: () => {
+    throw new Error("serializer is not initialized");
+  },
+  needToWriteRef: () => {
+    throw new Error("serializer is not initialized");
+  },
+  getHash: () => {
+    throw new Error("serializer is not initialized");
+  },
+  write: (value: any) => {
+    void value;
+    throw new Error("serializer is not initialized");
+  },
+  writeRef: (value: any) => {
+    void value;
+    throw new Error("serializer is not initialized");
+  },
+  writeNoRef: (value: any) => {
+    void value;
+    throw new Error("serializer is not initialized");
+  },
+  writeRefOrNull: (value: any) => {
+    void value;
+    throw new Error("serializer is not initialized");
+  },
+  writeTypeInfo: (value: any) => {
+    void value;
+    throw new Error("serializer is not initialized");
+  },
+  read: (fromRef: boolean) => {
+    void fromRef;
+    throw new Error("serializer is not initialized");
+  },
+  readRef: () => {
+    throw new Error("serializer is not initialized");
+  },
+  readRefWithoutTypeInfo: () => {
+    throw new Error("serializer is not initialized");
+  },
+  readNoRef: (fromRef: boolean) => {
+    void fromRef;
+    throw new Error("serializer is not initialized");
+  },
+  readTypeInfo: () => {
+    throw new Error("serializer is not initialized");
+  },
+  readDataAlwaysAdvances: false,
+};
 
 interface GeneratedRegistration {
   typeInfo: TypeInfo;
@@ -87,7 +143,7 @@ export class Gen {
     };
   }
 
-  private prepare(typeInfo: TypeInfo, serializerLookup: SerializerLookup): SerializerCreator {
+  private prepare(typeInfo: TypeInfo, serializerLookup: SerializerLookup): Serializer {
     const InnerGeneratorClass = CodegenRegistry.get(typeInfo.typeId);
     if (!InnerGeneratorClass) {
       throw new Error(`${typeInfo.typeId} generator not exists`);
@@ -113,18 +169,17 @@ export class Gen {
     }
     const factory = factoryBuilder();
     const localTypeMeta = generator.getLocalTypeMeta();
-    return (factoryLookup) =>
-      factory(
-        this.typeResolver,
-        factoryLookup,
-        Gen.external,
-        typeInfo,
-        this.regOptions,
-        localTypeMeta,
-        localTypeMetaSymbol,
-        checkedTypeMetaSerializerSymbol,
-        checkedTypeMetaWireTypeIdSymbol,
-      );
+    return factory(
+      this.typeResolver,
+      serializerLookup,
+      Gen.external,
+      typeInfo,
+      this.regOptions,
+      localTypeMeta,
+      localTypeMetaSymbol,
+      checkedTypeMetaSerializerSymbol,
+      checkedTypeMetaWireTypeIdSymbol,
+    );
   }
 
   private isRegistered(typeInfo: TypeInfo) {
@@ -158,7 +213,7 @@ export class Gen {
   }
 
   private addRegistration(typeInfo: TypeInfo) {
-    const owner = this.typeResolver.createSerializerPlaceholder();
+    const owner = { ...uninitializedSerializer };
     const entry: GeneratedRegistration = {
       typeInfo,
       serializer: owner,
@@ -225,7 +280,7 @@ export class Gen {
       for (const child of children) {
         this.traversalContainer(child);
       }
-      const serializer = this.prepare(typeInfo, this.serializerLookup)(this.serializerLookup);
+      const serializer = this.prepare(typeInfo, this.serializerLookup);
       Object.assign(entry.serializer, serializer);
     } finally {
       entry.preparing = false;
@@ -248,11 +303,8 @@ export class Gen {
       } else if (options?.props && Object.keys(options.props).length > 0) {
         this.prepareRegistration(typeInfo, Object.values(options.props));
       } else if (!this.isRegistered(typeInfo) && TypeId.structType(typeInfo.typeId)) {
-        // Keep the recursive owner local until every generated factory has completed. If a prior
-        // registration published a forward owner, factory captures use that owner without mutating
-        // it; commit initializes it in place so earlier serializers keep the same identity.
         if (this.findRegistration(typeInfo) === undefined) {
-          this.addRegistration(typeInfo);
+          throw new Error("nested struct schema must be registered or defined before use");
         }
       } else if (TypeId.enumType(typeInfo.typeId) && !this.isRegistered(typeInfo)) {
         this.prepareRegistration(typeInfo, []);
@@ -279,7 +331,7 @@ export class Gen {
   }
 
   reGenerateSerializer(typeInfo: TypeInfo) {
-    return this.prepare(typeInfo, this.typeResolver)(this.typeResolver);
+    return this.prepare(typeInfo, this.typeResolver);
   }
 
   generateSerializer(typeInfo: TypeInfo) {
@@ -288,6 +340,11 @@ export class Gen {
     // TypeInfo freezing may invoke application-owned proxy traps. A root entered there closes the
     // resolver before code generation or publication can continue.
     this.typeResolver.ensureRegistrationOpen();
+    if (!this.typeResolver.getSerializerByTypeInfo(typeInfo)?._initialized) {
+      // Seed the root owner before traversal so empty roots and self-recursive fields share the
+      // same transaction-local serializer without publishing an incomplete resolver entry.
+      this.addRegistration(typeInfo);
+    }
     this.traversalContainer(typeInfo);
     const serializer = this.typeResolver.getSerializerByTypeInfo(typeInfo);
     if (!serializer?._initialized) {

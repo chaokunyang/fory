@@ -152,6 +152,10 @@ const wrapperType = Type.struct("example.wrapper", {
 });
 ```
 
+A nested Struct that supplies only an ID or name must already be registered. Alternatively, define
+the complete nested schema in the same recursive `TypeInfo` graph. Registration rejects an
+unresolved nested identity without publishing either the parent or a placeholder.
+
 ## Field Metadata
 
 Field nullability, reference tracking, dynamic field behavior, numeric widths, and per-struct

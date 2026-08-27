@@ -46,7 +46,6 @@ type TypeResolverLike = {
   getSerializerByData(value: any): Serializer | null | undefined;
   isCompatible(): boolean;
   generateReadSerializer(typeInfo: TypeInfo): Serializer;
-  regenerateReadSerializer(typeInfo: TypeInfo): Serializer;
   getUnknownStructSerializer(typeMeta?: TypeMeta, wireTypeId?: number): Serializer;
 };
 
@@ -255,7 +254,9 @@ export class RefReader {
   constructor(private reader: BinaryReader) {}
 
   reset() {
-    this.readObjects = [];
+    if (this.readObjects.length !== 0) {
+      this.readObjects.length = 0;
+    }
   }
 
   getReadRef(refId: number) {

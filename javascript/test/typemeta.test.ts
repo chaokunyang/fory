@@ -550,9 +550,6 @@ describe("typemeta", () => {
         generateReadSerializer: () => {
           throw new Error("unused");
         },
-        regenerateReadSerializer: () => {
-          throw new Error("unused");
-        },
       } as any,
       config,
     );
@@ -759,9 +756,6 @@ describe("typemeta", () => {
         getSerializerByData: () => undefined,
         isCompatible: () => false,
         generateReadSerializer: () => {
-          throw new Error("unused");
-        },
-        regenerateReadSerializer: () => {
           throw new Error("unused");
         },
       } as any,
@@ -1460,21 +1454,6 @@ describe("typemeta", () => {
     expect(map.get("second").second).toBe("two");
   });
 
-  test("regenerated read serializers keep getTypeInfo", () => {
-    const fory = new Fory({ compatible: true });
-    const serializer = (fory as any).typeResolver.regenerateReadSerializer(
-      Type.struct(
-        { namespace: "example", typeName: "repro_struct" },
-        {
-          value: Type.int32(),
-        },
-      ),
-    );
-
-    expect(typeof serializer.getTypeInfo).toBe("function");
-    expect(serializer.getTypeInfo().named).toBe("example$repro_struct");
-  });
-
   test("caches compatible readers for alternating nested schemas", () => {
     const stringWriterFory = new Fory({ compatible: true });
     const boolWriterFory = new Fory({ compatible: true });
@@ -1556,9 +1535,6 @@ describe("typemeta", () => {
         getSerializerByData: () => undefined,
         isCompatible: () => true,
         generateReadSerializer: () => {
-          throw new Error("unused");
-        },
-        regenerateReadSerializer: () => {
           throw new Error("unused");
         },
       } as any,

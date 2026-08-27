@@ -35,64 +35,6 @@ import { BoolArray } from "./types/boolArray";
 import { isFloat16Array } from "./types/float16";
 import { getUnknownTypeMeta, UnknownStructSerializer } from "./unknownStruct";
 
-const uninitSerialize = {
-  _initialized: false,
-  fixedSize: 0,
-  getTypeInfo: () => {
-    throw new Error("uninitSerialize");
-  },
-  getTypeId: () => {
-    throw new Error("uninitSerialize");
-  },
-  getUserTypeId: () => {
-    throw new Error("uninitSerialize");
-  },
-  needToWriteRef: () => {
-    throw new Error("uninitSerialize");
-  },
-  getHash: () => {
-    throw new Error("uninitSerialize");
-  },
-  write: (v: any) => {
-    void v;
-    throw new Error("uninitSerialize");
-  },
-  writeRef: (v: any) => {
-    void v;
-    throw new Error("uninitSerialize");
-  },
-  writeNoRef: (v: any) => {
-    void v;
-    throw new Error("uninitSerialize");
-  },
-  writeRefOrNull: (v: any) => {
-    void v;
-    throw new Error("uninitSerialize");
-  },
-  writeTypeInfo: (v: any) => {
-    void v;
-    throw new Error("uninitSerialize");
-  },
-  read: (fromRef: boolean) => {
-    void fromRef;
-    throw new Error("uninitSerialize");
-  },
-  readRef: () => {
-    throw new Error("uninitSerialize");
-  },
-  readRefWithoutTypeInfo: () => {
-    throw new Error("uninitSerialize");
-  },
-  readNoRef: (fromRef: boolean) => {
-    void fromRef;
-    throw new Error("uninitSerialize");
-  },
-  readTypeInfo: () => {
-    throw new Error("uninitSerialize");
-  },
-  readDataAlwaysAdvances: false,
-};
-
 export default class TypeResolver {
   readonly trackingRef: boolean;
   private internalSerializer: Serializer[] = new Array(300);
@@ -192,53 +134,53 @@ export default class TypeResolver {
   }
 
   private initInternalSerializer() {
-    const registerSerializer = (typeInfo: TypeInfo) => {
+    const generateInternalSerializer = (typeInfo: TypeInfo) => {
       return new Gen(this).generateSerializer(typeInfo);
     };
-    registerSerializer(Type.string());
-    registerSerializer(new TypeInfo(TypeId.ENUM));
-    registerSerializer(new TypeInfo(TypeId.NAMED_ENUM));
-    registerSerializer(Type.any());
-    registerSerializer(Type.list(Type.any()));
-    registerSerializer(Type.map(Type.any(), Type.any()));
-    registerSerializer(Type.bool());
-    registerSerializer(Type.int8());
-    registerSerializer(Type.int16());
-    registerSerializer(Type.int32({ encoding: "fixed" }));
-    registerSerializer(Type.int32());
-    registerSerializer(Type.uint32({ encoding: "fixed" }));
-    registerSerializer(Type.uint64({ encoding: "fixed" }));
-    registerSerializer(Type.int64({ encoding: "fixed" }));
-    registerSerializer(Type.int64());
-    registerSerializer(Type.uint8());
-    registerSerializer(Type.uint16());
-    registerSerializer(Type.uint32());
-    registerSerializer(Type.uint64());
-    registerSerializer(Type.uint64({ encoding: "tagged" }));
-    registerSerializer(Type.int64({ encoding: "tagged" }));
-    registerSerializer(Type.float16());
-    registerSerializer(Type.bfloat16());
-    registerSerializer(Type.float32());
-    registerSerializer(Type.float64());
-    registerSerializer(Type.timestamp());
-    registerSerializer(Type.duration());
-    registerSerializer(Type.date());
-    registerSerializer(Type.decimal());
-    registerSerializer(Type.set(Type.any()));
-    registerSerializer(Type.binary());
-    registerSerializer(Type.boolArray());
-    registerSerializer(Type.uint8Array());
-    registerSerializer(Type.int8Array());
-    registerSerializer(Type.uint16Array());
-    registerSerializer(Type.int16Array());
-    registerSerializer(Type.uint32Array());
-    registerSerializer(Type.int32Array());
-    registerSerializer(Type.uint64Array());
-    registerSerializer(Type.int64Array());
-    registerSerializer(Type.float16Array());
-    registerSerializer(Type.bfloat16Array());
-    registerSerializer(Type.float32Array());
-    registerSerializer(Type.float64Array());
+    generateInternalSerializer(Type.string());
+    generateInternalSerializer(new TypeInfo(TypeId.ENUM));
+    generateInternalSerializer(new TypeInfo(TypeId.NAMED_ENUM));
+    generateInternalSerializer(Type.any());
+    generateInternalSerializer(Type.list(Type.any()));
+    generateInternalSerializer(Type.map(Type.any(), Type.any()));
+    generateInternalSerializer(Type.bool());
+    generateInternalSerializer(Type.int8());
+    generateInternalSerializer(Type.int16());
+    generateInternalSerializer(Type.int32({ encoding: "fixed" }));
+    generateInternalSerializer(Type.int32());
+    generateInternalSerializer(Type.uint32({ encoding: "fixed" }));
+    generateInternalSerializer(Type.uint64({ encoding: "fixed" }));
+    generateInternalSerializer(Type.int64({ encoding: "fixed" }));
+    generateInternalSerializer(Type.int64());
+    generateInternalSerializer(Type.uint8());
+    generateInternalSerializer(Type.uint16());
+    generateInternalSerializer(Type.uint32());
+    generateInternalSerializer(Type.uint64());
+    generateInternalSerializer(Type.uint64({ encoding: "tagged" }));
+    generateInternalSerializer(Type.int64({ encoding: "tagged" }));
+    generateInternalSerializer(Type.float16());
+    generateInternalSerializer(Type.bfloat16());
+    generateInternalSerializer(Type.float32());
+    generateInternalSerializer(Type.float64());
+    generateInternalSerializer(Type.timestamp());
+    generateInternalSerializer(Type.duration());
+    generateInternalSerializer(Type.date());
+    generateInternalSerializer(Type.decimal());
+    generateInternalSerializer(Type.set(Type.any()));
+    generateInternalSerializer(Type.binary());
+    generateInternalSerializer(Type.boolArray());
+    generateInternalSerializer(Type.uint8Array());
+    generateInternalSerializer(Type.int8Array());
+    generateInternalSerializer(Type.uint16Array());
+    generateInternalSerializer(Type.int16Array());
+    generateInternalSerializer(Type.uint32Array());
+    generateInternalSerializer(Type.int32Array());
+    generateInternalSerializer(Type.uint64Array());
+    generateInternalSerializer(Type.int64Array());
+    generateInternalSerializer(Type.float16Array());
+    generateInternalSerializer(Type.bfloat16Array());
+    generateInternalSerializer(Type.float32Array());
+    generateInternalSerializer(Type.float64Array());
 
     this.float64Serializer = this.getSerializerById(TypeId.FLOAT64);
     this.float32Serializer = this.getSerializerById(TypeId.FLOAT32);
@@ -272,7 +214,9 @@ export default class TypeResolver {
   }
 
   freezeRegistration() {
-    this.registrationFrozen = true;
+    if (!this.registrationFrozen) {
+      this.registrationFrozen = true;
+    }
   }
 
   ensureRegistrationOpen() {
@@ -281,12 +225,12 @@ export default class TypeResolver {
     }
   }
 
-  createSerializerPlaceholder(): Serializer {
-    return { ...uninitSerialize };
-  }
-
   commitGeneratedSerializers(entries: readonly { typeInfo: TypeInfo; serializer: Serializer }[]) {
+    this.ensureRegistrationOpen();
     const publications = entries.map((entry) => {
+      if (!entry.serializer._initialized) {
+        throw new Error("generated serializer graph is incomplete");
+      }
       const typeId = this.computeTypeId(entry.typeInfo);
       let internalTypeId: number | undefined;
       let customTypeKey: number | string | undefined;
@@ -308,21 +252,13 @@ export default class TypeResolver {
         internalTypeId,
         customTypeKey,
         existingSerializer,
-        descriptors:
-          existingSerializer === undefined || existingSerializer._initialized
-            ? undefined
-            : Object.getOwnPropertyDescriptors(entry.serializer),
       };
     });
-    this.ensureRegistrationOpen();
     for (const publication of publications) {
       if (publication.existingSerializer !== undefined) {
-        if (!publication.existingSerializer._initialized) {
-          // Complete only a resolver-owned forward placeholder. An initialized owner published by
-          // a nested registration is authoritative for this identity.
-          Object.defineProperties(publication.existingSerializer, publication.descriptors!);
-        }
-      } else if (publication.internalTypeId !== undefined) {
+        continue;
+      }
+      if (publication.internalTypeId !== undefined) {
         this.internalSerializer[publication.internalTypeId] = publication.entry.serializer;
       } else {
         this.customSerializer.set(publication.customTypeKey!, publication.entry.serializer);
@@ -330,61 +266,8 @@ export default class TypeResolver {
     }
   }
 
-  registerSerializer(typeInfo: TypeInfo, serializer: Serializer = uninitSerialize) {
-    this.ensureRegistrationOpen();
-    const typeId = this.computeTypeId(typeInfo);
-    if (!TypeId.isNamedType(typeId)) {
-      if (TypeId.needsUserTypeId(typeId) && typeInfo.userTypeId !== -1) {
-        const key = this.makeUserTypeKey(typeInfo.userTypeId);
-        if (this.customSerializer.has(key)) {
-          Object.assign(this.customSerializer.get(key)!, serializer);
-        } else {
-          this.customSerializer.set(key, { ...serializer });
-        }
-        return this.customSerializer.get(key);
-      }
-      if (typeId <= 0xff) {
-        if (this.internalSerializer[typeId]) {
-          Object.assign(this.internalSerializer[typeId], serializer);
-        } else {
-          this.internalSerializer[typeId] = { ...serializer };
-        }
-        return this.internalSerializer[typeId];
-      }
-      if (this.customSerializer.has(typeId)) {
-        Object.assign(this.customSerializer.get(typeId)!, serializer);
-      } else {
-        this.customSerializer.set(typeId, { ...serializer });
-      }
-      return this.customSerializer.get(typeId);
-    }
-
-    const name = typeInfo.named!;
-    if (this.customSerializer.has(name)) {
-      Object.assign(this.customSerializer.get(name)!, serializer);
-    } else {
-      this.customSerializer.set(name, { ...serializer });
-    }
-    return this.customSerializer.get(name);
-  }
-
   generateReadSerializer(typeInfo: TypeInfo) {
     return new Gen(this, { creator: typeInfo.options?.creator }).reGenerateSerializer(typeInfo);
-  }
-
-  regenerateReadSerializer(typeInfo: TypeInfo) {
-    this.ensureRegistrationOpen();
-    const serializer = this.generateReadSerializer(typeInfo);
-    return this.registerSerializer(typeInfo, {
-      readDataAlwaysAdvances: serializer.readDataAlwaysAdvances,
-      getHash: serializer.getHash,
-      getTypeInfo: serializer.getTypeInfo,
-      read: serializer.read,
-      readNoRef: serializer.readNoRef,
-      readRef: serializer.readRef,
-      readTypeInfo: serializer.readTypeInfo,
-      readRefWithoutTypeInfo: serializer.readRefWithoutTypeInfo,
-    } as any)!;
   }
 
   getSerializerByTypeInfo(typeInfo: TypeInfo) {

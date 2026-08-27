@@ -52,9 +52,11 @@ fory = pyfory.Fory(xlang=False, ref=False, strict=True)
 
 Keep `strict=True` for registered, trusted type surfaces. Use `strict=False` only when the configured
 surface includes native carriers such as functions, local classes, or objects reconstructed by
-reduction hooks. In either mode, register every application type and native carrier before the first
-root serialization or deserialization attempt. The first attempt permanently freezes the instance's
-registry even when it fails; `strict=False` does not enable late discovery or registration.
+reduction hooks. In either mode, register every application type and native carrier whose serializer
+must be installed before the first root serialization or deserialization attempt. The first attempt
+permanently freezes the instance's registry even when it fails. With `strict=False`, the configured
+policy may still authorize module-global classes and callables resolved while reading a native
+payload; that lookup does not add a type or serializer to the frozen registry.
 
 ## Common Usage
 

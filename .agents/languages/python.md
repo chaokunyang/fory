@@ -22,7 +22,13 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
   execute application factories or callbacks while holding its pool lock. Its registration
   linearization is reentrant so nested facade registrations share the same publication order. A
   root started during registration must not reuse the staging instance, and root reentry from a
-  running user `fory_factory` fails without recursively invoking that factory.
+  running user `fory_factory` or retained registration callback fails without recursively building
+  another instance. The non-reentrant pool lock owns only pool state; the separate instance-build
+  boundary covers the factory and complete callback replay.
+- Registry freeze prohibits type and serializer publication after the first root; it does not
+  prohibit policy-authorized resolution of module-global classes or callables during a non-strict
+  native read when that resolution does not mutate registry state. Do not describe these two
+  operations as one kind of late discovery.
 - In non-strict native mode, public unqualified `register_type` for a built-in native carrier uses
   the same reserved type identity as pre-root discovery. Ordinary application classes and
   dataclasses retain their struct registration identity. Configure both through public registration;

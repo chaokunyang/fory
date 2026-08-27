@@ -28,7 +28,7 @@ or state restoration.
 Native mode supports a configured Python-only type surface that may include Python functions, local
 classes, closures, and reduction hooks. Register every application type and Python-native carrier
 before the first root attempt. The first attempt permanently freezes registration, even if it
-fails, and `strict=False` does not permit late discovery.
+fails, and `strict=False` does not permit late type or serializer registration.
 
 Use xlang mode instead when the payload crosses language boundaries or the data model should be a
 portable schema shared with other Fory implementations.

@@ -23,9 +23,11 @@ Python native mode serializes Python-specific callable and type values that are 
 type system. Use `strict=False` only for trusted payloads and apply a deserialization policy when
 the accepted dynamic surface must be restricted.
 
-Register every callable carrier and application type before the first root operation. The first
-serialization or deserialization attempt permanently freezes the registry, even when it fails;
-`strict=False` does not enable late discovery or registration.
+Register every callable carrier and application type whose serializer must be installed before the
+first root operation. The first serialization or deserialization attempt permanently freezes the
+registry, even when it fails. With `strict=False`, the configured policy may still resolve a
+module-global function or class while reading a trusted native payload; that resolution does not
+install a type or serializer.
 
 ## Serialize Global Functions
 

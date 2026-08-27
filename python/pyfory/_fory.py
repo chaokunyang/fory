@@ -167,9 +167,11 @@ class Fory:
                 classes (default: True). Compatible metadata for an unregistered remote
                 Struct uses the fixed data-only UnknownStruct carrier instead of loading
                 or generating the sender-named class. Disabling strict mode authorizes
-                configured native carriers but does not permit discovery or registration
-                after the first root. Dynamic application types can be insecure if
-                malicious code exists in __new__/__init__/__eq__/__hash__ methods.
+                configured native carriers. Policy-authorized module globals may be
+                resolved while reading trusted native payloads, but the first root still
+                freezes type and serializer registration. Dynamic application types can
+                be insecure if malicious code exists in __new__/__init__/__eq__/__hash__
+                methods.
                 **WARNING**: Only disable in trusted environments. When disabling strict
                 mode, you should provide a custom `policy` parameter to control which types
                 are allowed. We are not responsible for security risks when this option

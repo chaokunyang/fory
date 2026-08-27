@@ -80,11 +80,11 @@ payloads, and keep the same registration IDs or names on every peer that shares
 those payloads.
 
 The first root serialization or deserialization attempt permanently closes
-registration, including when that attempt fails. `strict=False` relaxes
-the deserialization policy for registered Python-native carriers; it does not
-permit late discovery or registration. Register callable, class, method, and
-reduction carriers together with the application types that can appear in the
-graph before the first root operation.
+registration, including when that attempt fails. `strict=False` permits its
+configured policy to resolve module-global classes and callables while reading
+trusted native payloads, but that resolution does not reopen the registry or
+install a new serializer. Register native carrier types and application types
+whose serializers must be installed before the first root operation.
 Later registration attempts fail.
 
 Compatible metadata has one data-only exception: when a remote Struct has no

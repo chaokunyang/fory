@@ -150,8 +150,9 @@ print(result)  # Person(name='Alice', age=30)
 Register every application type before the first root serialization or deserialization attempt. In
 native mode, also register callable, class, method, state, and reduction carrier types that can
 appear in the object graph. The first root attempt permanently freezes the instance's registry,
-including when that attempt fails. Setting `strict=False` does not permit discovery or registration
-after that point.
+including when that attempt fails. Setting `strict=False` may authorize module-global resolution
+during a trusted native read, but it does not permit type or serializer registration after that
+point.
 
 If the first operation exposes an incomplete or invalid registration, create a new instance and
 register the complete type surface before retrying. A fully configured instance can process a later

@@ -47,7 +47,7 @@ assert np.array_equal(arrays["matrix"], result["matrix"])
 The ndarray carrier itself is available when the instance is created. Register application types
 that contain ndarrays, plus every custom type that can appear inside an object-dtype ndarray, before
 the first root attempt. The first root attempt permanently freezes registration, including when it
-fails. `strict=False` does not permit late discovery or registration.
+fails. `strict=False` does not permit late type or serializer registration.
 
 ## Out-of-Band Buffers
 

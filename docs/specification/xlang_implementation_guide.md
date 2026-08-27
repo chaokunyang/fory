@@ -129,6 +129,14 @@ table's current logical count participate in the next reset; otherwise prior
 owners create duplicate cleanup work across roots. Implementations should
 release an unusual high-water backing table.
 
+Java scoped meta-share `TypeInfo` occurrence tables use their logical size as the protocol
+visibility boundary. A table with at most 8192 active entries resets only that size and retains its
+slots; a larger table replaces its backing with eight slots. This uniform owner rule keeps normal
+cleanup allocation-free and must not be specialized for particular entry counts or benchmark
+shapes. JavaScript read-side occurrence arrays use native replacement reset instead. Its MetaString
+and TypeMeta writer owner tables retain bounded backing through 8192 active owners, reset only
+their own logical size after restoring active owner IDs, and release backing above that boundary.
+
 That operation-local state includes:
 
 - the current buffer

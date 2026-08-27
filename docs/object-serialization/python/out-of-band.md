@@ -35,7 +35,7 @@ Out-of-band serialization separates the Fory root bytes from selected buffers:
 `numpy.ndarray` and `pickle.PickleBuffer` are built-in native types. If an application wrapper or
 an object-dtype ndarray can contain custom values, register every application and Python-native
 carrier type before the first root attempt. That first attempt permanently freezes registration,
-including when it fails; `strict=False` does not permit late discovery.
+including when it fails; `strict=False` does not permit late type or serializer registration.
 
 ## Basic Out-of-Band Serialization
 

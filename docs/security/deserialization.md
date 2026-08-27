@@ -617,24 +617,12 @@ that case, classify the behavior by concrete impact:
 
 ## Registry Lifecycle
 
-Registration code that invokes serializer constructors, factories, or application callbacks must
-recheck the authoritative per-instance registry freeze after the callback and before publishing
-the entry prepared by that callback. A callback that starts the first root permanently closes the
-in-progress registration; implementations must not publish and then repair or invalidate late
-state. Kotlin and Scala combined generated-struct registration retain their canonical type-first
-owner because generated construction resolves that type, but must recheck before the subsequent
-serializer replacement. Module installation may perform complete nested registrations and must
-recheck before publishing its installed marker. Automatic type IDs are allocated only at their
-publication point, after callback preparation and the freeze recheck, so failed or nested
-registration needs no reservation or rollback state. Thread-safe facades validate a registration
-before retaining its replay callback, and application factories and callbacks execute outside
-non-reentrant pool locks.
-
-JavaScript generated registration initializes its recursive serializer graph against local owners
-before one guarded resolver publication. Application code hooks and generated factories complete
-before global placeholders, nested serializers, descriptors, or cache state are changed. Runtime
-and dynamic serializer lookup continues to use the authoritative resolver; the local lookup exists
-only while generated factories capture fixed serializer owners.
+The first root operation permanently closes type and serializer registration, including when that
+operation or registry finalization fails. Registration that invokes application code must recheck
+the authoritative lifecycle before publishing callback-derived state. Thread-safe facades retain
+only registrations that completed before the freeze. These rules prevent a failed or reentrant
+registration from changing the accepted type surface after deserialization has begun. Runtime-
+specific publication ownership belongs in the implementation guide and language guidance.
 
 ## Metadata And Type Resolution
 
@@ -661,18 +649,11 @@ Metadata readers should:
   entry so input cannot make the JVM derive an unbounded family of array classes.
 - Reset or release metadata state at the correct root-operation boundary.
 
-Java scoped meta-share TypeInfo occurrences are root-local. The current table size
-is the protocol visibility boundary, so resetting it to zero makes retained slots
-unreachable from later roots. Root cleanup retains the backing array and its slots
-for tables of at most 8192 entries to avoid clearing or allocating on the normal
-path. After a root exceeds 8192 entries, cleanup replaces the backing array with
-an eight-slot array so an unusual metadata high-water mark is not retained.
-
-JavaScript root entry releases reference and metadata state left by the
-previous operation, including a failed operation, before the context is reused.
-Operation-local reader occurrences and writer metadata owner IDs are reset at
-that reuse boundary. Full reference and metadata cleanup does not run on the
-root exit path.
+Operation-local metadata occurrences and writer IDs must be reset before the context is reused,
+including after a failed root. The reset must make prior-root entries unreachable and release
+unusual high-water backing without adding allocation or slot-clearing work to normal roots.
+Runtime-specific retention thresholds and reset ownership belong in the implementation guide and
+language guidance.
 
 A class-resolution cache reachable from untrusted deserialization may publish
 an entry only from explicit trusted configuration or after the active class

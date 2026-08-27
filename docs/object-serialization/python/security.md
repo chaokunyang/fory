@@ -83,9 +83,11 @@ fory.register_type(types.FunctionType)
 ```
 
 The first root attempt permanently freezes registration, including when that attempt fails.
-`strict=False` does not allow late discovery or registration. If that first operation exposes an
-incomplete or invalid registration, create and configure a new instance before retrying. A fully
-configured reader can process a later root after a malformed-data failure.
+`strict=False` does not permit type or serializer registration after that boundary, but its policy
+may authorize module-global classes and callables resolved while reading a trusted native payload.
+That resolution does not mutate the registry. If the first operation exposes an incomplete or
+invalid registration, create and configure a new instance before retrying. A fully configured
+reader can process a later root after a malformed-data failure.
 
 Received remote metadata is also limited:
 

@@ -23,6 +23,10 @@ Load this file when changing `cpp/`, Cython build plumbing, or C++ xlang behavio
   acquiring pooled instances. `BaseFory` and the source `TypeResolver` keep separate owner-local
   freeze gates so direct resolver registration cannot bypass the facade gate. Both reject before
   mutation; do not collapse these gates or describe permanent registry freeze as finalization.
+- Keep `TypeResolver::check_registration()` as the single out-of-line owner of the frozen and
+  registration-thread checks. Do not add a layout-preserving helper, padding, or call-shape
+  workaround. Resolver finalization prepares metadata completely and publishes it only after the
+  completed resolver clone succeeds; failed finalization must not expose partial metadata.
 - Put private methods last in class definitions, immediately before private fields.
 - Do not redesign alias-based or low-level public type shapes to add convenience methods unless the user explicitly asks for that API change.
 - For cross-language feature ports, match protocol behavior but use idiomatic C++ ownership and layering instead of mirroring Java structure literally.

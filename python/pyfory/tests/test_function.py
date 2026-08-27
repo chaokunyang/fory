@@ -15,7 +15,82 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import marshal
+import types
+
+import pytest
+
 import pyfory
+from pyfory.policy import DEFAULT_POLICY
+from pyfory.serialization import Buffer
+from pyfory.serializer import FunctionSerializer
+
+
+def test_function_globals_carrier():
+    def local_func():
+        return None
+
+    writer = pyfory.Fory(xlang=False)
+    buffer = Buffer.allocate(256)
+    try:
+        writer.write_context.prepare(buffer)
+        buffer.write_int8(2)
+        buffer.write_string(local_func.__module__)
+        buffer.write_string(local_func.__qualname__)
+        buffer.write_bytes_and_size(marshal.dumps(local_func.__code__))
+        buffer.write_bool(False)
+        buffer.write_bool(False)
+        buffer.write_var_uint32(0)
+        buffer.write_var_uint32(0)
+        writer.write_context.write_ref([])
+        writer.write_context.write_ref({})
+        data = buffer.to_bytes(0, buffer.get_writer_index())
+    finally:
+        writer.reset_write()
+
+    reader = pyfory.Fory(xlang=False, strict=False)
+    serializer = FunctionSerializer(reader.type_resolver, types.FunctionType)
+    try:
+        reader.read_context.prepare(Buffer(data))
+        with pytest.raises(Exception):
+            reader.read_context.read_non_ref(serializer)
+    finally:
+        reader.reset_read()
+
+    class DictSubclass(dict):
+        def __len__(self):
+            raise AssertionError("dict subclass operations must not run")
+
+    class FunctionReadContext:
+        policy = DEFAULT_POLICY
+
+        def __init__(self):
+            self._strings = iter((local_func.__module__, local_func.__qualname__))
+
+        def read_int8(self):
+            return 2
+
+        def read_string(self):
+            return next(self._strings)
+
+        def read_bytes_and_size(self):
+            return marshal.dumps(local_func.__code__)
+
+        def reserve_graph_memory(self, _size):
+            pass
+
+        def read_bool(self):
+            return False
+
+        def read_var_uint32(self):
+            return 0
+
+        def read_ref(self):
+            return DictSubclass()
+
+    with pytest.raises(Exception) as failure:
+        serializer._deserialize_function(FunctionReadContext())
+    assert not isinstance(failure.value, AssertionError)
 
 
 def test_lambda_functions_serialization():
@@ -23,7 +98,6 @@ def test_lambda_functions_serialization():
     fory = pyfory.Fory(
         xlang=False,
         strict=False,
-        compatible=False,
     )
     test_input = 5
 
@@ -65,13 +139,13 @@ def test_regular_functions_serialization():
 
     # Test regular function
     fory.register_type(type(add_one))
+    # Registry contents are finalized by the first root operation.
+    fory.register_type(tuple)
+    fory.register_type(list)
     serialized = fory.serialize(add_one)
     deserialized = fory.deserialize(serialized)
     assert add_one(test_input) == deserialized(test_input)
 
-    # Register the necessary types for complex functions
-    fory.register_type(tuple)
-    fory.register_type(list)
     # dict is already registered by default with MapSerializer
 
     # Test complex function

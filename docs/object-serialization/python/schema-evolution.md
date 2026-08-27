@@ -60,25 +60,27 @@ class SlotMessage:
 import pyfory
 from dataclasses import dataclass
 
-# Version 1: Original class
+# Version 1: Writer schema
 @dataclass
-class User:
+class UserV1:
     name: str
     age: pyfory.Int32
 
-f = pyfory.Fory(xlang=True)
-f.register(User, name="User")
-data = f.dumps(User("Alice", 30))
+writer = pyfory.Fory(xlang=True)
+writer.register(UserV1, name="User")
+data = writer.dumps(UserV1("Alice", 30))
 
-# Version 2: Add new field (backward compatible)
+# Version 2: Reader schema with a new field
 @dataclass
-class User:
+class UserV2:
     name: str
     age: pyfory.Int32
     email: str = "unknown@example.com"  # New field with default
 
-# Can still deserialize old data
-user = f.loads(data)
+# Register the reader schema on a separate instance.
+reader = pyfory.Fory(xlang=True)
+reader.register(UserV2, name="User")
+user = reader.loads(data)
 print(user.email)  # "unknown@example.com"
 ```
 

@@ -41,6 +41,19 @@ print(obj)  # {'name': 'Alice', 'age': 30, 'scores': [95, 87, 92]}
 
 **Note**: `dumps()`/`loads()` are aliases for `serialize()`/`deserialize()`. Both APIs are identical, use whichever feels more intuitive.
 
+## Registration Lifecycle
+
+Register every application type before the first root serialization or deserialization attempt. In
+Python native mode, also register any callable, class, method, state, or reduction carrier that can
+appear in the graph. The first root serialization or deserialization attempt permanently freezes
+the instance's registry, even when the operation fails. `strict=False` does not enable late type
+discovery or registration.
+
+If the first operation fails because registration is incomplete or invalid, create a new instance,
+register the complete type surface, and retry with that instance. A fully configured instance can
+process a later root after a failure while reading input data or serializing a value. See
+[Type Registration](type-registration.md) for the complete lifecycle.
+
 ## Custom Class Serialization
 
 Use dataclasses and type annotations for stable xlang payloads:
@@ -82,15 +95,14 @@ result = f.deserialize(data)
 assert result[0] is result[1]
 ```
 
-For arbitrary Python object graphs, local classes, functions, and methods, use
+For configured Python-native object graphs, local classes, functions, and methods, use
 [Native Serialization](native.md).
 
 ## Performance Tips
 
 1. **Disable `ref=True` if not needed**: Reference tracking has overhead
-2. **Use type_id instead of name**: Integer IDs are faster than string names
-3. **Reuse Fory instances**: Create once, use many times
-4. **Enable Cython**: Make sure `ENABLE_FORY_CYTHON_SERIALIZATION=1`
+2. **Reuse Fory instances**: Create once, use many times
+3. **Enable Cython**: Make sure `ENABLE_FORY_CYTHON_SERIALIZATION=1`
 
 ```python
 # Good: Reuse instance
@@ -288,7 +300,11 @@ Fory row-format schemas.
 
 ### Differences from Python Native Mode
 
-The binary protocol and API are similar to `pyfory`'s Python native mode, but Python native mode can serialize any Python object—including global functions, local functions, lambdas, local classes, and types with custom serialization using `__getstate__/__reduce__/__reduce_ex__`, which are **not allowed** in xlang mode.
+The binary protocol and API are similar to `pyfory`'s Python native mode, but native mode supports a
+configured Python-only type surface that may include global functions, local functions, lambdas,
+local classes, and types with custom serialization using `__getstate__`, `__reduce__`, or
+`__reduce_ex__`. Register those application and carrier types before the first root attempt. These
+Python-specific values are **not allowed** in xlang mode.
 
 ### Specifications and References
 

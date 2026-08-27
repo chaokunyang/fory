@@ -269,6 +269,9 @@ cdef class TypeResolver:
     cdef flat_hash_map[uint32_t, PyObject *] _c_user_type_id_to_type_info
     cdef flat_hash_map[uint64_t, PyObject *] _c_types_info
     cdef flat_hash_map[pair[int64_t, int64_t], PyObject *] _c_meta_hash_to_type_info
+    # The Python resolver owns registry mutability. This monotonic native cache only
+    # avoids re-entering Python after that owner has completed its first freeze attempt.
+    cdef bint registry_freeze_complete
 
     def __init__(self, Config config, *, shared_registry):
         """
@@ -300,6 +303,7 @@ cdef class TypeResolver:
         self._ns_type_to_type_info = resolver._ns_type_to_type_info
         self._local_type_info_by_hash = resolver._local_type_info_by_hash
         self._meta_shared_type_info = resolver._meta_shared_type_info
+        self.registry_freeze_complete = False
         for typeinfo in resolver._types_info.values():
             self._populate_type_info(typeinfo)
 
@@ -309,6 +313,14 @@ cdef class TypeResolver:
         self.resolver.initialize()
         for typeinfo in self.resolver._types_info.values():
             self._populate_type_info(typeinfo)
+
+    cdef inline void _freeze_registry(self):
+        cdef object typeinfo
+        if not self.registry_freeze_complete:
+            if self.resolver._freeze_registry():
+                for typeinfo in self.resolver._types_info.values():
+                    self._populate_type_info(typeinfo)
+            self.registry_freeze_complete = True
 
     def register_type(
         self,
@@ -348,11 +360,14 @@ cdef class TypeResolver:
         cdef TypeInfo typeinfo
         cdef uint8_t previous_type_id
         cdef uint32_t previous_user_type_id
-        typeinfo = self.resolver.get_type_info(cls)
+        self.resolver._check_registry_mutable()
+        typeinfo = self._types_info.get(normalize_fory_type(cls))
+        if typeinfo is None:
+            self.resolver.register_serializer(cls, serializer)
+            return
         previous_type_id = typeinfo.type_id
         previous_user_type_id = typeinfo.user_type_id
         self.resolver.register_serializer(cls, serializer)
-        typeinfo = self.resolver.get_type_info(cls)
         if previous_type_id != typeinfo.type_id or previous_user_type_id != typeinfo.user_type_id:
             if (
                 previous_type_id == <uint8_t>TypeId.ENUM
@@ -566,7 +581,7 @@ cdef class TypeResolver:
         write_context.write_var_uint32(index << 1)
         type_def = typeinfo.type_def
         if type_def is None:
-            self.resolver._set_type_info(typeinfo)
+            self.resolver._finalize_type_info(typeinfo)
             type_def = typeinfo.type_def
         write_context.write_bytes(type_def.encoded)
 
@@ -709,7 +724,7 @@ cdef class TypeResolver:
                 raise TypeError("Type metadata owner does not match the declared type")
         if typeinfo is not None:
             if typeinfo.type_def is None:
-                self.resolver._set_type_info(typeinfo)
+                self.resolver._finalize_type_info(typeinfo)
             if typeinfo.type_def is not None:
                 local_header = Buffer(typeinfo.type_def.encoded).read_int64()
                 if _typedef_hash_key(local_header) == hash_key:
@@ -1224,6 +1239,7 @@ cdef class Fory:
         )
 
     def dump(self, obj, stream):
+        self.type_resolver._freeze_registry()
         try:
             self.buffer.set_writer_index(0)
             self.buffer.bind_output_stream(Buffer.wrap_output_stream(stream))
@@ -1236,7 +1252,7 @@ cdef class Fory:
             self.force_flush()
         finally:
             self.buffer.bind_output_stream(None)
-            self.reset_write()
+            self.write_context.reset()
 
     def loads(self, buffer, buffers=None, unsupported_objects=None):
         return self.deserialize(
@@ -1247,6 +1263,7 @@ cdef class Fory:
 
     def serialize(self, obj, Buffer buffer=None, buffer_callback=None, unsupported_callback=None):
         cdef Buffer write_buffer
+        self.type_resolver._freeze_registry()
         try:
             write_buffer = self._serialize(
                 obj,
@@ -1260,7 +1277,7 @@ cdef class Fory:
                 return write_buffer
             return write_buffer.to_bytes(0, write_buffer.get_writer_index())
         finally:
-            self.reset_write()
+            self.write_context.reset()
 
     cdef Buffer _serialize(self, obj, Buffer buffer=None, buffer_callback=None, unsupported_callback=None):
         cdef WriteContext write_context = self.write_context
@@ -1273,8 +1290,12 @@ cdef class Fory:
         # so it should not pay an extra method call just to bind the active buffer.
         write_context.buffer = buffer
         write_context.c_buffer = buffer.c_buffer
-        write_context.buffer_callback = buffer_callback
-        write_context.unsupported_callback = unsupported_callback
+        # Root cleanup clears prior callbacks, so the common None path needs no
+        # object assignment or reference-count traffic here.
+        if buffer_callback is not None:
+            write_context.buffer_callback = buffer_callback
+        if unsupported_callback is not None:
+            write_context.unsupported_callback = unsupported_callback
         mask_index = buffer.get_writer_index()
         buffer.grow(1)
         buffer.set_writer_index(mask_index + 1)
@@ -1286,6 +1307,7 @@ cdef class Fory:
         return buffer
 
     def deserialize(self, buffer, buffers=None, unsupported_objects=None):
+        self.type_resolver._freeze_registry()
         try:
             return self._deserialize(
                 buffer,
@@ -1293,7 +1315,7 @@ cdef class Fory:
                 unsupported_objects=unsupported_objects,
             )
         finally:
-            self.reset_read()
+            self.read_context.reset()
 
     cdef object _deserialize(self, buffer, buffers=None, unsupported_objects=None):
         cdef ReadContext read_context = self.read_context

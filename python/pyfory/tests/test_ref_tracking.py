@@ -123,6 +123,7 @@ def test_collection_tuple_shared_reference_python_mode():
 def test_collection_set_element_alias_with_outer_reference_python_mode():
     fory = pyfory.Fory(xlang=False, ref=True, strict=False, compatible=False)
     token = HashKey("shared-key")
+    fory.register_type(HashKey)
     payload = [{token}, token]
     restored = _roundtrip(fory, payload)
 
@@ -155,6 +156,7 @@ def test_map_self_cycle_and_shared_submap_python_mode():
 def test_map_key_alias_with_outer_reference_python_mode():
     fory = pyfory.Fory(xlang=False, ref=True, strict=False, compatible=False)
     key = HashKey("k")
+    fory.register_type(HashKey)
     payload = [{key: "value"}, key]
     restored = _roundtrip(fory, payload)
 

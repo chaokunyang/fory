@@ -26,6 +26,11 @@ from pyfory.error import TypeUnregisteredError
 from pyfory.serializer import ReduceSerializer
 
 
+def register_reduce_types(fory, *classes):
+    for cls in (type, types.BuiltinFunctionType, *classes):
+        fory.register_type(cls)
+
+
 _reduce_factory_calls = []
 _class_callable_calls = []
 _function_factory_calls = []
@@ -295,6 +300,7 @@ def test_policy_reduce_global():
 def test_nonstrict_reduce_global():
     _reduce_factory_calls.clear()
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+    fory.register_type(NestedGlobalReduce)
 
     assert fory.deserialize(fory.serialize(NestedGlobalReduce("outer", "allowed"))) == NestedGlobalReduce("result", "allowed")
     assert _reduce_factory_calls == ["allowed"]
@@ -389,6 +395,8 @@ def test_policy_reduce_function():
 
 def test_nonstrict_reduce_function():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+    fory.register_type(types.FunctionType)
+    fory.register_type(FunctionCallableReduce)
     _function_factory_calls.clear()
 
     value = FunctionCallableReduce("allowed")
@@ -457,6 +465,7 @@ def test_basic_reduce_object():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = BasicReduceObject(42, 3)
+    register_reduce_types(fory, BasicReduceObject)
 
     # Verify ReduceSerializer is used
     serializer = fory.type_resolver.get_serializer(BasicReduceObject)
@@ -476,6 +485,7 @@ def test_reduce_with_state_object():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = ReduceWithStateObject("test", {"key": "value"})
+    register_reduce_types(fory, ReduceWithStateObject)
 
     # Verify ReduceSerializer is used
     serializer = fory.type_resolver.get_serializer(ReduceWithStateObject)
@@ -496,6 +506,7 @@ def test_reduce_ex_object():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = ReduceExObject(5, 7)
+    register_reduce_types(fory, ReduceExObject)
 
     # Verify ReduceSerializer is used
     serializer = fory.type_resolver.get_serializer(ReduceExObject)
@@ -516,6 +527,7 @@ def test_reduce_with_list_items():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = ReduceWithListItems([1, 2, 3, 4])
+    register_reduce_types(fory, ReduceWithListItems)
 
     # Verify ReduceSerializer is used
     serializer = fory.type_resolver.get_serializer(ReduceWithListItems)
@@ -535,6 +547,7 @@ def test_reduce_with_dict_items():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = ReduceWithDictItems({"a": 1, "b": 2})
+    register_reduce_types(fory, ReduceWithDictItems)
 
     # Verify ReduceSerializer is used
     serializer = fory.type_resolver.get_serializer(ReduceWithDictItems)
@@ -549,11 +562,12 @@ def test_reduce_with_dict_items():
     assert deserialized.name == "dict_obj"
 
 
-def test_reduce_precedence_over_stateful():
+def test_reduce_precedes_stateful():
     """Test that ReduceSerializer has higher precedence than StatefulSerializer"""
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = BothReduceAndStateful(100)
+    register_reduce_types(fory, BothReduceAndStateful)
 
     # Verify ReduceSerializer is used, not StatefulSerializer
     serializer = fory.type_resolver.get_serializer(BothReduceAndStateful)
@@ -576,6 +590,7 @@ def test_reference_tracking():
     obj1 = BasicReduceObject(42)
     obj2 = BasicReduceObject(42)
     container = [obj1, obj1, obj2]  # obj1 appears twice
+    register_reduce_types(fory, BasicReduceObject)
 
     serialized = fory.serialize(container)
     deserialized = fory.deserialize(serialized)
@@ -595,6 +610,7 @@ def test_nested_reduce_objects():
 
     inner = BasicReduceObject(10, 2)
     outer = ReduceWithStateObject("outer", {"inner": inner})
+    register_reduce_types(fory, BasicReduceObject, ReduceWithStateObject)
 
     serialized = fory.serialize(outer)
     deserialized = fory.deserialize(serialized)
@@ -604,21 +620,3 @@ def test_nested_reduce_objects():
     assert deserialized.data["inner"] == inner
     assert deserialized.data["inner"].value == 10
     assert deserialized.data["inner"].multiplier == 2
-
-
-def test_cross_language_compatibility():
-    """Test cross-language compatibility"""
-    fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-
-    obj = BasicReduceObject(123, 4)
-
-    # Serialize with Python
-    serialized = fory.serialize(obj)
-
-    # Should be able to deserialize (basic test)
-    deserialized = fory.deserialize(serialized)
-    assert deserialized == obj
-
-    # The serialized data should use Fory's native format, not pickle
-    # This is verified by the fact that we're using write_ref/read_ref
-    # in the ReduceSerializer implementation

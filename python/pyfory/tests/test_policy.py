@@ -267,6 +267,7 @@ def test_block_class_type_deserialization():
 
     policy = BlockClassPolicy(blocked_class_names=["UnsafeClass"])
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(type)
 
     # Serialize and deserialize the class type itself (not an instance)
     safe_data = fory.serialize(SafeClass)
@@ -291,6 +292,9 @@ def test_block_reduce_call():
 
     policy = BlockReduceCallPolicy(blocked_names=["ReducibleClass"])
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(type)
+    fory.register_type(types.FunctionType)
+    fory.register_type(ReducibleClass)
     data = fory.serialize(ReducibleClass(42))
 
     with pytest.raises(ValueError, match="ReducibleClass is blocked"):
@@ -309,6 +313,9 @@ def test_replace_reduced_object():
 
     policy = ReplaceObjectPolicy(replacement_value="REPLACED")
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(type)
+    fory.register_type(types.FunctionType)
+    fory.register_type(ReducibleClass)
     data = fory.serialize(ReducibleClass(42))
 
     result = fory.deserialize(data)
@@ -331,6 +338,7 @@ def test_sanitize_state():
 
     policy = SanitizeStatePolicy()
     fory = Fory(xlang=False, ref=False, strict=False, policy=policy, compatible=False)
+    fory.register_type(SecretHolder)
     data = fory.serialize(SecretHolder("admin", "secret123"))
 
     result = fory.deserialize(data)
@@ -364,6 +372,9 @@ def test_reduce_state_sanitizes_state():
 
     policy = CountingSanitizePolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(type)
+    fory.register_type(types.FunctionType)
+    fory.register_type(SecretReduceHolder)
     data = fory.serialize(SecretReduceHolder())
 
     result = fory.deserialize(data)
@@ -387,6 +398,8 @@ def test_stateful_intercepts_falsey_state_before_bool():
         policy=BlockSetStatePolicy(),
         compatible=False,
     )
+    fory.register_type(FalseyState)
+    fory.register_type(FalseyStatePayload)
     data = fory.serialize(FalseyStatePayload())
 
     with pytest.raises(ValueError, match="state blocked"):
@@ -434,6 +447,7 @@ def test_policy_with_local_class():
 
     policy = BlockClassPolicy(blocked_class_names=["LocalClass"])
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(type)
 
     # Serialize the local class type
     data = fory.serialize(LocalCls)
@@ -454,6 +468,9 @@ def test_policy_with_ref_tracking():
 
     policy = BlockReduceCallPolicy(blocked_names=["ReducibleClass"])
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(type)
+    fory.register_type(types.FunctionType)
+    fory.register_type(ReducibleClass)
 
     data = fory.serialize(ReducibleClass(42))
 
@@ -500,6 +517,9 @@ def test_multiple_policy_hooks():
 
     policy = MultiHookPolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(type)
+    fory.register_type(types.FunctionType)
+    fory.register_type(TestClass)
 
     data = fory.serialize(TestClass(42))
     result = fory.deserialize(data)
@@ -529,6 +549,10 @@ def test_policy_with_nested_reduce():
 
     policy = BlockReduceCallPolicy(blocked_names=["Inner"])
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(type)
+    fory.register_type(types.FunctionType)
+    fory.register_type(Inner)
+    fory.register_type(Outer)
 
     data = fory.serialize(Outer(Inner(42)))
 
@@ -561,6 +585,7 @@ def test_stateful_authorizes_instantiation():
 
     policy = BlockInstantiationPolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(StatefulPayload)
     with pytest.raises(ValueError, match="StatefulPayload blocked"):
         fory.deserialize(fory.serialize(StatefulPayload()))
     assert policy.authorize_instantiation_calls == 1
@@ -590,6 +615,9 @@ def test_reduce_class_callable_authorizes_instantiation():
 
     policy = BlockInstantiationPolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(type)
+    fory.register_type(ReducePayload)
+    fory.register_type(ReduceTarget)
     with pytest.raises(ValueError, match="ReduceTarget blocked"):
         fory.deserialize(fory.serialize(ReducePayload()))
     assert policy.reduce_target_calls == 1
@@ -774,6 +802,8 @@ def test_validator_returns_ignored():
 
     policy = ReturnPolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(type)
+    fory.register_type(types.FunctionType)
     assert fory.deserialize(fory.serialize(json)) is json
     assert fory.deserialize(fory.serialize(PolicyGlobalClass)) is PolicyGlobalClass
     assert fory.deserialize(fory.serialize(policy_global_function)) is policy_global_function
@@ -808,6 +838,11 @@ def test_local_class_return_ignored():
         policy=ReturnClassPolicy(),
         compatible=False,
     )
+    fory.register_type(type)
+    fory.register_type(types.FunctionType)
+    fory.register_type(types.MethodType)
+    fory.register_type(staticmethod)
+    fory.register_type(classmethod)
     decoded = fory.deserialize(fory.serialize(make_payload_class()))
     assert decoded is not SafeClass
     assert decoded.run() == "payload"
@@ -832,6 +867,7 @@ def test_type_deserialization_validates_module():
 
     policy = BlockModulePolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(type)
     with pytest.raises(ValueError, match="subprocess blocked"):
         fory.deserialize(fory.serialize(subprocess.Popen))
     assert policy.validate_module_calls == 1
@@ -856,6 +892,7 @@ def test_native_bound_method_uses_validate_method():
 
     policy = BlockMethodPolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(type(abs))
 
     with pytest.raises(ValueError, match="method blocked"):
         fory.deserialize(fory.serialize([].append))
@@ -890,6 +927,9 @@ def test_bound_method_policy_runs_before_getattribute_side_effect():
         policy=BlockMethodPolicy(),
         compatible=False,
     )
+    fory.register_type(types.FunctionType)
+    fory.register_type(types.MethodType)
+    fory.register_type(GuardedMethod)
     data = fory.serialize(method)
 
     GuardedMethod.getattribute_called = False
@@ -1267,7 +1307,10 @@ def test_default_global_round_trips():
     import time
 
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-    for value in (PolicyGlobalClass, policy_global_function, time.time, policy_reduce_global):
+    values = (PolicyGlobalClass, policy_global_function, time.time, policy_reduce_global)
+    for value in values:
+        fory.register_type(type(value))
+    for value in values:
         assert fory.deserialize(fory.serialize(value)) is value
 
 
@@ -1397,6 +1440,16 @@ def test_local_class_classmethod_policy():
     writer = Fory(xlang=False, ref=True, strict=False, compatible=False)
     policy = ClassMethodPolicy()
     reader = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    writer.register_type(type)
+    writer.register_type(types.FunctionType)
+    writer.register_type(types.MethodType)
+    writer.register_type(staticmethod)
+    writer.register_type(classmethod)
+    reader.register_type(type)
+    reader.register_type(types.FunctionType)
+    reader.register_type(types.MethodType)
+    reader.register_type(staticmethod)
+    reader.register_type(classmethod)
     data = writer.serialize(make_local_class())
 
     with pytest.raises(ValueError, match="classmethod blocked"):
@@ -1620,6 +1673,7 @@ def test_global_function_deserialization_validates_module():
 
     policy = BlockModulePolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(types.FunctionType)
     with pytest.raises(ValueError, match="function module blocked"):
         fory.deserialize(fory.serialize(policy_global_function))
     assert policy.validate_module_calls == 1
@@ -1646,6 +1700,7 @@ def test_local_function_deserialization_validates_module():
 
     policy = BlockModulePolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(types.FunctionType)
     with pytest.raises(ValueError, match="local function module blocked"):
         fory.deserialize(fory.serialize(local_function))
     assert policy.validate_module_calls == 1
@@ -1695,6 +1750,7 @@ def test_native_function_deserialization_validates_module():
 
     policy = BlockModulePolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(type(abs))
     with pytest.raises(ValueError, match="time blocked"):
         fory.deserialize(fory.serialize(time.time))
     assert policy.validate_module_calls == 1
@@ -1781,6 +1837,7 @@ def test_reduce_global_name_validates_module():
 
     policy = BlockModulePolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(GlobalNamePayload)
     with pytest.raises(ValueError, match="subprocess blocked"):
         fory.deserialize(fory.serialize(GlobalNamePayload()))
     assert policy.validate_module_calls == 1
@@ -1812,6 +1869,7 @@ def test_reduce_global_name_validates_class():
 
     policy = BlockClassPolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(GlobalNamePayload)
     with pytest.raises(ValueError, match="subprocess.Popen blocked"):
         fory.deserialize(fory.serialize(GlobalNamePayload()))
     assert policy.validate_module_calls == 1
@@ -1843,6 +1901,7 @@ def test_reduce_global_name_validates_function():
 
     policy = BlockFunctionPolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(GlobalNamePayload)
     with pytest.raises(ValueError, match="eval blocked"):
         fory.deserialize(fory.serialize(GlobalNamePayload()))
     assert policy.validate_module_calls == 1
@@ -1877,6 +1936,7 @@ def test_reduce_global_method_resolution_uses_validate_method():
 
     policy = MethodPolicy()
     fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    fory.register_type(GlobalNamePayload)
     with pytest.raises(ValueError, match="method blocked"):
         fory.deserialize(fory.serialize(GlobalNamePayload()))
     assert policy.validate_module_calls == 1

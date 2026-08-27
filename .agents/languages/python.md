@@ -11,6 +11,13 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
 - Python mode is the pure-Python xlang implementation and is mainly for debugging and testing.
 - Cython mode is the default high-performance implementation.
 - Cython mode owns the hot runtime path. Do not duplicate core runtime types between Python and Cython, tunnel Python facade methods into hidden Cython internals, or keep dead shims unless the user explicitly needs a compatibility module path.
+- Python `TypeResolver` owns registry freeze and finalization state. Its Cython companion may cache
+  completion of the one Python-owner dispatch needed to populate native resolver tables, but the
+  `Fory` facade must not mirror that state. Cython roots call the resolver owner directly.
+- In non-strict native mode, public unqualified `register_type` for a built-in native carrier uses
+  the same reserved type identity as pre-root discovery. Ordinary application classes and
+  dataclasses retain their struct registration identity. Configure both through public registration;
+  do not prewarm private resolver state or enumerate version-specific transitive object shapes.
 - Use explicit Cython fields and methods for fixed hot-path shapes. Avoid `__getattr__`, generic `object` fields, public bridge internals, or `Fory` backreferences where ownership can stay explicit.
 - Keep Python and Cython context/ref-tracking branch conditions and stack mutations semantically aligned unless a documented intentional difference exists.
 - Root deserialization graph memory budget state belongs to pure-Python and Cython `ReadContext`.

@@ -972,9 +972,14 @@ class DataClassStubSerializer(DataClassSerializer):
         return self._replace().read(read_context)
 
     def _replace(self):
-        typeinfo = self.type_resolver.get_type_info(self.type_)
-        typeinfo.serializer = DataClassSerializer(self.type_resolver, self.type_)
-        return typeinfo.serializer
+        typeinfo = self.type_resolver.get_type_info(self.type_, create=False)
+        serializer = None if typeinfo is None else typeinfo.serializer
+        # Recursive serializers may retain this stub while the canonical
+        # serializer is being built. Root-entry finalization must commit that
+        # serializer before use; the stub must never repair registry state later.
+        if serializer is None or isinstance(serializer, DataClassStubSerializer):
+            raise RuntimeError(f"Serializer finalization incomplete for {self.type_}")
+        return serializer
 
 
 basic_types = {

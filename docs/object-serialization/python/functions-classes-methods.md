@@ -23,6 +23,10 @@ Python native mode serializes Python-specific callable and type values that are 
 type system. Use `strict=False` only for trusted payloads and apply a deserialization policy when
 the accepted dynamic surface must be restricted.
 
+Register every callable carrier and application type before the first root operation. The first
+serialization or deserialization attempt permanently freezes the registry, even when it fails;
+`strict=False` does not enable late discovery or registration.
+
 ## Serialize Global Functions
 
 Capture and serialize functions defined at module level. Fory deserializes and returns the same
@@ -30,12 +34,14 @@ function object:
 
 ```python
 import pyfory
+import types
 
 fory = pyfory.Fory(xlang=False, ref=True, strict=False)
 
 def my_global_function(x):
     return 10 * x
 
+fory.register_type(types.FunctionType)
 data = fory.dumps(my_global_function)
 print(fory.loads(data)(10))  # 100
 ```
@@ -47,6 +53,7 @@ automatically:
 
 ```python
 import pyfory
+import types
 
 fory = pyfory.Fory(xlang=False, ref=True, strict=False)
 
@@ -57,6 +64,7 @@ def my_function():
         return x * local_var
     return local_func
 
+fory.register_type(types.FunctionType)
 data = fory.dumps(my_function())
 print(fory.loads(data)(10))  # 100
 
@@ -65,80 +73,37 @@ data = fory.dumps(lambda x: 10 * x)
 print(fory.loads(data)(10))  # 100
 ```
 
-## Serialize Global Classes/Methods
+## Serialize Methods
 
-Serialize class objects, instance methods, class methods, and static methods:
+Register the method carriers and receiver class before serializing bound, class, or static methods:
 
 ```python
-from dataclasses import dataclass
 import pyfory
+import types
+
 fory = pyfory.Fory(xlang=False, ref=True, strict=False)
 
-@dataclass
-class Person:
-    name: str
-    age: int
-
-    def f(self, x):
-        return self.age * x
+class Calculator:
+    def scale(self, x):
+        return 3 * x
 
     @classmethod
-    def g(cls, x):
+    def ten(cls, x):
         return 10 * x
 
     @staticmethod
-    def h(x):
-        return 10 * x
+    def double(x):
+        return 2 * x
 
-# Serialize global class
-print(fory.loads(fory.dumps(Person))("Bob", 25))  # Person(name='Bob', age=25)
+for carrier in (type, types.FunctionType, types.MethodType, staticmethod, classmethod, Calculator):
+    fory.register_type(carrier)
 
 # Serialize instance method
-print(fory.loads(fory.dumps(Person("Bob", 20).f))(10))  # 200
+print(fory.loads(fory.dumps(Calculator().scale))(10))  # 30
 
 # Serialize class method
-print(fory.loads(fory.dumps(Person.g))(10))  # 100
+print(fory.loads(fory.dumps(Calculator.ten))(10))  # 100
 
 # Serialize static method
-print(fory.loads(fory.dumps(Person.h))(10))  # 100
-```
-
-## Serialize Local Classes/Methods
-
-Serialize classes defined inside functions along with their methods:
-
-```python
-from dataclasses import dataclass
-import pyfory
-fory = pyfory.Fory(xlang=False, ref=True, strict=False)
-
-def create_local_class():
-    class LocalClass:
-        def f(self, x):
-            return 10 * x
-
-        @classmethod
-        def g(cls, x):
-            return 10 * x
-
-        @staticmethod
-        def h(x):
-            return 10 * x
-    return LocalClass
-
-# Serialize local class
-data = fory.dumps(create_local_class())
-print(fory.loads(data)().f(10))  # 100
-
-# Serialize local class instance method
-data = fory.dumps(create_local_class()().f)
-print(fory.loads(data)(10))  # 100
-
-# Serialize local class method
-data = fory.dumps(create_local_class().g)
-print(fory.loads(data)(10))  # 100
-
-# Serialize local class static method
-data = fory.dumps(create_local_class().h)
-print(fory.loads(data)(10))  # 100
+print(fory.loads(fory.dumps(Calculator.double))(10))  # 20
 ```

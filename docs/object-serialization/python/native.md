@@ -50,9 +50,11 @@ import pyfory
 fory = pyfory.Fory(xlang=False, ref=False, strict=True)
 ```
 
-Keep `strict=True` for registered, trusted type surfaces. Use `strict=False` only when native-mode
-payloads need dynamic Python types such as functions, local classes, or objects reconstructed by
-reduction hooks.
+Keep `strict=True` for registered, trusted type surfaces. Use `strict=False` only when the configured
+surface includes native carriers such as functions, local classes, or objects reconstructed by
+reduction hooks. In either mode, register every application type and native carrier before the first
+root serialization or deserialization attempt. The first attempt permanently freezes the instance's
+registry even when it fails; `strict=False` does not enable late discovery or registration.
 
 ## Common Usage
 
@@ -61,15 +63,17 @@ import pyfory
 
 fory = pyfory.Fory(xlang=False, ref=True, strict=False)
 
-data = fory.dumps({"name": "Alice", "age": 30, "scores": [95, 87, 92]})
-print(fory.loads(data))
-
 from dataclasses import dataclass
 
 @dataclass
 class Person:
     name: str
     age: int
+
+fory.register_type(Person)
+
+data = fory.dumps({"name": "Alice", "age": 30, "scores": [95, 87, 92]})
+print(fory.loads(data))
 
 person = Person("Bob", 25)
 data = fory.dumps(person)
@@ -86,9 +90,10 @@ deserialization. Treat untrusted native-mode bytes the same way you would treat 
 bytes.
 
 - Keep `strict=True` when deserializing data that should contain only registered or built-in types.
-- Use `strict=False` only for trusted payloads that require dynamic Python classes or functions.
-- Provide a `policy=` deserialization policy when dynamic types are required but the accepted type
-  surface should still be restricted.
+- Use `strict=False` only for trusted payloads that require configured Python class or function
+  carriers.
+- Provide a `policy=` deserialization policy when native carriers are required but the accepted
+  type surface should still be restricted.
 - Do not use xlang/native mode choice as a security control. Apply strict mode, policies,
   registration, and resource limits based on the payload source.
 
@@ -144,9 +149,9 @@ Use this when the payload stays in Python and large buffers should avoid extra c
 | ------------------------------------------ | ------------------------ | ----------------------- |
 | Python-only payloads                       | Yes                      | Optional                |
 | Non-Python readers or writers              | No                       | Yes                     |
-| Functions, lambdas, local classes          | Yes                      | No                      |
+| Registered functions, methods, and classes | Yes                      | No                      |
 | `__reduce__` / `__getstate__` object hooks | Yes                      | No                      |
-| Pickle/cloudpickle replacement             | Yes                      | No                      |
+| Configured pickle-style workloads          | Yes                      | No                      |
 | Portable type mapping across languages     | No                       | Yes                     |
 
 ## Performance Comparison
@@ -172,8 +177,10 @@ on every peer, and avoid Python-only values such as lambdas or local classes.
 
 ### A dynamic class or function fails to deserialize
 
-Use `strict=False` for trusted payloads and provide a deserialization `policy=` when only selected
-dynamic types should be accepted.
+Before the first root operation, register the application type and the native carrier types needed
+by the payload. Use `strict=False` for trusted payloads and provide a deserialization `policy=` when
+only selected dynamic types should be accepted. Create a new configured `Fory` instance if an
+already-used instance needs a different type surface.
 
 ### A cycle does not round-trip
 

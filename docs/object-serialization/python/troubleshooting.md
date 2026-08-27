@@ -62,16 +62,23 @@ object identity or cycles matter:
 f = pyfory.Fory(ref=True)
 ```
 
-For arbitrary Python object graphs with circular references, use Python native mode:
+For configured Python-native object graphs with circular references, use Python native mode:
 
 ```python
+from dataclasses import dataclass
+from typing import Optional
+
+import pyfory
+
 f = pyfory.Fory(xlang=False, ref=True, strict=False)
 
 # Example with circular reference
+@dataclass
 class Node:
-    def __init__(self, value):
-        self.value = value
-        self.next = None
+    value: int
+    next: Optional["Node"] = pyfory.field(ref=True, nullable=True, default=None)
+
+f.register_type(Node)
 
 node1 = Node(1)
 node2 = Node(2)
@@ -86,27 +93,30 @@ assert result.next.next is result  # Circular reference preserved
 ### Schema Evolution Not Working
 
 ```python
-# Keep compatible mode enabled. This is the default.
-f = pyfory.Fory()
+from dataclasses import dataclass
+
+import pyfory
 
 # Version 1: Original class
 @dataclass
-class User:
+class UserV1:
     name: str
     age: pyfory.Int32
 
-f.register(User, name="User")
-data = f.dumps(User("Alice", 30))
+writer = pyfory.Fory(xlang=True)
+writer.register(UserV1, name="example.User")
+data = writer.dumps(UserV1("Alice", 30))
 
 # Version 2: Add new field (backward compatible)
 @dataclass
-class User:
+class UserV2:
     name: str
     age: pyfory.Int32
     email: str = "unknown@example.com"  # New field with default
 
-# Can still deserialize old data
-user = f.loads(data)
+reader = pyfory.Fory(xlang=True)
+reader.register(UserV2, name="example.User")
+user = reader.loads(data)
 print(user.email)  # "unknown@example.com"
 ```
 
@@ -120,9 +130,15 @@ f = pyfory.Fory(strict=True)
 f.register(MyClass, type_id=100)
 f.register(AnotherClass, type_id=101)
 
-# Or disable strict mode (NOT recommended for production)
-f = pyfory.Fory(strict=False)  # Use only in trusted environments
+# Native mode may use strict=False only for trusted data, but application
+# and Python-native carrier types still must be registered before use.
+native_fory = pyfory.Fory(xlang=False, strict=False)
+native_fory.register_type(MyClass)
 ```
+
+The first root attempt permanently freezes registration, even when it fails. Do not register a
+missing type and retry on that same instance. Create a new instance, register the complete type
+surface, and retry with the new instance.
 
 ## Debug Mode
 
@@ -144,28 +160,33 @@ import pyfory  # Now uses pure Python implementation
 Handle common serialization errors gracefully:
 
 ```python
+from dataclasses import dataclass
+
 import pyfory
-from pyfory.error import TypeUnregisteredError, TypeNotCompatibleError
+from pyfory.error import TypeUnregisteredError
 
-fory = pyfory.Fory(strict=True)
+@dataclass
+class Message:
+    text: str
 
+message = Message("hello")
+unconfigured = pyfory.Fory(xlang=False, strict=True, compatible=False)
 try:
-    data = fory.dumps(my_object)
+    unconfigured.dumps(message)
 except TypeUnregisteredError as e:
     print(f"Type not registered: {e}")
-    # Register the type and retry
-    fory.register(type(my_object), type_id=100)
-    data = fory.dumps(my_object)
-except Exception as e:
-    print(f"Serialization failed: {e}")
+    # The failed instance is already frozen. Configure a new one.
+    fory = pyfory.Fory(xlang=False, strict=True, compatible=False)
+    fory.register_type(Message, type_id=100)
+    data = fory.dumps(message)
 
 try:
-    obj = fory.loads(data)
-except TypeNotCompatibleError as e:
-    print(f"Schema mismatch: {e}")
-    # Handle version mismatch
-except Exception as e:
-    print(f"Deserialization failed: {e}")
+    fory.loads(b"")
+except Exception:
+    pass
+
+# Root cleanup makes the configured instance reusable after the failed read.
+assert fory.loads(data) == message
 ```
 
 ## Development Setup

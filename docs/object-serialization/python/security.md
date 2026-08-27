@@ -31,13 +31,15 @@ Before deserialization:
 - Enforce request or file size, timeout, and concurrency limits outside Fory.
 - Register only the application types the endpoint accepts and configure the reader before its
   first root operation.
+- In native mode, register every callable, class, method, state, or reduction carrier that an
+  accepted graph may contain.
 - Validate the deserialized value against application authorization and domain rules before use.
 
 ## Built-in safeguards
 
 Treat native-mode bytes from untrusted sources the same way you would treat untrusted pickle bytes.
-Native mode can reconstruct Python objects, import modules, invoke reduction hooks, and rebuild
-dynamic classes or functions when `strict=False`.
+Within the configured type surface, native mode can reconstruct Python objects, import modules,
+invoke reduction hooks, and rebuild classes or functions when `strict=False`.
 
 ### Production Configuration
 
@@ -63,9 +65,11 @@ fory.register(UserModel, name="example.User")
 fory.register(OrderModel, name="example.Order")
 ```
 
-Use dynamic native-mode deserialization (`strict=False`) only for trusted Python-only payloads:
+Use native-mode deserialization with `strict=False` only for trusted Python-only payloads:
 
 ```python
+import types
+
 import pyfory
 
 fory = pyfory.Fory(
@@ -74,7 +78,14 @@ fory = pyfory.Fory(
     strict=False,
     max_depth=100,
 )
+
+fory.register_type(types.FunctionType)
 ```
+
+The first root attempt permanently freezes registration, including when that attempt fails.
+`strict=False` does not allow late discovery or registration. If that first operation exposes an
+incomplete or invalid registration, create and configure a new instance before retrying. A fully
+configured reader can process a later root after a malformed-data failure.
 
 Received remote metadata is also limited:
 
@@ -99,8 +110,8 @@ schema-evolution semantics.
 
 ### DeserializationPolicy
 
-When `strict=False` is necessary, use `DeserializationPolicy` to restrict the dynamic types and
-hooks accepted during deserialization:
+When `strict=False` is necessary, use `DeserializationPolicy` to restrict the types and hooks
+accepted during deserialization:
 
 ```python
 import pyfory
@@ -146,7 +157,7 @@ unchanged.
 ### Security Checklist
 
 - Keep `strict=True` for untrusted data.
-- Register all expected application types before deserialization.
+- Register all expected application and Python-native carrier types before the first root attempt.
 - Use `DeserializationPolicy` when `strict=False` is necessary.
 - Keep `max_depth` low enough to reject unexpectedly deep payloads.
 - Keep `max_graph_memory_bytes` at the fixed `128 MiB` default for most inputs, or set a positive

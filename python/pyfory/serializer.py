@@ -563,7 +563,7 @@ class PandasRangeIndexSerializer(Serializer):
             else:
                 write_context.write_int8(NOT_NULL_VALUE_FLAG)
                 write_context.write_no_ref(step)
-        write_context.write_ref(value.dtype)
+        write_context.write_string(value.dtype.str)
         write_context.write_ref(value.name)
 
     def read(self, read_context):
@@ -579,7 +579,7 @@ class PandasRangeIndexSerializer(Serializer):
             step = None
         else:
             step = read_context.read_no_ref()
-        dtype = read_context.read_ref()
+        dtype = np.dtype(read_context.read_string())
         name = read_context.read_ref()
         return self.type_(start, stop, step, dtype=dtype, name=name)
 
@@ -1347,10 +1347,17 @@ class ReduceSerializer(Serializer):
             elif len(reduce_result) == 4:
                 # Case 4: (callable, args, state, listitems)
                 callable_obj, args, state, listitems = reduce_result
+                # Reduce item iterators carry contents, not runtime iterator identity.
+                if listitems is not None:
+                    listitems = list(listitems)
                 reduce_data = (1, callable_obj, args, state, listitems)
             elif len(reduce_result) == 5:
                 # Case 5: (callable, args, state, listitems, dictitems)
                 callable_obj, args, state, listitems, dictitems = reduce_result
+                if listitems is not None:
+                    listitems = list(listitems)
+                if dictitems is not None:
+                    dictitems = list(dictitems)
                 reduce_data = (
                     1,
                     callable_obj,
@@ -1799,12 +1806,13 @@ class FunctionSerializer(Serializer):
             freevars.append(read_context.read_string())
 
         globals_dict = read_context.read_ref()
+        if type(globals_dict) is not dict:
+            raise ValueError("function globals must be a dict")
 
         # Create a globals dictionary with module's globals as the base
         func_global_entries = len(mod.__dict__) if mod else 0
-        if isinstance(globals_dict, dict):
-            func_global_entries = max(func_global_entries, len(globals_dict))
-        has_builtins = (mod is not None and "__builtins__" in mod.__dict__) or (isinstance(globals_dict, dict) and "__builtins__" in globals_dict)
+        func_global_entries = max(func_global_entries, len(globals_dict))
+        has_builtins = (mod is not None and "__builtins__" in mod.__dict__) or "__builtins__" in globals_dict
         if not has_builtins:
             func_global_entries += 1
         read_context.reserve_graph_memory(_DICT_OWNER_BYTES + func_global_entries * 2 * _REFERENCE_BYTES)

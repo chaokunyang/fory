@@ -88,9 +88,10 @@ class Fory:
     objects and cross-language reference metadata; Python native mode handles the
     broader Python object graph surface, including circular Python objects.
 
-    In Python native mode (xlang=False), Fory can serialize all Python objects
-    including dataclasses, classes with custom serialization methods, and local
-    functions/classes, making it a drop-in replacement for pickle.
+    In Python native mode (xlang=False), Fory can serialize a configured Python
+    type surface including dataclasses, classes with custom serialization methods,
+    and local functions/classes. Register application types and native carriers
+    before the first root operation, which permanently freezes the registry.
 
     In xlang mode, the default, Fory serializes objects in a format that can be
     deserialized by other Fory-supported languages (Java, Go, Rust, C++, etc.).
@@ -152,9 +153,9 @@ class Fory:
 
         Args:
             xlang: Enable xlang mode. When False, uses
-                Python native mode supporting all Python objects (dataclasses, __reduce__,
-                local functions/classes). With ref=True and strict=False, serves as a
-                drop-in replacement for pickle. When True, uses the xlang wire format
+                Python native mode supporting configured Python objects (dataclasses,
+                __reduce__, local functions/classes). Register all application types and
+                native carriers before the first root operation. When True, uses the xlang wire format
                 compatible with other Fory languages (Java, Go, Rust, etc), but Python-
                 specific features like functions and __reduce__ methods are not supported.
 
@@ -165,8 +166,9 @@ class Fory:
             strict: Require registration before loading or instantiating application
                 classes (default: True). Compatible metadata for an unregistered remote
                 Struct uses the fixed data-only UnknownStruct carrier instead of loading
-                or generating the sender-named class. When strict mode is disabled,
-                dynamic application types can be deserialized, which may be insecure if
+                or generating the sender-named class. Disabling strict mode authorizes
+                configured native carriers but does not permit discovery or registration
+                after the first root. Dynamic application types can be insecure if
                 malicious code exists in __new__/__init__/__eq__/__hash__ methods.
                 **WARNING**: Only disable in trusted environments. When disabling strict
                 mode, you should provide a custom `policy` parameter to control which types
@@ -300,6 +302,7 @@ class Fory:
             >>> fory.register(Person, type_id=100)
             >>>
             >>> # Register with name (more flexible)
+            >>> fory = Fory(xlang=True)
             >>> fory.register(Person, name="com.example.Person")
             >>>
             >>> # Python native mode (no cross-language matching needed)
@@ -346,6 +349,7 @@ class Fory:
             >>> fory.register_type(Person, type_id=100)
             >>>
             >>> # Register with name (more flexible)
+            >>> fory = Fory(xlang=True)
             >>> fory.register_type(Person, name="com.example.Person")
             >>>
             >>> # Python native mode (no cross-language matching needed)
@@ -390,9 +394,17 @@ class Fory:
 
         Example:
             >>> fory = Fory(xlang=False)
-            >>> fory.register_serializer(MyClass, MyCustomSerializer())
+            >>> fory.register_type(MyClass)
+            >>> serializer = MyCustomSerializer(fory.type_resolver, MyClass)
+            >>> fory.register_serializer(MyClass, serializer)
         """
         self.type_resolver.register_serializer(cls, serializer)
+
+    def _freeze_registry(self):
+        # The resolver remains authoritative because callers may register through
+        # it directly. Avoid entering its finalization method after the first root.
+        if not self.type_resolver._registry_frozen:
+            self.type_resolver._freeze_registry()
 
     def dumps(
         self,
@@ -421,6 +433,7 @@ class Fory:
             the passed object (or a view of it) is unsupported. If your sink
             needs retention, copy bytes inside ``write``.
         """
+        self._freeze_registry()
         try:
             self.buffer.set_writer_index(0)
             output_stream = Buffer.wrap_output_stream(stream)
@@ -434,7 +447,7 @@ class Fory:
             self.force_flush()
         finally:
             self.buffer.bind_output_stream(None)
-            self.reset_write()
+            self.write_context.reset()
 
     def loads(
         self,
@@ -476,6 +489,7 @@ class Fory:
             >>> print(type(data))
             <class 'bytes'>
         """
+        self._freeze_registry()
         try:
             write_buffer = self._serialize(
                 obj,
@@ -489,7 +503,7 @@ class Fory:
                 return write_buffer
             return write_buffer.to_bytes(0, write_buffer.get_writer_index())
         finally:
-            self.reset_write()
+            self.write_context.reset()
 
     def _serialize(
         self,
@@ -553,10 +567,11 @@ class Fory:
             >>> print(obj)
             {'key': 'value'}
         """
+        self._freeze_registry()
         try:
             return self._deserialize(buffer, buffers, unsupported_objects)
         finally:
-            self.reset_read()
+            self.read_context.reset()
 
     def _deserialize(
         self,
@@ -610,7 +625,8 @@ class Fory:
         Reset both write and read state.
 
         Clears all per-operation state including buffers and reference tracking.
-        Use this to ensure a clean state before reusing a Fory instance.
+        Use this to ensure clean operation state before reusing a Fory instance.
+        Reset does not reopen registration after the first root attempt.
         """
         self.reset_write()
         self.reset_read()
@@ -625,9 +641,9 @@ class ThreadSafeFory:
     needs to serialize or deserialize data, it acquires an instance from the pool, uses it,
     and returns it for reuse by other threads.
 
-    All type registrations must be performed before any serialization operations to ensure
-    consistency across all pooled instances. Attempting to register types after the first
-    serialization will raise a RuntimeError.
+    All type registrations must be performed before the first root serialization or
+    deserialization attempt to ensure consistency across all pooled instances. Registration
+    remains closed even when that first operation fails.
 
     Args:
         xlang (bool): Whether to enable xlang mode. Defaults to True.

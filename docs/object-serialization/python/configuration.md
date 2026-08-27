@@ -65,7 +65,7 @@ class ThreadSafeFory:
 | -------------------------------------- | ------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `xlang`                                | `bool`                          | `True`      | Use xlang mode. Set `False` for Python native mode.                                                                                                      |
 | `ref`                                  | `bool`                          | `False`     | Enable reference tracking for shared/circular references. Disable for better performance if your data has no shared references.                          |
-| `strict`                               | `bool`                          | `True`      | Require registration before loading application classes. Compatible unknown Structs use the data-only `UnknownStruct` carrier.                           |
+| `strict`                               | `bool`                          | `True`      | Require registration before loading application classes. Compatible unknown Structs use `UnknownStruct`. `False` does not permit late discovery.         |
 | `compatible`                           | `bool \| None`                  | `None`      | Schema evolution mode. `None` enables compatible mode in both xlang and native mode. Set `False` only when every reader and writer uses the same schema. |
 | `max_depth`                            | `int`                           | `50`        | Maximum deserialization depth for security, preventing stack overflow attacks.                                                                           |
 | `max_type_fields`                      | `int`                           | `512`       | Maximum fields accepted in one received remote struct metadata body.                                                                                     |
@@ -99,17 +99,24 @@ fory.register(MyClass, name="my.package.MyClass")
 fory.register(MyClass, name="my.package.MyClass", serializer=custom_serializer)
 ```
 
+Complete registration before the first root serialization or deserialization attempt. That first
+attempt permanently freezes registration, even if it fails. If the first operation exposes an
+incomplete or invalid registration, create and configure a new instance before retrying. A fully
+configured instance can process a later root after a failure while reading input data or serializing
+a value. See
+[Type Registration](type-registration.md) for the complete lifecycle.
+
 ## Xlang And Native Mode Comparison
 
-| Feature             | Native mode (`xlang=False`)                    | Xlang mode (default)                                                             |
-| ------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------- |
-| Use case            | Python-only applications                       | Multi-language systems                                                           |
-| Compatibility       | Python only                                    | Java, C++, Go, Rust, JavaScript/TypeScript, C#, Swift, Dart, Scala, Kotlin, etc. |
-| Supported types     | Python object surface                          | Cross-language compatible types                                                  |
-| Functions/lambdas   | Supported with trusted dynamic deserialization | Not allowed                                                                      |
-| Local classes       | Supported with trusted dynamic deserialization | Not allowed                                                                      |
-| Dynamic classes     | Supported with trusted dynamic deserialization | Not allowed                                                                      |
-| Schema mode default | Compatible                                     | Compatible                                                                       |
+| Feature             | Native mode (`xlang=False`)                  | Xlang mode (default)                                                             |
+| ------------------- | -------------------------------------------- | -------------------------------------------------------------------------------- |
+| Use case            | Python-only applications                     | Multi-language systems                                                           |
+| Compatibility       | Python only                                  | Java, C++, Go, Rust, JavaScript/TypeScript, C#, Swift, Dart, Scala, Kotlin, etc. |
+| Supported types     | Configured Python object surface             | Cross-language compatible types                                                  |
+| Functions/lambdas   | Supported when their carriers are registered | Not allowed                                                                      |
+| Local classes       | Supported when their carriers are registered | Not allowed                                                                      |
+| Class objects       | Supported when their carriers are registered | Not allowed                                                                      |
+| Schema mode default | Compatible                                   | Compatible                                                                       |
 
 ## Xlang Mode
 
@@ -128,15 +135,18 @@ Use `compatible=False` for xlang payloads only when every reader and writer alwa
 ## Native Mode
 
 ```python
+import types
+
 import pyfory
 
 fory = pyfory.Fory(xlang=False, ref=True, strict=False)
+fory.register_type(types.FunctionType)
 ```
 
 Native mode supports Python-specific object features such as functions, local classes, methods,
-`__reduce__`, and `__getstate__`. Compatible mode is still enabled by default. Set
-`compatible=False` only when every reader and writer always uses the same Python
-class schema and you want faster serialization and smaller size.
+`__reduce__`, and `__getstate__` when their application and carrier types are registered before the
+first root attempt. Compatible mode is still enabled by default. Set `compatible=False` only when
+every reader and writer always uses the same Python class schema.
 
 ## Compatible Mode
 
@@ -163,9 +173,11 @@ fory = pyfory.Fory(
 fory.register(UserModel, name="example.User")
 ```
 
-### Native Mode With Dynamic Types
+### Native Mode With Configured Python Types
 
 ```python
+import types
+
 import pyfory
 
 fory = pyfory.Fory(
@@ -174,9 +186,12 @@ fory = pyfory.Fory(
     strict=False,
     max_depth=1000,
 )
+
+fory.register_type(types.FunctionType)
 ```
 
 Use `strict=False` only for trusted data, preferably with a `policy=` deserialization policy.
+Register every application and Python-native carrier type before the first root attempt.
 
 ## Security
 

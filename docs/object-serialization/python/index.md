@@ -19,7 +19,8 @@ license: |
   limitations under the License.
 ---
 
-**Apache Fory™** is a blazing fast multi-language serialization framework powered by **JIT compilation** and **zero-copy** techniques, providing up to **ultra-fast performance** while maintaining ease of use and safety.
+**Apache Fory™** is a multi-language serialization framework with Python-native and
+cross-language object serialization modes.
 
 `pyfory` provides the Python implementation of Apache Fory™, offering xlang mode for cross-language payloads and native mode for Python-only object serialization.
 
@@ -28,28 +29,28 @@ license: |
 ### Flexible Serialization Modes
 
 - **Xlang mode**: Default cross-language wire format with compatible schema evolution
-- **Python native mode**: Same-language mode and drop-in replacement for pickle/cloudpickle
+- **Python native mode**: Same-language mode for a configured Python type surface
 
 ### Versatile Serialization Features
 
 - **Reference tracking** for shared xlang schema objects and Python native-mode circular graphs
-- **Polymorphism support** for customized types with automatic type dispatching
+- **Polymorphism support** for registered customized types
 - **Schema evolution** support for backward/forward compatibility when using dataclasses in xlang mode
-- **Out-of-band buffer support** for zero-copy serialization of large data structures like NumPy arrays and Pandas DataFrames, compatible with pickle protocol 5
+- **Out-of-band buffer support** for NumPy ndarrays and `pickle.PickleBuffer` values
 
-### Blazing Fast Performance
+### Python Runtime Support
 
-- **Extremely fast performance** compared to other serialization frameworks
-- **Runtime code generation** and **Cython-accelerated** core implementation for optimal performance
+- **Runtime code generation** for registered data models
+- **Cython-accelerated** core implementation
 
 ### Compact Data Size
 
-- **Compact object graph protocol** with minimal space overhead—up to 3× size reduction compared to pickle/cloudpickle
+- **Compact object graph protocol**
 - **Meta packing and sharing** to minimize type forward/backward compatibility space overhead
 
 ### Security & Safety
 
-- **Strict mode** prevents deserialization of untrusted types by type registration and checks.
+- **Strict mode** requires application type registration.
 - **Reference tracking** for handling circular references safely
 
 ## Installation
@@ -82,9 +83,10 @@ pip install -e ".[dev]"
 `pyfory` provides `ThreadSafeFory` for thread-safe serialization using a pooled wrapper:
 
 ```python
-import pyfory
 import threading
 from dataclasses import dataclass
+
+import pyfory
 
 @dataclass
 class Person:
@@ -111,8 +113,9 @@ for t in threads: t.join()
 
 - **Instance Pool**: Maintains a pool of `Fory` instances protected by a lock for thread safety
 - **Shared Configuration**: All registrations must be done upfront and are applied to all instances
-- **Same API**: Drop-in replacement for `Fory` class with identical methods
-- **Registration Safety**: Prevents registration after first use to ensure consistency
+- **Matching Operations**: Exposes the corresponding root and registration methods
+- **Registration Safety**: The first root attempt permanently freezes registration, even if the
+  operation fails
 
 **When to Use:**
 
@@ -123,8 +126,9 @@ for t in threads: t.join()
 ## Quick Start
 
 ```python
-import pyfory
 from dataclasses import dataclass
+
+import pyfory
 
 @dataclass
 class Person:
@@ -141,11 +145,28 @@ result = fory.deserialize(data)
 print(result)  # Person(name='Alice', age=30)
 ```
 
+## Registration Lifecycle
+
+Register every application type before the first root serialization or deserialization attempt. In
+native mode, also register callable, class, method, state, and reduction carrier types that can
+appear in the object graph. The first root attempt permanently freezes the instance's registry,
+including when that attempt fails. Setting `strict=False` does not permit discovery or registration
+after that point.
+
+If the first operation exposes an incomplete or invalid registration, create a new instance and
+register the complete type surface before retrying. A fully configured instance can process a later
+root after a failure while reading input data or serializing a value. See
+[Type Registration](type-registration.md) for the complete lifecycle.
+
 ## Xlang Mode And Native Mode
 
 Use xlang mode for cross-language payloads and dataclass schemas shared with other Fory implementations. Xlang mode is the default Python wire mode, and Python examples that use it set `xlang=True` explicitly so the mode choice is visible.
 
-Use native mode for Python-only traffic. Native mode is selected with `xlang=False` and owns pickle/cloudpickle-style behavior such as functions, lambdas, classes, methods, `__reduce__`, `__getstate__`, and out-of-band pickle protocol 5 buffers. It is optimized for Python's type system and supports a broader Python object surface than xlang mode, so use it when replacing pickle or cloudpickle. Compatible mode is enabled by default. Set `compatible=False` only when every reader and writer uses the same Python class schema and you want faster serialization and smaller size.
+Use native mode for Python-only traffic. Native mode is selected with `xlang=False` and supports a
+configured surface that may include functions, lambdas, classes, methods, `__reduce__`,
+`__getstate__`, NumPy ndarrays, and out-of-band buffers. Register application types and Python-native
+carrier types before the first root attempt. Compatible mode is enabled by default. Set
+`compatible=False` only when every reader and writer uses the same Python class schema.
 
 See [Native Serialization](native.md) for Python-only serialization details and [Cross-Language Interoperability](basic-serialization.md#cross-language-interoperability) for Python xlang registration and interoperability rules.
 
@@ -156,7 +177,7 @@ See [Native Serialization](native.md) for Python-only serialization details and 
 - [Configuration](configuration.md) - Fory parameters, modes, and security
 - [Type Registration](type-registration.md) - User-defined type registration
 - [Custom Serializers](custom-serializers.md) - Extend serialization behavior
-- [Row Format](../../row-format/python.md) - Zero-copy row format
+- [Row Format](../../row-format/python.md) - Row-format APIs
 - [gRPC Support](../../grpc/python.md) - Fory payloads over grpcio
 
 ## Links

@@ -92,8 +92,10 @@ Keep registration mapping consistent across peers:
 - Do not mix ID and name mapping for the same logical type across services
 - Register only one serializer for each target type on a `Fory` instance
 
-Registration closes after the first root serialization or deserialization.
-Complete all registrations before the first root operation.
+Registration closes permanently when the first root serialization or
+deserialization attempt begins, even if that operation fails. Complete all
+registrations before the first root operation; reusing the same `Fory` instance
+does not reopen registration.
 
 ## Dynamic Types and Registration
 

@@ -202,6 +202,27 @@ struct LateMetaExt: Serializer, Equatable {
     }
 }
 
+private final class RegistrationFinalizationError: Error {}
+
+private struct FailingRegistrationSerializer: StructSerializer {
+    typealias Target = Self
+
+    static let failure = RegistrationFinalizationError()
+    static var staticTypeId: TypeId { .structType }
+
+    static func defaultValue(_: ReadContext) throws -> Self { Self() }
+    static func writeData(_: Self, _: WriteContext) throws {}
+    static func readData(_: ReadContext) throws -> Self { Self() }
+    static func readCompatible(_: ReadContext, typeInfo _: TypeInfo) throws -> Self { Self() }
+
+    static func foryFieldsInfo(
+        trackRef _: Bool,
+        resolveSerializerTypeId _: (Any.Type) throws -> TypeId
+    ) throws -> [TypeMeta.FieldInfo] {
+        throw failure
+    }
+}
+
 @ForyStruct
 struct LateMetaHolder: Equatable {
     var ext: LateMetaExt
@@ -1177,6 +1198,24 @@ func registrationIsRejectedAfterFirstTopLevelUse() throws {
         #expect(Bool(false))
     } catch {
         #expect("\(error)".contains("cannot register more types"))
+    }
+}
+
+@Test
+func finalizationPreservesFailure() throws {
+    let fory = Fory()
+    try fory.register(FailingRegistrationSerializer.self, id: 701)
+
+    for _ in 0..<2 {
+        do {
+            _ = try fory.serialize(FailingRegistrationSerializer())
+            Issue.record("expected registration finalization failure")
+        } catch {
+            #expect(
+                (error as? RegistrationFinalizationError)
+                    === FailingRegistrationSerializer.failure
+            )
+        }
     }
 }
 

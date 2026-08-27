@@ -37,6 +37,10 @@ Load this file when changing `swift/` or Swift xlang behavior.
   ignored declaration fields are budget-only and must not enter target access,
   construction, metadata, or wire code. Omitted large value storage must be
   declared explicitly and ignored.
+- `@ForyStruct` supports protocol conformances but rejects every superclass during registration
+  finalization because macros cannot inspect inherited storage. SwiftSyntax represents both in one
+  inheritance clause, and Swift provides no public superclass query for arbitrary Swift classes;
+  keep the minimal `_getSuperclass` check finalization-owned and out of root hot paths.
 - Direct `Any` and `AnyObject` root overloads remain disfavored forwarding facades over
   `DynamicSerializer<Any>` and `DynamicSerializer<AnyObject>`, including their Data-buffer forms.
   Arbitrary protocol roots explicitly select `DynamicSerializer<T>`. Do not add an unconstrained

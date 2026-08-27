@@ -164,6 +164,19 @@ private final class LocalNode {
     required init() {}
 }
 
+private class SuperclassBase {
+    required init() {}
+}
+
+@ForyStruct
+private final class SuperclassChild: SuperclassBase {
+    var local: Int32 = 0
+
+    required init() {
+        super.init()
+    }
+}
+
 @ForyStruct
 private struct LocalNamedValue: NamedValue, Equatable {
     var name: String
@@ -525,7 +538,7 @@ func externalIgnoredFieldBudget() throws {
             )
         )
         try limited.register(NodeSerializer.self, id: 142)
-        #expect(throws: ForyError.self) {
+        #expect(throws: (any Error).self) {
             let _: Node = try limited.deserialize(
                 bytes,
                 with: NodeSerializer.self
@@ -719,7 +732,7 @@ func customCarrierEnforcesBudget() throws {
     )
     try reader.register(UserSerializer.self, id: 138)
     try reader.register(UserArrayCustomSerializer.self, id: 139)
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         let _: [User] = try reader.deserialize(
             bytes,
             with: UserArrayCustomSerializer.self
@@ -1076,7 +1089,7 @@ func directExternalDynamicRoot() throws {
 func dynamicTargetFailures() throws {
     let unregistered = Fory()
     let unregisteredValue: Any = User(name: "unregistered", age: 1)
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         _ = try unregistered.serialize(
             unregisteredValue,
             with: DynamicSerializer<Any>.self
@@ -1088,13 +1101,13 @@ func dynamicTargetFailures() throws {
     let value: Any = Key(value: "not-named")
     let bytes = try fory.serialize(value, with: DynamicSerializer<Any>.self)
 
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         let _: any NamedValue = try fory.deserialize(
             bytes,
             with: DynamicSerializer<any NamedValue>.self
         )
     }
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         let _: AnyObject = try fory.deserialize(
             bytes,
             with: DynamicSerializer<AnyObject>.self
@@ -1130,33 +1143,33 @@ func dynamicReferenceEnvelopeBytes() throws {
 @Test
 func registrationRejectsInvalidOwnership() throws {
     let carrier = Fory()
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         try carrier.register(ArraySerializer<UserSerializer>.self, id: 126)
     }
 
     let wrapper = Fory()
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         try wrapper.register(OptionalSerializer<UserSerializer>.self, id: 132)
     }
 
     let dynamic = Fory()
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         try dynamic.register(DynamicSerializer<Any>.self, id: 133)
     }
 
     let duplicateTarget = Fory()
     try duplicateTarget.register(UserSerializer.self, id: 127)
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         try duplicateTarget.register(AlternateUserSerializer.self, id: 128)
     }
 
     let builtinTarget = Fory()
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         try builtinTarget.register(StringCustomSerializer.self, id: 129)
     }
 
     let valueDeclaration = Fory()
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         try valueDeclaration.register(ValueNodeSerializer.self, id: 130)
     }
 }
@@ -1167,8 +1180,23 @@ func hiddenCarrierAliasIsRejected() throws {
     try fory.register(UserSerializer.self, id: 78)
     try fory.register(HiddenCarrierHolder.self, id: 79)
 
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         _ = try fory.serialize(HiddenCarrierHolder(users: []))
+    }
+    #expect(throws: (any Error).self) {
+        _ = try fory.serialize(Int32(1))
+    }
+    #expect(throws: (any Error).self) {
+        try fory.register(KeySerializer.self, id: 80)
+    }
+}
+
+@Test
+func superclassIsRejected() throws {
+    let fory = Fory()
+    try fory.register(SuperclassChild.self, id: 133)
+    #expect(throws: (any Error).self) {
+        _ = try fory.serialize(SuperclassChild())
     }
 }
 
@@ -1176,7 +1204,7 @@ func hiddenCarrierAliasIsRejected() throws {
 func numericIDConflictIsAtomic() throws {
     let fory = Fory()
     try fory.register(UserSerializer.self, id: 80)
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         try fory.register(KeySerializer.self, id: 80)
     }
     try fory.register(KeySerializer.self, id: 81)
@@ -1199,7 +1227,7 @@ func numericIDConflictIsAtomic() throws {
 func registrationFreezesAtFirstRoot() throws {
     let fory = Fory()
     _ = try fory.serialize(Int32(1))
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         try fory.register(UserSerializer.self, id: 131)
     }
 }

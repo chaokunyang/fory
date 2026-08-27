@@ -622,7 +622,8 @@ final class TypeResolver {
     private static let maxRemoteTypeMetaKeys = 8192
 
     private let trackRef: Bool
-    private var registrationFinished = false
+    private var registryFrozen = false
+    private var registrationFinalized = false
 
     private var bySerializerType = UInt64Map<TypeInfo>(initialCapacity: 64)
     private var byTargetType = UInt64Map<TypeInfo>(initialCapacity: 64)
@@ -634,6 +635,7 @@ final class TypeResolver {
     private var typeInfoByHeaderHash = UInt64Map<TypeInfo>(initialCapacity: 64)
     private var remoteSchemaVersionsByType: [String: Int] = [:]
     private var totalAcceptedSchemaVersions = 0
+    private var registrationFailure: (any Error)?
 
     init(trackRef: Bool = false) {
         self.trackRef = trackRef
@@ -833,7 +835,7 @@ final class TypeResolver {
 
     @inline(__always)
     func finishRegistration() throws {
-        if registrationFinished {
+        if registrationFinalized {
             return
         }
         try finishRegistrationSlow()
@@ -841,10 +843,21 @@ final class TypeResolver {
 
     @inline(never)
     private func finishRegistrationSlow() throws {
-        for typeInfo in registeredTypeInfos {
-            try typeInfo.finalizeTypeMeta(resolver: self)
+        // Freezing and finalization are separate states: the first root permanently closes
+        // registration, while a partial builder failure must never be mistaken for success.
+        if let registrationFailure {
+            throw registrationFailure
         }
-        registrationFinished = true
+        registryFrozen = true
+        do {
+            for typeInfo in registeredTypeInfos {
+                try typeInfo.finalizeTypeMeta(resolver: self)
+            }
+            registrationFinalized = true
+        } catch {
+            registrationFailure = error
+            throw error
+        }
     }
 
     func register<T: Serializer>(_ type: T.Type, id: UInt32) throws {
@@ -1323,7 +1336,7 @@ final class TypeResolver {
     }
 
     private func ensureRegistrationAllowed() throws {
-        guard !registrationFinished else {
+        guard !registryFrozen else {
             throw ForyError.invalidData(
                 "cannot register more types after top-level serialize/deserialize has frozen registration"
             )

@@ -134,6 +134,7 @@ test.each(["success", "failure"] as const)("restores root write state for %s", (
   }
   expect(writeContext.refWriter.writeObjects.size).toBe(0);
   expect(writeContext.disposeTypeMetaOwners).toHaveLength(0);
+  expect(writeContext.metaStringWriter.disposeMetaStringBytes).toHaveLength(0);
   expect(name.dynamicWriteStringId).toBe(-1);
   expect(typeMeta.dynamicTypeId).toBe(-1);
 });

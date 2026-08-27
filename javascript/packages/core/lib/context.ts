@@ -309,6 +309,8 @@ export class MetaStringWriter {
     this.disposeMetaStringBytes.forEach((item) => {
       item.dynamicWriteStringId = -1;
     });
+    // Reset owners are appended again after their ID is cleared, so retain no prior-root entries.
+    this.disposeMetaStringBytes.length = 0;
     this.dynamicNameId = 0;
   }
 }

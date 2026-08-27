@@ -276,6 +276,8 @@ export class RefReader {
 }
 
 export class MetaStringWriter {
+  private static readonly MAX_RETAINED_META_STRING_OWNERS = 8192;
+
   private disposeMetaStringBytes: MetaStringBytes[] = [];
   private dynamicNameId = 0;
   private namespaceEncoder = new MetaStringEncoder(".", "_");
@@ -306,14 +308,22 @@ export class MetaStringWriter {
   }
 
   reset() {
-    this.disposeMetaStringBytes.forEach((item) => {
-      item.dynamicWriteStringId = -1;
-    });
+    const names = this.disposeMetaStringBytes;
+    for (let i = 0; i < names.length; i++) {
+      names[i].dynamicWriteStringId = -1;
+    }
     this.dynamicNameId = 0;
+    if (names.length > MetaStringWriter.MAX_RETAINED_META_STRING_OWNERS) {
+      this.disposeMetaStringBytes = [];
+    } else {
+      names.length = 0;
+    }
   }
 }
 
 export class MetaStringReader {
+  private static readonly MAX_RETAINED_NAMES = 8192;
+
   private names: string[] = [];
   private namespaceDecoder = new MetaStringDecoder(".", "_");
   private typenameDecoder = new MetaStringDecoder("$", "_");
@@ -351,11 +361,17 @@ export class MetaStringReader {
   }
 
   reset() {
-    this.names = [];
+    if (this.names.length > MetaStringReader.MAX_RETAINED_NAMES) {
+      this.names = [];
+    } else {
+      this.names.length = 0;
+    }
   }
 }
 
 export class WriteContext {
+  private static readonly MAX_RETAINED_TYPE_META_OWNERS = 8192;
+
   readonly writer: BinaryWriter;
   readonly refWriter: RefWriter;
   readonly metaStringWriter: MetaStringWriter;
@@ -376,10 +392,15 @@ export class WriteContext {
     this.writer.reset();
     this.refWriter.reset();
     this.metaStringWriter.reset();
-    this.disposeTypeMetaOwners.forEach((owner) => {
-      owner.dynamicTypeId = -1;
-    });
-    this.disposeTypeMetaOwners = [];
+    const owners = this.disposeTypeMetaOwners;
+    for (let i = 0; i < owners.length; i++) {
+      owners[i].dynamicTypeId = -1;
+    }
+    if (owners.length > WriteContext.MAX_RETAINED_TYPE_META_OWNERS) {
+      this.disposeTypeMetaOwners = [];
+    } else {
+      owners.length = 0;
+    }
     this.dynamicTypeId = 0;
   }
 
@@ -548,6 +569,7 @@ export class WriteContext {
 export class ReadContext {
   private static readonly MIN_REMOTE_TYPE_META_LIMIT = 8192;
   private static readonly MAX_REMOTE_TYPE_KEYS = 8192;
+  private static readonly MAX_RETAINED_TYPE_META = 8192;
 
   readonly reader: BinaryReader;
   readonly refReader: RefReader;
@@ -584,15 +606,25 @@ export class ReadContext {
     this.reader.reset(bytes);
     this.refReader.reset();
     this.metaStringReader.reset();
-    this.typeMeta = [];
+    if (this.typeMeta.length !== 0) {
+      this.typeMeta.length = 0;
+    }
     this._depth = 0;
     this.remainingGraphMemoryBytes = this.maxGraphMemoryBytes;
     this.remainingUnbackedContainerItems = this.maxUnbackedContainerItems;
   }
 
-  resetReadDepth() {
-    // Root reads call this in finally; nested readers retain depth when a child throws.
+  resetRootState() {
+    // Root reads own failure cleanup; nested readers retain their live state when a child throws.
+    this.refReader.reset();
+    this.metaStringReader.reset();
+    if (this.typeMeta.length > ReadContext.MAX_RETAINED_TYPE_META) {
+      this.typeMeta = [];
+    } else {
+      this.typeMeta.length = 0;
+    }
     this._depth = 0;
+    this.remainingGraphMemoryBytes = 0;
     this.remainingUnbackedContainerItems = 0;
   }
 

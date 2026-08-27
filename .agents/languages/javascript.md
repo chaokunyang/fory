@@ -11,6 +11,10 @@ Load this file when changing `javascript/`.
 - Preserve generated serializer hot paths that bind writer, reader, ref, resolver, and metadata locals in outer closures; do not replace them with per-call context lookups without a measured reason.
 - Do not add parallel header-low/header-high slot caches in TypeMeta hot paths to chase benchmark gaps. Header-cache hits must use the concrete checked cache owner directly; if a small hit hint is needed, cache TypeMeta objects themselves and compare `TypeMeta.headerHash`, not separate low/high header fields or benchmark-pattern state.
 - JavaScript TypeMeta header cache hits should compare the 52-bit TypeMeta header hash directly. The hash is precise in JS `Number` and already includes the low header bits as hash input; do not add extra low-bit fields, sentinel state, nullable accepted headers, or parallel slot arrays around it.
+- Root-local read metadata occurrence arrays and write metadata owner arrays use an 8192-entry
+  retention boundary. Clear the logical length at or below that boundary and replace the array
+  only above it. Root serializers must release reference and metadata owner state in `finally`
+  after both successful and failed writes.
 - Runtime value carriers such as decimal or reduced-precision numeric types belong under the core `types/` ownership boundary, with imports, exports, and codegen externals updated together.
 - Keep `TypeInfo` as schema metadata. Compatibility-sensitive decisions belong on `TypeResolver` or explicit operations, not as retained resolver state on metadata objects.
 - Normalize optional boolean config values at config construction; do not carry `null` through runtime paths when it means `false`.

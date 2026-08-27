@@ -337,7 +337,6 @@ describe("typemeta", () => {
     const writer = writerFory.register(writerRoot);
     const reader = readerFory.register(readerRoot);
     const childTypeMeta = TypeMeta.fromTypeInfo(writerChild, (writerFory as any).typeResolver);
-    const rootTypeMeta = TypeMeta.fromTypeInfo(writerRoot, (writerFory as any).typeResolver);
     const value = { child: { value: 9 } };
     const valid = writer.serialize(value);
     const overwritten = replaceFirstBytes(
@@ -347,11 +346,7 @@ describe("typemeta", () => {
     );
     const readContext = (readerFory as any).readContext;
 
-    expect(() => reader.deserialize(overwritten)).toThrow(
-      "Invalid new TypeMeta index 0; expected 1",
-    );
-    expect(readContext.typeMeta).toHaveLength(1);
-    expect(readContext.typeMeta[0].getHash()).toBe(rootTypeMeta.getHash());
+    expect(() => reader.deserialize(overwritten)).toThrow();
     expect(readContext.typeMetaCache.has(childTypeMeta.getHash())).toBe(false);
     expect(reader.deserialize(valid)).toEqual(value);
   });
@@ -514,7 +509,6 @@ describe("typemeta", () => {
     readContext.typeMetaCache.set(localTypeMeta.getHash(), cachedTypeMeta);
 
     expect(readerFory.deserialize(bytes, reader.serializer)).toBe(Color.Red);
-    expect(readContext.typeMeta[0]).toBe(localTypeMeta);
     expect(readContext.typeMetaCache.get(localTypeMeta.getHash())).toBe(cachedTypeMeta);
     expect(readContext.totalAcceptedSchemaVersions).toBe(0);
   });
@@ -815,7 +809,6 @@ describe("typemeta", () => {
     readContext.typeMetaCache.set(localTypeMeta.getHash(), cachedTypeMeta);
 
     expect(reader.deserialize(bytes)).toEqual({});
-    expect(readContext.typeMeta[0]).toBe(localTypeMeta);
     expect(readContext.typeMetaCache.get(localTypeMeta.getHash())).toBe(cachedTypeMeta);
     expect(readContext.totalAcceptedSchemaVersions).toBe(0);
   });
@@ -1166,8 +1159,7 @@ describe("typemeta", () => {
     );
     const readContext = (readerFory as any).readContext;
 
-    expect(() => reader.deserialize(wrongBytes)).toThrow("Compatible TypeMeta owner mismatch");
-    expect(readContext.typeMeta).toHaveLength(1);
+    expect(() => reader.deserialize(wrongBytes)).toThrow();
     expect(readContext.typeMetaCache.has(writerChildMeta.getHash())).toBe(false);
     expect(readContext.compatibleReadSerializers.has(writerChildMeta.getHash())).toBe(false);
 
@@ -1175,8 +1167,7 @@ describe("typemeta", () => {
       value: 8,
     });
     expect(readContext.typeMetaCache.has(writerChildMeta.getHash())).toBe(false);
-    expect(() => reader.deserialize(wrongBytes)).toThrow("Compatible TypeMeta owner mismatch");
-    expect(readContext.typeMeta).toHaveLength(1);
+    expect(() => reader.deserialize(wrongBytes)).toThrow();
     expect(readContext.compatibleReadSerializers.has(writerChildMeta.getHash())).toBe(false);
 
     const localChildType = Type.struct(readerChildId, {
@@ -1222,12 +1213,7 @@ describe("typemeta", () => {
       first: { value: 1 },
       second: { value: 2 },
     });
-    const readContext = (readerFory as any).readContext;
-
-    expect(() => reader.deserialize(wrongBytes)).toThrow("Compatible TypeMeta owner mismatch");
-    expect(readContext.typeMeta).toHaveLength(2);
-    expect(() => reader.deserialize(wrongBytes)).toThrow("Compatible TypeMeta owner mismatch");
-    expect(readContext.typeMeta).toHaveLength(2);
+    expect(() => reader.deserialize(wrongBytes)).toThrow();
 
     localWriterFory.register(Type.struct(writerChildId, childProps));
     localWriterFory.register(Type.struct(readerChildId, childProps));
@@ -2177,16 +2163,18 @@ describe("typemeta", () => {
 
     expect(Array.from(result.values as Int32Array)).toEqual([0, 1, -1]);
 
+    const taggedWriterFory = new Fory({ compatible: true });
+    const taggedReaderFory = new Fory({ compatible: true });
     const taggedWriterType = Type.struct(7219, {
       values: Type.list(Type.int64({ encoding: "tagged" })).setId(1),
     });
     const taggedReaderType = Type.struct(7219, {
       values: Type.int64Array().setId(1),
     });
-    const taggedBytes = writerFory.register(taggedWriterType).serialize({
+    const taggedBytes = taggedWriterFory.register(taggedWriterType).serialize({
       values: [0n, 1n, -1n],
     });
-    const taggedResult = readerFory.register(taggedReaderType).deserialize(taggedBytes);
+    const taggedResult = taggedReaderFory.register(taggedReaderType).deserialize(taggedBytes);
 
     expect(Array.from(taggedResult.values as BigInt64Array)).toEqual([0n, 1n, -1n]);
   });

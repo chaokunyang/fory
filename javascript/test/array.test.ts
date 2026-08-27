@@ -284,7 +284,21 @@ describe("array", () => {
         values: Type.uint16Array(),
       },
     );
+    const float16Type = Type.struct(
+      { typeName: "example.float16array" },
+      {
+        values: Type.float16Array(),
+      },
+    );
+    const bfloat16Type = Type.struct(
+      { typeName: "example.bfloat16array" },
+      {
+        values: Type.bfloat16Array(),
+      },
+    );
     const uint16Serializer = fory.register(uint16Type).serializer;
+    const float16Serializer = fory.register(float16Type).serializer;
+    const bfloat16Serializer = fory.register(bfloat16Type).serializer;
     const uint16Bytes = fory.serialize(
       {
         values: new Uint16Array([0x1234, 0xabcd]),
@@ -293,13 +307,6 @@ describe("array", () => {
     );
     expect(containsBytes(uint16Bytes, [0x34, 0x12, 0xcd, 0xab])).toBe(true);
 
-    const float16Type = Type.struct(
-      { typeName: "example.float16array" },
-      {
-        values: Type.float16Array(),
-      },
-    );
-    const float16Serializer = fory.register(float16Type).serializer;
     const float16Bytes = fory.serialize(
       {
         values: new ForyFloat16Array([1, -2]),
@@ -308,13 +315,6 @@ describe("array", () => {
     );
     expect(containsBytes(float16Bytes, [0x00, 0x3c, 0x00, 0xc0])).toBe(true);
 
-    const bfloat16Type = Type.struct(
-      { typeName: "example.bfloat16array" },
-      {
-        values: Type.bfloat16Array(),
-      },
-    );
-    const bfloat16Serializer = fory.register(bfloat16Type).serializer;
     const bfloat16Bytes = fory.serialize(
       {
         values: new BFloat16Array([1, -2]),

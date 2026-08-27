@@ -117,6 +117,10 @@ fory.register(Type.enum("example.status", Status));
 
 Registration is per `Fory` instance. If you create two instances, you need to register schemas in both.
 
+Register every type and custom serializer before the first root serialization or deserialization
+attempt. Starting that first root operation permanently closes registration for the instance, even
+if the operation fails. Create a new `Fory` instance when you need a different registration set.
+
 ## What `register` Returns
 
 `fory.register(schema)` returns a bound serializer pair:

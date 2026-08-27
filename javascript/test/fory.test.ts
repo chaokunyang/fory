@@ -20,6 +20,7 @@
 import Fory, { TypeInfo, Type } from "../packages/core/index";
 import { describe, expect, test } from "@jest/globals";
 import { fromUint8Array } from "../packages/core/lib/platformBuffer";
+import { TypeId } from "../packages/core/lib/type";
 
 describe("fory", () => {
   test("defaults to compatible mode unless explicitly set", () => {
@@ -83,6 +84,76 @@ describe("fory", () => {
     const typeinfo8 = Type.string();
     testTypeInfo(typeinfo8, "123");
   });
+
+  test.each(["serialize", "deserialize"] as const)(
+    "freezes registration when %s starts and fails",
+    (operation) => {
+      const fory = new Fory({ compatible: false });
+      fory.register(Type.struct(8101, {}));
+
+      if (operation === "serialize") {
+        expect(() => fory.serialize(Symbol("unsupported"))).toThrow();
+      } else {
+        expect(() => fory.deserialize(new Uint8Array([0]))).toThrow();
+      }
+
+      expect(() => fory.register(Type.struct(8102, {}))).toThrow();
+    },
+  );
+
+  test("freezes direct resolver registration", () => {
+    const fory = new Fory({ compatible: false });
+    fory.serialize(1);
+
+    expect(() => fory.typeResolver.registerSerializer(Type.struct(8105, {}))).toThrow();
+    expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8105)).toBeUndefined();
+  });
+
+  test("keeps rejected descriptor mutable", () => {
+    const fory = new Fory({ compatible: false });
+    const typeInfo = Type.struct(8106, {});
+    fory.serialize(1);
+
+    expect(() => fory.register(typeInfo)).toThrow();
+    typeInfo.setNullable(true);
+    expect(typeInfo.nullable).toBe(true);
+  });
+
+  test("rejects regeneration before codegen", () => {
+    let generated = 0;
+    const fory = new Fory({
+      compatible: false,
+      hooks: {
+        afterCodeGenerated(code) {
+          generated++;
+          return code;
+        },
+      },
+    });
+    fory.serialize(1);
+    const generatedBefore = generated;
+
+    expect(() => fory.typeResolver.regenerateReadSerializer(Type.struct(8107, {}))).toThrow();
+    expect(generated).toBe(generatedBefore);
+  });
+
+  test.each(["serialize", "deserialize"] as const)(
+    "freezes registration after registered %s succeeds",
+    (operation) => {
+      const typeInfo = Type.struct(8103, {});
+      const source = new Fory({ compatible: false }).register(typeInfo.clone());
+      const fory = new Fory({ compatible: false });
+      const registered = fory.register(typeInfo);
+
+      if (operation === "serialize") {
+        registered.serialize({});
+      } else {
+        registered.deserialize(source.serialize({}));
+      }
+
+      expect(() => fory.register(Type.struct(8104, {}))).toThrow();
+    },
+  );
 
   function testTypeInfo(typeinfo: TypeInfo, input: any, expected?: any) {
     const fory = new Fory({ compatible: false });

@@ -14,11 +14,15 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
 - Python `TypeResolver` owns registry freeze and finalization state. Its Cython companion may cache
   completion of the one Python-owner dispatch needed to populate native resolver tables, but the
   `Fory` facade must not mirror that state. Cython roots call the resolver owner directly.
-  Serializer construction may reenter a root, so the resolver rechecks its frozen state after
-  construction and before publishing type, serializer, name, or ID state. Allocate automatic type
-  IDs only at that common publication point; do not reserve IDs before callbacks or maintain
-  rollback state. `ThreadSafeFory` validates registrations before retaining their replay callbacks,
-  and it must not execute application factories or callbacks while holding its pool lock.
+  Serializer construction may reenter registration or a root, so the resolver rechecks both
+  registration conflicts and its frozen state after construction and before publishing type,
+  serializer, name, or ID state. Allocate automatic type IDs only after those checks at the common
+  publication point; do not reserve IDs before callbacks or maintain rollback state.
+  `ThreadSafeFory` validates registrations before retaining their replay callbacks, and it must not
+  execute application factories or callbacks while holding its pool lock. Its registration
+  linearization is reentrant so nested facade registrations share the same publication order. A
+  root started during registration must not reuse the staging instance, and root reentry from a
+  running user `fory_factory` fails without recursively invoking that factory.
 - In non-strict native mode, public unqualified `register_type` for a built-in native carrier uses
   the same reserved type identity as pre-root discovery. Ordinary application classes and
   dataclasses retain their struct registration identity. Configure both through public registration;

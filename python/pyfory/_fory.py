@@ -692,8 +692,10 @@ class ThreadSafeFory:
         self._fory_factory = fory_factory
         self._callbacks = []
         self._lock = threading.Lock()
-        self._registration_lock = threading.Lock()
+        self._registration_lock = threading.RLock()
+        self._registration_depth = 0
         self._registration_fory = None
+        self._fory_factory_running = False
         self._pool = []
         if fory_factory is not None:
             self._fory_class = None
@@ -703,23 +705,37 @@ class ThreadSafeFory:
             self._fory_class = CythonFory
         else:
             self._fory_class = Fory
-        self._instances_created = False
+        self._root_started = False
 
     def _build_fory(self):
-        if self._fory_factory is not None:
-            fory = self._fory_factory()
-        else:
-            fory = self._fory_class(**self._config)
-        for callback in self._callbacks:
-            callback(fory)
-        return fory
+        with self._registration_lock:
+            if self._fory_factory is not None:
+                if self._fory_factory_running:
+                    raise RuntimeError(
+                        "Cannot start a root serialization or deserialization operation while the Fory factory is creating an instance."
+                    )
+                self._fory_factory_running = True
+                try:
+                    fory = self._fory_factory()
+                finally:
+                    self._fory_factory_running = False
+            else:
+                fory = self._fory_class(**self._config)
+            for callback in self._callbacks:
+                callback(fory)
+            return fory
 
     def _get_fory(self):
         with self._lock:
             if self._pool:
                 return self._pool.pop()
-            self._instances_created = True
-            fory = self._registration_fory
+            self._root_started = True
+            # Nested registrations share the staging instance, but a root may reuse it only
+            # after the outermost registration has published its callback.
+            if self._registration_depth == 0:
+                fory = self._registration_fory
+            else:
+                fory = None
             self._registration_fory = None
         if fory is not None:
             # The validation instance already contains every published registration.
@@ -733,25 +749,36 @@ class ThreadSafeFory:
             self._pool.append(fory)
 
     def _register_callback(self, callback):
+        # The reentrant lock gives nested facade registrations one publication order while the
+        # pool lock keeps a concurrently starting root atomic with callback publication.
         with self._registration_lock:
             with self._lock:
                 self._check_registration_open()
+                self._registration_depth += 1
                 registration_fory = self._registration_fory
-                # A concurrent root must not reuse this instance while the callback mutates it.
-                self._registration_fory = None
-            if registration_fory is None:
-                registration_fory = self._build_fory()
-            callback(registration_fory)
-            with self._lock:
-                self._check_registration_open()
-                self._callbacks.append(callback)
-                self._registration_fory = registration_fory
+            try:
+                if registration_fory is None:
+                    registration_fory = self._build_fory()
+                    with self._lock:
+                        self._check_registration_open()
+                        self._registration_fory = registration_fory
+                callback(registration_fory)
+                with self._lock:
+                    self._check_registration_open()
+                    self._callbacks.append(callback)
+                    self._registration_fory = registration_fory
+            except BaseException:
+                with self._lock:
+                    if self._registration_depth == 1:
+                        self._registration_fory = None
+                raise
+            finally:
+                with self._lock:
+                    self._registration_depth -= 1
 
     def _check_registration_open(self):
-        if self._instances_created:
-            raise RuntimeError(
-                "Cannot register types after Fory instances have been created. Please register all types before calling serialize/deserialize."
-            )
+        if self._root_started:
+            raise RuntimeError("Cannot register types after the first root serialization or deserialization operation has started.")
 
     def register(
         self,

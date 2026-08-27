@@ -829,9 +829,16 @@ class TypeResolver:
 
         if should_create_serializer:
             serializer = self._create_serializer(cls)
-        # Serializer construction can run application code and start a root. Recheck before
-        # publishing any type, serializer, name, or id state.
+        # Serializer construction can run application code and mutate or freeze this registry.
+        # Recheck both invariants before allocating an automatic ID or publishing state.
         self._check_registry_mutable()
+        self._preflight_registration(
+            cls,
+            type_id=type_id,
+            user_type_id=user_type_id,
+            namespace=namespace,
+            typename=typename,
+        )
         # Allocate automatic IDs only at the common commit point. Nested registrations therefore
         # receive IDs in publication order without reservations or rollback state.
         if type_id is None:
@@ -871,6 +878,8 @@ class TypeResolver:
         namespace,
         typename,
     ):
+        if cls in self._types_info:
+            raise TypeError(f"{cls} registered already")
         if typename is not None:
             existing = self._named_type_to_type_info.get((namespace, typename))
             if existing is not None and existing.cls is not cls:

@@ -190,11 +190,8 @@ def test_thread_safe_fory_register_after_use():
     person = Person(name="Alice", age=30)
     fory.serialize(person)
 
-    try:
+    with pytest.raises(RuntimeError):
         fory.register(Address)
-        assert False, "Should raise RuntimeError"
-    except RuntimeError as e:
-        assert "Cannot register types after Fory instances have been created" in str(e)
 
 
 def test_invalid_registration():
@@ -270,3 +267,66 @@ def test_reentrant_registration():
     assert fory.deserialize(fory.serialize(None)) is None
     with pytest.raises(RuntimeError):
         fory.register_type(Person)
+
+
+def test_nested_registration():
+    class AddressSerializer(pyfory.Serializer):
+        def write(self, write_context, value):
+            write_context.write_string(value.city)
+            write_context.write_string(value.country)
+
+        def read(self, read_context):
+            return Address(read_context.read_string(), read_context.read_string())
+
+    fory = ThreadSafeFory(xlang=True, compatible=False)
+    constructions = 0
+    errors = []
+
+    def serializer_factory(type_resolver, cls):
+        nonlocal constructions
+        constructions += 1
+        if constructions == 1:
+            fory.register_type(Person)
+        return AddressSerializer(type_resolver, cls)
+
+    def register():
+        try:
+            fory.register_type(Address, serializer=serializer_factory)
+        except (RuntimeError, TypeError) as exc:
+            errors.append(exc)
+
+    thread = threading.Thread(target=register, daemon=True)
+    thread.start()
+    thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    assert not errors
+    resolver = fory._registration_fory.type_resolver
+    person_info = resolver.get_type_info(Person, create=False)
+    address_info = resolver.get_type_info(Address, create=False)
+    assert person_info.user_type_id + 1 == address_info.user_type_id
+    address = Address(city="Oslo", country="Norway")
+    assert fory.deserialize(fory.serialize(address)) == address
+    assert constructions == 1
+
+
+def test_factory_root_reentry():
+    fory = None
+    constructions = 0
+
+    def fory_factory():
+        nonlocal constructions
+        constructions += 1
+        fory.serialize(None)
+        return pyfory.Fory(xlang=False, compatible=False)
+
+    fory = ThreadSafeFory(fory_factory=fory_factory)
+    with pytest.raises(Exception):
+        fory.register_type(Person)
+
+    assert constructions == 1
+    assert fory._root_started
+    assert not fory._callbacks
+    assert fory._registration_fory is None
+    with pytest.raises(RuntimeError):
+        fory.register_type(Address)

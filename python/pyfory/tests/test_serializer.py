@@ -1540,6 +1540,62 @@ def test_nested_registration_ids(registration):
     assert nested_info.user_type_id + 1 == type_info.user_type_id
 
 
+@pytest.mark.parametrize("conflict", ["class", "id", "name"])
+def test_nested_registration_conflict(conflict):
+    fory = Fory(xlang=True, compatible=False)
+    resolver = fory.type_resolver
+    nested_info = None
+    nested_cls = FrozenExt if conflict == "class" else FrozenSecondExt
+    outer_args = {}
+    nested_args = {}
+    if conflict == "class":
+        nested_args["type_id"] = 735
+    elif conflict == "id":
+        outer_args["type_id"] = 735
+        nested_args["type_id"] = 735
+    else:
+        outer_args["name"] = "test.NestedConflict"
+        nested_args["name"] = "test.NestedConflict"
+
+    def serializer_factory(type_resolver, cls):
+        nonlocal nested_info
+        serializer = FrozenExtSerializer(type_resolver, nested_cls)
+        nested_info = fory.register_type(
+            nested_cls,
+            serializer=serializer,
+            **nested_args,
+        )
+        return FrozenExtSerializer(type_resolver, cls)
+
+    with pytest.raises(TypeError):
+        fory.register_type(
+            FrozenExt,
+            serializer=serializer_factory,
+            **outer_args,
+        )
+
+    assert resolver.get_type_info(nested_cls, create=False) is nested_info
+    assert resolver._types_info[nested_cls] is nested_info
+    if conflict == "class":
+        assert resolver._user_type_id_to_type_info[735] is nested_info
+
+        class NextValue:
+            pass
+
+        actual = fory.register_type(NextValue)
+        expected_fory = Fory(xlang=True, compatible=False)
+        expected = expected_fory.register_type(NextValue)
+        assert actual.user_type_id == expected.user_type_id
+    else:
+        assert resolver.get_type_info(FrozenExt, create=False) is None
+        if conflict == "id":
+            assert resolver._user_type_id_to_type_info[735] is nested_info
+        else:
+            assert resolver.get_type_info_by_name("test", "NestedConflict") is nested_info
+            key = (nested_info.namespace_bytes, nested_info.typename_bytes)
+            assert resolver._ns_type_to_type_info[key] is nested_info
+
+
 def test_duplicate_type_keeps_id():
     class FirstValue:
         pass

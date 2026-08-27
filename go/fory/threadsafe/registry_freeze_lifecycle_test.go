@@ -120,7 +120,7 @@ func TestRegistryFreezeReplayFailure(t *testing.T) {
 }
 
 func TestRegistryFreezeOnFactoryPanic(t *testing.T) {
-	f := NewWithFactory(func() *fory.Fory { return nil })
+	f := NewWithFactory(func() *fory.Fory { panic("factory failure") })
 	require.Panics(t, func() {
 		_, _ = f.Serialize(int32(1))
 	})

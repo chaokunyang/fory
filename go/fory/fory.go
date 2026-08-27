@@ -799,11 +799,6 @@ func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v any, callback func(Bu
 		if f.metaContext != nil {
 			f.metaContext.Reset()
 		}
-		// Set up buffer callback for out-of-band serialization
-		if callback != nil {
-			f.writeCtx.bufferCallback = nil
-			f.writeCtx.outOfBand = false
-		}
 	}()
 	if !validateRootDecimal(f.writeCtx.Err(), v) {
 		return f.writeCtx.TakeError()
@@ -846,7 +841,6 @@ func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v any, buffers
 		if f.metaContext != nil {
 			f.metaContext.Reset()
 		}
-		f.readCtx.outOfBandBuffers = nil
 	}()
 	// Set up out-of-band buffers if provided
 	if buffers != nil {

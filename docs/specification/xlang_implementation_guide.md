@@ -94,6 +94,11 @@ the context is reused.
 `prepare(...)` should only bind the active buffer and root-operation inputs.
 `reset()` should clear operation-local mutable state.
 
+When writer metadata objects carry root-local dynamic IDs, reset must restore
+those IDs and discard the active owner-list entries. An owner may be appended
+again on first use in the next root; retaining prior entries creates duplicate
+cleanup work across roots.
+
 That operation-local state includes:
 
 - the current buffer

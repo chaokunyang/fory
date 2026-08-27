@@ -649,9 +649,11 @@ an eight-slot array so an unusual metadata high-water mark is not retained.
 
 JavaScript root entry releases reference and metadata state left by the
 previous operation, including a failed operation, before the context is reused.
-Its native arrays keep their O(1) replacement reset instead of copying the Java
-backing-array retention policy. Full reference and metadata cleanup does not
-run on the root exit path.
+Read-side occurrence arrays use native replacement reset instead of copying the
+Java backing-array retention policy. Writer metadata owners restore their
+dynamic IDs and then truncate the active owner list so the same owners do not
+accumulate across roots. Full reference and metadata cleanup does not run on
+the root exit path.
 
 A class-resolution cache reachable from untrusted deserialization may publish
 an entry only from explicit trusted configuration or after the active class

@@ -13,7 +13,9 @@ Load this file when changing `javascript/`.
 - JavaScript TypeMeta header cache hits should compare the 52-bit TypeMeta header hash directly. The hash is precise in JS `Number` and already includes the low header bits as hash input; do not add extra low-bit fields, sentinel state, nullable accepted headers, or parallel slot arrays around it.
 - Root entry releases reference and metadata state left by the previous operation, including a
   failed operation, before the context is reused. Do not put full cleanup on the root exit path or
-  copy Java backing-array retention policies onto native JavaScript arrays.
+  copy Java backing-array retention policies onto native JavaScript arrays. Read-side occurrence
+  arrays use native replacement reset. Writer metadata owners first restore their dynamic IDs,
+  then truncate the active owner list because those owners are appended again in the next root.
 - Runtime value carriers such as decimal or reduced-precision numeric types belong under the core `types/` ownership boundary, with imports, exports, and codegen externals updated together.
 - Keep `TypeInfo` as schema metadata. Compatibility-sensitive decisions belong on `TypeResolver` or explicit operations, not as retained resolver state on metadata objects.
 - Normalize optional boolean config values at config construction; do not carry `null` through runtime paths when it means `false`.

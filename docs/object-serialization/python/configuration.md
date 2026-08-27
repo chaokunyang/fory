@@ -54,9 +54,7 @@ Thread-safe serialization interface using a pooled wrapper:
 
 ```python
 class ThreadSafeFory:
-    def __init__(
-        self, fory_factory=None, **kwargs
-    )
+    def __init__(self, fory_factory=None, **kwargs)
 ```
 
 ## Parameters
@@ -82,6 +80,17 @@ class ThreadSafeFory:
 ## Key Methods
 
 ```python
+# Complete registration before serialization or deserialization. This form is valid in native
+# and xlang modes when no explicit stable identity is required.
+fory.register(MyClass)
+
+# Alternatively, use one of these forms when the xlang schema needs an explicit stable identity.
+# fory.register(MyClass, type_id=123)
+# fory.register(MyClass, name="my.package.MyClass")
+
+# Direct Fory accepts an instance; ThreadSafeFory requires a serializer class or factory.
+# fory.register(MyClass, serializer=MySerializer)
+
 # Serialization (serialize/deserialize are identical to dumps/loads)
 data: bytes = fory.serialize(obj)
 obj = fory.deserialize(data)
@@ -89,14 +98,6 @@ obj = fory.deserialize(data)
 # Alternative API (aliases)
 data: bytes = fory.dumps(obj)
 obj = fory.loads(data)
-
-# Type registration by id
-fory.register(MyClass, type_id=123)
-fory.register(MyClass, type_id=123, serializer=custom_serializer)
-
-# Type registration by name
-fory.register(MyClass, name="my.package.MyClass")
-fory.register(MyClass, name="my.package.MyClass", serializer=custom_serializer)
 ```
 
 Complete registration before the first root serialization or deserialization attempt. That first

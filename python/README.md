@@ -38,7 +38,7 @@ object serialization together with row-format APIs for analytical data.
 
 ### **Security & Safety**
 
-- **Strict mode** prevents deserialization of untrusted types by type registration and checks.
+- **Strict mode** limits application class loading to the configured registration surface.
 - **Reference tracking** for handling circular references safely
 
 ## Installation
@@ -226,7 +226,8 @@ print(fory.loads(data)(10))  # 100
 
 #### Serialize Methods
 
-Register method carriers and receiver classes before serializing bound, class, or static methods:
+Register method carriers and receiver classes before serializing bound instance methods. A static
+method is serialized as its underlying function:
 
 ```python
 import pyfory
@@ -238,19 +239,14 @@ class Calculator:
     def scale(self, x):
         return 3 * x
 
-    @classmethod
-    def ten(cls, x):
-        return 10 * x
-
     @staticmethod
     def double(x):
         return 2 * x
 
-for carrier in (type, types.FunctionType, types.MethodType, staticmethod, classmethod, Calculator):
+for carrier in (types.FunctionType, types.MethodType, Calculator):
     fory.register_type(carrier)
 
 print(fory.loads(fory.dumps(Calculator().scale))(10))  # 30
-print(fory.loads(fory.dumps(Calculator.ten))(10))  # 100
 print(fory.loads(fory.dumps(Calculator.double))(10))  # 20
 ```
 
@@ -514,15 +510,11 @@ Thread-safe serialization interface for sharing one configured facade across thr
 
 ```python
 class ThreadSafeFory:
-    def __init__(
-        self,
-        xlang: bool = True,
-        ref: bool = False,
-        strict: bool = True,
-        compatible: bool | None = None,
-        max_depth: int = 50
-    )
+    def __init__(self, fory_factory=None, **kwargs)
 ```
+
+Without `fory_factory`, keyword arguments are forwarded to each pooled `Fory`. Use
+`fory_factory` when each pooled instance needs custom instance-level configuration.
 
 Register all types before the first serialization or deserialization attempt. That first attempt
 permanently freezes registration, even when it fails. Every later registration attempt raises an
@@ -584,7 +576,7 @@ for t in threads: t.join()
 fory.register(MyClass, type_id=123)
 # Alternatively, register by name or provide a custom serializer.
 # fory.register(MyClass, name="my.package.MyClass")
-# fory.register(MyClass, type_id=123, serializer=custom_serializer)
+# fory.register(MyClass, type_id=123, serializer=MySerializer)
 
 # serialize/deserialize are identical to dumps/loads.
 data: bytes = fory.serialize(obj)
@@ -595,15 +587,15 @@ obj = fory.loads(data)
 
 ### Xlang And Native Mode Comparison
 
-| Feature             | Native mode (`xlang=False`)                   | Xlang mode (default)                  |
-| ------------------- | --------------------------------------------- | ------------------------------------- |
-| Use case            | Pure Python applications                      | Multi-language systems                |
-| Compatibility       | Python only                                   | Java, Go, Rust, C++, JavaScript, etc. |
-| Supported types     | Configured Python type surface                | Cross-language compatible types       |
-| Functions/lambdas   | Supported with registered native carriers     | Not allowed                           |
-| Methods             | Supported with registered carriers and owners | Not allowed                           |
-| Stateful/reduce     | Supported with registered application types   | Not allowed                           |
-| Schema mode default | Compatible                                    | Compatible                            |
+| Feature             | Native mode (`xlang=False`)               | Xlang mode (default)                  |
+| ------------------- | ----------------------------------------- | ------------------------------------- |
+| Use case            | Pure Python applications                  | Multi-language systems                |
+| Compatibility       | Python only                               | Java, Go, Rust, C++, JavaScript, etc. |
+| Supported types     | Configured Python type surface            | Cross-language compatible types       |
+| Functions/lambdas   | Registered and policy-authorized carriers | Not allowed                           |
+| Instance methods    | Registered and policy-authorized carriers | Not allowed                           |
+| Stateful/reduce     | Registered and policy-authorized types    | Not allowed                           |
+| Schema mode default | Compatible                                | Compatible                            |
 
 #### Native Mode (`xlang=False`)
 

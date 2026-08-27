@@ -229,6 +229,97 @@ def test_invalid_registration():
     assert valid_constructions == 1
 
 
+@pytest.mark.parametrize("method", ["register", "register_type", "register_union"])
+def test_serializer_instance_rejected(method):
+    class AddressSerializer(pyfory.Serializer):
+        def write(self, write_context, value):
+            write_context.write_string(value.city)
+            write_context.write_string(value.country)
+
+        def read(self, read_context):
+            return Address(read_context.read_string(), read_context.read_string())
+
+    owner = pyfory.Fory(xlang=False, compatible=False)
+    serializer = AddressSerializer(owner.type_resolver, Address)
+    builds = 0
+
+    def fory_factory():
+        nonlocal builds
+        builds += 1
+        return pyfory.Fory(xlang=False, compatible=False)
+
+    fory = ThreadSafeFory(fory_factory=fory_factory)
+
+    with pytest.raises(TypeError):
+        getattr(fory, method)(Address, serializer=serializer)
+
+    assert fory._callbacks == []
+    assert fory._registration_fory is None
+    assert not fory._root_started
+    assert builds == 0
+
+
+def test_serializer_factory_per_child():
+    class AddressSerializer(pyfory.Serializer):
+        def write(self, write_context, value):
+            write_context.write_string(value.city)
+            write_context.write_string(value.country)
+
+        def read(self, read_context):
+            return Address(read_context.read_string(), read_context.read_string())
+
+    serializers = []
+
+    def serializer_factory(type_resolver, cls):
+        serializer = AddressSerializer(type_resolver, cls)
+        serializers.append(serializer)
+        return serializer
+
+    fory = ThreadSafeFory(xlang=False, compatible=False)
+    fory.register_type(Address, serializer=serializer_factory)
+    first = fory._registration_fory
+    second = fory._build_fory()
+
+    assert len(serializers) == 2
+    assert serializers[0] is not serializers[1]
+    assert serializers[0].type_resolver is first.type_resolver
+    assert serializers[1].type_resolver is second.type_resolver
+    address = Address(city="Oslo", country="Norway")
+    assert second.deserialize(second.serialize(address)) == address
+    assert fory.deserialize(fory.serialize(address)) == address
+
+
+def test_factory_serializer_owner():
+    class AddressSerializer(pyfory.Serializer):
+        def write(self, write_context, value):
+            write_context.write_string(value.city)
+            write_context.write_string(value.country)
+
+        def read(self, read_context):
+            return Address(read_context.read_string(), read_context.read_string())
+
+    serializers = []
+
+    def fory_factory():
+        fory = pyfory.Fory(xlang=False, compatible=False)
+        serializer = AddressSerializer(fory.type_resolver, Address)
+        fory.register_type(Address, serializer=serializer)
+        serializers.append(serializer)
+        return fory
+
+    fory = ThreadSafeFory(fory_factory=fory_factory)
+    first = fory._build_fory()
+    second = fory._build_fory()
+
+    assert len(serializers) == 2
+    assert serializers[0] is not serializers[1]
+    assert serializers[0].type_resolver is first.type_resolver
+    assert serializers[1].type_resolver is second.type_resolver
+    address = Address(city="Oslo", country="Norway")
+    assert first.deserialize(first.serialize(address)) == address
+    assert second.deserialize(second.serialize(address)) == address
+
+
 def test_reentrant_registration():
     class AddressSerializer(pyfory.Serializer):
         def write(self, write_context, value):
@@ -330,6 +421,23 @@ def test_factory_root_reentry():
     assert fory._registration_fory is None
     with pytest.raises(RuntimeError):
         fory.register_type(Address)
+
+
+def test_build_owner_precedes_pool():
+    fory = None
+    pooled = pyfory.Fory(xlang=False, compatible=False)
+
+    def fory_factory():
+        fory._return_fory(pooled)
+        fory.serialize(None)
+        return pyfory.Fory(xlang=False, compatible=False)
+
+    fory = ThreadSafeFory(fory_factory=fory_factory)
+
+    with pytest.raises(RuntimeError):
+        fory.serialize(None)
+
+    assert fory._pool == [pooled]
 
 
 def test_callback_root_reentry():

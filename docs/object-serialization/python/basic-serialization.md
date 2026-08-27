@@ -43,11 +43,12 @@ print(obj)  # {'name': 'Alice', 'age': 30, 'scores': [95, 87, 92]}
 
 ## Registration Lifecycle
 
-Register every application type before the first root serialization or deserialization attempt. In
-Python native mode, also register any callable, class, method, state, or reduction carrier that can
-appear in the graph. The first root serialization or deserialization attempt permanently freezes
-the instance's registry, even when the operation fails. `strict=False` does not enable late type
-discovery or registration.
+Complete every explicit type and serializer registration before the first root serialization or
+deserialization attempt. In Python native mode, register the application and native carrier types
+whose serializers must be installed before that first root. The first root serialization or
+deserialization attempt permanently freezes the instance's registry, even when the operation
+fails. `strict=False` does not enable late type or serializer registration; its policy may still
+authorize module-global resolution during a trusted native read without mutating the registry.
 
 If the first operation fails because registration is incomplete or invalid, create a new instance,
 register the complete type surface, and retry with that instance. A fully configured instance can

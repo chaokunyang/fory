@@ -77,7 +77,8 @@ print(fory.loads(data)(10))  # 100
 
 ## Serialize Methods
 
-Register the method carriers and receiver class before serializing bound, class, or static methods:
+Register the method carriers and receiver class before serializing bound instance methods. A
+static method is serialized as its underlying function:
 
 ```python
 import pyfory
@@ -89,22 +90,15 @@ class Calculator:
     def scale(self, x):
         return 3 * x
 
-    @classmethod
-    def ten(cls, x):
-        return 10 * x
-
     @staticmethod
     def double(x):
         return 2 * x
 
-for carrier in (type, types.FunctionType, types.MethodType, staticmethod, classmethod, Calculator):
+for carrier in (types.FunctionType, types.MethodType, Calculator):
     fory.register_type(carrier)
 
 # Serialize instance method
 print(fory.loads(fory.dumps(Calculator().scale))(10))  # 30
-
-# Serialize class method
-print(fory.loads(fory.dumps(Calculator.ten))(10))  # 100
 
 # Serialize static method
 print(fory.loads(fory.dumps(Calculator.double))(10))  # 20

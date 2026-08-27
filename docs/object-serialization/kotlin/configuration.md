@@ -83,6 +83,10 @@ object ForyHolder {
 }
 ```
 
+Install `ForyModule` instances with `withModule(...)` before calling
+`buildThreadSafeFory()`. Runtime module registration and the Kotlin reified registration extension
+are available only on a direct `Fory` instance.
+
 ### Using Builder Methods
 
 ```kotlin

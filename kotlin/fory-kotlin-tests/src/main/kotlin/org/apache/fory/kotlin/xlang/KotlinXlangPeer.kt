@@ -32,6 +32,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import org.apache.fory.BaseFory
 import org.apache.fory.Fory
+import org.apache.fory.ForyModule
 import org.apache.fory.annotation.ArrayType
 import org.apache.fory.annotation.ForyCase
 import org.apache.fory.annotation.ForyField
@@ -946,15 +947,18 @@ private fun compatibleDefaultRoundTrip() {
 
 private fun checkNoArgRegisterReceivers() {
   checkNoArgRegister(newFory())
-  checkNoArgRegister(
+  val module = ForyModule { it.register<KotlinInternalUser>() }
+  checkNoArgRegistered(
     ForyKotlin.builder()
+      .withModule(module)
       .withXlang(true)
       .requireClassRegistration(true)
       .withRefTracking(false)
       .buildThreadLocalFory()
   )
-  checkNoArgRegister(
+  checkNoArgRegistered(
     ForyKotlin.builder()
+      .withModule(module)
       .withXlang(true)
       .requireClassRegistration(true)
       .withRefTracking(false)
@@ -962,8 +966,12 @@ private fun checkNoArgRegisterReceivers() {
   )
 }
 
-private fun checkNoArgRegister(fory: BaseFory) {
+private fun checkNoArgRegister(fory: Fory) {
   fory.register<KotlinInternalUser>()
+  checkNoArgRegistered(fory)
+}
+
+private fun checkNoArgRegistered(fory: BaseFory) {
   val value = KotlinInternalUser(id = 7u, name = "receiver")
   check(fory.deserialize(fory.serialize(value), KotlinInternalUser::class.java) == value)
 }

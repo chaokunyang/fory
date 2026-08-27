@@ -73,6 +73,8 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
           try {
             allFory.put(fory, null);
             factoryCallback.accept(fory);
+            // Keep finalization in this failure scope so an unusable late child is not retained.
+            registrationGate.finishChildIfFrozen(fory);
             return fory;
           } catch (RuntimeException | Error e) {
             foryThreadLocal.remove();
@@ -103,8 +105,8 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
           synchronized (allFory) {
             allFory.keySet().forEach(callback);
           }
-          factoryCallback = factoryCallback.andThen(callback);
-        });
+        },
+        () -> factoryCallback = factoryCallback.andThen(callback));
   }
 
   @Override

@@ -92,6 +92,13 @@ Do not add rollback, staging, or a parallel registration path for that exception
 installation may consist of complete nested registrations; publish the module-installed marker
 only after installation returns and the lifecycle is rechecked.
 
+Java combined type-and-serializer registration constructs against an unpublished type, rechecks
+the registry lifecycle, and then publishes the type and serializer together. The exact
+`ObjectSerializer` path uses its nonpublishing constructor. Static-generated serializer classes
+require an already registered canonical type and are therefore rejected by the combined class
+overload. Direct Java `Fory` instances may install a module before their first root operation;
+thread-safe facades install modules only through `ForyBuilder.withModule` during construction.
+
 JavaScript generated registration freezes the complete `TypeInfo` schema graph before code
 generation, including nested schemas and field occurrence modifiers. The writer-owned
 `dynamicTypeId` remains mutable because it is reset per root. Code generation then constructs and

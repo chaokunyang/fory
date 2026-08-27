@@ -21,6 +21,14 @@ Load this file when changing `kotlin/` or compiler code that generates Kotlin so
 - Combined generated-struct registration must publish the canonical type before constructing its
   serializer because generated construction resolves the canonical `TypeInfo`. Do not move that
   construction before type registration or add rollback, staging, or a parallel registration path.
+- Bootstrap installation markers must be published only after every nested registration completes
+  and an authoritative lifecycle recheck succeeds. A failed or root-reentered installation leaves
+  the marker absent naturally; do not publish early and add rollback or staging state. Use the
+  concrete `Fory` as the per-runtime monitor for the complete bootstrap, and reject same-runtime
+  same-thread reentry instead of recursively starting a second installation.
+- Install modules for thread-safe facades through `ForyBuilder.withModule` before building them.
+  Runtime registration extensions target concrete `Fory` instances and must not recreate a
+  thread-safe module-registration wrapper.
 - When adding Kotlin gRPC service companions, emit Kotlin source only. Reuse the generated schema
   module's `ThreadSafeFory` and KSP-generated schema serializers, and keep grpc-java/grpc-kotlin
   dependencies application-owned instead of adding them as hard `fory-kotlin` dependencies.

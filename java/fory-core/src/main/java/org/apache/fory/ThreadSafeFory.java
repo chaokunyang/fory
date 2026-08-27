@@ -22,6 +22,7 @@ package org.apache.fory;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.resolver.TypeChecker;
 
 /**
@@ -30,6 +31,9 @@ import org.apache.fory.resolver.TypeChecker;
  *
  * <p>The runtime class loader is fixed when the thread-safe serializer is built. If you need a
  * different class loader, build a different {@link ThreadSafeFory} instance.
+ *
+ * <p>Configure runtime modules through {@link ForyBuilder#withModule(ForyModule)} before building
+ * the facade.
  */
 public interface ThreadSafeFory extends BaseFory {
 

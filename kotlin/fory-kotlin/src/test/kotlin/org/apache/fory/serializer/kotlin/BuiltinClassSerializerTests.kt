@@ -21,6 +21,11 @@ package org.apache.fory.serializer.kotlin
 
 import java.math.BigDecimal
 import java.math.BigInteger
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.time.Duration
@@ -71,6 +76,76 @@ class BuiltinClassSerializerTests {
 
     assertThrows(ForyException::class.java) { KotlinSerializers.registerSerializers(fory) }
     Assert.assertSame(DefaultValueUtils.getKotlinDefaultValueSupport(), defaultValueSupport)
+  }
+
+  @Test
+  fun testFreezeWhileBootstrapWaits() {
+    val fory =
+      Fory.builder().withXlang(true).withCodegen(false).requireClassRegistration(true).build()
+    val executor = Executors.newSingleThreadExecutor()
+    val worker = AtomicReference<Thread>()
+    val started = CountDownLatch(1)
+    lateinit var result: Future<Throwable?>
+
+    try {
+      synchronized(DefaultValueUtils::class.java) {
+        result =
+          executor.submit<Throwable?> {
+            worker.set(Thread.currentThread())
+            started.countDown()
+            try {
+              KotlinSerializers.registerSerializers(fory)
+              null
+            } catch (t: Throwable) {
+              t
+            }
+          }
+        Assert.assertTrue(started.await(10, TimeUnit.SECONDS))
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (worker.get().state != Thread.State.BLOCKED && System.nanoTime() < deadline) {
+          Thread.yield()
+        }
+        Assert.assertEquals(worker.get().state, Thread.State.BLOCKED)
+        fory.serialize(1)
+      }
+
+      Assert.assertTrue(result.get(10, TimeUnit.SECONDS) is ForyException)
+      assertThrows(ForyException::class.java) { KotlinSerializers.registerSerializers(fory) }
+    } finally {
+      executor.shutdownNow()
+    }
+  }
+
+  @Test
+  fun testConcurrentBootstrap() {
+    val fory =
+      Fory.builder().withXlang(false).withCodegen(false).requireClassRegistration(true).build()
+    val executor = Executors.newFixedThreadPool(2)
+    val ready = CountDownLatch(2)
+    val start = CountDownLatch(1)
+
+    try {
+      val results =
+        List(2) {
+          executor.submit {
+            ready.countDown()
+            start.await(10, TimeUnit.SECONDS)
+            KotlinSerializers.registerSerializers(fory)
+          }
+        }
+      Assert.assertTrue(ready.await(10, TimeUnit.SECONDS))
+      start.countDown()
+      results.forEach { it.get(10, TimeUnit.SECONDS) }
+
+      Assert.assertTrue(fory.typeResolver.isRegistered(Duration::class.java))
+      val serializer = fory.typeResolver.getSerializer(Duration::class.java)
+      val defaultValueSupport = DefaultValueUtils.getKotlinDefaultValueSupport()
+      KotlinSerializers.registerSerializers(fory)
+      Assert.assertSame(fory.typeResolver.getSerializer(Duration::class.java), serializer)
+      Assert.assertSame(DefaultValueUtils.getKotlinDefaultValueSupport(), defaultValueSupport)
+    } finally {
+      executor.shutdownNow()
+    }
   }
 
   @Test

@@ -120,6 +120,10 @@ object ForyHolder {
 }
 ```
 
+Install `ForyModule` instances with `withModule(...)` before calling
+`buildThreadSafeFory()`. Runtime module registration and Scala generated-serializer registration
+extensions are available only on a direct `Fory` instance.
+
 ## Configuration
 
 All configuration options from Fory Java are available. See [Java Configuration](../java/configuration.md) for the complete list.

@@ -19,7 +19,9 @@
 
 package org.apache.fory.serializer;
 
+import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -27,11 +29,14 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyModule;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.TestUtils;
+import org.apache.fory.builder.Generated;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.meta.TypeDef;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.type.Descriptor;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -265,12 +270,100 @@ public class RegisterTest extends ForyTestBase {
     Assert.assertNull(fory.getTypeResolver().getTypeInfo(MyExt.class, false));
   }
 
+  @Test
+  public void testReentrantObjectRegistration() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
+    AtomicInteger factoryCalls = new AtomicInteger();
+    fory.registerSerializerFactory(
+        (resolver, type) -> {
+          if (type != ObjectField.class) {
+            return null;
+          }
+          factoryCalls.incrementAndGet();
+          fory.serialize("freeze");
+          return new ObjectFieldSerializer(resolver);
+        });
+
+    Assert.assertThrows(
+        ForyException.class,
+        () -> fory.registerSerializerAndType(ObjectHolder.class, ObjectSerializer.class));
+    Assert.assertEquals(factoryCalls.get(), 1);
+    Assert.assertTrue(fory.getTypeResolver().isRegistrationFinished());
+    Assert.assertFalse(fory.getTypeResolver().isRegistered(ObjectHolder.class));
+    Assert.assertNull(fory.getTypeResolver().getTypeInfo(ObjectHolder.class, false));
+  }
+
+  @Test(dataProvider = "xlang")
+  public void testStaticGeneratedClassRejected(boolean xlang) {
+    Fory fory =
+        Fory.builder()
+            .withXlang(xlang)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
+    RejectedStaticSerializer.CONSTRUCTIONS.set(0);
+
+    Assert.assertThrows(
+        ForyException.class,
+        () -> fory.registerSerializerAndType(ObjectHolder.class, RejectedStaticSerializer.class));
+    Assert.assertEquals(RejectedStaticSerializer.CONSTRUCTIONS.get(), 0);
+    Assert.assertFalse(fory.getTypeResolver().isRegistered(ObjectHolder.class));
+    Assert.assertNull(fory.getTypeResolver().getTypeInfo(ObjectHolder.class, false));
+  }
+
   public static class ReentrantSerializer extends MyExtSerializer {
     private static final AtomicReference<Runnable> CONSTRUCTION = new AtomicReference<>();
 
     public ReentrantSerializer(TypeResolver typeResolver) {
       super(typeResolver);
       CONSTRUCTION.get().run();
+    }
+  }
+
+  public static class ObjectHolder {
+    public ObjectField field;
+  }
+
+  public static final class ObjectField {}
+
+  public static class ObjectFieldSerializer extends Serializer<ObjectField> {
+    public ObjectFieldSerializer(TypeResolver typeResolver) {
+      super(typeResolver.getConfig(), ObjectField.class);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, ObjectField value) {}
+
+    @Override
+    public ObjectField read(ReadContext readContext) {
+      return new ObjectField();
+    }
+  }
+
+  public static final class RejectedStaticSerializer
+      extends Generated.GeneratedStaticCompatibleSerializer {
+    private static final AtomicInteger CONSTRUCTIONS = new AtomicInteger();
+
+    public RejectedStaticSerializer(TypeResolver resolver, Class<?> type, TypeDef typeDef) {
+      super(resolver, type, typeDef, Collections.emptyList());
+      CONSTRUCTIONS.incrementAndGet();
+    }
+
+    @Override
+    public List<Descriptor> getGeneratedDescriptors() {
+      return Collections.emptyList();
+    }
+
+    @Override
+    public Object readCompatible(ReadContext readContext) {
+      throw new UnsupportedOperationException();
     }
   }
 

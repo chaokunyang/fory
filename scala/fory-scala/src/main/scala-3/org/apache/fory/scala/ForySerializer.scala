@@ -19,7 +19,7 @@
 
 package org.apache.fory.scala
 
-import org.apache.fory.{BaseFory, Fory, ForyModule, ThreadSafeFory}
+import org.apache.fory.Fory
 import org.apache.fory.annotation.Internal
 import org.apache.fory.exception.ForyException
 import org.apache.fory.meta.TypeDef
@@ -169,53 +169,6 @@ object ForySerializer {
       checkRegistrationOpen(resolver)
       resolver.setSerializer(cls, generatedSerializer)
     }
-  }
-
-  def register[T](
-      fory: ThreadSafeFory,
-      cls: Class[T])(using serializer: ForySerializer[T]): Unit = {
-    registerModule(fory, cls, null, null, null)
-  }
-
-  def register[T](
-      fory: ThreadSafeFory,
-      cls: Class[T],
-      typeId: Long)(using serializer: ForySerializer[T]): Unit = {
-    registerModule(fory, cls, java.lang.Long.valueOf(typeId), null, null)
-  }
-
-  def register[T](
-      fory: ThreadSafeFory,
-      cls: Class[T],
-      name: String)(using serializer: ForySerializer[T]): Unit = {
-    val (namespace, typeName) = splitName(name)
-    registerModule(fory, cls, null, namespace, typeName)
-  }
-
-  def register[T](
-      fory: ThreadSafeFory,
-      cls: Class[T],
-      namespace: String,
-      typeName: String)(using serializer: ForySerializer[T]): Unit = {
-    checkTypeName(typeName)
-    registerModule(fory, cls, null, namespace, typeName)
-  }
-
-  private[scala] def registerModule[T](
-      fory: BaseFory,
-      cls: Class[T],
-      typeId: java.lang.Long,
-      namespace: String,
-      typeName: String)(using serializer: ForySerializer[T]): Unit = {
-    if typeName != null then {
-      checkTypeName(typeName)
-    }
-    fory.register(new ForyModule {
-      override def install(runtime: Fory): Unit = {
-        runtime.register(ForyScala)
-        register(runtime, cls, typeId, namespace, typeName)(using serializer)
-      }
-    })
   }
 
   private def registerType[T](

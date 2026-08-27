@@ -417,7 +417,15 @@ public abstract class TypeResolver {
   public <T> void registerSerializerAndType(
       Class<T> type, Class<? extends Serializer> serializerClass) {
     checkRegisterAllowed();
-    Serializer<?> serializer = newSerializer(type, serializerClass);
+    if (StaticGeneratedStructSerializer.class.isAssignableFrom(serializerClass)) {
+      throw new ForyException(
+          "Static generated serializers require registering the type first, then installing a "
+              + "constructed serializer instance with registerSerializer.");
+    }
+    Serializer<?> serializer =
+        serializerClass == ObjectSerializer.class
+            ? new ObjectSerializer<>(this, type, false)
+            : newSerializer(type, serializerClass);
     // Serializer construction may invoke application code which starts a root operation. Keep
     // type and serializer publication together after the authoritative lifecycle check.
     checkRegisterAllowed();

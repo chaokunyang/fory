@@ -90,12 +90,14 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   accepted registration, finish registration, and only then become visible; discard a provisional
   child when replay or finalization fails. Keep the lock order gate before pool or child storage.
 - Registration callbacks must recheck the authoritative freeze owner after returning and before
-  publishing the entry they prepared. Combined type-and-serializer registration may construct a
-  serializer only after the canonical type is registered when construction resolves that
-  `TypeInfo`; recheck before replacing the serializer and do not add rollback or a second
-  registration path. `ForyModule.install` may perform complete nested registrations, but the
+  publishing the entry they prepared. Java combined type-and-serializer registration constructs
+  against an unpublished type, rechecks, then publishes both together. Use the nonpublishing
+  `ObjectSerializer` constructor for that exact class; reject static-generated serializer classes
+  from the combined class overload because their construction requires prior canonical type
+  registration. `ForyModule.install` may perform complete nested registrations, but the
   module-installed marker is published only after installation returns and the lifecycle is
-  rechecked.
+  rechecked. Direct `Fory` accepts modules before its first root; thread-safe facades accept modules
+  only through `ForyBuilder.withModule` before construction.
 - For GraalVM, use `fory codegen` to generate serializers when building native images. Do not add reflection configuration except for JDK `proxy`.
 - In Java native mode (`xlang=false`), only `Types.BOOL` through `Types.STRING` share type IDs with xlang mode. Other native-mode type IDs differ.
 - Choose one serializer ownership location per logical Java type family. Add native/xlang serializer variants only when the wire format or constructor contract truly differs.

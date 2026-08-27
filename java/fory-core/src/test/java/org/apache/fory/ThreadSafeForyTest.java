@@ -644,6 +644,8 @@ public class ThreadSafeForyTest extends ForyTestBase {
           executor.submit(() -> fory.execute(value -> value)).get(10, TimeUnit.SECONDS);
       ClassResolver otherResolver = (ClassResolver) otherThreadFory.getTypeResolver();
       assertNotNull(otherResolver.getRegisteredClassId(BeanA.class));
+      assertTrue(otherResolver.isRegistrationFinished());
+      Assert.assertThrows(ForyException.class, () -> otherThreadFory.register(BeanB.class));
       assertNull(otherResolver.getRegisteredClassId(BeanB.class));
     } finally {
       executor.shutdownNow();
@@ -683,6 +685,85 @@ public class ThreadSafeForyTest extends ForyTestBase {
           ForyException.class, () -> gate.applyRegistration(() -> Assert.fail("must not run")));
     } finally {
       releaseRegistration.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  public void testFreezeWaitsForChildren() throws Exception {
+    CountDownLatch finishEntered = new CountDownLatch(1);
+    CountDownLatch releaseFinish = new CountDownLatch(1);
+    FacadeRegistrationGate gate =
+        new FacadeRegistrationGate(
+            () -> {
+              finishEntered.countDown();
+              awaitUnchecked(releaseFinish);
+            });
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      Future<?> first = executor.submit(gate::freeze);
+      assertTrue(finishEntered.await(10, TimeUnit.SECONDS));
+      CountDownLatch secondStarted = new CountDownLatch(1);
+      Future<?> second =
+          executor.submit(
+              () -> {
+                secondStarted.countDown();
+                gate.freeze();
+              });
+      assertTrue(secondStarted.await(10, TimeUnit.SECONDS));
+      Assert.assertThrows(TimeoutException.class, () -> second.get(100, TimeUnit.MILLISECONDS));
+
+      releaseFinish.countDown();
+      first.get(10, TimeUnit.SECONDS);
+      second.get(10, TimeUnit.SECONDS);
+    } finally {
+      releaseFinish.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  public void testFailedFreezeStaysClosed() {
+    AtomicInteger finishCalls = new AtomicInteger();
+    FacadeRegistrationGate gate =
+        new FacadeRegistrationGate(
+            () -> {
+              finishCalls.incrementAndGet();
+              throw new IllegalStateException("failed");
+            });
+
+    Assert.assertThrows(IllegalStateException.class, gate::freeze);
+    Assert.assertThrows(ForyException.class, gate::freeze);
+    Assert.assertThrows(ForyException.class, () -> gate.applyRegistration(() -> {}));
+    assertEquals(finishCalls.get(), 1);
+  }
+
+  @Test
+  public void testRejectedCallbackNotReplayed() throws Exception {
+    ThreadLocalFory facade =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .buildThreadLocalFory();
+    AtomicInteger callbackCalls = new AtomicInteger();
+    Assert.assertThrows(
+        ForyException.class,
+        () ->
+            facade.registerCallback(
+                child -> {
+                  callbackCalls.incrementAndGet();
+                  facade.serialize("freeze");
+                }));
+    assertEquals(callbackCalls.get(), 1);
+
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    try {
+      Fory lateChild =
+          executor.submit(() -> facade.execute(child -> child)).get(10, TimeUnit.SECONDS);
+      assertTrue(lateChild.getTypeResolver().isRegistrationFinished());
+      assertEquals(callbackCalls.get(), 1);
+    } finally {
       executor.shutdownNow();
     }
   }
@@ -735,6 +816,39 @@ public class ThreadSafeForyTest extends ForyTestBase {
     try {
       Fory second = executor.submit(local::get).get(10, TimeUnit.SECONDS);
       return new Fory[] {first, second};
+    } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  public void testBuilderModuleForLateChild() throws Exception {
+    AtomicInteger installs = new AtomicInteger();
+    ForyModule module =
+        child -> {
+          installs.incrementAndGet();
+          child.registerSerializerAndType(Foo.class, FooSerializer.class);
+        };
+    ThreadLocalFory facade =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(true)
+            .withModule(module)
+            .withCompatible(false)
+            .buildThreadLocalFory();
+    assertEquals(installs.get(), 1);
+    facade.serialize("freeze");
+
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    try {
+      Foo value = new Foo();
+      value.f1 = 42;
+      Foo result =
+          executor
+              .submit(() -> facade.deserialize(facade.serialize(value), Foo.class))
+              .get(10, TimeUnit.SECONDS);
+      assertEquals(result, value);
+      assertEquals(installs.get(), 2);
     } finally {
       executor.shutdownNow();
     }

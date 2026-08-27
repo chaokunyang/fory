@@ -66,11 +66,6 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
     registerCallback(fory -> fory.register(className, namespace, typeName));
   }
 
-  @Override
-  public void register(ForyModule module) {
-    registerCallback(fory -> fory.register(module));
-  }
-
   public void registerUnion(
       Class<?> cls, int id, org.apache.fory.serializer.Serializer<?> serializer) {
     registerCallback(fory -> fory.registerUnion(cls, id, serializer));

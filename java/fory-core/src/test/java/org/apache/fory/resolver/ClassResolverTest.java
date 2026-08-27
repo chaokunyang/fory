@@ -28,8 +28,11 @@ import static org.testng.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.Primitives;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.io.Serializable;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -61,11 +64,14 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.InsecureException;
+import org.apache.fory.logging.LogLevel;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.ClassSpec;
+import org.apache.fory.meta.EncodedMetaString;
+import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.TypeRef;
@@ -294,6 +300,27 @@ public class ClassResolverTest extends ForyTestBase {
         classResolver.getSerializerClass(
             Class.forName("org.apache.fory.serializer.collection.MapContainer")),
         MapSerializers.DefaultJavaMapSerializer.class);
+  }
+
+  @Test
+  public void testSuppressXtypeWarnings() throws Exception {
+    String suppressed =
+        captureOutput(
+            () -> {
+              Fory fory = newUnknownClassFory(true);
+              resolveMissingXtype(fory, "FirstType");
+              resolveMissingXtype(fory, "SecondType");
+            });
+    assertEquals(count(suppressed, " WARN  XtypeResolver:"), 0);
+
+    String unsuppressed =
+        captureOutput(
+            () -> {
+              Fory fory = newUnknownClassFory(false);
+              resolveMissingXtype(fory, "ThirdType");
+              resolveMissingXtype(fory, "FourthType");
+            });
+    assertEquals(count(unsuppressed, " WARN  XtypeResolver:"), 1);
   }
 
   @Test
@@ -1906,6 +1933,66 @@ public class ClassResolverTest extends ForyTestBase {
     @Override
     public int hashCode() {
       return Objects.hash(codes);
+    }
+  }
+
+  private static Fory newUnknownClassFory(boolean suppressWarnings) {
+    return Fory.builder()
+        .withXlang(true)
+        .withMetaShare(true)
+        .withDeserializeUnknownClass(true)
+        .suppressClassRegistrationWarnings(suppressWarnings)
+        .build();
+  }
+
+  private static String captureOutput(Runnable action) throws Exception {
+    int previousLogLevel = LoggerFactory.getLogLevel();
+    PrintStream previousOut = System.out;
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    try {
+      LoggerFactory.setLogLevel(LogLevel.WARN_LEVEL);
+      System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8.name()));
+      action.run();
+    } finally {
+      System.setOut(previousOut);
+      LoggerFactory.setLogLevel(previousLogLevel);
+    }
+    return out.toString(StandardCharsets.UTF_8.name());
+  }
+
+  private static void resolveMissingXtype(Fory fory, String typeName) {
+    try {
+      Method method =
+          XtypeResolver.class.getDeclaredMethod(
+              "loadBytesToTypeInfoWithTypeId",
+              int.class,
+              EncodedMetaString.class,
+              EncodedMetaString.class);
+      method.setAccessible(true);
+      method.invoke(
+          fory.getTypeResolver(),
+          Types.NAMED_STRUCT,
+          Encoders.PACKAGE_ENCODER.encodeBinary("missing.pkg"),
+          Encoders.TYPE_NAME_ENCODER.encodeBinary(typeName));
+    } catch (InvocationTargetException e) {
+      if (!(e.getCause() instanceof IllegalStateException)) {
+        throw new AssertionError(e.getCause());
+      }
+    } catch (ReflectiveOperationException e) {
+      throw new AssertionError(e);
+    }
+  }
+
+  private static int count(String text, String pattern) {
+    int count = 0;
+    int from = 0;
+    while (true) {
+      int index = text.indexOf(pattern, from);
+      if (index < 0) {
+        return count;
+      }
+      count++;
+      from = index + pattern.length();
     }
   }
 }

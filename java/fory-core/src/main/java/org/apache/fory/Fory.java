@@ -220,7 +220,10 @@ public final class Fory implements BaseFory {
     getTypeResolver().register(className, namespace, typeName);
   }
 
-  @Override
+  /**
+   * Installs a module into this runtime before its first root operation. Configure modules for a
+   * thread-safe facade through {@link ForyBuilder#withModule(ForyModule)} before building it.
+   */
   public void register(ForyModule module) {
     Preconditions.checkNotNull(module);
     checkRegisterAllowed();

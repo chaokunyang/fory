@@ -181,9 +181,11 @@ public sealed class Fory
         FreezeRegistry();
         ByteWriter writer = _writeContext.Writer;
         writer.Reset();
+        // A previous failed root may leave references behind. Reset before serializer lookup,
+        // because generated or application serializer factories can fail during that lookup.
+        _writeContext.ResetFor(writer);
         Serializer<T> serializer = _typeResolver.GetSerializer<T>();
         WriteHead(writer);
-        _writeContext.ResetFor(writer);
         RefMode refMode = Config.TrackRef ? RefMode.Tracking : RefMode.NullOnly;
         serializer.Write(_writeContext, value, refMode, true, false);
         _writeContext.RefWriter.Reset();

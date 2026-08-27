@@ -138,6 +138,65 @@ public sealed class GeneratedFrozenSerializer : Serializer<GeneratedFrozenValue>
     }
 }
 
+public enum LookupFailureValue
+{
+    Zero,
+}
+
+public sealed class LookupFailureSerializer : Serializer<LookupFailureValue>
+{
+    public static Action? ConstructionAction;
+
+    public LookupFailureSerializer()
+    {
+        ConstructionAction?.Invoke();
+    }
+
+    public override LookupFailureValue DefaultValue => LookupFailureValue.Zero;
+
+    public override void WriteData(WriteContext context, in LookupFailureValue value, bool hasGenerics)
+    {
+        _ = context;
+        _ = value;
+        _ = hasGenerics;
+    }
+
+    public override LookupFailureValue ReadData(ReadContext context)
+    {
+        _ = context;
+        return LookupFailureValue.Zero;
+    }
+}
+
+public enum AtomicRegistrationValue
+{
+    Zero,
+    One,
+}
+
+public sealed class AtomicRegistrationSerializer : Serializer<AtomicRegistrationValue>
+{
+    public static Action? ConstructionAction;
+
+    public AtomicRegistrationSerializer()
+    {
+        ConstructionAction?.Invoke();
+    }
+
+    public override AtomicRegistrationValue DefaultValue => AtomicRegistrationValue.Zero;
+
+    public override void WriteData(WriteContext context, in AtomicRegistrationValue value, bool hasGenerics)
+    {
+        _ = hasGenerics;
+        context.Writer.WriteVarInt32((int)value);
+    }
+
+    public override AtomicRegistrationValue ReadData(ReadContext context)
+    {
+        return (AtomicRegistrationValue)context.Reader.ReadVarInt32();
+    }
+}
+
 [ForyStruct]
 public sealed class FailingWritePayload
 {
@@ -971,37 +1030,49 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
-    public void ThreadSafeRebuildFreezeClears()
+    public void ThreadSafeFailureDoesNotPublish()
     {
+        TypeResolver.RegisterGenerated<AtomicRegistrationValue, AtomicRegistrationSerializer>();
         using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
-        fory.Register<FrozenPayload, FrozenPayloadSerializer>(731);
-        bool rootStarted = false;
+        fory.Register<TimeEnvelope>(734);
+        int constructions = 0;
+        bool nestedFailed = false;
+        bool stageRetained = false;
+        AtomicRegistrationSerializer.ConstructionAction = () => constructions++;
         FrozenPayloadSerializer.ConstructionAction = () =>
         {
-            if (rootStarted)
+            ForyRuntime? stage = RegistrationForyFor(fory);
+            try
             {
-                return;
+                fory.Register<AtomicRegistrationValue>(new string('a', 32_767));
             }
-
-            rootStarted = true;
-            _ = fory.Serialize(1);
+            catch
+            {
+                nestedFailed = true;
+            }
+            stageRetained = ReferenceEquals(stage, RegistrationForyFor(fory));
         };
-        GeneratedFrozenSerializer.ConstructionAction =
-            () => throw new InvalidOperationException("registration failure");
 
         try
         {
-            Exception error = Assert.ThrowsAny<Exception>(
-                () => fory.Register<GeneratedFrozenValue, GeneratedFrozenSerializer>(732));
-            Assert.IsType<InvalidOperationException>(error.InnerException ?? error);
-            Assert.Null(RegistrationForyFor(fory));
-            Assert.Throws<InvalidOperationException>(() => fory.Register<TimeEnvelope>(733));
+            fory.Register<FrozenPayload, FrozenPayloadSerializer>(735);
+            Assert.True(nestedFailed);
+            Assert.True(stageRetained);
+            Assert.Equal(1, constructions);
+            fory.Register<AtomicRegistrationValue>(737);
+            Assert.Equal(2, constructions);
         }
         finally
         {
             FrozenPayloadSerializer.ConstructionAction = null;
-            GeneratedFrozenSerializer.ConstructionAction = null;
+            AtomicRegistrationSerializer.ConstructionAction = null;
         }
+
+        FrozenPayload value = new() { Value = 1 };
+        Assert.Equal(value.Value, fory.Deserialize<FrozenPayload>(fory.Serialize(value)).Value);
+        Assert.Equal(
+            AtomicRegistrationValue.One,
+            fory.Deserialize<AtomicRegistrationValue>(fory.Serialize(AtomicRegistrationValue.One)));
     }
 
     [Fact]
@@ -1025,6 +1096,34 @@ public sealed class RuntimeEdgeCaseTests
 
         Assert.Throws<InvalidOperationException>(() => fory.Serialize(value));
         Assert.Equal(7, fory.Deserialize<int>(fory.Serialize(7)));
+    }
+
+    [Fact]
+    public void FailedLookupRestoresWriteState()
+    {
+        TypeResolver.RegisterGenerated<LookupFailureValue, LookupFailureSerializer>();
+        ForyRuntime fory = ForyRuntime.Builder().TrackRef(true).Build();
+        fory.Register<FailingWritePayload, FailingWriteSerializer>(736);
+
+        Assert.Throws<InvalidOperationException>(
+            () => fory.Serialize(new FailingWritePayload { Value = 1 }));
+        bool lookupStarted = false;
+        LookupFailureSerializer.ConstructionAction = () =>
+        {
+            lookupStarted = true;
+            throw new InvalidOperationException("serializer lookup failed");
+        };
+        try
+        {
+            Assert.ThrowsAny<Exception>(() => fory.Serialize(LookupFailureValue.Zero));
+            Assert.True(lookupStarted);
+        }
+        finally
+        {
+            LookupFailureSerializer.ConstructionAction = null;
+        }
+
+        Assert.Equal(0u, WriteContextFor(fory).RefWriter.ReserveRefId());
     }
 
     [Fact]
@@ -1189,6 +1288,15 @@ public sealed class RuntimeEdgeCaseTests
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(field);
         return Assert.IsType<ReadContext>(field.GetValue(fory));
+    }
+
+    private static WriteContext WriteContextFor(ForyRuntime fory)
+    {
+        System.Reflection.FieldInfo? field = typeof(ForyRuntime).GetField(
+            "_writeContext",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return Assert.IsType<WriteContext>(field.GetValue(fory));
     }
 
     private static ForyRuntime? RegistrationForyFor(ThreadSafeFory fory)

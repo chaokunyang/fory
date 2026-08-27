@@ -229,23 +229,7 @@ public sealed class ThreadSafeFory : IDisposable
                 ThrowRegistryFrozen();
             }
 
-            try
-            {
-                registration(_registrationFory ??= new Fory(_config));
-            }
-            catch
-            {
-                if (!_disposed && _registryFrozen == 0)
-                {
-                    Fory? rebuilt = _registrations.Count == 0 ? null : RebuildRegistrationFory();
-                    // Rebuilding replays serializer constructors, which can close this wrapper.
-                    if (!_disposed && _registryFrozen == 0)
-                    {
-                        _registrationFory = rebuilt;
-                    }
-                }
-                throw;
-            }
+            registration(_registrationFory ??= new Fory(_config));
 
             ThrowIfDisposed();
             if (_registryFrozen != 0)
@@ -280,17 +264,6 @@ public sealed class ThreadSafeFory : IDisposable
                 Volatile.Write(ref _registryFrozen, 1);
             }
         }
-    }
-
-    private Fory RebuildRegistrationFory()
-    {
-        Fory fory = new(_config);
-        foreach (Action<Fory> registration in _registrations)
-        {
-            registration(fory);
-        }
-
-        return fory;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

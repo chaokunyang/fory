@@ -15,7 +15,8 @@ Load this file when changing `csharp/` or C# xlang behavior.
   to the replay log. Serializer construction and generated factories may reenter a root, so direct
   registration must recheck the facade after resolving the serializer and before resolver mutation.
   `ThreadSafeFory` must recheck disposal and freeze after staging registration and before replay-log
-  publication, and a staging failure must not rebuild after either lifecycle boundary has closed.
+  publication. Resolver registration must prepare all serializer and MetaString state before its
+  single map commit, so failed validation needs no staging rebuild or identity workaround.
   New per-thread runtimes replay that log; do not mutate existing runtimes or introduce another
   freeze owner.
 - Generated C# gRPC service companions are compiler-owned files that depend on application-provided gRPC packages, not `csharp/src/Fory`. Keep gRPC package references out of the Fory runtime package.

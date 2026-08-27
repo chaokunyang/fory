@@ -509,9 +509,14 @@ public sealed class TypeResolver
         return TypeInfo.Create(typeof(T), new TSerializer());
     }
 
-    internal void Register(Type type, uint id, TypeInfo? explicitTypeInfo = null)
+    internal void Register(Type type, uint id)
     {
-        TypeInfo typeInfo = GetOrCreateTypeInfo(type, explicitTypeInfo).WithTypeIdRegistration(id);
+        Register(type, id, PrepareRegistration(type));
+    }
+
+    internal void Register(Type type, uint id, TypeInfo typeInfo)
+    {
+        typeInfo = PrepareRegistration(type, typeInfo).WithTypeIdRegistration(id);
         _typeInfos.Set(TypeMapKey.Get(type), typeInfo);
         _byUserTypeId[id] = typeInfo;
         InvalidateFinalizedVersion();
@@ -551,16 +556,41 @@ public sealed class TypeResolver
         }
     }
 
-    internal void Register(Type type, string namespaceName, string typeName, TypeInfo? explicitTypeInfo = null)
+    internal void Register(Type type, string namespaceName, string typeName)
     {
         ValidateSplitTypeName(namespaceName, typeName);
-        TypeInfo typeInfo = GetOrCreateTypeInfo(type, explicitTypeInfo);
+        Register(type, namespaceName, typeName, PrepareRegistration(type));
+    }
+
+    internal void Register(Type type, string namespaceName, string typeName, TypeInfo typeInfo)
+    {
+        ValidateSplitTypeName(namespaceName, typeName);
         MetaString namespaceMeta = MetaStringEncoder.Namespace.Encode(namespaceName, TypeMetaEncodings.NamespaceMetaStringEncodings);
         MetaString typeNameMeta = MetaStringEncoder.TypeName.Encode(typeName, TypeMetaEncodings.TypeNameMetaStringEncodings);
-        typeInfo = typeInfo.WithTypeNameRegistration(namespaceMeta, typeNameMeta);
+        typeInfo = PrepareRegistration(type, typeInfo).WithTypeNameRegistration(namespaceMeta, typeNameMeta);
         _typeInfos.Set(TypeMapKey.Get(type), typeInfo);
         _byTypeName[(namespaceName, typeName)] = typeInfo;
         InvalidateFinalizedVersion();
+    }
+
+    private TypeInfo PrepareRegistration(Type type, TypeInfo typeInfo)
+    {
+        if (typeInfo.Type != type)
+        {
+            throw new InvalidDataException($"serializer type mismatch for {type}, got {typeInfo.Type}");
+        }
+
+        if (!_typeInfos.TryGetValue(TypeMapKey.Get(type), out TypeInfo? existing) || ReferenceEquals(existing, typeInfo))
+        {
+            return typeInfo;
+        }
+
+        if (existing.IsRegistered)
+        {
+            throw new InvalidDataException($"cannot override serializer for registered type {type}");
+        }
+
+        return typeInfo.WithRegistrationFrom(existing);
     }
 
     /// <summary>

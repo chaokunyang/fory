@@ -57,11 +57,11 @@ import org.apache.fory.io.ForyStreamReader;
  * <p>Warning: The instance of this class should not be held at GraalVM build time; build-time heap
  * buffers do not represent the runtime heap layout.
  *
- * <p>In the Java 25 multi-release implementation, absolute random-access get/put methods are
- * internal fast paths. Callers must pass legal indices and ranges; read/write entry points perform
- * logical {@link MemoryBuffer} range validation before reaching these methods. The implementation
- * relies on {@link VarHandle}, array, and {@link ByteBuffer} access only for JVM memory safety and
- * does not repeat root Unsafe-style logical bounds checks.
+ * <p>The Java 25 multi-release implementation intentionally does not duplicate logical range
+ * checks around indexed array, absolute {@link ByteBuffer}, or {@link VarHandle} access. Those JVM
+ * accessors own bounds enforcement and already fail safely. The exact exception type, message, and
+ * detection point are not contracts, so adding checks only to make an invalid access fail earlier
+ * or more precisely would burden every hot buffer operation without improving memory safety.
  *
  * <p>Note(chaokunyang): Buffer operations are very common, and jvm inline and branch elimination is
  * not reliable even in c2 compiler, so we try to inline and avoid checks as we can manually. jvm
@@ -157,7 +157,12 @@ public final class MemoryBuffer {
       throw new IllegalArgumentException(
           String.format("%d exceeds buffer size %d", offset + length, buffer.length));
     }
-    initHeapBuffer(buffer, offset, length);
+    this.heapMemory = buffer;
+    this.heapOffset = offset;
+    final long startPos = BYTE_ARRAY_OFFSET + offset;
+    this.address = startPos;
+    this.size = length;
+    this.addressLimit = startPos + length;
     if (streamReader != null) {
       this.streamReader = streamReader;
     } else {
@@ -1452,10 +1457,16 @@ public final class MemoryBuffer {
       storeInt(address + index, (int) encoded);
       return 4;
     }
-    // 0xff0000000: 0b11111111 << 28. Note eight `1` here instead of seven.
-    encoded |= ((value & 0xff0000000L) << 4) | 0x80000000L;
+    // The fifth byte carries seven data bits. Bit 35 uses a sixth byte so this
+    // specialized string-header encoding stays standard VarUint64 on the wire.
+    encoded |= ((value & 0x7f0000000L) << 4) | 0x80000000L;
+    if (value >>> 35 == 0) {
+      storeLong(address + index, encoded);
+      return 5;
+    }
+    encoded |= 0x8000000000L | ((value >>> 35) << 40);
     storeLong(address + index, encoded);
-    return 5;
+    return 6;
   }
 
   private int putVarUint36SmallBigEndian(int index, long encoded, long value) {
@@ -1479,10 +1490,14 @@ public final class MemoryBuffer {
       storeInt(address + index, Integer.reverseBytes((int) encoded));
       return 4;
     }
-    // 0xff0000000: 0b11111111 << 28. Note eight `1` here instead of seven.
-    encoded |= ((value & 0xff0000000L) << 4) | 0x80000000L;
+    encoded |= ((value & 0x7f0000000L) << 4) | 0x80000000L;
+    if (value >>> 35 == 0) {
+      storeLong(address + index, Long.reverseBytes(encoded));
+      return 5;
+    }
+    encoded |= 0x8000000000L | ((value >>> 35) << 40);
     storeLong(address + index, Long.reverseBytes(encoded));
-    return 5;
+    return 6;
   }
 
   /**
@@ -2009,6 +2024,7 @@ public final class MemoryBuffer {
   public void grow(int neededSize) {
     int length = writerIndex + neededSize;
     if (length > size) {
+      // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
       globalAllocator.grow(this, length);
     }
   }
@@ -2016,6 +2032,7 @@ public final class MemoryBuffer {
   /** For off-heap buffer, this will make a heap buffer internally. */
   public void ensure(int length) {
     if (length > size) {
+      // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
       globalAllocator.grow(this, length);
     }
   }
@@ -2616,8 +2633,11 @@ public final class MemoryBuffer {
       result |= (bulkValue >>> 3) & 0xfe00000;
       if ((bulkValue & 0x80000000L) != 0) {
         readIdx++;
-        // 0xff0000000: 0b11111111 << 28
-        result |= (bulkValue >>> 4) & 0xff0000000L;
+        result |= (bulkValue >>> 4) & 0x7f0000000L;
+        if ((bulkValue & 0x8000000000L) != 0) {
+          readIdx++;
+          result |= (bulkValue >>> 5) & 0x800000000L;
+        }
       }
     }
     readerIndex = readIdx;
@@ -2642,7 +2662,11 @@ public final class MemoryBuffer {
           result |= (b & 0x7F) << 21;
           if ((b & 0x80) != 0) {
             b = readByte();
-            result |= (b & 0xFF) << 28;
+            result |= (b & 0x7F) << 28;
+            if ((b & 0x80) != 0) {
+              b = readByte();
+              result |= (b & 0x01) << 35;
+            }
           }
         }
       }
@@ -3846,11 +3870,16 @@ public final class MemoryBuffer {
       int newSize =
           newCapacity < BUFFER_GROW_STEP_THRESHOLD
               ? newCapacity << 1
-              : (int) Math.min(newCapacity * 1.5d, Integer.MAX_VALUE - 8);
+              : largeGrowthCapacity(newCapacity);
 
       byte[] data = new byte[newSize];
       buffer.get(0, data, 0, buffer.size());
       buffer.initHeapBuffer(data, 0, data.length);
+    }
+
+    private static int largeGrowthCapacity(int newCapacity) {
+      return Math.max(
+          newCapacity, (int) Math.min(newCapacity * 1.5d, Integer.MAX_VALUE - 8));
     }
   }
 

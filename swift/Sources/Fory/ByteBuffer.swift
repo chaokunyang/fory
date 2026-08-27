@@ -111,8 +111,13 @@ public final class ByteBuffer {
         cursor = 0
     }
 
+    /// Moves the read cursor to an existing buffer boundary.
+    /// Invalid positions leave the cursor unchanged.
     @inlinable
     public func setCursor(_ value: Int) {
+        if value < 0 || value > readableCount {
+            return
+        }
         cursor = value
     }
 
@@ -177,8 +182,20 @@ public final class ByteBuffer {
         cursor
     }
 
+    /// Rewinds the read cursor without moving before the start of the buffer.
+    /// Invalid amounts leave the cursor unchanged.
     @inlinable
     public func moveBack(_ amount: Int) {
+        if amount < 0 || amount > cursor {
+            return
+        }
+        cursor -= amount
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func moveBackUnchecked(_ amount: Int) {
+        // Hot read owners use this only to rewind bytes they just consumed successfully.
         cursor -= amount
     }
 
@@ -751,7 +768,7 @@ public final class ByteBuffer {
         if (first & 1) == 0 {
             return Int64(first >> 1)
         }
-        moveBack(3)
+        moveBackUnchecked(3)
         return try readInt64()
     }
 
@@ -761,7 +778,7 @@ public final class ByteBuffer {
         if (first & 1) == 0 {
             return UInt64(first >> 1)
         }
-        moveBack(3)
+        moveBackUnchecked(3)
         return try readUInt64()
     }
 

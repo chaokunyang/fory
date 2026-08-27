@@ -212,6 +212,22 @@ bool _isTrailSurrogate(int codeUnit) =>
     codeUnit >= 0xdc00 && codeUnit <= 0xdfff;
 
 int _writeVarUint36Small(Uint8List target, int offset, int value) {
+  if (value > 0x7fffffff) {
+    return _writeVarUint36Large(target, offset, value);
+  }
+  final start = offset;
+  var remaining = value;
+  while (remaining >= 0x80) {
+    target[offset] = (remaining & 0x7f) | 0x80;
+    offset += 1;
+    remaining >>>= 7;
+  }
+  target[offset] = remaining;
+  return offset - start + 1;
+}
+
+@pragma('vm:never-inline')
+int _writeVarUint36Large(Uint8List target, int offset, int value) {
   final start = offset;
   var remaining = value;
   while (remaining >= 0x80) {

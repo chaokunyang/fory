@@ -145,6 +145,7 @@ cdef class Buffer:
         object data
         object output_stream
         c_bool readonly
+        int32_t export_count
         Py_ssize_t shape[1]
         Py_ssize_t stride[1]
     def __init__(self, data not None, int32_t offset=0, length=None):
@@ -193,6 +194,7 @@ cdef class Buffer:
         self.c_buffer.reader_index(0)
         self.c_buffer.writer_index(0)
         self.output_stream = None
+        self.export_count = 0
 
     @classmethod
     def from_stream(cls, stream not None, uint32_t buffer_size=4096):
@@ -212,6 +214,7 @@ cdef class Buffer:
         buffer.data = stream
         buffer.output_stream = None
         buffer.readonly = False
+        buffer.export_count = 0
         buffer.c_buffer.reader_index(0)
         buffer.c_buffer.writer_index(0)
         return buffer
@@ -226,6 +229,7 @@ cdef class Buffer:
         buffer.data = owner
         buffer.output_stream = None
         buffer.readonly = False
+        buffer.export_count = 0
         buffer.c_buffer.reader_index(0)
         buffer.c_buffer.writer_index(0)
         return buffer
@@ -243,6 +247,7 @@ cdef class Buffer:
         buffer.data = None
         buffer.output_stream = None
         buffer.readonly = False
+        buffer.export_count = 0
         buffer.c_buffer.reader_index(0)
         buffer.c_buffer.writer_index(0)
         return buffer
@@ -291,6 +296,10 @@ cdef class Buffer:
             raise ValueError(f"{owner} length {length} exceeds the maximum supported size")
         return <int32_t>length
 
+    cdef inline void _check_resize(self, int32_t new_size):
+        if new_size > self.c_buffer.size() and self.export_count != 0:
+            raise BufferError("cannot resize Buffer while exported views exist")
+
     cdef inline void _prepare_capacity(self, int32_t needed_size):
         cdef int32_t writer_index = <int32_t>self.c_buffer.writer_index()
         cdef int32_t end
@@ -300,8 +309,10 @@ cdef class Buffer:
                 f"{self.c_buffer.writer_index()}"
             )
         end = writer_index + needed_size
-        if end > self.c_buffer.size() and end > max_buffer_size // 2:
-            self.c_buffer.reserve(<uint32_t>end)
+        if end > self.c_buffer.size():
+            self._check_resize(end)
+            if end > max_buffer_size // 2:
+                self.c_buffer.reserve(<uint32_t>end)
 
     cdef inline void _prepare_write(self, int32_t needed_size):
         self._check_writable()
@@ -341,6 +352,7 @@ cdef class Buffer:
     cpdef inline reserve(self, int32_t new_size):
         if new_size < 0:
             raise ValueError(f"Buffer size {new_size} out of bound {0, max_buffer_size}")
+        self._check_resize(new_size)
         self.c_buffer.reserve(new_size)
 
     cpdef inline put_bool(self, uint32_t offset, c_bool v):
@@ -610,7 +622,7 @@ cdef class Buffer:
             if end > <uint64_t>max_buffer_size:
                 raise ValueError(f"Destination range {(offset, end)} exceeds the maximum supported size")
             if end > <uint64_t>self.c_buffer.size():
-                self.c_buffer.reserve(<uint32_t>end)
+                self.reserve(<int32_t>end)
             self.c_buffer.copy_from(offset, &data[0], 0, length)
 
     cpdef inline bytes get_bytes(self, uint32_t offset, uint32_t nbytes):
@@ -967,6 +979,8 @@ cdef class Buffer:
 
     def __getbuffer__(self, Py_buffer *buffer, int flags):
         cdef Py_ssize_t itemsize = 1
+        if self.c_buffer.has_input_stream():
+            raise BufferError("stream-backed Buffer cannot export a relocatable view")
         if self.readonly and flags & PyBUF_WRITABLE:
             raise BufferError("Buffer is read-only")
         self.shape[0] = self.c_buffer.size()
@@ -982,9 +996,11 @@ cdef class Buffer:
         buffer.shape = self.shape
         buffer.strides = self.stride
         buffer.suboffsets = NULL                # for pointer arrays only
+        self.export_count += 1
 
     def __releasebuffer__(self, Py_buffer *buffer):
-        pass
+        if self.export_count > 0:
+            self.export_count -= 1
 
     def __repr__(self):
         return "Buffer(reader_index={}, writer_index={}, size={})".format(

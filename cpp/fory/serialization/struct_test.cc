@@ -136,22 +136,6 @@ struct MixedFieldIdentityStruct {
               alpha_value, (count, fory::F(2).varint()));
 };
 
-struct NormalizedCollisionStruct {
-  int32_t fooBar = 0;
-  int32_t foo_bar = 0;
-  FORY_STRUCT(NormalizedCollisionStruct, fooBar, foo_bar);
-};
-
-struct MixedMaskStruct {
-  std::string fooBar;
-  std::string foo_bar;
-
-  bool operator==(const MixedMaskStruct &other) const {
-    return fooBar == other.fooBar && foo_bar == other.foo_bar;
-  }
-  FORY_STRUCT(MixedMaskStruct, (fooBar, fory::F(9)), foo_bar);
-};
-
 struct MaximumFieldTagStruct {
   int32_t value;
 
@@ -360,44 +344,6 @@ struct TaggedUintStruct {
   FORY_STRUCT(TaggedUintStruct, (value, fory::F().tagged()));
 };
 
-struct VarintInt32Tail {
-  int32_t value = 0;
-  FORY_STRUCT(VarintInt32Tail, (value, fory::F().varint()));
-};
-
-struct VarintInt64Tail {
-  int64_t value = 0;
-  FORY_STRUCT(VarintInt64Tail, (value, fory::F().varint()));
-};
-
-struct VarintUint32Tail {
-  uint32_t value = 0;
-  FORY_STRUCT(VarintUint32Tail, (value, fory::F().varint()));
-};
-
-struct VarintUint64Tail {
-  uint64_t value = 0;
-  FORY_STRUCT(VarintUint64Tail, (value, fory::F().varint()));
-};
-
-struct VarintBatchV1 {
-  int32_t first = 0;
-  int32_t second = 0;
-  int32_t third = 0;
-  FORY_STRUCT(VarintBatchV1, (first, fory::F(1).varint()),
-              (second, fory::F(2).varint()), (third, fory::F(3).varint()));
-};
-
-struct VarintBatchV2 {
-  int32_t first = 0;
-  int32_t second = 0;
-  int32_t third = 0;
-  int32_t added = 0;
-  FORY_STRUCT(VarintBatchV2, (first, fory::F(1).varint()),
-              (second, fory::F(2).varint()), (third, fory::F(3).varint()),
-              (added, fory::F(4).varint()));
-};
-
 // String handling
 struct StringTestStruct {
   std::string empty;
@@ -410,6 +356,13 @@ struct StringTestStruct {
            long_text == other.long_text;
   }
   FORY_STRUCT(StringTestStruct, empty, ascii, utf8, long_text);
+};
+
+struct HybridVarintStruct {
+  int32_t value;
+  std::string text;
+
+  FORY_STRUCT(HybridVarintStruct, value, text);
 };
 
 // Nested structs
@@ -838,9 +791,7 @@ inline FieldType make_test_field_type(TypeId type_id,
 inline FieldInfo make_test_field_info(std::string name, int32_t field_id,
                                       FieldType field_type) {
   FieldInfo info(std::move(name), std::move(field_type));
-  if (field_id >= 0) {
-    info.field_id = field_id;
-  }
+  info.field_id = field_id;
   return info;
 }
 
@@ -1001,53 +952,6 @@ TEST(StructComprehensiveTest, TaggedIntTruncationFails) {
     check_truncation(TaggedUintStruct{std::numeric_limits<uint64_t>::max()},
                      613, "unsigned");
   }
-}
-
-TEST(StructComprehensiveTest, VarintTailTruncationFails) {
-  auto check_truncation = [](auto original, uint32_t type_id) {
-    using StructType = decltype(original);
-    auto fory =
-        Fory::builder().xlang(true).compatible(false).track_ref(false).build();
-    ASSERT_TRUE(fory.register_struct<StructType>(type_id).ok());
-
-    auto serialized = fory.serialize(original);
-    ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
-    std::vector<uint8_t> bytes = std::move(serialized).value();
-    ASSERT_FALSE(bytes.empty());
-    bytes.pop_back();
-
-    auto result = fory.deserialize<StructType>(bytes.data(), bytes.size());
-    ASSERT_FALSE(result.ok());
-  };
-
-  check_truncation(VarintInt32Tail{1}, 614);
-  check_truncation(VarintInt64Tail{1}, 615);
-  check_truncation(VarintUint32Tail{1}, 616);
-  check_truncation(VarintUint64Tail{1}, 617);
-}
-
-TEST(StructComprehensiveTest, VarintBatchTruncationFails) {
-  auto writer =
-      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
-  auto exact_reader =
-      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
-  auto evolved_reader =
-      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
-  ASSERT_TRUE(writer.register_struct<VarintBatchV1>(629).ok());
-  ASSERT_TRUE(exact_reader.register_struct<VarintBatchV1>(629).ok());
-  ASSERT_TRUE(evolved_reader.register_struct<VarintBatchV2>(629).ok());
-
-  auto serialized = writer.serialize(VarintBatchV1{1, 2, 1 << 27});
-  ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
-  std::vector<uint8_t> bytes = std::move(serialized).value();
-  ASSERT_FALSE(bytes.empty());
-  bytes.pop_back();
-
-  auto exact = exact_reader.deserialize<VarintBatchV1>(bytes);
-  ASSERT_FALSE(exact.ok());
-
-  auto evolved = evolved_reader.deserialize<VarintBatchV2>(bytes);
-  ASSERT_FALSE(evolved.ok());
 }
 
 TEST(StructComprehensiveTest, GeneratedVectorDepth) {
@@ -1393,6 +1297,21 @@ TEST(StructComprehensiveTest, SceneMultipleNested) {
   test_roundtrip(Scene{{0, 0, 10}, {100, 100, 200}, {{0, 0}, {800, 600}}});
 }
 
+TEST(StructComprehensiveTest, HybridVarintReservesPhysicalStore) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  WriteContext write_ctx(fory.config(), fory.type_resolver().clone());
+  std::array<uint8_t, 8> storage{};
+  write_ctx.buffer() = Buffer(storage.data(), 5, false);
+
+  HybridVarintStruct value{std::numeric_limits<int32_t>::min(), "x"};
+  detail::write_struct_fields_impl(value, write_ctx,
+                                   std::make_index_sequence<2>{}, false);
+
+  EXPECT_FALSE(write_ctx.has_error());
+  EXPECT_NE(write_ctx.buffer().data(), storage.data());
+}
+
 TEST(StructComprehensiveTest, VectorStructEmpty) {
   test_roundtrip(VectorStruct{{}, {}, {}});
 }
@@ -1702,7 +1621,7 @@ TEST(StructComprehensiveTest, FullyTaggedStructsUseNumericTagOrder) {
 
   std::map<int32_t, const FieldInfo *> fields_by_id;
   for (const auto &field : fields) {
-    fields_by_id.emplace(static_cast<uint32_t>(field.field_id), &field);
+    fields_by_id.emplace(field.field_id, &field);
   }
   ASSERT_NE(fields_by_id.find(1), fields_by_id.end());
   ASSERT_NE(fields_by_id.find(2), fields_by_id.end());
@@ -1753,53 +1672,6 @@ TEST(StructComprehensiveTest, MixedFieldIdentifiersUseProtocolOrder) {
   EXPECT_EQ(fields[2].field_id, -1);
   EXPECT_EQ(fields[3].field_name, "beta_value");
   EXPECT_EQ(fields[3].field_id, -1);
-}
-
-TEST(StructComprehensiveTest, StructFieldIdentityIsUnique) {
-  auto collision =
-      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
-  EXPECT_FALSE(collision.register_struct<NormalizedCollisionStruct>(610).ok());
-
-  MixedMaskStruct value{"tagged", "untagged"};
-  auto mixed =
-      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
-  ASSERT_TRUE(mixed.register_struct<MixedMaskStruct>(612).ok());
-  auto encoded = mixed.serialize(value);
-  ASSERT_TRUE(encoded.ok()) << encoded.error().to_string();
-  auto decoded = mixed.deserialize<MixedMaskStruct>(encoded.value());
-  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
-  EXPECT_EQ(decoded.value(), value);
-  const auto &indices = mixed.type_resolver().sorted_indices<MixedMaskStruct>();
-  ASSERT_EQ(indices.size(), 2U);
-  EXPECT_NE(indices[0], indices[1]);
-}
-
-TEST(StructComprehensiveTest, RemoteFieldIdentityIsUnique) {
-  TypeMeta local;
-  local.field_infos = {
-      make_test_field_info("foo_bar", -1,
-                           make_test_field_type(TypeId::VARINT32)),
-      make_test_field_info("tagged", 7,
-                           make_test_field_type(TypeId::VARINT32))};
-
-  std::vector<FieldInfo> duplicate_names = {
-      make_test_field_info("fooBar", -1,
-                           make_test_field_type(TypeId::VARINT32)),
-      make_test_field_info("foo_bar", -1,
-                           make_test_field_type(TypeId::VARINT32))};
-  EXPECT_FALSE(
-      TypeMeta::assign_local_dispatch_ids(&local, duplicate_names).ok());
-  EXPECT_EQ(duplicate_names[0].field_id, -1);
-  EXPECT_EQ(duplicate_names[1].field_id, -1);
-
-  std::vector<FieldInfo> duplicate_tags = {
-      make_test_field_info("first", 7, make_test_field_type(TypeId::VARINT32)),
-      make_test_field_info("second", 7,
-                           make_test_field_type(TypeId::VARINT32))};
-  EXPECT_FALSE(
-      TypeMeta::assign_local_dispatch_ids(&local, duplicate_tags).ok());
-  EXPECT_EQ(duplicate_tags[0].field_id, 7);
-  EXPECT_EQ(duplicate_tags[1].field_id, 7);
 }
 
 TEST(StructComprehensiveTest, FieldTagRange) {
@@ -1967,8 +1839,10 @@ TEST(StructComprehensiveTest,
       "items", -1,
       make_test_field_type(TypeId::LIST,
                            {make_test_field_type(TypeId::UINT32)}))};
-  EXPECT_FALSE(
+  ASSERT_TRUE(
       TypeMeta::assign_local_dispatch_ids(&local_type, name_remote).ok());
+  EXPECT_EQ(name_remote[0].field_id, -1);
+  EXPECT_EQ(name_remote[0].matched_field_id, -1);
 
   TypeMeta mixed_local;
   mixed_local.field_infos = {
@@ -1994,27 +1868,7 @@ TEST(StructComprehensiveTest,
                   &mixed_local, untagged_remote_for_tagged_local)
                   .ok());
   EXPECT_EQ(untagged_remote_for_tagged_local[0].field_id, -1);
-  EXPECT_EQ(untagged_remote_for_tagged_local[0].matched_field_id, 0);
-
-  std::vector<FieldInfo> name_then_tag = {
-      make_test_field_info("tagged", -1, make_test_field_type(TypeId::STRING)),
-      make_test_field_info("tagged", 3, make_test_field_type(TypeId::STRING))};
-  ASSERT_TRUE(
-      TypeMeta::assign_local_dispatch_ids(&mixed_local, name_then_tag).ok());
-  EXPECT_EQ(name_then_tag[0].field_id, -1);
-  EXPECT_EQ(name_then_tag[0].matched_field_id, 0);
-  EXPECT_EQ(name_then_tag[1].field_id, 3);
-  EXPECT_EQ(name_then_tag[1].matched_field_id, -1);
-
-  std::vector<FieldInfo> tag_then_name = {
-      make_test_field_info("tagged", 3, make_test_field_type(TypeId::STRING)),
-      make_test_field_info("tagged", -1, make_test_field_type(TypeId::STRING))};
-  ASSERT_TRUE(
-      TypeMeta::assign_local_dispatch_ids(&mixed_local, tag_then_name).ok());
-  EXPECT_EQ(tag_then_name[0].field_id, 3);
-  EXPECT_EQ(tag_then_name[0].matched_field_id, 0);
-  EXPECT_EQ(tag_then_name[1].field_id, -1);
-  EXPECT_EQ(tag_then_name[1].matched_field_id, -1);
+  EXPECT_EQ(untagged_remote_for_tagged_local[0].matched_field_id, -1);
 }
 
 TEST(StructComprehensiveTest, CompatibleSignedToUnsignedStructRead) {
@@ -2073,7 +1927,8 @@ TEST(StructComprehensiveTest, LocalDispatchRejectsMatchedIdOverflow) {
       field_type)};
   auto result = TypeMeta::assign_local_dispatch_ids(&local_type, remote_fields);
 
-  EXPECT_FALSE(result.ok());
+  ASSERT_FALSE(result.ok());
+  EXPECT_NE(result.error().message().find("exceeds max"), std::string::npos);
 }
 
 TEST(StructComprehensiveTest, OptionalFieldsAllEmpty) {

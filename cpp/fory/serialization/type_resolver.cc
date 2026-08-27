@@ -1240,25 +1240,9 @@ assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
 
   // Primary mapping: field name -> sorted index in local schema
   std::unordered_map<std::string, size_t> local_field_index_map;
-  std::unordered_map<std::string, size_t> local_tagged_name_map;
-  std::unordered_set<std::string> ambiguous_tagged_names;
   local_field_index_map.reserve(local_fields.size());
-  local_tagged_name_map.reserve(local_fields.size());
-  ambiguous_tagged_names.reserve(local_fields.size());
   for (size_t i = 0; i < local_fields.size(); ++i) {
-    std::string canonical_name =
-        normalize_field_name(local_fields[i].field_name);
-    if (local_fields[i].field_id == detail::kFieldNameIdentity) {
-      if (!local_field_index_map.emplace(std::move(canonical_name), i).second) {
-        return Unexpected(
-            Error::invalid("Duplicate local canonical field name"));
-      }
-    } else if (!ambiguous_tagged_names.count(canonical_name)) {
-      if (!local_tagged_name_map.emplace(canonical_name, i).second) {
-        local_tagged_name_map.erase(canonical_name);
-        ambiguous_tagged_names.emplace(std::move(canonical_name));
-      }
-    }
+    local_field_index_map.emplace(local_fields[i].field_name, i);
   }
   // Tag ID mapping when field IDs are explicitly configured.
   std::unordered_map<int32_t, size_t> local_field_id_map;
@@ -1270,22 +1254,15 @@ assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
     }
   }
 
-  // Validate the complete remote identity set before assigning any local
-  // dispatch IDs. Tag and canonical-name identities are separate domains.
-  std::unordered_set<int32_t> remote_tag_ids;
-  std::unordered_set<std::string> remote_field_names;
-  remote_tag_ids.reserve(remote_fields.size());
-  remote_field_names.reserve(remote_fields.size());
-  for (size_t i = 0; i < remote_fields.size(); ++i) {
-    const FieldInfo &remote_field = remote_fields[i];
-    const bool unique =
-        remote_field.field_id != detail::kFieldNameIdentity
-            ? remote_tag_ids.emplace(remote_field.field_id).second
-            : remote_field_names
-                  .emplace(normalize_field_name(remote_field.field_name))
-                  .second;
-    if (!unique) {
-      return Unexpected(Error::invalid_data("Duplicate remote field identity"));
+  std::unordered_set<int32_t> remote_field_ids;
+  for (const auto &remote_field : remote_fields) {
+    if (remote_field.field_id >= 0) {
+      if (remote_field_ids.empty()) {
+        remote_field_ids.reserve(remote_fields.size());
+      }
+      if (!remote_field_ids.emplace(remote_field.field_id).second) {
+        return Unexpected(Error::invalid_data("Duplicate remote field tag"));
+      }
     }
   }
   // Track which local fields have already been matched so that each
@@ -1332,9 +1309,7 @@ assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
   };
 
   // For each remote field, assign doubled dispatch id in local schema.
-  for (size_t remote_index = 0; remote_index < remote_fields.size();
-       ++remote_index) {
-    FieldInfo &remote_field = remote_fields[remote_index];
+  for (auto &remote_field : remote_fields) {
     bool matched = false;
 
     if (remote_field.field_id != detail::kFieldNameIdentity) {
@@ -1344,21 +1319,16 @@ assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
         matched = is_matched;
       }
     } else {
-      // Prefer a local name-identified field. If none exists, a remote name may
-      // bind a uniquely named local tagged field for schema evolution. The
-      // shared used-local gate prevents a later tag occurrence from binding the
-      // same field a second time.
-      const std::string canonical_name =
-          normalize_field_name(remote_field.field_name);
-      auto it = local_field_index_map.find(canonical_name);
+      // 1) Try exact name + type match first (fast path for same-language
+      //    schemas and most C++-only cases). A local tag-ID field's identifier
+      //    is the tag ID, not the field name, so it must not match an untagged
+      //    remote field by name in a mixed schema.
+      auto it = local_field_index_map.find(remote_field.field_name);
       if (it != local_field_index_map.end()) {
-        FORY_TRY(is_matched, assign_matched_field(remote_field, it->second));
-        matched = is_matched;
-      } else {
-        auto tagged_it = local_tagged_name_map.find(canonical_name);
-        if (tagged_it != local_tagged_name_map.end()) {
-          FORY_TRY(is_matched,
-                   assign_matched_field(remote_field, tagged_it->second));
+        size_t idx = it->second;
+        const FieldInfo &local_field = local_fields[idx];
+        if (local_field.field_id < 0) {
+          FORY_TRY(is_matched, assign_matched_field(remote_field, idx));
           matched = is_matched;
         }
       }
@@ -1369,8 +1339,7 @@ assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
       //    field such as `email` to an unrelated local string field.
       if (!matched && remote_field.field_name.empty()) {
         for (size_t i = 0; i < local_fields.size(); ++i) {
-          if (used[i] ||
-              local_fields[i].field_id != detail::kFieldNameIdentity) {
+          if (used[i] || local_fields[i].field_id >= 0) {
             continue;
           }
           // Compatible adapters require tag or canonical-name identity. The

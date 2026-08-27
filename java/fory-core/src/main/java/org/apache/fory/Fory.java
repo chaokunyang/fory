@@ -22,6 +22,7 @@ package org.apache.fory;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -77,7 +78,6 @@ import org.apache.fory.util.StringUtils;
 @NotThreadSafe
 public final class Fory implements BaseFory {
   private static final Logger LOG = LoggerFactory.getLogger(Fory.class);
-  private static final byte[] EMPTY_BYTES = new byte[0];
 
   public static final byte NULL_FLAG = -3;
   // This flag indicates that object is a not-null value.
@@ -100,9 +100,6 @@ public final class Fory implements BaseFory {
   private final WriteContext writeContext;
   private final ReadContext readContext;
   private final CopyContext copyContext;
-  // Byte-array roots do not escape the root operation. Reuse their view, but always detach it in
-  // finally so a long-lived Fory instance never retains caller input across roots.
-  private final MemoryBuffer byteArrayInputBuffer = MemoryUtils.wrap(EMPTY_BYTES);
   private final IdentityHashMap<ForyModule, Boolean> installedModules = new IdentityHashMap<>();
   private final byte headerBitmap;
   private MemoryBuffer buffer;
@@ -321,7 +318,7 @@ public final class Fory implements BaseFory {
     MemoryBuffer buf = getBuffer();
     buf.writerIndex(0);
     serialize(buf, obj, null);
-    byte[] bytes = buf.getBytes(0, buf.writerIndex());
+    byte[] bytes = copyWrittenBytes(buf);
     resetBuffer();
     return bytes;
   }
@@ -331,7 +328,7 @@ public final class Fory implements BaseFory {
     MemoryBuffer buf = getBuffer();
     buf.writerIndex(0);
     serialize(buf, obj, callback);
-    byte[] bytes = buf.getBytes(0, buf.writerIndex());
+    byte[] bytes = copyWrittenBytes(buf);
     resetBuffer();
     return bytes;
   }
@@ -378,6 +375,15 @@ public final class Fory implements BaseFory {
     serializeToStream(outputStream, buf -> serialize(buf, obj, callback));
   }
 
+  private byte[] copyWrittenBytes(MemoryBuffer buffer) {
+    int length = buffer.writerIndex();
+    if (buffer.isHeapFullyWriteable()) {
+      // Fory owns this writer index; keep public arbitrary-range validation out of the root path.
+      return Arrays.copyOf(buffer.getHeapMemory(), length);
+    }
+    return buffer.getBytes(0, length);
+  }
+
   private ForyException processSerializationError(Throwable e) {
     if (!config.trackingRef()) {
       String msg =
@@ -414,12 +420,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(byte[] bytes) {
-    MemoryBuffer inputBuffer = prepareByteArrayInput(bytes);
-    try {
-      return deserialize(inputBuffer, (Iterable<MemoryBuffer>) null);
-    } finally {
-      releaseByteArrayInput();
-    }
+    return deserialize(MemoryUtils.wrap(bytes), (Iterable<MemoryBuffer>) null);
   }
 
   @Override
@@ -429,12 +430,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T deserialize(byte[] bytes, Class<T> type) {
-    MemoryBuffer inputBuffer = prepareByteArrayInput(bytes);
-    try {
-      return deserialize(inputBuffer, type);
-    } finally {
-      releaseByteArrayInput();
-    }
+    return deserialize(MemoryUtils.wrap(bytes), type);
   }
 
   @Override
@@ -482,12 +478,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(byte[] bytes, Iterable<MemoryBuffer> outOfBandBuffers) {
-    MemoryBuffer inputBuffer = prepareByteArrayInput(bytes);
-    try {
-      return deserialize(inputBuffer, outOfBandBuffers);
-    } finally {
-      releaseByteArrayInput();
-    }
+    return deserialize(MemoryUtils.wrap(bytes), outOfBandBuffers);
   }
 
   @Override
@@ -574,17 +565,6 @@ public final class Fory implements BaseFory {
     } finally {
       channel.compactBuffer();
     }
-  }
-
-  private MemoryBuffer prepareByteArrayInput(byte[] bytes) {
-    byteArrayInputBuffer.pointTo(bytes, 0, bytes.length);
-    byteArrayInputBuffer.readerIndex(0);
-    return byteArrayInputBuffer;
-  }
-
-  private void releaseByteArrayInput() {
-    byteArrayInputBuffer.pointTo(EMPTY_BYTES, 0, 0);
-    byteArrayInputBuffer.readerIndex(0);
   }
 
   @SuppressWarnings("unchecked")

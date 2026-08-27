@@ -218,4 +218,14 @@ void Buffer::grow_checked(uint64_t required_size, uint32_t min_capacity) {
   grow_to_fit(static_cast<uint32_t>(required_size));
 }
 
+void Buffer::fail_range(uint32_t offset, uint32_t length) const {
+  FORY_CHECK(false) << "Buffer out of bound: " << offset << " + " << length
+                    << " > " << size_;
+}
+
+void Buffer::fail_writer_index(uint64_t target) const {
+  FORY_CHECK(false) << "Buffer overflow writer_index " << writer_index_
+                    << " target writer_index " << target << " size " << size_;
+}
+
 } // namespace fory

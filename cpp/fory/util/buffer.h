@@ -40,10 +40,9 @@ namespace fory {
 class StdInputStream;
 class PyInputStream;
 namespace serialization::detail {
-struct CollectionFieldWriter;
-struct StringFieldWriter;
-struct StructFieldReader;
+struct PrimitiveVectorWriter;
 struct StructFieldWriter;
+struct StringFieldWriter;
 } // namespace serialization::detail
 
 // A buffer class for storing raw bytes with various methods for reading and
@@ -186,21 +185,21 @@ public:
   }
 
   FORY_ALWAYS_INLINE void writer_index(uint32_t writer_index) {
-    FORY_CHECK(
-        FORY_PREDICT_TRUE(writer_index < std::numeric_limits<uint32_t>::max() &&
-                          writer_index <= size_))
-        << "Buffer overflow writer_index" << writer_index_
-        << " target writer_index " << writer_index << " size " << size_;
+    if (FORY_PREDICT_FALSE(writer_index >=
+                               std::numeric_limits<uint32_t>::max() ||
+                           writer_index > size_)) {
+      fail_writer_index(writer_index);
+    }
     writer_index_ = writer_index;
   }
 
   FORY_ALWAYS_INLINE void increase_writer_index(uint32_t diff) {
     const uint64_t writer_index = static_cast<uint64_t>(writer_index_) + diff;
-    FORY_CHECK(
-        FORY_PREDICT_TRUE(writer_index < std::numeric_limits<uint32_t>::max() &&
-                          writer_index <= size_))
-        << "Buffer overflow writer_index" << writer_index_ << " diff " << diff
-        << " size " << size_;
+    if (FORY_PREDICT_FALSE(writer_index >=
+                               std::numeric_limits<uint32_t>::max() ||
+                           writer_index > size_)) {
+      fail_writer_index(writer_index);
+    }
     writer_index_ = static_cast<uint32_t>(writer_index);
   }
 
@@ -270,18 +269,19 @@ public:
   }
 
   FORY_ALWAYS_INLINE void put_int24(uint32_t offset, int32_t value) {
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 3)))
-        << "Buffer out of bound: " << offset << " + 3 > " << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, 3))) {
+      fail_range(offset, 3);
+    }
     data_[offset] = static_cast<uint8_t>(value);
     data_[offset + 1] = static_cast<uint8_t>(value >> 8);
     data_[offset + 2] = static_cast<uint8_t>(value >> 16);
   }
 
   template <typename T> FORY_ALWAYS_INLINE T get(uint32_t relative_offset) {
-    FORY_CHECK(FORY_PREDICT_TRUE(
-        range_in_bounds(relative_offset, static_cast<uint32_t>(sizeof(T)))))
-        << "Out of range " << relative_offset << " should be less than "
-        << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(
+            relative_offset, static_cast<uint32_t>(sizeof(T))))) {
+      fail_range(relative_offset, static_cast<uint32_t>(sizeof(T)));
+    }
     T value = load_unaligned<T>(data_ + relative_offset);
     return value;
   }
@@ -308,8 +308,9 @@ public:
   }
 
   FORY_ALWAYS_INLINE int32_t get_int24(uint32_t offset) {
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 3)))
-        << "Out of range " << offset << " should be less than " << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, 3))) {
+      fail_range(offset, 3);
+    }
     int32_t b0 = data_[offset];
     int32_t b1 = data_[offset + 1];
     int32_t b2 = data_[offset + 2];
@@ -368,9 +369,9 @@ public:
                             : value < 0x4000     ? 2
                             : value < 0x10000000 ? 4
                                                  : 8;
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, extent)))
-        << "Buffer out of bound: " << offset << " + " << extent << " > "
-        << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, extent))) {
+      fail_range(offset, extent);
+    }
     return put_var_uint32_unchecked(offset, value);
   }
 
@@ -379,9 +380,46 @@ public:
   /// Slow path: byte-by-byte for buffer edge cases.
   FORY_ALWAYS_INLINE uint32_t get_var_uint32(uint32_t offset,
                                              uint32_t *read_bytes_length) {
-    uint32_t value;
-    *read_bytes_length = get_var_uint32_length(offset, value);
-    return value;
+    if (FORY_PREDICT_FALSE(offset >= size_)) {
+      *read_bytes_length = 0;
+      return 0;
+    }
+    // Fast path: need at least 5 bytes for safe bulk read (4 bytes + potential
+    // 5th)
+    if (FORY_PREDICT_TRUE(size_ - offset >= 5)) {
+      uint32_t bulk = load_unaligned<uint32_t>(data_ + offset);
+
+      uint32_t result = bulk & 0x7F;
+      if ((bulk & 0x80) == 0) {
+        *read_bytes_length = 1;
+        return result;
+      }
+      // Extract bits 7-13 from bulk (at positions 8-14 after shift)
+      result |= (bulk >> 1) & 0x3F80;
+      if ((bulk & 0x8000) == 0) {
+        *read_bytes_length = 2;
+        return result;
+      }
+      // Extract bits 14-20 from bulk (at positions 16-22 after shift)
+      result |= (bulk >> 2) & 0x1FC000;
+      if ((bulk & 0x800000) == 0) {
+        *read_bytes_length = 3;
+        return result;
+      }
+      // Extract bits 21-27 from bulk (at positions 24-30 after shift)
+      result |= (bulk >> 3) & 0xFE00000;
+      if ((bulk & 0x80000000) == 0) {
+        *read_bytes_length = 4;
+        return result;
+      }
+      // 5th byte for bits 28-31 (only 4 bits used for uint32, but mask with
+      // 0x7F per varint spec)
+      result |= static_cast<uint32_t>(data_[offset + 4] & 0x7F) << 28;
+      *read_bytes_length = 5;
+      return result;
+    }
+    // Slow path: byte-by-byte read
+    return read_var_uint32_slow(offset, read_bytes_length);
   }
 
   /// Slow path for varuint32 decode when not enough bytes for bulk read.
@@ -438,9 +476,9 @@ public:
                             : value < 0x10000000           ? 4
                             : value < 0x100000000000000ULL ? 8
                                                            : 9;
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, extent)))
-        << "Buffer out of bound: " << offset << " + " << extent << " > "
-        << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, extent))) {
+      fail_range(offset, extent);
+    }
     return put_var_uint64_unchecked(offset, value);
   }
 
@@ -545,15 +583,17 @@ public:
   /// - If bit 0 is 1: read 1 byte flag + 8 bytes uint64
   FORY_ALWAYS_INLINE uint64_t get_tagged_uint64(uint32_t offset,
                                                 uint32_t *read_bytes_length) {
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 4)))
-        << "Buffer out of bound: " << offset << " + 4 > " << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, 4))) {
+      fail_range(offset, 4);
+    }
     uint32_t i = load_unaligned<uint32_t>(data_ + offset);
     if ((i & 0b1) != 0b1) {
       *read_bytes_length = 4;
       return static_cast<uint64_t>(i >> 1);
     } else {
-      FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 9)))
-          << "Buffer out of bound: " << offset << " + 9 > " << size_;
+      if (FORY_PREDICT_FALSE(!range_in_bounds(offset, 9))) {
+        fail_range(offset, 9);
+      }
       *read_bytes_length = 9;
       return load_unaligned<uint64_t>(data_ + offset + 1);
     }
@@ -565,15 +605,17 @@ public:
   /// - If bit 0 is 1: read 1 byte flag + 8 bytes int64
   FORY_ALWAYS_INLINE int64_t get_tagged_int64(uint32_t offset,
                                               uint32_t *read_bytes_length) {
-    FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 4)))
-        << "Buffer out of bound: " << offset << " + 4 > " << size_;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, 4))) {
+      fail_range(offset, 4);
+    }
     int32_t i = load_unaligned<int32_t>(data_ + offset);
     if ((i & 0b1) != 0b1) {
       *read_bytes_length = 4;
       return static_cast<int64_t>(i >> 1); // Arithmetic shift for signed
     } else {
-      FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 9)))
-          << "Buffer out of bound: " << offset << " + 9 > " << size_;
+      if (FORY_PREDICT_FALSE(!range_in_bounds(offset, 9))) {
+        fail_range(offset, 9);
+      }
       *read_bytes_length = 9;
       return load_unaligned<int64_t>(data_ + offset + 1);
     }
@@ -586,19 +628,11 @@ public:
   FORY_ALWAYS_INLINE uint32_t put_tagged_uint64(uint32_t offset,
                                                 uint64_t value) {
     constexpr uint64_t MAX_SMALL_VALUE = 0x7fffffff; // INT32_MAX as u64
-    if (value <= MAX_SMALL_VALUE) {
-      FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 4)))
-          << "Buffer out of bound: " << offset << " + 4 > " << size_;
-      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(value)
-                                                    << 1);
-      return 4;
-    } else {
-      FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 9)))
-          << "Buffer out of bound: " << offset << " + 9 > " << size_;
-      data_[offset] = 0b1;
-      store_unaligned<uint64_t>(data_ + offset + 1, value);
-      return 9;
+    const uint32_t extent = value <= MAX_SMALL_VALUE ? 4 : 9;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, extent))) {
+      fail_range(offset, extent);
     }
+    return put_tagged_uint64_unchecked(offset, value);
   }
 
   /// write int64_t using tagged encoding at given offset. Returns bytes
@@ -609,20 +643,12 @@ public:
   FORY_ALWAYS_INLINE uint32_t put_tagged_int64(uint32_t offset, int64_t value) {
     constexpr int64_t MIN_SMALL_VALUE = -1073741824; // -2^30
     constexpr int64_t MAX_SMALL_VALUE = 1073741823;  // 2^30 - 1
-    if (value >= MIN_SMALL_VALUE && value <= MAX_SMALL_VALUE) {
-      FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 4)))
-          << "Buffer out of bound: " << offset << " + 4 > " << size_;
-      const uint32_t encoded =
-          static_cast<uint32_t>(static_cast<int32_t>(value)) << 1;
-      store_unaligned<uint32_t>(data_ + offset, encoded);
-      return 4;
-    } else {
-      FORY_CHECK(FORY_PREDICT_TRUE(range_in_bounds(offset, 9)))
-          << "Buffer out of bound: " << offset << " + 9 > " << size_;
-      data_[offset] = 0b1;
-      store_unaligned<int64_t>(data_ + offset + 1, value);
-      return 9;
+    const uint32_t extent =
+        value >= MIN_SMALL_VALUE && value <= MAX_SMALL_VALUE ? 4 : 9;
+    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, extent))) {
+      fail_range(offset, extent);
     }
+    return put_tagged_int64_unchecked(offset, value);
   }
 
   /// write uint8_t value to buffer at current writer index.
@@ -1089,15 +1115,17 @@ public:
   bool equals(const Buffer &other) const;
 
   FORY_ALWAYS_INLINE void grow(uint32_t min_capacity) {
-    const uint64_t required_size =
-        static_cast<uint64_t>(writer_index_) + min_capacity;
-    if (FORY_PREDICT_TRUE(required_size <= size_ &&
-                          required_size <
-                              std::numeric_limits<uint32_t>::max())) {
+    // writer_index_ is always within size_: public cursor mutation checks it,
+    // and internal writers advance only after proving capacity. Comparing the
+    // requested extent with the remaining capacity keeps the success path to
+    // one primitive branch without allowing uint32 addition to wrap.
+    if (FORY_PREDICT_TRUE(min_capacity <= size_ - writer_index_)) {
       return;
     }
     // Keep overflow reporting and resize arithmetic off scalar write hot paths.
     // The slow owner retains the same checked uint32_t capacity contract.
+    const uint64_t required_size =
+        static_cast<uint64_t>(writer_index_) + min_capacity;
     grow_checked(required_size, min_capacity);
   }
 
@@ -1173,10 +1201,9 @@ public:
   std::string hex() const;
 
 private:
-  friend struct serialization::detail::CollectionFieldWriter;
-  friend struct serialization::detail::StringFieldWriter;
-  friend struct serialization::detail::StructFieldReader;
+  friend struct serialization::detail::PrimitiveVectorWriter;
   friend struct serialization::detail::StructFieldWriter;
+  friend struct serialization::detail::StringFieldWriter;
   friend class StdInputStream;
   friend class PyInputStream;
   friend class OutputStream;
@@ -1191,40 +1218,6 @@ private:
   template <typename T>
   FORY_ALWAYS_INLINE static void store_unaligned(uint8_t *ptr, T value) {
     std::memcpy(ptr, &value, sizeof(T));
-  }
-
-  // Returning the physical length keeps the generated struct batch's failure
-  // proof in a register. The public value-returning API unwraps this same path.
-  FORY_ALWAYS_INLINE uint32_t get_var_uint32_length(uint32_t offset,
-                                                    uint32_t &value) {
-    if (FORY_PREDICT_FALSE(offset >= size_)) {
-      value = 0;
-      return 0;
-    }
-    if (FORY_PREDICT_TRUE(size_ - offset >= 5)) {
-      const uint32_t bulk = load_unaligned<uint32_t>(data_ + offset);
-      value = bulk & 0x7F;
-      if ((bulk & 0x80) == 0) {
-        return 1;
-      }
-      value |= (bulk >> 1) & 0x3F80;
-      if ((bulk & 0x8000) == 0) {
-        return 2;
-      }
-      value |= (bulk >> 2) & 0x1FC000;
-      if ((bulk & 0x800000) == 0) {
-        return 3;
-      }
-      value |= (bulk >> 3) & 0xFE00000;
-      if ((bulk & 0x80000000) == 0) {
-        return 4;
-      }
-      value |= static_cast<uint32_t>(data_[offset + 4] & 0x7F) << 28;
-      return 5;
-    }
-    uint32_t length;
-    value = read_var_uint32_slow(offset, &length);
-    return length;
   }
 
   FORY_ALWAYS_INLINE void rebind_input_stream_to_this() {
@@ -1384,6 +1377,34 @@ private:
     return 9;
   }
 
+  FORY_ALWAYS_INLINE uint32_t put_tagged_uint64_unchecked(uint32_t offset,
+                                                          uint64_t value) {
+    constexpr uint64_t MAX_SMALL_VALUE = 0x7fffffff;
+    if (value <= MAX_SMALL_VALUE) {
+      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(value)
+                                                    << 1);
+      return 4;
+    }
+    data_[offset] = 0b1;
+    store_unaligned<uint64_t>(data_ + offset + 1, value);
+    return 9;
+  }
+
+  FORY_ALWAYS_INLINE uint32_t put_tagged_int64_unchecked(uint32_t offset,
+                                                         int64_t value) {
+    constexpr int64_t MIN_SMALL_VALUE = -1073741824;
+    constexpr int64_t MAX_SMALL_VALUE = 1073741823;
+    if (value >= MIN_SMALL_VALUE && value <= MAX_SMALL_VALUE) {
+      const uint32_t encoded =
+          static_cast<uint32_t>(static_cast<int32_t>(value)) << 1;
+      store_unaligned<uint32_t>(data_ + offset, encoded);
+      return 4;
+    }
+    data_[offset] = 0b1;
+    store_unaligned<int64_t>(data_ + offset + 1, value);
+    return 9;
+  }
+
   FORY_ALWAYS_INLINE bool range_in_bounds(uint32_t offset,
                                           uint32_t length) const {
     return offset <= size_ && length <= size_ - offset;
@@ -1416,6 +1437,10 @@ private:
 
   FORY_NOINLINE void grow_checked(uint64_t required_size,
                                   uint32_t min_capacity);
+
+  FORY_NOINLINE void fail_range(uint32_t offset, uint32_t length) const;
+
+  FORY_NOINLINE void fail_writer_index(uint64_t target) const;
 
   uint8_t *data_;
   uint32_t size_;

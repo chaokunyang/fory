@@ -156,9 +156,6 @@ template <> struct Serializer<Duration> {
       return Duration();
     }
     int32_t nanos = ctx.read_int32(ctx.error());
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return Duration();
-    }
     auto result = detail::temporal_nanos_from_parts(seconds, nanos, "Duration");
     if (FORY_PREDICT_FALSE(!result.ok())) {
       ctx.set_error(std::move(result).error());
@@ -254,9 +251,6 @@ template <> struct Serializer<Timestamp> {
       return Timestamp();
     }
     uint32_t nanos = ctx.read_uint32(ctx.error());
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return Timestamp();
-    }
     auto result = detail::temporal_nanos_from_parts(
         seconds, static_cast<int64_t>(nanos), "Timestamp");
     if (FORY_PREDICT_FALSE(!result.ok())) {

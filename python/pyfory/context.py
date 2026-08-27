@@ -70,7 +70,7 @@ def hash_meta_string_data(data: bytes, encoding: int) -> int:
 
 
 class EncodedMetaString:
-    __slots__ = ("data", "encoding", "hashcode", "length")
+    __slots__ = ("data", "length", "encoding", "hashcode")
 
     def __init__(self, data: bytes, hashcode: int):
         self.data = data
@@ -126,10 +126,10 @@ class MetaStringWriter:
 
 class MetaStringReader:
     __slots__ = (
+        "shared_registry",
         "_dynamic_id_to_encoded_meta_strings",
         "_hash_to_encoded_meta_strings",
         "_small_encoded_meta_strings",
-        "shared_registry",
     )
 
     def __init__(self, shared_registry):
@@ -227,20 +227,20 @@ class MetaShareReadContext:
 
 class WriteContext:
     __slots__ = (
-        "buffer",
-        "buffer_callback",
+        "type_resolver",
+        "xlang",
+        "track_ref",
+        "strict",
         "compatible",
-        "context_objects",
         "field_nullable",
-        "meta_share_context",
-        "meta_string_writer",
         "policy",
         "ref_writer",
-        "strict",
-        "track_ref",
-        "type_resolver",
+        "meta_string_writer",
+        "meta_share_context",
+        "buffer",
+        "buffer_callback",
         "unsupported_callback",
-        "xlang",
+        "context_objects",
     )
 
     def __init__(self, config: Config, type_resolver):
@@ -452,27 +452,27 @@ class WriteContext:
 
 class ReadContext:
     __slots__ = (
+        "type_resolver",
+        "xlang",
+        "track_ref",
+        "strict",
+        "compatible",
+        "field_nullable",
+        "policy",
+        "max_depth",
         "_max_graph_memory_bytes",
-        "_max_unbacked_container_items",
         "_remaining_graph_memory_bytes",
+        "_max_unbacked_container_items",
+        "remaining_unbacked_container_items",
+        "ref_reader",
+        "meta_string_reader",
+        "meta_share_context",
         "buffer",
         "buffers",
-        "compatible",
+        "unsupported_objects",
+        "peer_out_of_band_enabled",
         "context_objects",
         "depth",
-        "field_nullable",
-        "max_depth",
-        "meta_share_context",
-        "meta_string_reader",
-        "peer_out_of_band_enabled",
-        "policy",
-        "ref_reader",
-        "remaining_unbacked_container_items",
-        "strict",
-        "track_ref",
-        "type_resolver",
-        "unsupported_objects",
-        "xlang",
     )
 
     def __init__(self, config: Config, type_resolver):

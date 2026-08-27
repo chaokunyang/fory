@@ -651,26 +651,29 @@ data = f.serialize(MyDataClass(field1="value", field2=42))
 Handle shared references and circular dependencies safely. Set `ref=True` to deduplicate objects:
 
 ```python
+from dataclasses import dataclass
+from typing import Optional
+
 import pyfory
 
 f = pyfory.Fory(xlang=False, ref=True)  # Enable reference tracking
 
-# Handle circular references safely
+@dataclass
 class Node:
-    def __init__(self, value):
-        self.value = value
-        self.children = []
-        self.parent = None
+    value: str
+    next: Optional["Node"] = pyfory.field(ref=True, nullable=True, default=None)
+
+f.register_type(Node)
 
 root = Node("root")
 child = Node("child")
-child.parent = root  # Circular reference
-root.children.append(child)
+root.next = child
+child.next = root  # Circular reference
 
 # Serializes without infinite recursion
 data = f.serialize(root)
 result = f.deserialize(data)
-assert result.children[0].parent is result  # Reference preserved
+assert result.next.next is result  # Reference preserved
 ```
 
 ### Type Registration
@@ -862,28 +865,9 @@ object identity or cycles matter:
 f = pyfory.Fory(ref=True)
 ```
 
-For configured Python object graphs with circular references, use native mode and register every
-application type before the first root:
-
-```python
-f = pyfory.Fory(xlang=False, ref=True, strict=False)
-
-# Example with circular reference
-class Node:
-    def __init__(self, value):
-        self.value = value
-        self.next = None
-
-node1 = Node(1)
-node2 = Node(2)
-node1.next = node2
-node2.next = node1  # Circular reference
-
-f.register_type(Node)
-data = f.dumps(node1)
-result = f.loads(data)
-assert result.next.next is result  # Circular reference preserved
-```
+For configured Python object graphs with circular references, use native mode, register every
+application type before the first root, and declare reference-tracked recursive fields as shown in
+[Reference Tracking & Circular References](#reference-tracking--circular-references).
 
 ### Debug Mode
 

@@ -12,8 +12,12 @@ Load this file when changing `csharp/` or C# xlang behavior.
 - A direct C# `Fory` owns permanent registration freeze at first root entry, including a failed
   root. `ThreadSafeFory` linearizes root entry and registration with its registration lock and
   frozen state, validates registration on its staging `Fory`, and appends only successful actions
-  to the replay log. New per-thread runtimes replay that log; do not mutate existing runtimes or
-  introduce another freeze owner.
+  to the replay log. Serializer construction and generated factories may reenter a root, so direct
+  registration must recheck the facade after resolving the serializer and before resolver mutation.
+  `ThreadSafeFory` must recheck disposal and freeze after staging registration and before replay-log
+  publication, and a staging failure must not rebuild after either lifecycle boundary has closed.
+  New per-thread runtimes replay that log; do not mutate existing runtimes or introduce another
+  freeze owner.
 - Generated C# gRPC service companions are compiler-owned files that depend on application-provided gRPC packages, not `csharp/src/Fory`. Keep gRPC package references out of the Fory runtime package.
 - C# generated schema modules are source-file owners. Service companions must use that module's `ThreadSafeFory` and must not introduce namespace-owned aliases or duplicate serializer registration paths.
 - C# external-type serialization is target-keyed. A local

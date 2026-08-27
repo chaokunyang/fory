@@ -82,6 +82,12 @@ not the place where nested serializers do their work.
 - owning registration through `TypeResolver`
 - resetting operation-local context state at the top-level root boundary
 
+Registration preparation may invoke serializer constructors, generated factories, or application
+callbacks before any registry mutation. If such a callback starts a root operation, registration
+must recheck the authoritative per-instance freeze owner when the callback returns and reject the
+in-progress registration before publishing type, serializer, name, ID, or replay state. Do not
+publish late state and then repair it through invalidation or rollback.
+
 Nested serializers must not call back into root `serialize(...)` or
 `deserialize(...)` entry points.
 

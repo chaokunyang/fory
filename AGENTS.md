@@ -186,6 +186,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   serializer rebinding, metadata rebuilding, or other late-registration
   machinery. Registration-order finalization before the first root operation
   remains registration-owned and must not create a runtime invalidation path.
+  If serializer construction, factory execution, or another application callback
+  can reenter a root, recheck the authoritative per-instance freeze owner after
+  that callback and before the first registry mutation or replay-log publication.
 - Python `TypeResolver` is the sole registry freeze and finalization owner. Its Cython resolver
   companion may cache completion of the Python-owner dispatch needed to populate native tables,
   but the `Fory` facade must not mirror that state; Cython roots call the resolver owner directly.

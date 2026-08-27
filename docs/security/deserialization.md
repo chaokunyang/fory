@@ -615,6 +615,14 @@ that case, classify the behavior by concrete impact:
 - Pure strictness about whether a skipped value used one specific encoding shape
   is not a security issue.
 
+## Registry Lifecycle
+
+Registration code that invokes serializer constructors, factories, or application callbacks must
+recheck the authoritative per-instance registry freeze after the callback and before publishing
+resolver or replay-log state. A callback that starts the first root permanently closes the
+in-progress registration; implementations must not publish and then repair or invalidate late
+state.
+
 ## Metadata And Type Resolution
 
 Metadata parsing is security-sensitive when it affects retained read-side state,

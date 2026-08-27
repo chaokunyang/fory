@@ -72,6 +72,8 @@ fory.Register<MyType, MyTypeSerializer>("com.example.MyType");
 A `Fory` instance accepts registration only before its first root serialization or deserialization
 attempt. Starting that operation permanently freezes the instance's registry, even when the
 operation fails. Every later registration throws `InvalidOperationException`.
+If a custom serializer constructor starts a root operation, that root freezes the registry and the
+in-progress registration fails without publishing the serializer or type mapping.
 
 To configure additional types, build a new `Fory` instance, complete its registrations, and then
 use that new instance for serialization or deserialization.

@@ -918,7 +918,7 @@ def test_data_class_serializer_xlang():
 
 
 @pytest.mark.parametrize("track_ref", [False, True])
-def test_dataclass_with_typed_tuple_field(track_ref):
+def test_dataclass_typed_tuple(track_ref):
     fory = Fory(xlang=False, ref=track_ref, strict=False, compatible=False)
     fory.register_type(TupleFieldObject)
     obj = TupleFieldObject(bar=("a", 1))

@@ -563,6 +563,8 @@ class PandasRangeIndexSerializer(Serializer):
             else:
                 write_context.write_int8(NOT_NULL_VALUE_FLAG)
                 write_context.write_no_ref(step)
+        # Concrete dtype classes differ across NumPy versions. Keep this wire slot owned by
+        # RangeIndex and encode NumPy's stable descriptor instead of a version-specific object ref.
         write_context.write_string(value.dtype.str)
         write_context.write_ref(value.name)
 
@@ -1806,6 +1808,8 @@ class FunctionSerializer(Serializer):
             freevars.append(read_context.read_string())
 
         globals_dict = read_context.read_ref()
+        # The writer defines this as a data-only namespace snapshot. Reject subclasses and other
+        # mappings so their runtime behavior cannot become part of function reconstruction.
         if type(globals_dict) is not dict:
             raise ValueError("function globals must be a dict")
 

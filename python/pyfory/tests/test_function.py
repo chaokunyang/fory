@@ -121,7 +121,7 @@ def test_lambda_functions_serialization():
     assert closure_lambda(test_input) == deserialized(test_input)
 
 
-def test_regular_functions_serialization():
+def test_regular_function_roundtrip():
     """Tests serialization of regular functions."""
     fory = pyfory.Fory(
         xlang=False,

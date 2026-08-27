@@ -305,6 +305,7 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   compatibleScalarContainerRefs()
   compatibleDenseUIntList()
   trackedDenseArrayRefs()
+  serializerRegistrationFreezes()
 
   val fory = newFory()
   fory.register<KotlinUser>("kotlin.KotlinUser")
@@ -751,6 +752,67 @@ private fun trackedDenseArrayRefs() {
   check(noRefDecoded.notNullUInts contentEquals uints)
   check(noRefDecoded.sentinel == sentinel)
   check(noRefDecoded.added == "reader-default")
+}
+
+private fun serializerRegistrationFreezes() {
+  val registeredFory = newFory()
+  registeredFory.register<KotlinUser>("kotlin.KotlinUser")
+  registeredFory.serialize(KotlinUser(1u, "freeze", 2L))
+  val serializer = registeredFory.getSerializer(KotlinUser::class.java)
+  val typeId = registeredFory.typeResolver.getTypeInfo(KotlinUser::class.java).typeId
+  check(
+    runCatching { KotlinSerializers.registerSerializer(registeredFory, KotlinUser::class.java) }
+      .isFailure
+  )
+  check(registeredFory.getSerializer(KotlinUser::class.java) === serializer)
+  check(registeredFory.typeResolver.getTypeInfo(KotlinUser::class.java).typeId == typeId)
+
+  val unregisteredFory = newFory()
+  unregisteredFory.serialize("freeze")
+  check(!unregisteredFory.typeResolver.isRegistered(KotlinUser::class.java))
+  check(
+    runCatching { KotlinSerializers.registerSerializer(unregisteredFory, KotlinUser::class.java) }
+      .isFailure
+  )
+  check(!unregisteredFory.typeResolver.isRegistered(KotlinUser::class.java))
+
+  val failedRootFory = newFory()
+  check(runCatching { failedRootFory.deserialize(byteArrayOf()) }.isFailure)
+  for (frozenFory in listOf(unregisteredFory, failedRootFory)) {
+    val resolver = frozenFory.typeResolver
+    val cacheField = resolver.sharedRegistry.javaClass.getDeclaredField("objectInstantiatorCache")
+    cacheField.isAccessible = true
+    val cache = cacheField.get(resolver.sharedRegistry) as Map<*, *>
+    check(KotlinPet::class.java !in cache)
+    check(
+      runCatching {
+          KotlinSerializers.registerUnion(
+            frozenFory,
+            KotlinPet::class.java,
+            "kotlin.LateKotlinPet",
+          )
+        }
+        .isFailure
+    )
+    check(KotlinPet::class.java !in cache)
+    check(!resolver.isRegistered(KotlinPet::class.java))
+  }
+
+  val compatibleFory = newCompatibleFory()
+  KotlinSerializers.registerType(
+    compatibleFory,
+    KotlinUser::class.java,
+    "kotlin.KotlinUserCompatible",
+  )
+  check(
+    compatibleFory.typeResolver.getTypeInfo(KotlinUser::class.java).typeId ==
+      Types.NAMED_COMPATIBLE_STRUCT
+  )
+  KotlinSerializers.registerSerializer(compatibleFory, KotlinUser::class.java)
+  check(
+    compatibleFory.typeResolver.getTypeInfo(KotlinUser::class.java).typeId ==
+      Types.NAMED_COMPATIBLE_STRUCT
+  )
 }
 
 private fun checkUnionListBudget(values: List<UInt>) {

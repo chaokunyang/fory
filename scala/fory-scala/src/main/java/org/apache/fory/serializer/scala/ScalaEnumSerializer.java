@@ -138,6 +138,12 @@ public final class ScalaEnumSerializer extends ImmutableSerializer<Object> imple
     }
   }
 
+  // Registration reuses the values already discovered here so enum companion code cannot run
+  // after the canonical type has been published.
+  Object[] getEnumConstants() {
+    return enumConstants;
+  }
+
   static boolean canSerialize(Class<?> cls) {
     Class<?> enumClass = ScalaTypes.resolveScalaEnumClass(cls);
     if (enumClass == null) {

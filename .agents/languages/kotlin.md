@@ -14,6 +14,13 @@ Load this file when changing `kotlin/` or compiler code that generates Kotlin so
   Fory. Do not auto-install a new serializer for an existing type-registered Kotlin class unless the
   wire format matches the previous serializer family and old-payload/new-runtime compatibility is
   tested.
+- Public registration helpers must check the registry freeze before constructing a serializer,
+  enum serializer, or union serializer. A registered-type serializer replacement must check again
+  after generated serializer construction and before the explicit replacement because
+  `TypeResolver.setSerializer` remains available for lazy internal resolution.
+- Combined generated-struct registration must publish the canonical type before constructing its
+  serializer because generated construction resolves the canonical `TypeInfo`. Do not move that
+  construction before type registration or add rollback, staging, or a parallel registration path.
 - When adding Kotlin gRPC service companions, emit Kotlin source only. Reuse the generated schema
   module's `ThreadSafeFory` and KSP-generated schema serializers, and keep grpc-java/grpc-kotlin
   dependencies application-owned instead of adding them as hard `fory-kotlin` dependencies.

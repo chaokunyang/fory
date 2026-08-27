@@ -22,6 +22,7 @@ package org.apache.fory.serializer.scala
 import org.apache.fory.Fory
 import org.apache.fory.scala.ForyScala
 import org.apache.fory.annotation.ForyEnumId
+import org.apache.fory.exception.ForyException
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -40,6 +41,16 @@ object ScalaEnumTest {
     case Green
     @ForyEnumId(7)
     case Red
+  }
+
+  object EnumDiscoveryProbe {
+    var initialized: Int = 0
+  }
+
+  enum CountingEnum { case Value }
+
+  object CountingEnum {
+    EnumDiscoveryProbe.initialized += 1
   }
 
   case class Colors(set: Set[ColorEnum])
@@ -81,6 +92,22 @@ class ScalaEnumTest extends AnyWordSpec with Matchers {
       }
 
       reader.deserialize(writer.serialize(StableColorV1.Green)) shouldBe StableColorV2.Green
+    }
+    "reject late bootstrap before enum discovery" in {
+      val frozen = ForyScala.builder()
+        .withXlang(false)
+        .requireClassRegistration(false)
+        .build()
+      frozen.serialize(1)
+
+      intercept[ForyException] {
+        ScalaSerializers.registerSerializers(frozen)
+      }
+      EnumDiscoveryProbe.initialized = 0
+      intercept[ForyException] {
+        ScalaSerializers.registerEnum(frozen, classOf[CountingEnum], 712L)
+      }
+      EnumDiscoveryProbe.initialized shouldBe 0
     }
   }
 }

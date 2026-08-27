@@ -19,6 +19,9 @@
 
 package org.apache.fory.serializer.scala;
 
+import static org.apache.fory.serializer.scala.ToFactorySerializers.IterableToFactoryClass;
+import static org.apache.fory.serializer.scala.ToFactorySerializers.MapToFactoryClass;
+
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
@@ -27,12 +30,10 @@ import org.apache.fory.Fory;
 import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.config.Config;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.resolver.TypeResolver;
 import scala.collection.immutable.NumericRange;
 import scala.collection.immutable.Range;
-
-import static org.apache.fory.serializer.scala.ToFactorySerializers.IterableToFactoryClass;
-import static org.apache.fory.serializer.scala.ToFactorySerializers.MapToFactoryClass;
 
 public class ScalaSerializers {
   private static final Map<Fory, Boolean> INSTALLED_FORY =
@@ -43,13 +44,14 @@ public class ScalaSerializers {
   }
 
   public static void registerSerializers(Fory fory) {
+    TypeResolver resolver = fory.getTypeResolver();
+    checkRegistrationOpen(resolver);
     synchronized (INSTALLED_FORY) {
       if (INSTALLED_FORY.containsKey(fory)) {
         return;
       }
       INSTALLED_FORY.put(fory, Boolean.TRUE);
     }
-    TypeResolver resolver = fory.getTypeResolver();
     try {
       fory.registerSerializerFactory(new ScalaSerializerFactory());
       if (resolver.isCrossLanguage()) {
@@ -193,8 +195,12 @@ public class ScalaSerializers {
 
   public static void registerEnum(Fory fory, Class<?> cls, long typeId) {
     TypeResolver resolver = fory.getTypeResolver();
-    resolver.registerEnum(cls, typeId, new ScalaEnumSerializer(resolver, cls));
-    registerEnumRuntimeAliases(fory, cls);
+    checkRegistrationOpen(resolver);
+    ScalaEnumSerializer serializer = new ScalaEnumSerializer(resolver, cls);
+    checkRegistrationOpen(resolver);
+    Object[] values = serializer.getEnumConstants();
+    resolver.registerEnum(cls, typeId, serializer);
+    registerEnumRuntimeAliases(fory, cls, values);
   }
 
   private static String[] splitName(String name) {
@@ -222,15 +228,23 @@ public class ScalaSerializers {
   public static void registerEnum(Fory fory, Class<?> cls, String name) {
     TypeResolver resolver = fory.getTypeResolver();
     String[] parts = splitName(name);
-    resolver.registerEnum(cls, parts[0], parts[1], new ScalaEnumSerializer(resolver, cls));
-    registerEnumRuntimeAliases(fory, cls);
+    checkRegistrationOpen(resolver);
+    ScalaEnumSerializer serializer = new ScalaEnumSerializer(resolver, cls);
+    checkRegistrationOpen(resolver);
+    Object[] values = serializer.getEnumConstants();
+    resolver.registerEnum(cls, parts[0], parts[1], serializer);
+    registerEnumRuntimeAliases(fory, cls, values);
   }
 
   public static void registerEnum(Fory fory, Class<?> cls, String namespace, String typeName) {
     checkTypeName(typeName);
     TypeResolver resolver = fory.getTypeResolver();
-    resolver.registerEnum(cls, namespace, typeName, new ScalaEnumSerializer(resolver, cls));
-    registerEnumRuntimeAliases(fory, cls);
+    checkRegistrationOpen(resolver);
+    ScalaEnumSerializer serializer = new ScalaEnumSerializer(resolver, cls);
+    checkRegistrationOpen(resolver);
+    Object[] values = serializer.getEnumConstants();
+    resolver.registerEnum(cls, namespace, typeName, serializer);
+    registerEnumRuntimeAliases(fory, cls, values);
   }
 
   @Internal
@@ -239,8 +253,8 @@ public class ScalaSerializers {
     fory.getTypeResolver().registerRuntimeTypeAlias(runtimeClass, canonicalClass);
   }
 
-  private static void registerEnumRuntimeAliases(Fory fory, Class<?> cls) {
-    for (Object value : ScalaEnumSerializer.loadValues(cls)) {
+  private static void registerEnumRuntimeAliases(Fory fory, Class<?> cls, Object[] values) {
+    for (Object value : values) {
       Class<?> runtimeClass = value.getClass();
       if (runtimeClass != cls) {
         registerRuntimeTypeAlias(fory, runtimeClass, cls);
@@ -248,4 +262,12 @@ public class ScalaSerializers {
     }
   }
 
+  private static void checkRegistrationOpen(TypeResolver resolver) {
+    if (resolver.isRegistrationFinished()) {
+      throw new ForyException(
+          "Cannot register class/serializer after registration has been frozen. Please register "
+              + "all classes before invoking top-level `serialize/deserialize/copy` methods of "
+              + "Fory.");
+    }
+  }
 }

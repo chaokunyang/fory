@@ -21,6 +21,7 @@ package org.apache.fory.scala
 
 import org.apache.fory.{BaseFory, Fory, ForyModule, ThreadSafeFory}
 import org.apache.fory.annotation.Internal
+import org.apache.fory.exception.ForyException
 import org.apache.fory.meta.TypeDef
 import org.apache.fory.resolver.TypeResolver
 import org.apache.fory.serializer.Serializer
@@ -58,6 +59,16 @@ object ForySerializer {
     if typeName == null || typeName.isEmpty || typeName.contains(".") then {
       throw new IllegalArgumentException(
         "typeName must be non-empty and must not contain `.` when namespace is provided")
+    }
+  }
+
+  private def checkRegistrationOpen(resolver: TypeResolver): Unit = {
+    // Public generated registration must freeze with the root facade. Resolver serializer
+    // mutation stays available for lazy internal resolution after registration has finished.
+    if resolver.isRegistrationFinished then {
+      throw new ForyException(
+        "Cannot register class/serializer after registration has been frozen. Please register " +
+          "all classes before invoking top-level `serialize/deserialize/copy` methods of Fory.")
     }
   }
 
@@ -106,11 +117,16 @@ object ForySerializer {
 
   @Internal
   def registerSerializer[T](fory: Fory, cls: Class[T])(using serializer: ForySerializer[T]): Unit = {
-    if serializer.isUnion then {
+    val resolver = fory.getTypeResolver
+    checkRegistrationOpen(resolver)
+    val union = serializer.isUnion
+    checkRegistrationOpen(resolver)
+    if union then {
       throw new IllegalArgumentException("Use ForySerializer.register for Scala union serializers")
     }
-    val resolver = fory.getTypeResolver
-    resolver.setSerializer(cls, serializer.createSerializer(resolver))
+    val generatedSerializer = serializer.createSerializer(resolver)
+    checkRegistrationOpen(resolver)
+    resolver.setSerializer(cls, generatedSerializer)
   }
 
   private def register[T](
@@ -123,27 +139,34 @@ object ForySerializer {
       checkTypeName(typeName)
     }
     val resolver = fory.getTypeResolver
-    serializer match {
-      case _ if serializer.isUnion =>
-        val unionSerializer = serializer.createSerializer(resolver)
-        if typeId != null then {
-          resolver.registerUnion(cls, typeId.longValue(), unionSerializer)
-        } else {
-          val unionNamespace =
-            if namespace != null then namespace else Option(cls.getPackage).map(_.getName).orNull
-          val unionTypeName = if typeName != null then typeName else cls.getSimpleName
-          fory.registerUnion(
-            cls,
-            if unionNamespace == null then "" else unionNamespace,
-            unionTypeName,
-            unionSerializer)
-        }
-        serializer.handledRuntimeClasses(cls).foreach { runtimeClass =>
-          ScalaSerializers.registerRuntimeTypeAlias(fory, runtimeClass, cls)
-        }
-      case _ =>
-        registerType(fory, cls, typeId, namespace, typeName)
-        resolver.setSerializer(cls, serializer.createSerializer(resolver))
+    checkRegistrationOpen(resolver)
+    val union = serializer.isUnion
+    checkRegistrationOpen(resolver)
+    if union then {
+      // Union construction does not require canonical registration, so finish the remaining user
+      // methods before publishing any type state.
+      val generatedSerializer = serializer.createSerializer(resolver)
+      checkRegistrationOpen(resolver)
+      val runtimeClasses = serializer.handledRuntimeClasses(cls)
+      checkRegistrationOpen(resolver)
+      if typeId != null then {
+        resolver.registerUnion(cls, typeId.longValue(), generatedSerializer)
+      } else {
+        val unionNamespace =
+          if namespace != null then namespace else Option(cls.getPackage).map(_.getName).orNull
+        val unionTypeName = if typeName != null then typeName else cls.getSimpleName
+        fory.registerUnion(
+          cls,
+          if unionNamespace == null then "" else unionNamespace,
+          unionTypeName,
+          generatedSerializer)
+      }
+      runtimeClasses.foreach { runtimeClass =>
+        ScalaSerializers.registerRuntimeTypeAlias(fory, runtimeClass, cls)
+      }
+    } else {
+      registerType(fory, cls, typeId, namespace, typeName)
+      resolver.setSerializer(cls, serializer.createSerializer(resolver))
     }
   }
 

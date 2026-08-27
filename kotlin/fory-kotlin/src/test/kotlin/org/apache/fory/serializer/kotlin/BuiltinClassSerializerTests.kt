@@ -34,10 +34,23 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import org.apache.fory.Fory
+import org.apache.fory.exception.ForyException
 import org.apache.fory.kotlin.ForyKotlin
+import org.apache.fory.util.DefaultValueUtils
 import org.testng.Assert
+import org.testng.Assert.assertThrows
 
 class BuiltinClassSerializerTests {
+  @Test
+  fun testLateBootstrapIsReadOnly() {
+    val fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
+    fory.serialize(1)
+    val defaultValueSupport = DefaultValueUtils.getKotlinDefaultValueSupport()
+
+    assertThrows(ForyException::class.java) { KotlinSerializers.registerSerializers(fory) }
+    Assert.assertSame(DefaultValueUtils.getKotlinDefaultValueSupport(), defaultValueSupport)
+  }
+
   @Test
   fun testSerializePair() {
     val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()

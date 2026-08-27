@@ -223,17 +223,13 @@ public final class Fory implements BaseFory {
   @Override
   public void register(ForyModule module) {
     Preconditions.checkNotNull(module);
+    checkRegisterAllowed();
     if (installedModules.containsKey(module)) {
       return;
     }
+    module.install(this);
     checkRegisterAllowed();
     installedModules.put(module, Boolean.TRUE);
-    try {
-      module.install(this);
-    } catch (RuntimeException | Error e) {
-      installedModules.remove(module);
-      throw e;
-    }
   }
 
   @Override

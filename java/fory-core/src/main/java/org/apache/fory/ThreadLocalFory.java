@@ -47,13 +47,14 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   private final ThreadLocal<Fory> foryThreadLocal;
   private Consumer<Fory> factoryCallback;
   private final Map<Fory, Object> allFory;
-  private final FacadeRegistrationGate registrationGate = new FacadeRegistrationGate();
+  private final FacadeRegistrationGate registrationGate;
 
   public ThreadLocalFory(Function<ForyBuilder, Fory> factory) {
     SharedRegistry sharedRegistry = new SharedRegistry();
     foryFactory = () -> factory.apply(Fory.builder().withSharedRegistry(sharedRegistry));
     factoryCallback = f -> {};
     allFory = Collections.synchronizedMap(new WeakHashMap<>());
+    registrationGate = new FacadeRegistrationGate(this::finishChildRegistration);
     foryThreadLocal = ThreadLocal.withInitial(this::newFory);
     // 1. init and warm for current thread.
     // Fory creation took about 1~2 ms, but first creation
@@ -66,10 +67,27 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
     return registrationGate.initializeChild(
         () -> {
           Fory fory = foryFactory.get();
-          factoryCallback.accept(fory);
-          allFory.put(fory, null);
-          return fory;
+          // Bind and publish the same provisional child before callbacks. A callback which
+          // reenters the facade then freezes this child instead of recursively creating another.
+          foryThreadLocal.set(fory);
+          try {
+            allFory.put(fory, null);
+            factoryCallback.accept(fory);
+            return fory;
+          } catch (RuntimeException | Error e) {
+            foryThreadLocal.remove();
+            allFory.remove(fory);
+            throw e;
+          }
         });
+  }
+
+  private void finishChildRegistration() {
+    synchronized (allFory) {
+      for (Fory fory : allFory.keySet()) {
+        fory.getTypeResolver().finishRegistration();
+      }
+    }
   }
 
   private Fory currentFory() {
@@ -91,8 +109,8 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
 
   @Override
   public <R> R execute(Function<Fory, R> action) {
-    Fory fory = foryThreadLocal.get();
-    return registrationGate.execute(fory, action);
+    registrationGate.freeze();
+    return action.apply(foryThreadLocal.get());
   }
 
   @Override

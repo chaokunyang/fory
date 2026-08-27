@@ -416,10 +416,12 @@ public abstract class TypeResolver {
    */
   public <T> void registerSerializerAndType(
       Class<T> type, Class<? extends Serializer> serializerClass) {
-    if (!isRegistered(type)) {
-      register(type);
-    }
-    registerSerializer(type, serializerClass);
+    checkRegisterAllowed();
+    Serializer<?> serializer = newSerializer(type, serializerClass);
+    // Serializer construction may invoke application code which starts a root operation. Keep
+    // type and serializer publication together after the authoritative lifecycle check.
+    checkRegisterAllowed();
+    registerSerializerAndType(type, serializer);
   }
 
   /**

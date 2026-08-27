@@ -19,10 +19,14 @@
 
 package org.apache.fory.serializer;
 
+import java.util.IdentityHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyModule;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.TestUtils;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
@@ -195,6 +199,79 @@ public class RegisterTest extends ForyTestBase {
                   return new MyExtSerializer(resolver);
                 }));
     Assert.assertFalse(creatorCalled.get());
+  }
+
+  @Test
+  public void testReentrantModuleFreeze() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
+    AtomicBoolean installReturned = new AtomicBoolean();
+    ForyModule module =
+        runtime -> {
+          runtime.serialize("freeze");
+          installReturned.set(true);
+        };
+
+    Assert.assertThrows(ForyException.class, () -> fory.register(module));
+    Assert.assertTrue(installReturned.get());
+    IdentityHashMap<ForyModule, Boolean> installedModules =
+        TestUtils.getFieldValue(fory, "installedModules");
+    Assert.assertFalse(installedModules.containsKey(module));
+  }
+
+  @Test
+  public void testFrozenModuleDuplicateRejected() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
+    AtomicInteger installs = new AtomicInteger();
+    ForyModule module = runtime -> installs.incrementAndGet();
+    fory.register(module);
+    fory.serialize("freeze");
+
+    Assert.assertThrows(ForyException.class, () -> fory.register(module));
+    Assert.assertEquals(installs.get(), 1);
+  }
+
+  @Test(dataProvider = "xlang")
+  public void testReentrantCombinedRegistration(boolean xlang) {
+    Fory fory =
+        Fory.builder()
+            .withXlang(xlang)
+            .withCodegen(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .build();
+    ReentrantSerializer.CONSTRUCTION.set(() -> fory.serialize("freeze"));
+    try {
+      Assert.assertThrows(
+          ForyException.class,
+          () -> fory.registerSerializerAndType(MyExt.class, ReentrantSerializer.class));
+    } finally {
+      ReentrantSerializer.CONSTRUCTION.set(null);
+    }
+
+    Assert.assertTrue(fory.getTypeResolver().isRegistrationFinished());
+    Assert.assertFalse(fory.getTypeResolver().isRegistered(MyExt.class));
+    Assert.assertNull(fory.getTypeResolver().getTypeInfo(MyExt.class, false));
+  }
+
+  public static class ReentrantSerializer extends MyExtSerializer {
+    private static final AtomicReference<Runnable> CONSTRUCTION = new AtomicReference<>();
+
+    public ReentrantSerializer(TypeResolver typeResolver) {
+      super(typeResolver);
+      CONSTRUCTION.get().run();
+    }
   }
 
   public static class MyExtSerializer extends Serializer<MyExt> {

@@ -53,7 +53,7 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   private final Fory[] pooledFory;
   private final Semaphore waiterSignal = new Semaphore(0);
   private final AtomicInteger waitingBorrowers = new AtomicInteger();
-  private final FacadeRegistrationGate registrationGate = new FacadeRegistrationGate();
+  private final FacadeRegistrationGate registrationGate;
 
   public ThreadPoolFory(Function<ForyBuilder, Fory> foryFactory, int poolSize) {
     if (poolSize <= 0) {
@@ -70,6 +70,13 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
       Fory fory = factory.get();
       pooledFory[i] = fory;
       slots.set(i, new PooledEntry(fory, i));
+    }
+    registrationGate = new FacadeRegistrationGate(this::finishChildRegistration);
+  }
+
+  private void finishChildRegistration() {
+    for (Fory fory : pooledFory) {
+      fory.getTypeResolver().finishRegistration();
     }
   }
 
@@ -163,9 +170,10 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
 
   @Override
   public <R> R execute(Function<Fory, R> action) {
+    registrationGate.freeze();
     PooledEntry entry = acquireEntry();
     try {
-      return registrationGate.execute(entry.fory, action);
+      return action.apply(entry.fory);
     } finally {
       release(entry);
     }

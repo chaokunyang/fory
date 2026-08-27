@@ -19,7 +19,6 @@
 
 package org.apache.fory;
 
-import java.util.function.Function;
 import java.util.function.Supplier;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.exception.ForyException;
@@ -28,17 +27,18 @@ import org.apache.fory.exception.ForyException;
 @Internal
 public final class FacadeRegistrationGate {
   private final Object lock = new Object();
+  private final Runnable finishChildren;
   private volatile boolean frozen;
+
+  public FacadeRegistrationGate(Runnable finishChildren) {
+    this.finishChildren = finishChildren;
+  }
 
   public void applyRegistration(Runnable action) {
     synchronized (lock) {
-      if (frozen) {
-        throw new ForyException(
-            "Cannot register class/serializer after registration has been frozen. Please register "
-                + "all classes before invoking top-level `serialize/deserialize/copy` methods of "
-                + "ThreadSafeFory.");
-      }
+      checkRegistrationAllowed();
       action.run();
+      checkRegistrationAllowed();
     }
   }
 
@@ -52,19 +52,22 @@ public final class FacadeRegistrationGate {
   public void freeze() {
     if (!frozen) {
       synchronized (lock) {
-        frozen = true;
+        if (!frozen) {
+          // Set the permanent facade state first. If child finalization fails, registration must
+          // remain closed rather than reopening a partially finalized facade.
+          frozen = true;
+          finishChildren.run();
+        }
       }
     }
   }
 
-  /** Freezes facade and child registration before invoking an action that can expose the child. */
-  public <R> R execute(Fory fory, Function<Fory, R> action) {
-    synchronized (lock) {
-      // The callback may return or otherwise retain the raw child. Freeze before exposing it,
-      // because a later root through that escaped reference is invisible to the facade.
-      frozen = true;
-      fory.getTypeResolver().finishRegistration();
+  private void checkRegistrationAllowed() {
+    if (frozen) {
+      throw new ForyException(
+          "Cannot register class/serializer after registration has been frozen. Please register "
+              + "all classes before invoking top-level `serialize/deserialize/copy` methods of "
+              + "ThreadSafeFory.");
     }
-    return action.apply(fory);
   }
 }

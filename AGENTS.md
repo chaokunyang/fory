@@ -160,8 +160,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - JavaScript root entry releases reference and metadata state left by the previous root, including a
   failed root, before the context is reused. Do not add full cleanup to the root exit path or copy
   Java backing-array retention policies onto native JavaScript arrays. Read-side occurrence arrays
-  use native replacement reset. Writer metadata owners first restore their dynamic IDs, then
-  truncate the active owner list because those owners are appended again in the next root.
+  use native replacement reset. The writer metadata-owner table has a separate logical size: reset
+  owner IDs and the logical size without clearing bounded backing, and replace backing only after
+  more than 8192 owners.
 - Root failure exceptions must not copy or retain the operation reference table or materialized
   object graph for diagnostics. Root cleanup owns releasing that graph, and failure reporting must
   remain bounded independently of graph size.

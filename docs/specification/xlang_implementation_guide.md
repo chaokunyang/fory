@@ -95,9 +95,10 @@ the context is reused.
 `reset()` should clear operation-local mutable state.
 
 When writer metadata objects carry root-local dynamic IDs, reset must restore
-those IDs and discard the active owner-list entries. An owner may be appended
-again on first use in the next root; retaining prior entries creates duplicate
-cleanup work across roots.
+those IDs and reset the active owner count. A bounded owner table may retain its
+backing storage, but only entries below the current logical count participate in
+the next reset; otherwise prior owners create duplicate cleanup work across
+roots. Implementations should release an unusual high-water backing table.
 
 That operation-local state includes:
 

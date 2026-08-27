@@ -651,9 +651,10 @@ JavaScript root entry releases reference and metadata state left by the
 previous operation, including a failed operation, before the context is reused.
 Read-side occurrence arrays use native replacement reset instead of copying the
 Java backing-array retention policy. Writer metadata owners restore their
-dynamic IDs and then truncate the active owner list so the same owners do not
-accumulate across roots. Full reference and metadata cleanup does not run on
-the root exit path.
+dynamic IDs and reset a separate logical owner count, so a bounded backing
+array is reused without making prior-root entries visible or accumulating
+duplicate work. After more than 8192 owners, reset replaces that backing array.
+Full reference and metadata cleanup does not run on the root exit path.
 
 A class-resolution cache reachable from untrusted deserialization may publish
 an entry only from explicit trusted configuration or after the active class

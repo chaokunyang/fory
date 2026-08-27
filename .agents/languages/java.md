@@ -159,6 +159,15 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - In `MemoryBuffer` and `MemoryOps` hot paths, duplicate small straight-line copy/read/write logic
   when that keeps control flow direct. Do not add private helper indirection to hot paths just to
   reduce local code duplication; keep helpers for slow, cold, or error paths.
+- Preserve the JDK 25 `MemoryBuffer` ownership documented by its class Javadoc: read/write entry
+  points own logical range validation, while internal absolute get/put fast paths receive proven
+  legal indices and rely on indexed array, absolute `ByteBuffer`, or `VarHandle` access for physical
+  bounds. Do not repeat the entry-point check inside those accessors solely to move or normalize
+  error detection.
+- `MemoryAllocator.grow` owns the postcondition that a successful return leaves the buffer capacity
+  at least the requested capacity. Callers must reject invalid or overflowed requests before the
+  call, but must not recheck the allocator postcondition afterward; fix a violating allocator at
+  the allocator implementation.
 - In JDK 25 Fory JSON C2-sensitive code, preserve measured, naturally large hot-method boundaries.
   A method that exceeds HotSpot's 325-byte hot-inline limit through real representation, scalar,
   array, collection, or generated-schema work is an independent subtree owner. Generated group

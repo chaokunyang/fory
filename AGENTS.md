@@ -47,8 +47,10 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Malformed input must surface as a controlled root-operation error and still run
   root cleanup, but the exact exception type, error code, message, detection
   layer, and detection point are not contracts unless a public API or
-  specification explicitly says otherwise. An existing bounded downstream
-  buffer, type, reference, depth, or serializer error is sufficient. Do not add
+  specification explicitly says otherwise. Differences only in error type,
+  message, layer, offset, or detection point are not security findings. An
+  existing bounded downstream buffer, type, reference, depth, or serializer
+  error is sufficient. Do not add
   hot-path branches, helper APIs, allocations, or generated-code expansion
   solely to make an error earlier, more specific, or more uniform, and do not
   write tests that force such error normalization.

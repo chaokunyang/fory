@@ -18,9 +18,11 @@
 package threadsafe
 
 import (
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/apache/fory/go/fory"
 	"github.com/stretchr/testify/require"
@@ -32,6 +34,77 @@ type registryFreezePooled struct {
 
 type registryFreezeRace struct {
 	Value int32
+}
+
+type reentrantStringSerializer struct {
+	f      *Fory
+	called chan struct{}
+}
+
+func (s *reentrantStringSerializer) String() string {
+	select {
+	case s.called <- struct{}{}:
+	default:
+	}
+	_, _ = s.f.Serialize(int32(1))
+	return "reentrant serializer"
+}
+
+func (*reentrantStringSerializer) Write(
+	*fory.WriteContext, fory.RefMode, bool, bool, reflect.Value,
+) {
+}
+
+func (*reentrantStringSerializer) WriteData(*fory.WriteContext, reflect.Value) {}
+
+func (*reentrantStringSerializer) Read(
+	*fory.ReadContext, fory.RefMode, bool, bool, reflect.Value,
+) {
+}
+
+func (*reentrantStringSerializer) ReadData(*fory.ReadContext, reflect.Value) {}
+
+func (*reentrantStringSerializer) ReadWithTypeInfo(
+	*fory.ReadContext, fory.RefMode, *fory.TypeInfo, reflect.Value,
+) {
+}
+
+func TestDuplicateSerializerFormatting(t *testing.T) {
+	called := make(chan struct{}, 1)
+	serializer := &reentrantStringSerializer{called: called}
+	var f *Fory
+	f = NewWithFactory(func() *fory.Fory {
+		inner := fory.New(fory.WithXlang(false), fory.WithCompatible(false))
+		if err := inner.RegisterUnionByName(
+			registryFreezePooled{}, "test.DuplicateSerializer", serializer,
+		); err != nil {
+			panic(err)
+		}
+		return inner
+	})
+	serializer.f = f
+
+	result := make(chan error, 1)
+	go func() {
+		result <- f.RegisterStructByName(
+			registryFreezePooled{}, "test.DuplicateSerializer")
+	}()
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	select {
+	case err := <-result:
+		require.Error(t, err)
+	case <-timer.C:
+		t.Fatal("duplicate registration deadlocked while formatting the serializer")
+	}
+	select {
+	case <-called:
+		t.Fatal("duplicate registration formatted the application serializer")
+	default:
+	}
+	require.False(t, f.registryFrozen.Load())
+	require.Empty(t, f.registrations)
+	require.Nil(t, f.prepared)
 }
 
 func TestFactoryRootReentry(t *testing.T) {

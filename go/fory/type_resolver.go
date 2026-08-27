@@ -455,7 +455,7 @@ func (r *TypeResolver) initialize() {
 
 func (r *TypeResolver) registerSerializer(type_ reflect.Type, typeId TypeId, s Serializer) error {
 	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
 	}
 	r.typeToSerializers[type_] = s
 	// Skip type ID registration for namespaced types, collection types, and primitive array types
@@ -527,7 +527,7 @@ func (r *TypeResolver) RegisterStruct(type_ reflect.Type, typeID TypeId, userTyp
 		}
 		// For struct types, check if serializer already registered
 		if prev, ok := r.typeToSerializers[type_]; ok {
-			return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+			return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
 		}
 
 		// Create struct serializer
@@ -582,7 +582,7 @@ func (r *TypeResolver) RegisterUnion(type_ reflect.Type, userTypeID uint32, seri
 		return fmt.Errorf("RegisterUnion only supports struct types; got: %v", type_.Kind())
 	}
 	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
 	}
 
 	tag := type_.Name()
@@ -651,7 +651,7 @@ func (r *TypeResolver) RegisterEnum(type_ reflect.Type, userTypeID uint32) error
 func (r *TypeResolver) registerEnumByName(type_ reflect.Type, namespace, typeName string) error {
 	// Check if already registered
 	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
 	}
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
@@ -691,7 +691,7 @@ func (r *TypeResolver) registerEnumByName(type_ reflect.Type, namespace, typeNam
 
 func (r *TypeResolver) registerStructByName(type_ reflect.Type, namespace, typeName string) error {
 	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
 	}
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
@@ -739,7 +739,7 @@ func (r *TypeResolver) registerUnionByName(
 		return fmt.Errorf("RegisterUnionByName requires a non-nil serializer")
 	}
 	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
 	}
 	if type_.Kind() != reflect.Struct {
 		return fmt.Errorf("RegisterUnionByName only supports struct types; got: %v", type_.Kind())
@@ -781,7 +781,7 @@ func (r *TypeResolver) registerExtensionByName(
 		return fmt.Errorf("serializer cannot be nil for extension type %s", type_)
 	}
 	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
 	}
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
@@ -832,7 +832,7 @@ func (r *TypeResolver) RegisterExtension(
 		return fmt.Errorf("serializer cannot be nil for extension type %s", type_)
 	}
 	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
 	}
 
 	// Create adapter wrapping the user's ExtensionSerializer

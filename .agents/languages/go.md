@@ -14,7 +14,9 @@ Load this file when changing `go/fory/` or Go xlang behavior.
   are not logged; pool misses after freeze replay the immutable successful log. Its custom factory
   runs without the registration mutex because application code may reenter a root; after the
   factory returns, registration rechecks the frozen state before publishing prepared or replay
-  state.
+  state. Resolver duplicate diagnostics identify application serializers by concrete type only;
+  they must not invoke application string or format methods while registration holds the lifecycle
+  mutex.
 - Go `ReadContext` intentionally defers codec errors to existing `HasError` or `CheckError`
   boundaries. After an error, work may continue only while it remains panic- and bounds-safe and
   cannot cause disproportionate work or allocation, publish state that survives root cleanup, or

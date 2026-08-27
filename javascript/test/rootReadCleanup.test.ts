@@ -134,9 +134,51 @@ test.each(["success", "failure"] as const)("restores root write state for %s", (
   }
   expect(writeContext.refWriter.writeObjects.size).toBe(0);
   expect(writeContext.disposeTypeMetaOwners).toHaveLength(0);
-  expect(writeContext.metaStringWriter.disposeMetaStringBytes).toHaveLength(0);
+  expect(writeContext.metaStringWriter.disposeMetaStringBytesSize).toBe(0);
   expect(name.dynamicWriteStringId).toBe(-1);
   expect(typeMeta.dynamicTypeId).toBe(-1);
+});
+
+test("reuses root write metastring owners", () => {
+  const fory = new Fory({ compatible: true });
+  const registered = fory.register(Type.struct(7609, {}));
+  const writeContext = (fory as any).writeContext;
+  const name = writeContext.metaStringWriter.encodeTypeName("RootName");
+
+  registered.serializer.writeRef = () => {
+    writeContext.metaStringWriter.writeBytes(writeContext.writer, name);
+  };
+
+  expect(registered.serialize({})).toBeDefined();
+  const owners = writeContext.metaStringWriter.disposeMetaStringBytes;
+  expect(owners).toHaveLength(1);
+  expect(writeContext.metaStringWriter.disposeMetaStringBytesSize).toBe(1);
+
+  expect(registered.serialize({})).toBeDefined();
+  expect(writeContext.metaStringWriter.disposeMetaStringBytes).toBe(owners);
+  expect(owners).toHaveLength(1);
+  expect(writeContext.metaStringWriter.disposeMetaStringBytesSize).toBe(1);
+});
+
+test.each([8192, 8193])("bounds %s root write metastring owners", (ownerCount) => {
+  const fory = new Fory({ compatible: true });
+  const writeContext = (fory as any).writeContext;
+  const metaStringWriter = writeContext.metaStringWriter;
+
+  for (let i = 0; i < ownerCount; i++) {
+    const owner = metaStringWriter.encodeTypeName(`name-${i}`);
+    metaStringWriter.writeBytes(writeContext.writer, owner);
+  }
+  const owners = metaStringWriter.disposeMetaStringBytes;
+
+  writeContext.reset();
+  expect(metaStringWriter.disposeMetaStringBytesSize).toBe(0);
+  if (ownerCount === 8192) {
+    expect(metaStringWriter.disposeMetaStringBytes).toBe(owners);
+  } else {
+    expect(metaStringWriter.disposeMetaStringBytes).not.toBe(owners);
+    expect(metaStringWriter.disposeMetaStringBytes).toHaveLength(0);
+  }
 });
 
 test("releases a failed root write buffer before reuse", () => {

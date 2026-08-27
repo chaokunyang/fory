@@ -276,7 +276,10 @@ export class RefReader {
 }
 
 export class MetaStringWriter {
+  private static readonly MAX_RETAINED_META_STRING_OWNERS = 8192;
+
   private disposeMetaStringBytes: MetaStringBytes[] = [];
+  private disposeMetaStringBytesSize = 0;
   private dynamicNameId = 0;
   private namespaceEncoder = new MetaStringEncoder(".", "_");
   private typenameEncoder = new MetaStringEncoder("$", "_");
@@ -287,7 +290,7 @@ export class MetaStringWriter {
     } else {
       bytes.dynamicWriteStringId = this.dynamicNameId;
       this.dynamicNameId += 1;
-      this.disposeMetaStringBytes.push(bytes);
+      this.disposeMetaStringBytes[this.disposeMetaStringBytesSize++] = bytes;
       const len = bytes.bytes.getBytes().byteLength;
       writer.writeVarUInt32(len << 1);
       if (len !== 0) {
@@ -306,11 +309,17 @@ export class MetaStringWriter {
   }
 
   reset() {
-    this.disposeMetaStringBytes.forEach((item) => {
-      item.dynamicWriteStringId = -1;
-    });
-    // Reset owners are appended again after their ID is cleared, so retain no prior-root entries.
-    this.disposeMetaStringBytes.length = 0;
+    const owners = this.disposeMetaStringBytes;
+    const size = this.disposeMetaStringBytesSize;
+    for (let i = 0; i < size; i++) {
+      owners[i].dynamicWriteStringId = -1;
+    }
+    // These owners remain serializer-owned. Keep bounded backing without making old entries
+    // protocol-visible, and release only an unusual root's oversized owner table.
+    if (size > MetaStringWriter.MAX_RETAINED_META_STRING_OWNERS) {
+      this.disposeMetaStringBytes = [];
+    }
+    this.disposeMetaStringBytesSize = 0;
     this.dynamicNameId = 0;
   }
 }

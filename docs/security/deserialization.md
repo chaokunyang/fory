@@ -640,6 +640,18 @@ Metadata readers should:
   entry so input cannot make the JVM derive an unbounded family of array classes.
 - Reset or release metadata state at the correct root-operation boundary.
 
+Java scoped meta-share TypeInfo occurrences are root-local. The current table size
+is the protocol visibility boundary, so resetting it to zero makes retained slots
+unreachable from later roots. Root cleanup retains the backing array and its slots
+for tables of at most 8192 entries to avoid clearing or allocating on the normal
+path. After a root exceeds 8192 entries, cleanup replaces the backing array with
+an eight-slot array so an unusual metadata high-water mark is not retained.
+
+JavaScript applies the same 8192-entry boundary to its root-local read-side
+MetaString and TypeMeta occurrence arrays. Bounded roots clear only the logical
+length; larger roots replace the arrays so ordinary compatible reads do not
+allocate during cleanup.
+
 A class-resolution cache reachable from untrusted deserialization may publish
 an entry only from explicit trusted configuration or after the active class
 policy has accepted the resolved class. A cache hit therefore represents an
@@ -656,6 +668,11 @@ reader must not infer another accepted name from inverse registration,
 class-keyed state, or `Class.getName()`. A custom-name registration does not by
 itself publish the Java class name as an additional alias; ID registration does
 publish the Java class name.
+
+Read-side warnings selected by remote class or type names must use fixed
+one-time-log keys. They must not include remote names or other
+untrusted-cardinality values in the message or arguments, because those keys are
+retained for the logger lifetime.
 
 Remote metadata that can create persistent read state must be bounded before
 that state is retained. The check is resource control only: it must not change
@@ -763,6 +780,11 @@ This is acceptable when the continued work cannot:
 Nested `try`/`finally` or equivalent cleanup should be added only when the
 outer root-operation cleanup cannot cover the state or resource owned by the
 nested path.
+
+A failure object must not copy or retain the root reference table or the
+materialized object graph for diagnostics. Root cleanup owns releasing that
+operation-local graph, and error reporting must stay bounded independently of
+the graph size.
 
 ## Performance Requirements
 

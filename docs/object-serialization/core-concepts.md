@@ -39,7 +39,8 @@ only values. Use [Row Format](../row-format/index.md) for trusted analytical row
 A Fory instance owns its mode, schema behavior, reference settings, registered types, custom
 serializers, and read limits. Configure and register the instance before its first root
 serialization or deserialization operation, then reuse it. Registration is frozen after the first
-root operation so the same instance always resolves a type in the same way.
+root attempt, even when that operation fails, so the same instance always resolves a type in the
+same way.
 
 Thread-safety differs by Fory implementation. Some implementations provide a thread-safe wrapper or pool; others use
 one instance per thread or task. Follow the selected language guide instead of sharing an ordinary

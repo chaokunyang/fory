@@ -152,6 +152,19 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   than conflating them with `readData`.
 - For remote TypeDef/TypeMeta reads, the checked metadata cache is the only owner of remote "already validated" state. Cache hit means the header was previously parsed, body/hash-validated, policy-checked, and published by that cache, so the hot path must skip the body and use cached metadata without extra validation, hashing, limit checks, exact-local checks, allocation, or policy work. The protocol-defined 52-bit TypeDef/TypeMeta header hash is the unique schema identity, so a known expected local header/hash match is a local-schema hit and must not recompare field arrays or metadata bodies. The low 12 header bits belong only to the current frame; on a hit, use its current size and optional extension for bounds and skip, but do not validate its reserved or compression flags. A local hit uses the local TypeInfo/TypeMeta without schema-version counting or cache publish. Cache miss is the only path that parses and validates non-local metadata, including low flags, and enforces limits. If the local header becomes available only after that first parse, compare its 52-bit hash with the validated received hash; equality selects the local owner without a second byte or field comparison. Only a non-local miss publishes remote metadata to the cache. Do not add nullable accepted-header fields, sentinel headers, per-TypeInfo markers, pending metadata state, parallel header-low/header-high slots, or parallel acceptance state for this decision. If a runtime needs a metadata hit hint, cache the concrete checked metadata owner object, such as the TypeInfo, TypeDef, or TypeMeta used by that runtime, and compare its validated header identity directly.
 - Checked MetaString caches follow the same rule: validate and publish only on cache miss; on cache hit, skip the encoded body and use the cached value without rehashing, comparing body bytes, or repeating validation. The protocol-defined wire hash alone is the MetaString cache identity; the current frame length is used only for bounds checking and advancing the reader, and must not participate in hit selection. Do not add hit-time byte or length comparison or parallel acceptance state for MetaString caches.
+- Java scoped meta-share TypeInfo occurrences are root-local, and their current table size is the
+  protocol visibility boundary. Root cleanup must reset tables of at most 8192 entries by setting
+  only the size to zero; do not clear retained slots. When the size exceeds 8192, replace the
+  backing array with an eight-slot array. Do not add per-count or benchmark-shape specializations
+  to this path.
+- JavaScript root-local read metadata occurrence arrays and write metadata owner arrays use the
+  same 8192-entry retention boundary. Reset a bounded array by clearing its logical length and
+  replace it only after the root exceeds 8192 entries; ordinary compatible roots must not allocate
+  replacement arrays during cleanup. Root serializers clear reference and metadata owner state in
+  `finally` after success or failure.
+- Root failure exceptions must not copy or retain the operation reference table or materialized
+  object graph for diagnostics. Root cleanup owns releasing that graph, and failure reporting must
+  remain bounded independently of graph size.
 - When a user corrects a non-obvious invariant, encode it in the nearest source comment before continuing, and also update `AGENTS.md`, `.agents/**`, docs, or specs when the rule is reusable beyond one file. Do not rely only on chat history, task notes, commit messages, or benchmark logs for corrections that protect security, protocol behavior, ownership, naming, or hot-path performance.
 - Reject semantic hacks. Do not bypass broken semantics by deleting cases, simplifying callers, adding coercion hooks, or using workaround fallbacks; fix the underlying bug and prove it with focused tests.
 - Protect hot paths. Avoid per-call allocations, callback objects, result tuples or records, unnecessary runtime branches, and wrapper-class substitutions in hot codec/runtime paths; prefer conditional imports and allocation-free concrete implementations where they fit the language.
@@ -172,6 +185,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   serializer rebinding, metadata rebuilding, or other late-registration
   machinery. Registration-order finalization before the first root operation
   remains registration-owned and must not create a runtime invalidation path.
+- Python `TypeResolver` is the sole registry freeze and finalization owner. Its Cython resolver
+  companion may cache completion of the Python-owner dispatch needed to populate native tables,
+  but the `Fory` facade must not mirror that state; Cython roots call the resolver owner directly.
 - Use semantic naming only. Name things after protocol or domain concepts, not history, runtime origin, or workaround style; avoid vague names such as `Internal`, `java_style_*`, `Runtime`, `Session`, `Plan`, `Payload`, or `Binding` when they do not name the real concept. Keep class, method, function, and variable names concise; do not encode the whole scenario or implementation history into one identifier. Never name a class or method with a `Plan` suffix; use the real domain concept instead. For Fory codec/read APIs, do not use generic `payload` naming; name the exact owner and data shape, such as bytes, body, frame, field, string, list, map, compressed bytes, or primitive-array encoding.
 - Keep one implementation path. Do not keep parallel helpers, serializers, harnesses, wrappers, or registration flows for the same concept; extend the existing owner path instead of inventing another one.
 - Follow current scope exactly. The latest explicit user instruction overrides earlier plans, and when scope narrows, remove leaked out-of-scope edits immediately.
@@ -188,6 +204,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Do not allow implementation drift from the design document.
 - Do not compromise design decisions to make implementation easier.
 - Do not leave workaround code behind.
+- Do not introduce unnecessary abstractions or concepts.
 - All code must have a clean owner model; the wrong owner model or abstraction is unacceptable.
 - Do not leave ugly or temporary code behind.
 - Do not leave legacy, dead, useless, or stale code, tests, or docs behind.
@@ -198,6 +215,8 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Do not preserve legacy, dead, or useless code, tests, or docs unless the user explicitly requests it.
 - Ignore internal API compatibility unless the user explicitly requests it. Do not keep shims, wrappers, or transitional paths only to preserve internal call sites.
 - Performance is the top priority. Do not introduce regressions without explicit justification.
+- Do not add object allocation to hot paths. Breaking internal compatibility is acceptable; remove
+  obsolete code, tests, and docs instead of preserving compatibility-only paths.
 - "Refactor" means changing structure, ownership, naming, or API shape without changing behavior, wire format, or implementation strategy unless the user explicitly asks for those changes.
 - Do not make design tradeoffs the user did not request. If a refactor appears to require a behavior, logic, protocol, or performance tradeoff, stop and ask.
 - Treat existing low-level or optimized code as deliberate by default. During a refactor, preserve the current implementation strategy unless the user explicitly asks to redesign or optimize it.

@@ -61,10 +61,16 @@ inline void write_string_data(const char *data, size_t size,
   const uint64_t length = static_cast<uint64_t>(size);
   const uint64_t size_with_encoding =
       (length << 2) | static_cast<uint64_t>(StringEncoding::UTF8);
-  ctx.write_var_uint36_small(size_with_encoding);
+  Buffer &buffer = ctx.buffer();
+  buffer.grow(static_cast<uint32_t>(size + 9));
+  uint32_t writer_index = buffer.writer_index();
+  writer_index +=
+      buffer.put_var_uint64_unchecked(writer_index, size_with_encoding);
   if (size > 0) {
-    ctx.write_bytes(data, static_cast<uint32_t>(size));
+    buffer.unsafe_put(writer_index, data, static_cast<uint32_t>(size));
   }
+  buffer.unsafe_set_writer_index(writer_index + static_cast<uint32_t>(size));
+  ctx.try_flush();
 }
 
 /// write UTF-16 string data, converting to UTF-8 or using native encoding

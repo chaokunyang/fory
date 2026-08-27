@@ -202,6 +202,10 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Do not make design tradeoffs the user did not request. If a refactor appears to require a behavior, logic, protocol, or performance tradeoff, stop and ask.
 - Treat existing low-level or optimized code as deliberate by default. During a refactor, preserve the current implementation strategy unless the user explicitly asks to redesign or optimize it.
 - Do not replace existing C, C++, Cython, unsafe, or other low-level optimized paths with simpler high-level implementations just to make a refactor easier.
+- When removing a redundant wrapper or helper, preserve any aggregate capacity proof, fused
+  operation, reserved wide store, specialized overload, or unchecked primitive path in the natural
+  owner. Do not route that work through a generic checked path unless matched benchmarks justify the
+  implementation change.
 - If a refactor accidentally changes logic or implementation strategy, revert that part and re-implement the refactor around the existing logic.
 - Use English only in code, comments, and documentation.
 - Do not use emoji in documentation, including headings, feature lists, status

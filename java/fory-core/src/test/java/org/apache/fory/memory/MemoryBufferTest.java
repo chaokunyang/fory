@@ -649,60 +649,126 @@ public class MemoryBufferTest {
 
   private void assertTypedArrayCopies(MemoryBuffer buffer) {
     byte[] bytes = {1, 2, 3, 4};
-    int byteOffset = buffer.writerIndex();
-    buffer.writeBytes(bytes);
+    buffer.copyFromByteArray(0, bytes, 0, bytes.length);
     byte[] byteCopy = new byte[bytes.length];
-    buffer.copyToByteArray(byteOffset, byteCopy, 0, bytes.length);
+    buffer.copyToByteArray(0, byteCopy, 0, bytes.length);
     assertEquals(byteCopy, bytes);
 
     boolean[] booleans = {true, false, true};
-    int booleanOffset = buffer.writerIndex();
-    buffer.writeBooleans(booleans);
+    buffer.copyFromBooleanArray(0, booleans, 0, booleans.length);
     boolean[] booleanCopy = new boolean[booleans.length];
-    buffer.copyToBooleanArray(booleanOffset, booleanCopy, 0, booleans.length);
+    buffer.copyToBooleanArray(0, booleanCopy, 0, booleans.length);
     assertEquals(booleanCopy, booleans);
 
     char[] chars = {'a', 0x1234, Character.MAX_VALUE};
-    int charOffset = buffer.writerIndex();
-    buffer.writeChars(chars);
+    buffer.copyFromCharArray(0, chars, 0, chars.length * Character.BYTES);
     char[] charCopy = new char[chars.length];
-    buffer.copyToCharArray(charOffset, charCopy, 0, chars.length * Character.BYTES);
+    buffer.copyToCharArray(0, charCopy, 0, chars.length * Character.BYTES);
     assertEquals(charCopy, chars);
 
     short[] shorts = {1, -2, Short.MAX_VALUE};
-    int shortOffset = buffer.writerIndex();
-    buffer.writeShorts(shorts);
+    buffer.copyFromShortArray(0, shorts, 0, shorts.length * Short.BYTES);
     short[] shortCopy = new short[shorts.length];
-    buffer.copyToShortArray(shortOffset, shortCopy, 0, shorts.length * Short.BYTES);
+    buffer.copyToShortArray(0, shortCopy, 0, shorts.length * Short.BYTES);
     assertEquals(shortCopy, shorts);
 
     int[] ints = {1, -2, Integer.MIN_VALUE};
-    int intOffset = buffer.writerIndex();
-    buffer.writeInts(ints);
+    buffer.copyFromIntArray(0, ints, 0, ints.length * Integer.BYTES);
     int[] intCopy = new int[ints.length];
-    buffer.copyToIntArray(intOffset, intCopy, 0, ints.length * Integer.BYTES);
+    buffer.copyToIntArray(0, intCopy, 0, ints.length * Integer.BYTES);
     assertEquals(intCopy, ints);
 
     long[] longs = {1L, -2L, Long.MAX_VALUE};
-    int longOffset = buffer.writerIndex();
-    buffer.writeLongs(longs);
+    buffer.copyFromLongArray(0, longs, 0, longs.length * Long.BYTES);
     long[] longCopy = new long[longs.length];
-    buffer.copyToLongArray(longOffset, longCopy, 0, longs.length * Long.BYTES);
+    buffer.copyToLongArray(0, longCopy, 0, longs.length * Long.BYTES);
     assertEquals(longCopy, longs);
 
     float[] floats = {1.5f, -2.5f, Float.MAX_VALUE};
-    int floatOffset = buffer.writerIndex();
-    buffer.writeFloats(floats);
+    buffer.copyFromFloatArray(0, floats, 0, floats.length * Float.BYTES);
     float[] floatCopy = new float[floats.length];
-    buffer.copyToFloatArray(floatOffset, floatCopy, 0, floats.length * Float.BYTES);
+    buffer.copyToFloatArray(0, floatCopy, 0, floats.length * Float.BYTES);
     assertEquals(floatCopy, floats);
 
     double[] doubles = {1.5d, -2.5d, Double.MAX_VALUE};
-    int doubleOffset = buffer.writerIndex();
-    buffer.writeDoubles(doubles);
+    buffer.copyFromDoubleArray(0, doubles, 0, doubles.length * Double.BYTES);
     double[] doubleCopy = new double[doubles.length];
-    buffer.copyToDoubleArray(doubleOffset, doubleCopy, 0, doubles.length * Double.BYTES);
+    buffer.copyToDoubleArray(0, doubleCopy, 0, doubles.length * Double.BYTES);
     assertEquals(doubleCopy, doubles);
+  }
+
+  @Test
+  public void testPrimitiveArrayLittleEndian() {
+    assertPrimitiveArrayLittleEndian(MemoryUtils.buffer(64));
+    assertPrimitiveArrayLittleEndian(MemoryUtils.wrap(ByteBuffer.allocateDirect(64)));
+  }
+
+  private void assertPrimitiveArrayLittleEndian(MemoryBuffer buffer) {
+    char[] chars = {0x1234};
+    short[] shorts = {(short) 0x1234};
+    int[] ints = {0x12345678};
+    long[] longs = {0x0102030405060708L};
+    float[] floats = {1.0f};
+    double[] doubles = {1.0d};
+    buffer.writeChars(chars);
+    buffer.writeShorts(shorts);
+    buffer.writeInts(ints);
+    buffer.writeLongs(longs);
+    buffer.writeFloats(floats);
+    buffer.writeDoubles(doubles);
+
+    assertEquals(
+        buffer.getBytes(0, buffer.writerIndex()),
+        new byte[] {
+          0x34,
+          0x12,
+          0x34,
+          0x12,
+          0x78,
+          0x56,
+          0x34,
+          0x12,
+          0x08,
+          0x07,
+          0x06,
+          0x05,
+          0x04,
+          0x03,
+          0x02,
+          0x01,
+          0x00,
+          0x00,
+          (byte) 0x80,
+          0x3f,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          (byte) 0xf0,
+          0x3f
+        });
+
+    buffer.readerIndex(0);
+    char[] readChars = new char[1];
+    short[] readShorts = new short[1];
+    int[] readInts = new int[1];
+    long[] readLongs = new long[1];
+    float[] readFloats = new float[1];
+    double[] readDoubles = new double[1];
+    buffer.readChars(readChars, 0, 1);
+    buffer.readShorts(readShorts, 0, 1);
+    buffer.readInts(readInts, 0, 1);
+    buffer.readLongs(readLongs, 0, 1);
+    buffer.readFloats(readFloats, 0, 1);
+    buffer.readDoubles(readDoubles, 0, 1);
+    assertEquals(readChars, chars);
+    assertEquals(readShorts, shorts);
+    assertEquals(readInts, ints);
+    assertEquals(readLongs, longs);
+    assertEquals(readFloats, floats);
+    assertEquals(readDoubles, doubles);
   }
 
   @Test

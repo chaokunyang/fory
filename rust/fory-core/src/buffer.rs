@@ -202,14 +202,34 @@ impl<'a> Writer<'a> {
 
     #[inline(always)]
     fn write_u24(&mut self, value: u32) {
-        let bytes = value.to_le_bytes();
-        self.bf.extend_from_slice(&bytes[..3]);
+        let offset = self.bf.len();
+        self.bf.reserve(4);
+        // The four-byte store stays inside reserved capacity; only the three wire bytes become
+        // initialized vector contents.
+        unsafe {
+            self.bf
+                .as_mut_ptr()
+                .add(offset)
+                .cast::<u32>()
+                .write_unaligned(value.to_le());
+            self.bf.set_len(offset + 3);
+        }
     }
 
     #[inline(always)]
     fn write_u40(&mut self, value: u64) {
-        let bytes = value.to_le_bytes();
-        self.bf.extend_from_slice(&bytes[..5]);
+        let offset = self.bf.len();
+        self.bf.reserve(8);
+        // The eight-byte store stays inside reserved capacity; only the five wire bytes become
+        // initialized vector contents.
+        unsafe {
+            self.bf
+                .as_mut_ptr()
+                .add(offset)
+                .cast::<u64>()
+                .write_unaligned(value.to_le());
+            self.bf.set_len(offset + 5);
+        }
     }
 
     // ============ VAR_UINT32 (TypeId = 12) ============

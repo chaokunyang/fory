@@ -18,10 +18,13 @@ Load this file when changing `javascript/`.
   their own logical size: reset active owner IDs and that table's logical size without clearing
   bounded backing, and replace either backing only after its root has more than 8192 owners.
 - Generated registration must initialize the complete recursive serializer graph against
-  generation-local owners before one `TypeResolver` batch publication. Factory-init serializer
-  lookup may resolve those local owners for fixed captures; runtime and dynamic lookup must keep the
-  real resolver. Initialize an existing published forward owner in place during commit so previous
-  captures retain identity. Do not publish placeholders, nested serializers, descriptors, or cache
+  generation-local owners before one `TypeResolver` batch publication. Freeze the complete
+  `TypeInfo` schema graph before code generation; schema fields and occurrence modifiers are
+  immutable afterward, while `dynamicTypeId` remains operation-local writer state. Factory-init
+  serializer lookup may resolve local owners for fixed captures; runtime and dynamic lookup must
+  keep the real resolver. Initialize an uninitialized published forward owner in place during
+  commit so previous captures retain identity, but never overwrite an initialized owner published
+  by a nested registration. Do not publish placeholders, nested serializers, descriptors, or cache
   state before every generated factory and application code hook succeeds.
 - Runtime value carriers such as decimal or reduced-precision numeric types belong under the core `types/` ownership boundary, with imports, exports, and codegen externals updated together.
 - Keep `TypeInfo` as schema metadata. Compatibility-sensitive decisions belong on `TypeResolver` or explicit operations, not as retained resolver state on metadata objects.

@@ -65,7 +65,6 @@ type SerializerCreator = (serializerLookup: SerializerLookup) => Serializer;
 interface GeneratedRegistration {
   typeInfo: TypeInfo;
   serializer: Serializer;
-  captureOwner: Serializer;
   preparing: boolean;
 }
 
@@ -163,7 +162,6 @@ export class Gen {
     const entry: GeneratedRegistration = {
       typeInfo,
       serializer: owner,
-      captureOwner: this.typeResolver.getSerializerByTypeInfo(typeInfo) ?? owner,
       preparing: false,
     };
     this.generatedRegistrations.push(entry);
@@ -178,6 +176,10 @@ export class Gen {
   }
 
   private getCapturedSerializerById(id: number, userTypeId?: number) {
+    const published = this.typeResolver.getSerializerById(id, userTypeId);
+    if (published !== undefined) {
+      return published;
+    }
     const entry = this.generatedRegistrations.find((candidate) => {
       const typeId = this.typeResolver.computeTypeId(candidate.typeInfo);
       if (typeId !== id || TypeId.isNamedType(typeId)) {
@@ -191,17 +193,21 @@ export class Gen {
       }
       return true;
     });
-    return entry?.captureOwner ?? this.typeResolver.getSerializerById(id, userTypeId);
+    return entry?.serializer as Serializer;
   }
 
   private getCapturedSerializerByName(name: number | string) {
+    const published = this.typeResolver.getSerializerByName(name);
+    if (published !== undefined) {
+      return published;
+    }
     const entry = this.generatedRegistrations.find(
       (candidate) =>
         typeof name === "string" &&
         TypeId.isNamedType(this.typeResolver.computeTypeId(candidate.typeInfo)) &&
         candidate.typeInfo.named === name,
     );
-    return entry?.captureOwner ?? this.typeResolver.getSerializerByName(name);
+    return entry?.serializer;
   }
 
   private prepareRegistration(typeInfo: TypeInfo, children: TypeInfo[]) {
@@ -277,6 +283,11 @@ export class Gen {
   }
 
   generateSerializer(typeInfo: TypeInfo) {
+    this.typeResolver.ensureRegistrationOpen();
+    typeInfo.freeze();
+    // TypeInfo freezing may invoke application-owned proxy traps. A root entered there closes the
+    // resolver before code generation or publication can continue.
+    this.typeResolver.ensureRegistrationOpen();
     this.traversalContainer(typeInfo);
     const serializer = this.typeResolver.getSerializerByTypeInfo(typeInfo);
     if (!serializer?._initialized) {
@@ -291,7 +302,7 @@ export class Gen {
 
     // Generated factories may execute application-transformed code, so every factory completes
     // against local owners before the resolver performs the only global publication step.
-    this.typeResolver.commitGeneratedSerializers(typeInfo, this.generatedRegistrations);
+    this.typeResolver.commitGeneratedSerializers(this.generatedRegistrations);
     return this.typeResolver.getSerializerByTypeInfo(typeInfo)!;
   }
 }

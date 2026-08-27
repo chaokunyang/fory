@@ -149,24 +149,63 @@ export class TypeInfo<T = unknown> extends ExtensibleFunction {
     });
   }
 
+  /** Freezes schema-owned state recursively while leaving root write IDs operation-local. */
   public freeze() {
-    Object.defineProperties(this, {
-      named: { writable: false, configurable: false },
-      namespace: { writable: false, configurable: false },
-      typeName: { writable: false, configurable: false },
-      userTypeId: { writable: false, configurable: false },
-      evolving: { writable: false, configurable: false },
-      options: { writable: false, configurable: false },
-      _typeId: { writable: false, configurable: false },
-      nullable: { writable: false, configurable: false },
-    });
-    Object.freeze(this.options);
-    if (this.options?.props) {
-      Object.freeze(this.options!.props);
-    }
-    if (this.options?.enumProps) {
-      Object.freeze(this.options!.enumProps);
-    }
+    const seen = new Set<TypeInfo>();
+    const freezeTypeInfo = (typeInfo: TypeInfo) => {
+      if (seen.has(typeInfo)) {
+        return;
+      }
+      seen.add(typeInfo);
+      const options = typeInfo.options;
+      const children: TypeInfo[] = [];
+      if (options !== undefined) {
+        if (options.props !== undefined) {
+          children.push(...Object.values(options.props));
+          Object.freeze(options.props);
+        }
+        if (options.cases !== undefined) {
+          children.push(...Object.values(options.cases));
+          Object.freeze(options.cases);
+        }
+        if (options.fieldEntries !== undefined) {
+          for (const entry of options.fieldEntries) {
+            children.push(entry.typeInfo);
+            Object.freeze(entry);
+          }
+          Object.freeze(options.fieldEntries);
+        }
+        if (options.inner !== undefined) {
+          children.push(options.inner);
+        }
+        if (options.key !== undefined) {
+          children.push(options.key);
+        }
+        if (options.value !== undefined) {
+          children.push(options.value);
+        }
+        if (options.enumProps !== undefined) {
+          Object.freeze(options.enumProps);
+        }
+        Object.freeze(options);
+      }
+      Object.defineProperties(typeInfo, {
+        named: { writable: false, configurable: false },
+        namespace: { writable: false, configurable: false },
+        typeName: { writable: false, configurable: false },
+        userTypeId: { writable: false, configurable: false },
+        evolving: { writable: false, configurable: false },
+        options: { writable: false, configurable: false },
+        _typeId: { writable: false, configurable: false },
+        nullable: { writable: false, configurable: false },
+        trackingRef: { writable: false, configurable: false },
+        id: { writable: false, configurable: false },
+        dynamic: { writable: false, configurable: false },
+      });
+      // dynamicTypeId is operation-local writer state and remains mutable across roots.
+      children.forEach(freezeTypeInfo);
+    };
+    freezeTypeInfo(this);
   }
 
   public constructor(typeId: number, userTypeId = -1) {

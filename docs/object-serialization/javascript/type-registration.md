@@ -137,6 +137,21 @@ const order = deserialize(bytes);
 
 Store and reuse this pair — it is the fast path.
 
+Registration freezes the schema and every nested `TypeInfo`. Set field IDs, nullability, reference
+tracking, and other schema options before registration. To use an already registered type as a new
+field occurrence with different field options, clone it first:
+
+```ts
+const itemType = Type.struct("example.item", {
+  value: Type.string(),
+});
+fory.register(itemType);
+
+const wrapperType = Type.struct("example.wrapper", {
+  item: itemType.clone().setId(1).setNullable(true),
+});
+```
+
 ## Field Metadata
 
 Field nullability, reference tracking, dynamic field behavior, numeric widths, and per-struct

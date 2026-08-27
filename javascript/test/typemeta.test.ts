@@ -509,6 +509,7 @@ describe("typemeta", () => {
     readContext.typeMetaCache.set(localTypeMeta.getHash(), cachedTypeMeta);
 
     expect(readerFory.deserialize(bytes, reader.serializer)).toBe(Color.Red);
+    expect(readContext.typeMeta[0]).toBe(localTypeMeta);
     expect(readContext.typeMetaCache.get(localTypeMeta.getHash())).toBe(cachedTypeMeta);
     expect(readContext.totalAcceptedSchemaVersions).toBe(0);
   });
@@ -809,6 +810,7 @@ describe("typemeta", () => {
     readContext.typeMetaCache.set(localTypeMeta.getHash(), cachedTypeMeta);
 
     expect(reader.deserialize(bytes)).toEqual({});
+    expect(readContext.typeMeta[0]).toBe(localTypeMeta);
     expect(readContext.typeMetaCache.get(localTypeMeta.getHash())).toBe(cachedTypeMeta);
     expect(readContext.totalAcceptedSchemaVersions).toBe(0);
   });
@@ -1012,7 +1014,7 @@ describe("typemeta", () => {
     const writerChild = writerFory.register(remoteChild);
     const writerRoot = writerFory.register(
       Type.struct(rootId, {
-        child: remoteChild.setId(1),
+        child: remoteChild.clone().setId(1),
       }),
     );
     const remoteTypeMeta = TypeMeta.fromTypeInfo(remoteChild, (writerFory as any).typeResolver);
@@ -1027,7 +1029,7 @@ describe("typemeta", () => {
       const child = fory.register(localChild);
       const root = fory.register(
         Type.struct(rootId, {
-          child: localChild.setId(1),
+          child: localChild.clone().setId(1),
         }),
       );
       return { fory, child, root };

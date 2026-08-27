@@ -238,3 +238,27 @@ test("releases a failed root write buffer before reuse", () => {
   expect(fory.serialize(7)).toBeDefined();
   expect(writer.getPlatformBuffer().byteLength).toBeLessThan(4 * 1024 * 1024);
 });
+
+test("releases failed root reference backing before reuse", () => {
+  const fory = new Fory({ compatible: false, ref: true });
+  const registered = fory.register(Type.struct(7612, {}));
+  const refReader = (fory as any).readContext.refReader;
+  let failedBacking: unknown[];
+
+  registered.serializer.readRef = () => {
+    for (let i = 0; i < 32768; i++) {
+      refReader.reference({});
+    }
+    failedBacking = refReader.readObjects;
+    throw new Error("root read failed");
+  };
+  expect(() => registered.deserialize(new Uint8Array([1]))).toThrow();
+  expect(refReader.readObjects).toBe(failedBacking!);
+
+  registered.serializer.readRef = () => {
+    expect(refReader.readObjects).not.toBe(failedBacking!);
+    expect(refReader.readObjects).toHaveLength(0);
+    return {};
+  };
+  expect(registered.deserialize(new Uint8Array([1]))).toEqual({});
+});

@@ -285,10 +285,7 @@ export default class TypeResolver {
     return { ...uninitSerialize };
   }
 
-  commitGeneratedSerializers(
-    rootTypeInfo: TypeInfo,
-    entries: readonly { typeInfo: TypeInfo; serializer: Serializer }[],
-  ) {
+  commitGeneratedSerializers(entries: readonly { typeInfo: TypeInfo; serializer: Serializer }[]) {
     const publications = entries.map((entry) => {
       const typeId = this.computeTypeId(entry.typeInfo);
       let internalTypeId: number | undefined;
@@ -312,18 +309,19 @@ export default class TypeResolver {
         customTypeKey,
         existingSerializer,
         descriptors:
-          existingSerializer === undefined
+          existingSerializer === undefined || existingSerializer._initialized
             ? undefined
             : Object.getOwnPropertyDescriptors(entry.serializer),
       };
     });
     this.ensureRegistrationOpen();
-    rootTypeInfo.freeze();
     for (const publication of publications) {
       if (publication.existingSerializer !== undefined) {
-        // Published forward owners are plain resolver-owned placeholders. Define their prepared
-        // data properties in place so earlier generated serializers retain the same owner.
-        Object.defineProperties(publication.existingSerializer, publication.descriptors!);
+        if (!publication.existingSerializer._initialized) {
+          // Complete only a resolver-owned forward placeholder. An initialized owner published by
+          // a nested registration is authoritative for this identity.
+          Object.defineProperties(publication.existingSerializer, publication.descriptors!);
+        }
       } else if (publication.internalTypeId !== undefined) {
         this.internalSerializer[publication.internalTypeId] = publication.entry.serializer;
       } else {

@@ -92,12 +92,16 @@ Do not add rollback, staging, or a parallel registration path for that exception
 installation may consist of complete nested registrations; publish the module-installed marker
 only after installation returns and the lifecycle is rechecked.
 
-JavaScript generated registration constructs and initializes the complete recursive serializer
-graph against generation-local owners. Generated factories may use a construction-only lookup for
-fixed serializer captures, while runtime and dynamic dispatch retain the real `TypeResolver`.
-After every factory and application code hook succeeds, the resolver performs one guarded batch
-publication. An already-published forward owner is initialized in place during that commit so
-previous generated captures retain its identity.
+JavaScript generated registration freezes the complete `TypeInfo` schema graph before code
+generation, including nested schemas and field occurrence modifiers. The writer-owned
+`dynamicTypeId` remains mutable because it is reset per root. Code generation then constructs and
+initializes the complete recursive serializer graph against generation-local owners. Generated
+factories may use a construction-only lookup for fixed serializer captures, while runtime and
+dynamic dispatch retain the real `TypeResolver`. After every factory and application code hook
+succeeds, the resolver performs one guarded batch publication. An uninitialized, already-published
+forward owner is initialized in place during that commit so previous generated captures retain its
+identity. An initialized owner published by a nested registration is authoritative and must not be
+overwritten by the outer registration.
 
 Nested serializers must not call back into root `serialize(...)` or
 `deserialize(...)` entry points.

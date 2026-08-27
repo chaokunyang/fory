@@ -255,9 +255,7 @@ export class RefReader {
   constructor(private reader: BinaryReader) {}
 
   reset() {
-    if (this.readObjects.length !== 0) {
-      this.readObjects.length = 0;
-    }
+    this.readObjects = [];
   }
 
   getReadRef(refId: number) {

@@ -821,6 +821,9 @@ class TypeResolver:
 
         if should_create_serializer:
             serializer = self._create_serializer(cls)
+        # Serializer construction can run application code and start a root. Recheck before
+        # publishing any type, serializer, name, or id state.
+        self._check_registry_mutable()
         if serializer is not None and type_id in _NO_REF_NUMERIC_TYPE_IDS:
             serializer.need_to_write_ref = False
 

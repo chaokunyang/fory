@@ -1035,6 +1035,34 @@ def test_registry_freezes_at_root(root):
     assert fory.type_resolver.get_type_info(FrozenRegistration).type_id == TypeId.STRUCT
 
 
+@pytest.mark.parametrize("registration", ["type", "union"])
+def test_reentrant_freeze(registration):
+    fory = Fory(xlang=True, compatible=False)
+    before = registration_state(fory)
+    constructions = 0
+    target = FrozenExt if registration == "type" else FrozenUnion
+
+    def serializer_factory(type_resolver, cls):
+        nonlocal constructions
+        constructions += 1
+        fory.serialize(None)
+        if registration == "type":
+            return FrozenExtSerializer(type_resolver, cls)
+        return UnionSerializer(type_resolver, cls, {0: str})
+
+    with pytest.raises(RuntimeError, match="first root operation"):
+        if registration == "type":
+            fory.register_type(target, type_id=725, serializer=serializer_factory)
+        else:
+            fory.register_union(target, type_id=725, serializer=serializer_factory)
+
+    assert constructions == 1
+    assert fory.type_resolver.get_type_info(target, create=False) is None
+    assert registration_state(fory) == before
+    with pytest.raises(RuntimeError, match="first root operation"):
+        fory.register_type(RejectedRegistration, type_id=726)
+
+
 def test_frozen_serializer_lookup(monkeypatch):
     fory = Fory(xlang=False, strict=False, compatible=False)
     fory.serialize(None)

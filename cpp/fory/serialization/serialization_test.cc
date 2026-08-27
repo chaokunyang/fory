@@ -29,6 +29,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <forward_list>
 #include <limits>
 #include <map>
 #include <memory>
@@ -74,6 +75,16 @@ struct NestedStruct {
     return point == other.point && label == other.label;
   }
   FORY_STRUCT(NestedStruct, point, label);
+};
+
+struct UnregisteredNested {
+  int32_t value;
+  FORY_STRUCT(UnregisteredNested, value);
+};
+
+struct MissingNestedHolder {
+  UnregisteredNested nested;
+  FORY_STRUCT(MissingNestedHolder, nested);
 };
 
 enum class Color { RED, GREEN, BLUE };
@@ -985,6 +996,15 @@ TEST(SerializationTest, LastElementErrorSafepoints) {
                                                            declared_ctx, 2));
   EXPECT_TRUE(declared_ctx.has_error());
 
+  std::vector<uint8_t> forward_bytes{2};
+  Buffer forward_buffer(forward_bytes);
+  ReadContext forward_ctx(config, std::make_unique<TypeResolver>());
+  forward_ctx.attach(forward_buffer);
+  std::forward_list<int32_t> forward_values;
+  EXPECT_FALSE(read_declared_same_type_collection<int32_t>(forward_values,
+                                                           forward_ctx, 2));
+  EXPECT_TRUE(forward_ctx.has_error());
+
   std::vector<uint8_t> type_info_bytes{2};
   Buffer type_info_buffer(type_info_bytes);
   ReadContext type_info_ctx(config, std::make_unique<TypeResolver>());
@@ -995,6 +1015,16 @@ TEST(SerializationTest, LastElementErrorSafepoints) {
   EXPECT_FALSE(read_same_type_info_collection<int32_t>(
       type_info_values, type_info_ctx, 2, type_info));
   EXPECT_TRUE(type_info_ctx.has_error());
+
+  std::vector<uint8_t> measured_bytes{2};
+  Buffer measured_buffer(measured_bytes);
+  ReadContext measured_ctx(config, std::make_unique<TypeResolver>());
+  measured_ctx.attach(measured_buffer);
+  type_info.harness.read_data_always_advances = false;
+  std::vector<int32_t> measured_values;
+  EXPECT_FALSE(read_same_type_info_collection<int32_t>(
+      measured_values, measured_ctx, 2, type_info));
+  EXPECT_TRUE(measured_ctx.has_error());
 }
 
 // ============================================================================
@@ -2550,6 +2580,37 @@ TEST(SerializationTest, SourceResolverFinalizes) {
   auto bytes = fory.serialize(::SimpleStruct{1, 2});
   ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
   expect_finalized_source(*source_resolver);
+}
+
+TEST(SerializationTest, FinalizationFailureIsAtomic) {
+  auto source_resolver = std::make_shared<TypeResolver>();
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .type_resolver(source_resolver)
+                  .build();
+  ASSERT_TRUE(fory.register_struct<::SimpleStruct>(1).ok());
+  ASSERT_TRUE(fory.register_struct<::MissingNestedHolder>(2).ok());
+
+  auto simple_info = source_resolver->get_type_info<::SimpleStruct>();
+  auto holder_info = source_resolver->get_type_info<::MissingNestedHolder>();
+  ASSERT_TRUE(simple_info.ok());
+  ASSERT_TRUE(holder_info.ok());
+  ASSERT_EQ(simple_info.value()->type_meta, nullptr);
+  ASSERT_TRUE(simple_info.value()->type_def.empty());
+  ASSERT_EQ(holder_info.value()->type_meta, nullptr);
+  ASSERT_TRUE(holder_info.value()->type_def.empty());
+
+  auto final_resolver = source_resolver->build_final_type_resolver();
+  ASSERT_FALSE(final_resolver.ok());
+
+  EXPECT_EQ(simple_info.value()->type_meta, nullptr);
+  EXPECT_TRUE(simple_info.value()->type_def.empty());
+  EXPECT_EQ(holder_info.value()->type_meta, nullptr);
+  EXPECT_TRUE(holder_info.value()->type_def.empty());
+  EXPECT_FALSE(fory.register_struct<::UnregisteredNested>(3).ok());
+  EXPECT_FALSE(source_resolver->get_type_info<::UnregisteredNested>().ok());
 }
 
 TEST(SerializationTest, DirectFailedRootFreezes) {

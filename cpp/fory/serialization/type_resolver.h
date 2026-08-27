@@ -1523,8 +1523,6 @@ private:
   /// Validate registration state while registration_mutex_ is held.
   Result<void, Error> check_registration();
 
-  static FORY_NOINLINE Result<void, Error> registration_frozen_error();
-
   void register_builtin_types();
 
   bool compatible_;
@@ -1571,16 +1569,6 @@ inline void TypeResolver::apply_config(const Config &config) {
   xlang_ = config.xlang;
   check_struct_version_ = config.check_struct_version;
   track_ref_ = config.track_ref;
-}
-
-inline Result<void, Error> TypeResolver::check_registration() {
-  if (FORY_PREDICT_FALSE(registry_frozen_)) {
-    return registration_frozen_error();
-  }
-  FORY_CHECK(std::this_thread::get_id() == registration_thread_id_)
-      << "TypeResolver registration methods must be called from the same "
-         "thread that created the TypeResolver";
-  return Result<void, Error>();
 }
 
 template <typename Source, typename Target>

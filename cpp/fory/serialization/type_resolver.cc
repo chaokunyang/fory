@@ -1762,9 +1762,15 @@ TypeResolver::get_type_info(const std::type_index &type_index) const {
   return entry->second;
 }
 
-FORY_NOINLINE Result<void, Error> TypeResolver::registration_frozen_error() {
-  return Unexpected(Error::invalid(
-      "TypeResolver registry is frozen, cannot register more types"));
+Result<void, Error> TypeResolver::check_registration() {
+  if (FORY_PREDICT_FALSE(registry_frozen_)) {
+    return Unexpected(Error::invalid(
+        "TypeResolver registry is frozen, cannot register more types"));
+  }
+  FORY_CHECK(std::this_thread::get_id() == registration_thread_id_)
+      << "TypeResolver registration methods must be called from the same "
+         "thread that created the TypeResolver";
+  return Result<void, Error>();
 }
 
 Result<std::unique_ptr<TypeResolver>, Error>

@@ -45,7 +45,10 @@ same classes in the same order. With explicit IDs, the order may differ, but eac
 same class on both sides.
 
 Complete class and serializer registration before the first `serialize`, `deserialize`, or `copy`
-call. Later registration attempts are rejected.
+call. Starting one of these operations permanently freezes registration even if the operation
+fails. Calling `ThreadSafeFory#execute` also freezes registration before the callback runs. The
+`Fory` instance passed to that callback is already frozen, including when the callback retains it.
+Later registration attempts are rejected.
 
 `registerSerializer(Foo.class, ...)` is sufficient to use `Foo` when class registration is enabled.
 Use `registerSerializerAndType(Foo.class, ...)` when you also want Fory to assign a numeric type ID.

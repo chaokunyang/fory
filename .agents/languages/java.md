@@ -33,6 +33,14 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   values; use qualified names only when a real name conflict requires it.
 - If you run temporary tests with `java -cp`, run `mvn -T16 install -DskipTests` first so local Fory jars are current.
 - `WriteContext`, `ReadContext`, and `CopyContext` must stay explicit. Do not reintroduce `ThreadLocal` or ambient runtime-context patterns.
+- Java scoped meta-share TypeInfo occurrences are root-local, and the current table size is their
+  protocol visibility boundary. Reset tables of at most 8192 entries by setting the size to zero;
+  do not null retained slots. Only when the size exceeds 8192 may cleanup replace the backing array,
+  and it must restore a small eight-slot array instead of retaining or allocating 8192 slots. Keep
+  the normal root-cleanup path allocation-free, and do not add count-shape specializations.
+- Deserialization failures must not copy or retain the active reference table or materialized graph
+  in the exception. Root reset owns releasing operation-local graph state; keep failure reporting
+  bounded independently of graph size.
 - Java root deserialization graph memory budgeting belongs to `ReadContext`
   and is initialized by `Fory` root APIs. Public config is `maxGraphMemoryBytes`
   with fixed `128 MiB` default. Positive explicit values override the default;
@@ -125,6 +133,9 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   unmatched named sender layers as data-only metadata, and does not route layer names through
   `ClassResolver.readClassInternal`. Inverse registration must not turn a missed input name into an
   accepted class.
+- `warnOnce` keys live for the logger lifetime. Read-side resolver warnings selected by remote
+  names must use a fixed message and must not include a remote name or another
+  untrusted-cardinality value in the message arguments.
 - Keep JDK interface names that do not require explicit registration in
   `DefaultJdkClassAllowList`. `TypeResolver.loadClass` and `ClassResolver.isSecure` must both use
   this single owner. Keep custom `TypeChecker` and fixed disallowed-list checks on their existing

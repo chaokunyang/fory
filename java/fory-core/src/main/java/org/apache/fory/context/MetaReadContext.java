@@ -29,9 +29,24 @@ import org.apache.fory.resolver.TypeInfo;
  * type definitions announced by the peer remain available for later payloads.
  */
 public class MetaReadContext {
+  private static final int MAX_RETAINED_TYPE_INFOS = 8192;
+  private static final int RESET_TYPE_INFO_CAPACITY = 8;
+
   /**
    * Type infos announced by the peer, indexed by the protocol id assigned during the current or
    * shared meta-share session.
    */
   public final ObjectArray<TypeInfo> readTypeInfos = new ObjectArray<>();
+
+  void reset() {
+    ObjectArray<TypeInfo> typeInfos = readTypeInfos;
+    int size = typeInfos.size;
+    // The current size is the protocol visibility boundary, so stale slots cannot be referenced
+    // by a later root. Keep bounded tables intact to make normal root cleanup allocation-free, and
+    // discard only an oversized backing array retained by an unusually metadata-heavy root.
+    typeInfos.size = 0;
+    if (size > MAX_RETAINED_TYPE_INFOS) {
+      typeInfos.objects = new Object[RESET_TYPE_INFO_CAPACITY];
+    }
+  }
 }

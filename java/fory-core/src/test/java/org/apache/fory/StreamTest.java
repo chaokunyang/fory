@@ -396,6 +396,57 @@ public class StreamTest extends ForyTestBase {
     }
   }
 
+  @Test
+  public void testChannelPrefixCompaction() throws IOException {
+    Fory fory = builder().build();
+    byte[] root = fory.serialize(12345);
+    int rootCount = 16;
+    byte[] roots = new byte[root.length * rootCount];
+    for (int i = 0; i < rootCount; i++) {
+      System.arraycopy(root, 0, roots, i * root.length, root.length);
+    }
+
+    try (ForyReadableChannel channel =
+        new ForyReadableChannel(
+            new ChunkedReadableByteChannel(roots, roots.length),
+            ByteBuffer.allocate(roots.length))) {
+      assertEquals(fory.deserialize(channel), 12345);
+      assertEquals(channel.getBuffer().readerIndex(), root.length);
+      assertEquals(channel.getBuffer().remaining(), root.length * (rootCount - 1));
+
+      for (int i = 1; i < rootCount / 2; i++) {
+        assertEquals(fory.deserialize(channel), 12345);
+      }
+      assertEquals(channel.getBuffer().readerIndex(), 0);
+      assertEquals(channel.getBuffer().remaining(), root.length * (rootCount / 2));
+
+      for (int i = rootCount / 2; i < rootCount; i++) {
+        assertEquals(fory.deserialize(channel), 12345);
+      }
+      assertEquals(channel.getBuffer().remaining(), 0);
+    }
+
+    try (ForyReadableChannel channel =
+        new ForyReadableChannel(
+            new ChunkedReadableByteChannel(roots, roots.length),
+            ByteBuffer.allocateDirect(roots.length))) {
+      assertEquals(fory.deserialize(channel, Integer.class), 12345);
+      assertEquals(channel.getBuffer().readerIndex(), root.length);
+      assertEquals(channel.getBuffer().remaining(), root.length * (rootCount - 1));
+
+      for (int i = 1; i < rootCount / 2; i++) {
+        assertEquals(fory.deserialize(channel, Integer.class), 12345);
+      }
+      assertEquals(channel.getBuffer().readerIndex(), 0);
+      assertEquals(channel.getBuffer().remaining(), root.length * (rootCount / 2));
+
+      for (int i = rootCount / 2; i < rootCount; i++) {
+        assertEquals(fory.deserialize(channel, Integer.class), 12345);
+      }
+      assertEquals(channel.getBuffer().remaining(), 0);
+    }
+  }
+
   private static void assertGeometricGrowth(MemoryBuffer buffer, int numBytes, String label) {
     int growCount = 0;
     Object lastBacking = backingBuffer(buffer);

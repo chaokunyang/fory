@@ -1342,11 +1342,10 @@ public class XtypeResolver extends TypeResolver {
       compositeClassNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
       return typeInfo;
     }
-    String msg = String.format("Class %s not registered", qualifiedName);
     Class<?> type = null;
     if (config.deserializeUnknownClass()) {
       if (!config.suppressClassRegistrationWarnings()) {
-        LOG.warnOnce(msg);
+        LOG.warnOnce("A named type is not registered and will be read as an unknown class.");
       }
       switch (typeId) {
         case Types.NAMED_ENUM:

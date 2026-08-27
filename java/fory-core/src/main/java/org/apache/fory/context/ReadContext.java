@@ -300,7 +300,7 @@ public final class ReadContext {
       contextObjects.clear();
     }
     if (scopedMetaShareEnabled) {
-      metaReadContext.readTypeInfos.size = 0;
+      metaReadContext.reset();
     } else {
       metaReadContext = null;
     }

@@ -20,12 +20,6 @@
 package org.apache.fory.util;
 
 import java.lang.reflect.Field;
-import java.util.Arrays;
-import java.util.List;
-import org.apache.fory.Fory;
-import org.apache.fory.collection.ObjectArray;
-import org.apache.fory.context.MapRefReader;
-import org.apache.fory.context.ReadContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
@@ -57,16 +51,9 @@ public class ExceptionUtils {
     }
   }
 
-  public static RuntimeException handleReadFailed(Fory fory, Throwable t) {
+  public static RuntimeException handleReadFailed(Throwable t) {
     if (t instanceof ForyException) {
       throw (ForyException) t;
-    }
-    ReadContext readContext = fory.getReadContext();
-    if (readContext.getRefReader() instanceof MapRefReader) {
-      ObjectArray readObjects = ((MapRefReader) readContext.getRefReader()).getReadRefs();
-      // carry with read objects for better trouble shooting.
-      List<Object> objects = Arrays.asList(readObjects.objects).subList(0, readObjects.size);
-      throw new DeserializationException(objects, t);
     }
     throw new DeserializationException("Failed to deserialize input", t);
   }

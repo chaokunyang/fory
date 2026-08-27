@@ -1498,7 +1498,7 @@ public abstract class TypeResolver {
     } catch (IllegalStateException e) {
       if (deserializeUnknownClass) {
         if (!config.suppressClassRegistrationWarnings()) {
-          LOG.warnOnce(e.getMessage());
+          LOG.warnOnce("A class could not be loaded and will be read as an unknown class.");
         }
         return UnknownClass.getUnknowClass(className, isEnum, arrayDims, metaContextShareEnabled);
       }

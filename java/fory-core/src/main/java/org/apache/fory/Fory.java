@@ -442,7 +442,7 @@ public final class Fory implements BaseFory {
         jitContext.unlock();
       }
     } catch (Throwable t) {
-      throw ExceptionUtils.handleReadFailed(this, t);
+      throw ExceptionUtils.handleReadFailed(t);
     } finally {
       readContext.reset();
     }
@@ -459,7 +459,11 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T deserialize(ForyReadableChannel channel, Class<T> type) {
-    return deserialize(channel.getBuffer(), type);
+    try {
+      return deserialize(channel.getBuffer(), type);
+    } finally {
+      channel.compactBuffer();
+    }
   }
 
   @Override
@@ -517,7 +521,7 @@ public final class Fory implements BaseFory {
         jitContext.unlock();
       }
     } catch (Throwable t) {
-      throw ExceptionUtils.handleReadFailed(this, t);
+      throw ExceptionUtils.handleReadFailed(t);
     } finally {
       readContext.reset();
     }
@@ -545,8 +549,12 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(ForyReadableChannel channel, Iterable<MemoryBuffer> outOfBandBuffers) {
-    MemoryBuffer buf = channel.getBuffer();
-    return deserialize(buf, outOfBandBuffers);
+    try {
+      MemoryBuffer buf = channel.getBuffer();
+      return deserialize(buf, outOfBandBuffers);
+    } finally {
+      channel.compactBuffer();
+    }
   }
 
   @SuppressWarnings("unchecked")

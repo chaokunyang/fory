@@ -770,34 +770,6 @@ public class ForyTest extends ForyTestBase {
     serDeCheckSerializer(fory, table, "HashBasedTableSerializer");
   }
 
-  @Data
-  static class PrintReadObject {
-    public PrintReadObject() {
-      throw new RuntimeException();
-    }
-
-    public PrintReadObject(boolean b) {}
-  }
-
-  @Test
-  public void testPrintReadObjectsWhenFailed() {
-    Fory fory =
-        Fory.builder()
-            .withXlang(false)
-            .withRefTracking(true)
-            .withCodegen(false)
-            .requireClassRegistration(false)
-            .withCompatible(false)
-            .build();
-    PrintReadObject o = new PrintReadObject(true);
-    try {
-      serDe(fory, ImmutableList.of(ImmutableList.of("a", "b"), o));
-      Assert.fail();
-    } catch (ForyException e) {
-      Assert.assertTrue(e.getMessage().contains("[a, b]"));
-    }
-  }
-
   @Test
   public void testNullObjSerAndDe() {
     Fory fory =

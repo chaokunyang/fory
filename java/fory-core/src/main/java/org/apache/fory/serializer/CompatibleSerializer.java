@@ -253,9 +253,11 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
         readFields(readContext, fieldValues);
       }
       fieldValues = RecordUtils.remapping(recordInfo, fieldValues);
-      T t = objectInstantiator.newInstanceWithArguments(fieldValues);
-      Arrays.fill(recordInfo.getRecordComponents(), null);
-      return t;
+      try {
+        return objectInstantiator.newInstanceWithArguments(fieldValues);
+      } finally {
+        Arrays.fill(recordInfo.getRecordComponents(), null);
+      }
     }
     T targetObject = newInstance();
     if (readContext.hasPreservedRefId()) {

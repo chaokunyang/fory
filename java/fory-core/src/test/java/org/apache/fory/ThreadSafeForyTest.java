@@ -30,7 +30,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.Data;
 import org.apache.fory.context.MetaReadContext;
@@ -40,6 +42,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.pool.ThreadPoolFory;
+import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
@@ -615,6 +618,112 @@ public class ThreadSafeForyTest extends ForyTestBase {
     fory.register(BeanA.class);
     fory.serialize("ok");
     Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
+  }
+
+  @Test
+  public void testExecuteFreezesThreadLocal() throws Exception {
+    ThreadSafeFory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .buildThreadLocalFory();
+    fory.register(BeanA.class);
+
+    Fory escaped = fory.execute(value -> value);
+    Assert.assertThrows(ForyException.class, () -> escaped.register(BeanB.class));
+    assertNull(((ClassResolver) escaped.getTypeResolver()).getRegisteredClassId(BeanB.class));
+
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    try {
+      Fory otherThreadFory =
+          executor.submit(() -> fory.execute(value -> value)).get(10, TimeUnit.SECONDS);
+      ClassResolver otherResolver = (ClassResolver) otherThreadFory.getTypeResolver();
+      assertNotNull(otherResolver.getRegisteredClassId(BeanA.class));
+      assertNull(otherResolver.getRegisteredClassId(BeanB.class));
+    } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  public void testRegistrationGateLinearization() throws Exception {
+    FacadeRegistrationGate gate = new FacadeRegistrationGate();
+    CountDownLatch registrationEntered = new CountDownLatch(1);
+    CountDownLatch freezeEntered = new CountDownLatch(1);
+    CountDownLatch releaseRegistration = new CountDownLatch(1);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      Future<?> registration =
+          executor.submit(
+              () ->
+                  gate.applyRegistration(
+                      () -> {
+                        registrationEntered.countDown();
+                        awaitUnchecked(releaseRegistration);
+                      }));
+      assertTrue(registrationEntered.await(10, TimeUnit.SECONDS));
+      Future<?> freeze =
+          executor.submit(
+              () -> {
+                freezeEntered.countDown();
+                gate.freeze();
+              });
+      assertTrue(freezeEntered.await(10, TimeUnit.SECONDS));
+      Assert.assertThrows(TimeoutException.class, () -> freeze.get(100, TimeUnit.MILLISECONDS));
+
+      releaseRegistration.countDown();
+      registration.get(10, TimeUnit.SECONDS);
+      freeze.get(10, TimeUnit.SECONDS);
+      Assert.assertThrows(
+          ForyException.class, () -> gate.applyRegistration(() -> Assert.fail("must not run")));
+    } finally {
+      releaseRegistration.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  public void testExecuteFreezesPool() {
+    ThreadPoolFory fory =
+        (ThreadPoolFory)
+            Fory.builder()
+                .withXlang(false)
+                .requireClassRegistration(true)
+                .withCompatible(false)
+                .buildThreadSafeForyPool(2);
+    fory.register(BeanA.class);
+
+    Fory escaped = fory.execute(value -> value);
+    Assert.assertThrows(ForyException.class, () -> escaped.register(BeanB.class));
+
+    Fory[] pooledFory = TestUtils.getFieldValue(fory, "pooledFory");
+    for (Fory child : pooledFory) {
+      ClassResolver resolver = (ClassResolver) child.getTypeResolver();
+      assertNotNull(resolver.getRegisteredClassId(BeanA.class));
+      assertNull(resolver.getRegisteredClassId(BeanB.class));
+    }
+  }
+
+  @Test
+  public void testFailedRootFreezesFacade() {
+    ThreadSafeFory[] runtimes =
+        new ThreadSafeFory[] {
+          Fory.builder()
+              .withXlang(false)
+              .requireClassRegistration(true)
+              .withCompatible(false)
+              .buildThreadLocalFory(),
+          Fory.builder()
+              .withXlang(false)
+              .requireClassRegistration(true)
+              .withCompatible(false)
+              .buildThreadSafeForyPool(2)
+        };
+    for (ThreadSafeFory fory : runtimes) {
+      Assert.assertThrows(RuntimeException.class, () -> fory.deserialize(new byte[0]));
+      Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
+    }
   }
 
   private void assertConcurrentRoundTrip(ThreadSafeFory fory, BeanA beanA)

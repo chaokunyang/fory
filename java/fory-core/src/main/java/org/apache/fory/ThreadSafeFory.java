@@ -34,8 +34,11 @@ import org.apache.fory.resolver.TypeChecker;
 public interface ThreadSafeFory extends BaseFory {
 
   /**
-   * Provide a context to execution operations on {@link Fory} directly and return the executed
-   * result.
+   * Executes {@code action} with an underlying {@link Fory} instance and returns its result.
+   *
+   * <p>Calling this method permanently freezes registration before {@code action} runs. Complete
+   * all facade registration first; the supplied instance is already frozen and remains frozen if
+   * the callback returns or retains it.
    */
   <R> R execute(Function<Fory, R> action);
 

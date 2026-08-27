@@ -29,6 +29,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.fory.AbstractThreadSafeFory;
+import org.apache.fory.FacadeRegistrationGate;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.config.ForyBuilder;
@@ -52,7 +53,7 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   private final Fory[] pooledFory;
   private final Semaphore waiterSignal = new Semaphore(0);
   private final AtomicInteger waitingBorrowers = new AtomicInteger();
-  private final Object callbackLock = new Object();
+  private final FacadeRegistrationGate registrationGate = new FacadeRegistrationGate();
 
   public ThreadPoolFory(Function<ForyBuilder, Fory> foryFactory, int poolSize) {
     if (poolSize <= 0) {
@@ -73,6 +74,11 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   }
 
   private PooledEntry acquire() {
+    registrationGate.freeze();
+    return acquireEntry();
+  }
+
+  private PooledEntry acquireEntry() {
     int slotIndex = slotIndexForCurrentThread();
     PooledEntry entry = tryBorrowPreferredSlots(slotIndex);
     if (entry != null) {
@@ -147,18 +153,19 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   @Internal
   @Override
   public void registerCallback(Consumer<Fory> callback) {
-    synchronized (callbackLock) {
-      for (Fory fory : pooledFory) {
-        callback.accept(fory);
-      }
-    }
+    registrationGate.applyRegistration(
+        () -> {
+          for (Fory fory : pooledFory) {
+            callback.accept(fory);
+          }
+        });
   }
 
   @Override
   public <R> R execute(Function<Fory, R> action) {
-    PooledEntry entry = acquire();
+    PooledEntry entry = acquireEntry();
     try {
-      return action.apply(entry.fory);
+      return registrationGate.execute(entry.fory, action);
     } finally {
       release(entry);
     }

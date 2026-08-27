@@ -217,9 +217,11 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     if (isRecord) {
       Object[] fields = readFields(readContext);
       fields = RecordUtils.remapping(recordInfo, fields);
-      T obj = objectInstantiator.newInstanceWithArguments(fields);
-      Arrays.fill(recordInfo.getRecordComponents(), null);
-      return obj;
+      try {
+        return objectInstantiator.newInstanceWithArguments(fields);
+      } finally {
+        Arrays.fill(recordInfo.getRecordComponents(), null);
+      }
     }
     T obj = newBean();
     if (trackingRef) {

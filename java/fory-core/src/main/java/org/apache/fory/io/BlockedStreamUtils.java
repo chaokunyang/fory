@@ -94,7 +94,7 @@ public class BlockedStreamUtils {
       readFrameBody(channel, buf, size);
       return action.apply(buf.slice(0, size));
     } catch (Throwable t) {
-      throw ExceptionUtils.handleReadFailed(fory, t);
+      throw ExceptionUtils.handleReadFailed(t);
     } finally {
       fory.resetBuffer();
     }
@@ -158,7 +158,7 @@ public class BlockedStreamUtils {
       MemoryBuffer frame = readToBufferFromStream(inputStream, buf);
       return function.apply(frame);
     } catch (Throwable t) {
-      throw ExceptionUtils.handleReadFailed(fory, t);
+      throw ExceptionUtils.handleReadFailed(t);
     } finally {
       fory.resetBuffer();
     }

@@ -19,13 +19,8 @@
 
 package org.apache.fory.exception;
 
-import java.util.List;
-
 /** Exception thrown when a deserialization operation fails. */
 public class DeserializationException extends ForyException {
-
-  private transient List<Object> readObjects;
-
   public DeserializationException(String message) {
     super(message);
   }
@@ -36,31 +31,5 @@ public class DeserializationException extends ForyException {
 
   public DeserializationException(String message, Throwable cause) {
     super(message, cause);
-  }
-
-  // if `readObjects` too big, generate message lazily to avoid big string creation cost.
-  public DeserializationException(List<Object> readObjects, Throwable cause) {
-    super(cause);
-    this.readObjects = readObjects;
-  }
-
-  @Override
-  public String getMessage() {
-    if (readObjects == null) {
-      return super.getMessage();
-    } else {
-      try {
-        return "Deserialize failed, read objects are: " + readObjects;
-      } catch (Throwable e) {
-        StringBuilder builder =
-            new StringBuilder("Deserialize failed, type of read objects are: [");
-        for (Object readObject : readObjects) {
-          builder.append(readObject == null ? null : readObject.getClass()).append(", ");
-        }
-        builder.delete(builder.length() - 2, builder.length());
-        builder.append("]");
-        return builder.toString();
-      }
-    }
   }
 }

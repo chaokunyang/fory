@@ -47,10 +47,14 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.AbstractObjectSerializer;
+import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.FieldGroups.FieldCodecCategory;
+import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer.RemoteFieldInfo;
+import org.apache.fory.util.record.RecordInfo;
 import org.testng.Assert;
 import org.testng.SkipException;
 import org.testng.annotations.DataProvider;
@@ -254,33 +258,219 @@ public class StaticCompatibleCodecBuilderTest {
   @Test
   public void testInaccessibleRecordInstantiator() throws Exception {
     assumeRecordSupport();
+    String simpleName = "StaticCompatibleHiddenRecordFailure";
     CompilationResult writerResult =
         compile(
-            "test.StaticCompatibleHiddenRecordPayload",
-            "package test;\n"
-                + "public class StaticCompatibleHiddenRecordPayload {\n"
+            "writer." + simpleName,
+            "package writer;\n"
+                + "public class "
+                + simpleName
+                + " {\n"
                 + "  public String id;\n"
-                + "  public StaticCompatibleHiddenRecordPayload() {}\n"
+                + "  public "
+                + simpleName
+                + "() {}\n"
                 + "}\n");
+    String readerName = "org.apache.fory.builder." + simpleName;
     CompilationResult readerResult =
         compile(
-            "test.StaticCompatibleHiddenRecordPayload",
-            "package test;\n" + "record StaticCompatibleHiddenRecordPayload(int id) {}\n");
+            readerName,
+            "package org.apache.fory.builder;\n"
+                + "record "
+                + simpleName
+                + "(int id) {\n"
+                + "  public static boolean fail;\n"
+                + "  "
+                + simpleName
+                + " {\n"
+                + "    if (fail) throw new IllegalStateException(\"expected\");\n"
+                + "  }\n"
+                + "}\n");
     Assert.assertTrue(writerResult.success, writerResult.diagnostics());
     Assert.assertTrue(readerResult.success, readerResult.diagnostics());
-    try (URLClassLoader writerLoader = writerResult.classLoader();
-        URLClassLoader readerLoader = readerResult.classLoader()) {
-      Class<?> writerType = writerLoader.loadClass("test.StaticCompatibleHiddenRecordPayload");
-      Class<?> readerType = readerLoader.loadClass("test.StaticCompatibleHiddenRecordPayload");
-      Fory writer = compatibleFory(writerLoader, writerType, false, "hidden-record-writer");
-      Fory reader = compatibleFory(readerLoader, readerType, false, "hidden-record-reader");
+    try (URLClassLoader writerLoader = writerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("writer." + simpleName);
+      Class<?> readerType = defineTestClass(readerResult, readerName);
+      Fory writer = compatibleFory(writerLoader, writerType, true, "hidden-record-writer");
+      Fory reader =
+          compatibleFory(
+              StaticCompatibleCodecBuilderTest.class.getClassLoader(),
+              readerType,
+              true,
+              "hidden-record-reader");
       TypeDef remoteTypeDef = TypeDef.buildTypeDef(writer.getTypeResolver(), writerType);
       String generatedSource =
           new StaticCompatibleCodecBuilder(TypeRef.of(readerType), reader, remoteTypeDef).genCode();
       Assert.assertTrue(generatedSource.contains("newInstanceWithArguments"));
       Assert.assertTrue(generatedSource.contains("Object[] _f_recordArgs = this._f_recordArgs"));
+      Assert.assertTrue(generatedSource.contains("finally"));
+      Assert.assertTrue(generatedSource.contains("_f_recordArgs[0] = null"));
       Assert.assertFalse(
-          generatedSource.contains("return new test.StaticCompatibleHiddenRecordPayload"));
+          generatedSource.contains("return new org.apache.fory.builder." + simpleName));
+
+      Class<? extends Serializer> staticSerializerClass =
+          CodecUtils.loadOrGenStaticCompatibleCodecClass(
+              reader.getTypeResolver(), cast(readerType), remoteTypeDef);
+      // Construction installs this TypeDef-specific serializer in the reader resolver. The
+      // deserialization below verifies that the installed instance owns record-argument cleanup.
+      staticSerializerClass
+          .getConstructor(TypeResolver.class, Class.class, TypeDef.class)
+          .newInstance(reader.getTypeResolver(), readerType, remoteTypeDef);
+
+      Object writerValue = writerType.getConstructor().newInstance();
+      setField(writerType, writerValue, "id", "73");
+      writer.setMetaWriteContext(new MetaWriteContext());
+      byte[] bytes = writer.serialize(writerValue);
+
+      setField(readerType, null, "fail", true);
+      MetaReadContext metaReadContext = new MetaReadContext();
+      reader.setMetaReadContext(metaReadContext);
+      Assert.assertThrows(RuntimeException.class, () -> reader.deserialize(bytes));
+
+      Serializer<?> serializer = metaReadContext.readTypeInfos.get(0).getSerializer();
+      Assert.assertTrue(
+          serializer instanceof GeneratedStaticCompatibleSerializer,
+          serializer.getClass().getName());
+      Field recordArgsField = serializer.getClass().getDeclaredField("_f_recordArgs");
+      recordArgsField.setAccessible(true);
+      Assert.assertEquals(recordArgsField.get(serializer), new Object[] {null});
+
+      setField(readerType, null, "fail", false);
+      reader.setMetaReadContext(new MetaReadContext());
+      Assert.assertEquals(invoke(readerType, reader.deserialize(bytes), "id"), 73);
+    }
+  }
+
+  @Test
+  public void testCompatibleRecordClearsArgs() throws Exception {
+    assumeRecordSupport();
+    CompilationResult writerResult =
+        compile(
+            "test.CompatibleFailingRecord",
+            "package test;\n"
+                + "public class CompatibleFailingRecord {\n"
+                + "  public String value;\n"
+                + "  public CompatibleFailingRecord() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.CompatibleFailingRecord",
+            "package test;\n"
+                + "public record CompatibleFailingRecord(String value) {\n"
+                + "  public static boolean fail;\n"
+                + "  public CompatibleFailingRecord {\n"
+                + "    if (fail) throw new IllegalStateException(\"expected\");\n"
+                + "  }\n"
+                + "}\n");
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.CompatibleFailingRecord");
+      Class<?> readerType = readerLoader.loadClass("test.CompatibleFailingRecord");
+      Fory writer = compatibleFory(writerLoader, writerType, false, "failing-record-writer", false);
+      Fory reader = compatibleFory(readerLoader, readerType, false, "failing-record-reader", false);
+      Object writerValue = writerType.getConstructor().newInstance();
+      setField(writerType, writerValue, "value", "retained-value");
+      writer.setMetaWriteContext(new MetaWriteContext());
+      byte[] bytes = writer.serialize(writerValue);
+
+      setField(readerType, null, "fail", true);
+      MetaReadContext metaReadContext = new MetaReadContext();
+      reader.setMetaReadContext(metaReadContext);
+      Assert.assertThrows(RuntimeException.class, () -> reader.deserialize(bytes));
+
+      Serializer<?> serializer = metaReadContext.readTypeInfos.get(0).getSerializer();
+      Assert.assertTrue(serializer instanceof CompatibleSerializer);
+      Field recordInfoField = CompatibleSerializer.class.getDeclaredField("recordInfo");
+      recordInfoField.setAccessible(true);
+      RecordInfo recordInfo = (RecordInfo) recordInfoField.get(serializer);
+      Assert.assertEquals(recordInfo.getRecordComponents(), new Object[] {null});
+    }
+  }
+
+  @Test
+  public void testRecordFailureClearsArgs() throws Exception {
+    assumeRecordSupport();
+    CompilationResult result =
+        compile(
+            "test.FailingRecord",
+            "package test;\n"
+                + "public record FailingRecord(String value) {\n"
+                + "  public static boolean fail;\n"
+                + "  public FailingRecord {\n"
+                + "    if (fail) throw new IllegalStateException(\"expected\");\n"
+                + "  }\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    try (URLClassLoader loader = result.classLoader()) {
+      Class<?> type = loader.loadClass("test.FailingRecord");
+      Fory fory =
+          Fory.builder()
+              .withClassLoader(loader)
+              .withXlang(false)
+              .withRefTracking(true)
+              .withCodegen(false)
+              .requireClassRegistration(false)
+              .build();
+      Object value = type.getConstructor(String.class).newInstance("retained-value");
+      byte[] bytes = fory.serialize(value);
+
+      setField(type, null, "fail", true);
+      Assert.assertThrows(RuntimeException.class, () -> fory.deserialize(bytes, cast(type)));
+
+      Serializer<?> serializer = fory.getTypeResolver().getSerializer(type);
+      Assert.assertTrue(serializer instanceof ObjectSerializer);
+      Field recordInfoField = ObjectSerializer.class.getDeclaredField("recordInfo");
+      recordInfoField.setAccessible(true);
+      RecordInfo recordInfo = (RecordInfo) recordInfoField.get(serializer);
+      Assert.assertEquals(recordInfo.getRecordComponents(), new Object[] {null});
+
+      setField(type, null, "fail", false);
+      Assert.assertEquals(
+          invoke(type, fory.deserialize(bytes, cast(type)), "value"), "retained-value");
+    }
+  }
+
+  @Test
+  public void testRecordCopyClearsArgs() throws Exception {
+    assumeRecordSupport();
+    CompilationResult result =
+        compile(
+            "test.CopyFailingRecord",
+            "package test;\n"
+                + "public record CopyFailingRecord(String value) {\n"
+                + "  public static boolean fail;\n"
+                + "  public CopyFailingRecord {\n"
+                + "    if (fail) throw new IllegalStateException(\"expected\");\n"
+                + "  }\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    try (URLClassLoader loader = result.classLoader()) {
+      Class<?> type = loader.loadClass("test.CopyFailingRecord");
+      Fory fory =
+          Fory.builder()
+              .withClassLoader(loader)
+              .withXlang(false)
+              .withRefTracking(true)
+              .withRefCopy(true)
+              .withCodegen(false)
+              .requireClassRegistration(false)
+              .build();
+      Object value = type.getConstructor(String.class).newInstance("retained-value");
+      Serializer<?> serializer = fory.getTypeResolver().getSerializer(type);
+      Assert.assertTrue(serializer instanceof ObjectSerializer);
+
+      setField(type, null, "fail", true);
+      Assert.assertThrows(RuntimeException.class, () -> fory.copy(value));
+
+      Field copyRecordInfoField = AbstractObjectSerializer.class.getDeclaredField("copyRecordInfo");
+      copyRecordInfoField.setAccessible(true);
+      RecordInfo recordInfo = (RecordInfo) copyRecordInfoField.get(serializer);
+      Assert.assertEquals(recordInfo.getRecordComponents(), new Object[] {null});
+
+      setField(type, null, "fail", false);
+      Assert.assertEquals(invoke(type, fory.copy(value), "value"), "retained-value");
     }
   }
 
@@ -772,6 +962,16 @@ public class StaticCompatibleCodecBuilderTest {
           compiler.getTask(null, fileManager, diagnostics, options, null, units);
       return new CompilationResult(classRoot, task.call(), diagnostics.getDiagnostics());
     }
+  }
+
+  private static Class<?> defineTestClass(CompilationResult result, String typeName)
+      throws Exception {
+    Path classFile = result.classRoot.resolve(typeName.replace('.', '/') + ".class");
+    byte[] classBytes = Files.readAllBytes(classFile);
+    java.lang.reflect.Method defineClass =
+        java.lang.invoke.MethodHandles.Lookup.class.getMethod("defineClass", byte[].class);
+    return (Class<?>)
+        defineClass.invoke(java.lang.invoke.MethodHandles.lookup(), (Object) classBytes);
   }
 
   private static void assumeRecordSupport() {

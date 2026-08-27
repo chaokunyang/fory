@@ -262,8 +262,8 @@ them to `deserialize` in the same order. For contiguous storage, `BufferObject.g
 expose a `memoryview` without an additional source-side copy; non-contiguous storage may be copied.
 This does not promise copy-free transport or decoding.
 
-See [Out-of-Band Buffers](../docs/object-serialization/python/out-of-band.md) for the callback,
-transport, and stream APIs.
+See [Out-of-Band Buffers](https://fory.apache.org/docs/object-serialization/python/out-of-band) for
+the callback, transport, and stream APIs.
 
 ## Cross-Language Object Graph Serialization
 
@@ -331,8 +331,9 @@ Person person = (Person) fory.deserialize(binaryData);
 ## Row Format
 
 Row Format provides random and partial access to trusted analytical data without reconstructing the
-complete object graph. See the [Python Row Format guide](../docs/row-format/python.md) for supported
-types, schema requirements, and APIs.
+complete object graph. See the
+[Python Row Format guide](https://fory.apache.org/docs/row-format/python) for supported types, schema
+requirements, and APIs.
 
 ### Basic Row Format Usage
 
@@ -509,7 +510,7 @@ class Fory:
 
 ### ThreadSafeFory Class
 
-Thread-safe serialization interface using thread-local storage:
+Thread-safe serialization interface for sharing one configured facade across threads:
 
 ```python
 class ThreadSafeFory:
@@ -523,7 +524,9 @@ class ThreadSafeFory:
     )
 ```
 
-`ThreadSafeFory` provides thread-safe serialization by maintaining a pool of `Fory` instances protected by a lock. When a thread needs to serialize/deserialize, it gets an instance from the pool, uses it, and returns it. All type registrations must be done before any serialization to ensure consistency across all instances.
+Register all types before the first serialization or deserialization attempt. That first attempt
+permanently freezes registration, even when it fails. Every later registration attempt raises an
+error.
 
 **Thread Safety Example:**
 
@@ -555,8 +558,8 @@ for t in threads: t.join()
 
 **Key Features:**
 
-- **Instance Pool**: Maintains a pool of `Fory` instances protected by a lock for thread safety
-- **Shared Configuration**: All registrations must be done upfront and are applied to all instances
+- **Thread-safe use**: One configured facade can be shared across threads
+- **Shared Configuration**: Complete all registrations before the first root attempt
 - **Same root API**: Provides the same serialization and deserialization methods as `Fory`
 - **Registration Safety**: The first root attempt permanently freezes registration, even if it fails
 
@@ -577,21 +580,17 @@ for t in threads: t.join()
 **Key Methods:**
 
 ```python
-# Serialization (serialize/deserialize are identical to dumps/loads)
+# Complete registration before the first root API call.
+fory.register(MyClass, type_id=123)
+# Alternatively, register by name or provide a custom serializer.
+# fory.register(MyClass, name="my.package.MyClass")
+# fory.register(MyClass, type_id=123, serializer=custom_serializer)
+
+# serialize/deserialize are identical to dumps/loads.
 data: bytes = fory.serialize(obj)
 obj = fory.deserialize(data)
-
-# Alternative API (aliases)
-data: bytes = fory.dumps(obj)
+data = fory.dumps(obj)
 obj = fory.loads(data)
-
-# Type registration by id
-fory.register(MyClass, type_id=123)
-fory.register(MyClass, type_id=123, serializer=custom_serializer)
-
-# Type registration by name
-fory.register(MyClass, name="my.package.MyClass")
-fory.register(MyClass, name="my.package.MyClass", serializer=custom_serializer)
 ```
 
 ### Xlang And Native Mode Comparison
@@ -679,22 +678,23 @@ assert result.next.next is result  # Reference preserved
 ### Type Registration
 
 Register the complete application type surface before the first root operation. See
-[Type Registration](../docs/object-serialization/python/type-registration.md) for registration
-identity, strict-mode behavior, and the frozen registry lifecycle. See
-[Python Security](../docs/object-serialization/python/security.md) before accepting untrusted input.
+[Type Registration](https://fory.apache.org/docs/object-serialization/python/type-registration) for
+registration identity, strict-mode behavior, and the frozen registry lifecycle. See
+[Python Security](https://fory.apache.org/docs/object-serialization/python/security) before
+accepting untrusted input.
 
 ### Custom Serializers
 
 Custom serializers implement the serializer-owned `write` and `read` operations and are registered
 before the first root operation. See
-[Custom Serializers](../docs/object-serialization/python/custom-serializers.md) for the supported
-constructor and context APIs.
+[Custom Serializers](https://fory.apache.org/docs/object-serialization/python/custom-serializers) for
+the supported constructor and context APIs.
 
 ### NumPy & Scientific Computing
 
 Python native mode supports NumPy ndarrays, including multidimensional and object-dtype arrays. See
-[NumPy Integration](../docs/object-serialization/python/numpy-integration.md) for supported behavior
-and out-of-band transport.
+[NumPy Integration](https://fory.apache.org/docs/object-serialization/python/numpy-integration) for
+supported behavior and out-of-band transport.
 
 ## Best Practices
 
@@ -730,7 +730,7 @@ Use these configuration rules before measuring an application workload:
    Python class schema
 4. **Use Row Format for partial reads**: Choose it when applications need random access to trusted
    analytical row data instead of object reconstruction; see the
-   [Python Row Format guide](../docs/row-format/python.md)
+   [Python Row Format guide](https://fory.apache.org/docs/row-format/python)
 
 ```python
 # Good: Reuse instance
@@ -747,16 +747,16 @@ for obj in objects:
 ### Type Registration Patterns
 
 Use stable names for shared xlang schemas and numeric IDs for Python-native type identity. See
-[Type Registration](../docs/object-serialization/python/type-registration.md) for the supported
-patterns, including custom serializers and batch registration.
+[Type Registration](https://fory.apache.org/docs/object-serialization/python/type-registration) for
+the supported patterns, including custom serializers and batch registration.
 
 ### Error Handling
 
 A failed root never reopens the registry. Create and fully configure a new instance after a missing
 or invalid registration failure. A fully configured instance can process another root after a
 failure while reading input data or serializing a value. See
-[Error Handling](../docs/object-serialization/python/troubleshooting.md#error-handling) for a
-complete example.
+[Error Handling](https://fory.apache.org/docs/object-serialization/python/troubleshooting#error-handling)
+for a complete example.
 
 ## Security Best Practices
 
@@ -814,8 +814,9 @@ else:
 
 When `strict=False` is necessary for trusted native-mode payloads, configure a
 `DeserializationPolicy` before the first root operation to restrict accepted types and object hooks.
-See [Python Security](../docs/object-serialization/python/security.md#deserializationpolicy) for the
-supported policy hooks and configuration example.
+See
+[Python Security](https://fory.apache.org/docs/object-serialization/python/security#deserializationpolicy)
+for the supported policy hooks and configuration example.
 
 ## Troubleshooting
 
@@ -887,7 +888,8 @@ import pyfory  # Now uses pure Python implementation
 
 Xlang mode defaults to compatible schema evolution. Configure writer and reader schemas on separate
 instances because each instance's registry freezes on its first root operation. See
-[Schema Evolution](../docs/object-serialization/python/schema-evolution.md) for a complete example.
+[Schema Evolution](https://fory.apache.org/docs/object-serialization/python/schema-evolution) for a
+complete example.
 
 **Q: Type registration errors in strict mode**
 

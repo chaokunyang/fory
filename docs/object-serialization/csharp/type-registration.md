@@ -70,10 +70,8 @@ fory.Register<MyType, MyTypeSerializer>("com.example.MyType");
 ## Registration Lifecycle
 
 A `Fory` instance accepts registration only before its first root serialization or deserialization
-attempt. Starting that operation permanently freezes the instance's registry, even when the
-operation fails. Every later registration throws `InvalidOperationException`.
-If a custom serializer constructor starts a root operation, that root freezes the registry and the
-in-progress registration fails without publishing the serializer or type mapping.
+attempt. Starting that operation permanently closes registration, even when the operation fails.
+Every later registration throws `InvalidOperationException`.
 
 To configure additional types, build a new `Fory` instance, complete its registrations, and then
 use that new instance for serialization or deserialization.
@@ -82,8 +80,7 @@ use that new instance for serialization or deserialization.
 
 `ThreadSafeFory` exposes the same registration APIs. Register every type before the first
 serialization or deserialization attempt. Starting the first root permanently freezes
-registration, even when the root fails. A later registration throws `InvalidOperationException`
-before changing any per-thread runtime.
+registration, even when the root fails. A later registration throws `InvalidOperationException`.
 
 ```csharp
 using ThreadSafeFory fory = Fory.Builder().BuildThreadSafe();

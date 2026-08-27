@@ -230,9 +230,8 @@ public:
     reader_index_ += diff;
   }
 
-  // Unsafe operations deliberately trust their callers to prove the complete
-  // physical extent or cursor position. Keep that contract explicit instead of
-  // adding local checks or access-control wrappers that duplicate the proof.
+  // Unsafe operations trust callers to prove the complete physical extent or
+  // cursor position.
   FORY_ALWAYS_INLINE void unsafe_increase_reader_index(uint32_t diff) {
     reader_index_ += diff;
   }
@@ -710,7 +709,7 @@ public:
   FORY_ALWAYS_INLINE void write_uint8(uint8_t value) {
     grow(1);
     unsafe_put_byte(writer_index_, value);
-    advance_writer_index_unchecked(1);
+    writer_index_ += 1;
   }
 
   /// write int8_t value to buffer at current writer index.
@@ -718,7 +717,7 @@ public:
   FORY_ALWAYS_INLINE void write_int8(int8_t value) {
     grow(1);
     unsafe_put_byte(writer_index_, static_cast<uint8_t>(value));
-    advance_writer_index_unchecked(1);
+    writer_index_ += 1;
   }
 
   /// write uint16_t value as fixed 2 bytes to buffer at current writer index.
@@ -726,7 +725,7 @@ public:
   FORY_ALWAYS_INLINE void write_uint16(uint16_t value) {
     grow(2);
     unsafe_put<uint16_t>(writer_index_, value);
-    advance_writer_index_unchecked(2);
+    writer_index_ += 2;
   }
 
   /// write int16_t value as fixed 2 bytes to buffer at current writer index.
@@ -734,7 +733,7 @@ public:
   FORY_ALWAYS_INLINE void write_int16(int16_t value) {
     grow(2);
     unsafe_put<int16_t>(writer_index_, value);
-    advance_writer_index_unchecked(2);
+    writer_index_ += 2;
   }
 
   /// write int24 value as fixed 3 bytes to buffer at current writer index.
@@ -742,7 +741,7 @@ public:
   FORY_ALWAYS_INLINE void write_int24(int32_t value) {
     grow(3);
     put_int24(writer_index_, value);
-    advance_writer_index_unchecked(3);
+    writer_index_ += 3;
   }
 
   /// write int32_t value as fixed 4 bytes to buffer at current writer index.
@@ -750,7 +749,7 @@ public:
   FORY_ALWAYS_INLINE void write_int32(int32_t value) {
     grow(4);
     unsafe_put<int32_t>(writer_index_, value);
-    advance_writer_index_unchecked(4);
+    writer_index_ += 4;
   }
 
   /// write uint32_t value as fixed 4 bytes to buffer at current writer index.
@@ -758,7 +757,7 @@ public:
   FORY_ALWAYS_INLINE void write_uint32(uint32_t value) {
     grow(4);
     unsafe_put<uint32_t>(writer_index_, value);
-    advance_writer_index_unchecked(4);
+    writer_index_ += 4;
   }
 
   /// write int64_t value as fixed 8 bytes to buffer at current writer index.
@@ -766,7 +765,7 @@ public:
   FORY_ALWAYS_INLINE void write_int64(int64_t value) {
     grow(8);
     unsafe_put<int64_t>(writer_index_, value);
-    advance_writer_index_unchecked(8);
+    writer_index_ += 8;
   }
 
   /// write float value as fixed 4 bytes to buffer at current writer index.
@@ -774,7 +773,7 @@ public:
   FORY_ALWAYS_INLINE void write_float(float value) {
     grow(4);
     unsafe_put<float>(writer_index_, value);
-    advance_writer_index_unchecked(4);
+    writer_index_ += 4;
   }
 
   /// write double value as fixed 8 bytes to buffer at current writer index.
@@ -782,7 +781,7 @@ public:
   FORY_ALWAYS_INLINE void write_double(double value) {
     grow(8);
     unsafe_put<double>(writer_index_, value);
-    advance_writer_index_unchecked(8);
+    writer_index_ += 8;
   }
 
   /// Write float16_t as fixed 2 bytes (raw IEEE 754 bits, little-endian).
@@ -790,7 +789,7 @@ public:
   FORY_ALWAYS_INLINE void write_f16(float16_t value) {
     grow(2);
     unsafe_put<uint16_t>(writer_index_, value.to_bits());
-    advance_writer_index_unchecked(2);
+    writer_index_ += 2;
   }
 
   /// Write bfloat16_t as fixed 2 bytes (raw IEEE 754 bits, little-endian).
@@ -798,7 +797,7 @@ public:
   FORY_ALWAYS_INLINE void write_bf16(bfloat16_t value) {
     grow(2);
     unsafe_put<uint16_t>(writer_index_, value.to_bits());
-    advance_writer_index_unchecked(2);
+    writer_index_ += 2;
   }
 
   /// write uint32_t value as varint to buffer at current writer index.
@@ -806,7 +805,7 @@ public:
   FORY_ALWAYS_INLINE void write_var_uint32(uint32_t value) {
     grow(8); // bulk write may write 8 bytes for varint32
     uint32_t len = put_var_uint32_unchecked(writer_index_, value);
-    advance_writer_index_unchecked(len);
+    writer_index_ += len;
   }
 
   /// write int32_t value as varint (zigzag encoded) to buffer at current
@@ -822,7 +821,7 @@ public:
   FORY_ALWAYS_INLINE void write_var_uint64(uint64_t value) {
     grow(9); // Max 9 bytes for varint64
     uint32_t len = put_var_uint64_unchecked(writer_index_, value);
-    advance_writer_index_unchecked(len);
+    writer_index_ += len;
   }
 
   /// write int64_t value as varint (zigzag encoded) to buffer at current
@@ -848,7 +847,7 @@ public:
   FORY_ALWAYS_INLINE void write_bytes(const void *data, uint32_t length) {
     grow(length);
     unsafe_put(writer_index_, data, length);
-    advance_writer_index_unchecked(length);
+    writer_index_ += length;
     if (FORY_PREDICT_FALSE(output_stream_ != nullptr && writer_index_ > 4096)) {
       output_stream_->try_flush();
     }
@@ -1080,7 +1079,7 @@ public:
       grow(9);
       data_[writer_index_] = 0b1;
       unsafe_put<int64_t>(writer_index_ + 1, value);
-      advance_writer_index_unchecked(9);
+      writer_index_ += 9;
     }
   }
 
@@ -1116,7 +1115,7 @@ public:
       grow(9);
       data_[writer_index_] = 0b1;
       unsafe_put<uint64_t>(writer_index_ + 1, value);
-      advance_writer_index_unchecked(9);
+      writer_index_ += 9;
     }
   }
 
@@ -1354,13 +1353,6 @@ private:
   FORY_ALWAYS_INLINE bool range_in_bounds(uint32_t offset,
                                           uint32_t length) const {
     return offset <= size_ && length <= size_ - offset;
-  }
-
-  // Auto-growing writers call this only after grow() has proved the complete
-  // physical store extent and the uint32 writer-index range. Rechecking here
-  // would make every scalar write pay twice for the same safety proof.
-  FORY_ALWAYS_INLINE void advance_writer_index_unchecked(uint32_t diff) {
-    writer_index_ += diff;
   }
 
   FORY_ALWAYS_INLINE void grow_to_fit(uint32_t required_size) {

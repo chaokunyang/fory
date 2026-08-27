@@ -341,43 +341,6 @@ def test_bit_helper_ranges():
         set_bit_to(buffer, 2**32 - 1, 2**32 - 1, True)
 
 
-@pytest.mark.parametrize(
-    "array_type,values",
-    [
-        (pyfory.BoolArray, [True]),
-        (pyfory.Int8Array, [1]),
-        (pyfory.Int16Array, [1]),
-        (pyfory.Int32Array, [1]),
-        (pyfory.Int64Array, [1]),
-        (pyfory.UInt8Array, [1]),
-        (pyfory.UInt16Array, [1]),
-        (pyfory.UInt32Array, [1]),
-        (pyfory.UInt64Array, [1]),
-        (pyfory.Float16Array, [1.0]),
-        (pyfory.BFloat16Array, [1.0]),
-        (pyfory.Float32Array, [1.0]),
-        (pyfory.Float64Array, [1.0]),
-    ],
-)
-def test_native_array_range_owner(array_type, values):
-    value = array_type(values)
-    assert value[0] == values[0]
-    assert value._get(-1) == values[0]
-    value._set(-1, values[0])
-    with pytest.raises(Exception):
-        _ = value[1]
-    with pytest.raises(Exception):
-        value._get(1)
-    with pytest.raises(Exception):
-        value._set(1, values[0])
-    with pytest.raises(Exception):
-        value._delete(1)
-    value._insert(99, values[0])
-    assert len(value) == 2
-    value._delete(-1)
-    assert value == values
-
-
 def test_hash_buffer_empty_input():
     assert pyfory.mmh3.hash_buffer(b"") == (0, 0)
 

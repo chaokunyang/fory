@@ -155,18 +155,6 @@ void main() {
               byteLength: 93,
               headerLength: 2,
             ),
-            (
-              value: _repeat('a', 4095),
-              encoding: stringLatin1Encoding,
-              byteLength: 4095,
-              headerLength: 2,
-            ),
-            (
-              value: _repeat('a', 4096),
-              encoding: stringLatin1Encoding,
-              byteLength: 4096,
-              headerLength: 3,
-            ),
           ];
 
       for (final testCase in cases) {

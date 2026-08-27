@@ -206,21 +206,7 @@ public final class MemoryBuffer {
    * @param streamReader a reader for reading from a stream.
    */
   private MemoryBuffer(byte[] buffer, int offset, int length, ForyStreamReader streamReader) {
-    checkArgument(offset >= 0 && length >= 0);
-    if (offset > buffer.length - length) {
-      throw new IllegalArgumentException(
-          String.format("%d exceeds buffer size %d", (long) offset + length, buffer.length));
-    }
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.initHeapBuffer(this, buffer, offset, length);
-    } else {
-      this.heapMemory = buffer;
-      this.heapOffset = offset;
-      final long startPos = BYTE_ARRAY_OFFSET + offset;
-      this.address = startPos;
-      this.size = length;
-      this.addressLimit = startPos + length;
-    }
+    initHeapBuffer(buffer, offset, length);
     if (streamReader != null) {
       this.streamReader = streamReader;
     } else {
@@ -343,17 +329,17 @@ public final class MemoryBuffer {
   }
 
   public void initHeapBuffer(byte[] buffer, int offset, int length) {
+    if (buffer == null) {
+      throw new NullPointerException("buffer");
+    }
+    if (offset < 0 || length < 0 || offset > buffer.length - length) {
+      throw new IllegalArgumentException(
+          String.format(
+              "offset %d and length %d exceed buffer size %d", offset, length, buffer.length));
+    }
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.initHeapBuffer(this, buffer, offset, length);
     } else {
-      if (buffer == null) {
-        throw new NullPointerException("buffer");
-      }
-      if (offset < 0 || length < 0 || offset > buffer.length - length) {
-        throw new IllegalArgumentException(
-            String.format(
-                "offset %d and length %d exceed buffer size %d", offset, length, buffer.length));
-      }
       this.heapMemory = buffer;
       this.heapOffset = offset;
       final long startPos = BYTE_ARRAY_OFFSET + offset;
@@ -2033,10 +2019,9 @@ public final class MemoryBuffer {
   }
 
   private void growSlow(long length) {
-    if (length > Integer.MAX_VALUE) {
+    if (length < 0 || length > Integer.MAX_VALUE) {
       throwOOBException();
     }
-    // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
     globalAllocator.grow(this, (int) length);
   }
 
@@ -2045,16 +2030,8 @@ public final class MemoryBuffer {
     // Negative extents are overflowed writer positions. Compare as unsigned so the common path
     // keeps one branch while overflow rejection and allocation stay cold before any Unsafe access.
     if (Integer.compareUnsigned(length, size) > 0) {
-      ensureSlow(length);
+      growSlow(length);
     }
-  }
-
-  private void ensureSlow(int length) {
-    if (length < 0) {
-      throwOOBException();
-    }
-    // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
-    globalAllocator.grow(this, length);
   }
 
   // -------------------------------------------------------------------------

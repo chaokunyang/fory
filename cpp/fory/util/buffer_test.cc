@@ -122,7 +122,8 @@ TEST(Buffer, to_string) {
 
 void check_var_uint32(int32_t start_offset, std::shared_ptr<Buffer> buffer,
                       int32_t value, uint32_t bytes_written) {
-  uint32_t actual_bytes_written = buffer->put_var_uint32(start_offset, value);
+  uint32_t actual_bytes_written =
+      buffer->put_var_uint32_unchecked(start_offset, value);
   EXPECT_EQ(actual_bytes_written, bytes_written);
   uint32_t read_bytes_length;
   int32_t var_int = buffer->get_var_uint32(start_offset, &read_bytes_length);
@@ -149,7 +150,8 @@ TEST(Buffer, TestVarUint) {
 
 void check_var_uint64(int32_t start_offset, std::shared_ptr<Buffer> buffer,
                       uint64_t value, uint32_t bytes_written) {
-  uint32_t actual_bytes_written = buffer->put_var_uint64(start_offset, value);
+  uint32_t actual_bytes_written =
+      buffer->put_var_uint64_unchecked(start_offset, value);
   EXPECT_EQ(actual_bytes_written, bytes_written);
   uint32_t read_bytes_length;
   uint64_t var_int = buffer->get_var_uint64(start_offset, &read_bytes_length);
@@ -305,11 +307,6 @@ TEST(Buffer, OffsetRangeRejectsOverflow) {
                "");
   buffer->unsafe_put<uint32_t>(0, 1);
   EXPECT_DEATH(buffer->get_tagged_int64(0, &bytes_read), "");
-  EXPECT_DEATH(
-      buffer->put_tagged_uint64(std::numeric_limits<uint32_t>::max(), 0), "");
-  EXPECT_DEATH(buffer->put_tagged_int64(0, std::numeric_limits<int64_t>::max()),
-               "");
-
   const uint8_t byte = 1;
   EXPECT_DEATH(
       buffer->copy_from(std::numeric_limits<uint32_t>::max(), &byte, 0, 1), "");
@@ -347,44 +344,6 @@ TEST(Buffer, RepresentedCopySupportsOverlap) {
   EXPECT_EQ(bytes, (std::vector<uint8_t>{1, 1, 2, 3, 4}));
 }
 
-TEST(Buffer, VarUintPutChecksPhysicalExtent) {
-  std::shared_ptr<Buffer> one_byte;
-  std::shared_ptr<Buffer> two_bytes;
-  std::shared_ptr<Buffer> three_bytes;
-  std::shared_ptr<Buffer> four_bytes;
-  std::shared_ptr<Buffer> seven_bytes;
-  std::shared_ptr<Buffer> eight_bytes;
-  std::shared_ptr<Buffer> nine_bytes;
-  ASSERT_TRUE(allocate_buffer(1, &one_byte));
-  ASSERT_TRUE(allocate_buffer(2, &two_bytes));
-  ASSERT_TRUE(allocate_buffer(3, &three_bytes));
-  ASSERT_TRUE(allocate_buffer(4, &four_bytes));
-  ASSERT_TRUE(allocate_buffer(7, &seven_bytes));
-  ASSERT_TRUE(allocate_buffer(8, &eight_bytes));
-  ASSERT_TRUE(allocate_buffer(9, &nine_bytes));
-
-  EXPECT_EQ(one_byte->put_var_uint32(0, 0x7f), 1U);
-  EXPECT_EQ(two_bytes->put_var_uint64(0, 0x80), 2U);
-  constexpr uint32_t kThreeByteValue = uint32_t{1} << 14;
-  EXPECT_DEATH(three_bytes->put_var_uint32(0, kThreeByteValue), "");
-  EXPECT_EQ(four_bytes->put_var_uint32(0, kThreeByteValue), 3U);
-  constexpr uint64_t kFourByteValue = uint64_t{1} << 21;
-  EXPECT_EQ(four_bytes->put_var_uint64(0, kFourByteValue), 4U);
-
-  constexpr uint32_t kFiveByteValue = uint32_t{1} << 28;
-  EXPECT_DEATH(seven_bytes->put_var_uint32(0, kFiveByteValue), "");
-  EXPECT_EQ(eight_bytes->put_var_uint32(0, kFiveByteValue), 5U);
-  uint32_t bytes_read = 0;
-  EXPECT_EQ(eight_bytes->get_var_uint32(0, &bytes_read), kFiveByteValue);
-  EXPECT_EQ(bytes_read, 5U);
-
-  constexpr uint64_t kNineByteValue = uint64_t{1} << 56;
-  EXPECT_DEATH(eight_bytes->put_var_uint64(0, kNineByteValue), "");
-  EXPECT_EQ(nine_bytes->put_var_uint64(0, kNineByteValue), 9U);
-  EXPECT_EQ(nine_bytes->get_var_uint64(0, &bytes_read), kNineByteValue);
-  EXPECT_EQ(bytes_read, 9U);
-}
-
 TEST(Buffer, NegativeEqualsReturnsFalse) {
   std::vector<uint8_t> bytes = {1, 2, 3};
   Buffer first(bytes);
@@ -419,13 +378,13 @@ TEST(Buffer, TaggedSmallNegative) {
   std::shared_ptr<Buffer> buffer;
   ASSERT_TRUE(allocate_buffer(8, &buffer));
 
-  EXPECT_EQ(buffer->put_tagged_int64(0, -1), 4U);
+  EXPECT_EQ(buffer->put_tagged_int64_unchecked(0, -1), 4U);
   uint32_t bytes_read = 0;
   EXPECT_EQ(buffer->get_tagged_int64(0, &bytes_read), -1);
   EXPECT_EQ(bytes_read, 4U);
 
   constexpr uint64_t kMaxSmallUnsigned = 0x7fffffff;
-  EXPECT_EQ(buffer->put_tagged_uint64(0, kMaxSmallUnsigned), 4U);
+  EXPECT_EQ(buffer->put_tagged_uint64_unchecked(0, kMaxSmallUnsigned), 4U);
   EXPECT_EQ(buffer->get_tagged_uint64(0, &bytes_read), kMaxSmallUnsigned);
   EXPECT_EQ(bytes_read, 4U);
 

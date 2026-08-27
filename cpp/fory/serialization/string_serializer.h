@@ -47,20 +47,6 @@ enum class StringEncoding : uint8_t {
 
 namespace detail {
 
-struct StringFieldWriter {
-  FORY_ALWAYS_INLINE static uint32_t put_size(Buffer &buffer, uint32_t offset,
-                                              uint64_t size) {
-    return buffer.put_var_uint64_unchecked(offset, size);
-  }
-
-  FORY_ALWAYS_INLINE static void commit(Buffer &buffer, uint32_t offset) {
-    buffer.writer_index_ = offset;
-    if (FORY_PREDICT_FALSE(buffer.output_stream_ != nullptr && offset > 4096)) {
-      buffer.output_stream_->try_flush();
-    }
-  }
-};
-
 /// write string data with UTF-8 encoding
 inline void write_string_data(const char *data, size_t size,
                               WriteContext &ctx) {
@@ -79,11 +65,12 @@ inline void write_string_data(const char *data, size_t size,
   buffer.grow(static_cast<uint32_t>(size + 9));
   uint32_t writer_index = buffer.writer_index();
   writer_index +=
-      StringFieldWriter::put_size(buffer, writer_index, size_with_encoding);
+      buffer.put_var_uint64_unchecked(writer_index, size_with_encoding);
   if (size > 0) {
     buffer.unsafe_put(writer_index, data, static_cast<uint32_t>(size));
   }
-  StringFieldWriter::commit(buffer, writer_index + static_cast<uint32_t>(size));
+  buffer.unsafe_set_writer_index(writer_index + static_cast<uint32_t>(size));
+  ctx.try_flush();
 }
 
 /// write UTF-16 string data, converting to UTF-8 or using native encoding

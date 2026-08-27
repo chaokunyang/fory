@@ -159,22 +159,27 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - In `MemoryBuffer` and `MemoryOps` hot paths, duplicate small straight-line copy/read/write logic
   when that keeps control flow direct. Do not add private helper indirection to hot paths just to
   reduce local code duplication; keep helpers for slow, cold, or error paths.
+- `MemoryBuffer` semantic primitive-array `write*` and `read*` methods own the canonical
+  little-endian element order. Keep native bulk copy as the little-endian hot path and isolate
+  big-endian conversion in separate slow helpers; serializers must not duplicate that endian
+  branch. The explicit `copyTo*Array` and `copyFrom*Array` methods remain raw native-memory copies,
+  so their format owner must handle byte order when required.
 - Add a Java `MemoryBuffer` check only when its absence can cause a JVM or native crash, OOM, or
   attacker-controlled memory amplification. Delayed, masked, less precise, or differently typed
   failures do not justify a check, and neither does an incorrect decoded result without one of
-  those crash or memory consequences. Do not duplicate an array, `ByteBuffer`, VarHandle, stream,
+  those crash or memory consequences. Do not duplicate an array, `ByteBuffer`, `VarHandle`, stream,
   or other existing bounds owner merely to move or normalize an error.
-- The JDK 25 `MemoryBuffer` overlay is intentionally unchecked at its logical buffer boundary.
-  Indexed array accesses, absolute `ByteBuffer` accesses, and VarHandle accesses own bounds
-  enforcement and already provide a controlled failure; its exact exception type, message, and
-  detection point are not contracts. Do not copy the JDK 8-24 Unsafe-path range checks into this
-  overlay. Keep an explicit check only before allocation, capacity growth, or another side effect
-  when it is required to prevent a crash, OOM, or attacker-controlled memory amplification that the
-  access owner cannot contain.
-- `MemoryAllocator.grow` owns the postcondition that a successful return has supplied at least the
-  requested capacity. `MemoryBuffer` must not recheck that postcondition after calling `grow` or
-  `ensure`; an allocator that returns without satisfying it violates the allocator contract and
-  must be fixed in the allocator implementation rather than burdening every buffer hot path.
+- The JDK 25 `MemoryBuffer` overlay intentionally does not duplicate logical range checks around
+  indexed array, absolute `ByteBuffer`, or `VarHandle` access. Those JVM accessors own physical
+  bounds enforcement and already provide a controlled failure; the exact exception type, message,
+  and detection point are not contracts. Do not copy JDK 8-24 Unsafe-path checks into the overlay
+  solely to make invalid access fail earlier or more precisely. Keep an explicit check before
+  allocation, capacity growth, or another side effect when it is needed to prevent a crash, OOM, or
+  attacker-controlled memory amplification that the access owner cannot contain.
+- `MemoryAllocator.grow` owns the postcondition that a successful return leaves the buffer capacity
+  at least the requested capacity. Callers must reject invalid or overflowed requests before the
+  call, but must not recheck the allocator postcondition afterward; fix a violating allocator at
+  the allocator implementation.
 - In JDK 25 Fory JSON C2-sensitive code, preserve measured, naturally large hot-method boundaries.
   A method that exceeds HotSpot's 325-byte hot-inline limit through real representation, scalar,
   array, collection, or generated-schema work is an independent subtree owner. Generated group

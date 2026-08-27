@@ -61,15 +61,8 @@ cdef class _ForyArray:
     cpdef Py_ssize_t _size(self):
         raise NotImplementedError
 
-    # These cpdef helpers are public; normalize here so direct calls share sequence bounds semantics.
-    cpdef object _get(self, Py_ssize_t index):
-        return self._get_unchecked(self._normalize_index(index))
-
     cdef object _get_unchecked(self, Py_ssize_t index):
         raise NotImplementedError
-
-    cpdef _set(self, Py_ssize_t index, object value):
-        self._set_unchecked(self._normalize_index(index), value)
 
     cdef _set_unchecked(self, Py_ssize_t index, object value):
         raise NotImplementedError
@@ -77,14 +70,8 @@ cdef class _ForyArray:
     cpdef _append(self, object value):
         raise NotImplementedError
 
-    cpdef _insert(self, Py_ssize_t index, object value):
-        self._insert_unchecked(self._normalize_insert_index(index), value)
-
     cdef _insert_unchecked(self, Py_ssize_t index, object value):
         raise NotImplementedError
-
-    cpdef _delete(self, Py_ssize_t index):
-        self._delete_unchecked(self._normalize_index(index))
 
     cdef _delete_unchecked(self, Py_ssize_t index):
         raise NotImplementedError

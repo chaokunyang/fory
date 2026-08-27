@@ -22,7 +22,6 @@ package org.apache.fory;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -318,7 +317,7 @@ public final class Fory implements BaseFory {
     MemoryBuffer buf = getBuffer();
     buf.writerIndex(0);
     serialize(buf, obj, null);
-    byte[] bytes = copyWrittenBytes(buf);
+    byte[] bytes = buf.getBytes(0, buf.writerIndex());
     resetBuffer();
     return bytes;
   }
@@ -328,7 +327,7 @@ public final class Fory implements BaseFory {
     MemoryBuffer buf = getBuffer();
     buf.writerIndex(0);
     serialize(buf, obj, callback);
-    byte[] bytes = copyWrittenBytes(buf);
+    byte[] bytes = buf.getBytes(0, buf.writerIndex());
     resetBuffer();
     return bytes;
   }
@@ -373,15 +372,6 @@ public final class Fory implements BaseFory {
   @Override
   public void serialize(OutputStream outputStream, Object obj, BufferCallback callback) {
     serializeToStream(outputStream, buf -> serialize(buf, obj, callback));
-  }
-
-  private byte[] copyWrittenBytes(MemoryBuffer buffer) {
-    int length = buffer.writerIndex();
-    if (buffer.isHeapFullyWriteable()) {
-      // Fory owns this writer index; keep public arbitrary-range validation out of the root path.
-      return Arrays.copyOf(buffer.getHeapMemory(), length);
-    }
-    return buffer.getBytes(0, length);
   }
 
   private ForyException processSerializationError(Throwable e) {

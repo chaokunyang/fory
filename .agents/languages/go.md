@@ -7,12 +7,6 @@ Load this file when changing `go/fory/` or Go xlang behavior.
 - Run Go commands from within `go/fory/`.
 - Changes under `go/` must pass formatting and tests.
 - The Go implementation focuses on fast serializers.
-- Go codec paths may intentionally record an error and continue bounds-safe work
-  until an established serializer or root safepoint checks it. Do not add eager
-  per-field or per-element error branches, cursor rollback, or tests that pin the
-  first detection point unless deferral can cause a panic, out-of-bounds access,
-  disproportionate work or allocation, persistent state pollution, or success
-  past the required safepoint.
 - Root deserialization graph memory budget state belongs to `ReadContext`.
   `WithMaxGraphMemoryBytes` uses a fixed `128 MiB` default; positive explicit
   values override it, and explicit non-positive values are invalid at config creation.

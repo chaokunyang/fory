@@ -32,6 +32,13 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Preserve architecture. Do not introduce new layers, parallel flows, or public APIs unless explicitly requested; prefer local repair in the existing owner over shared-infra expansion, and stop if a fix conflicts with an ADR, spec, or invariant.
 - Do not change an existing `RefReader`/`RefWriter` architecture or API to support compatible skip. Compatible skip must not add alternate reference slots or tables, alternate reference lookup or publication methods, or forwarding APIs in read/write contexts, builders, serializers, or generated-code plumbing. Keep ordinary reference publication and lookup unchanged and resolve the case in the existing compatible generated owner. For an authorized removed-field read of an unregistered Struct, the empty object created by the skip reader is that path's final owner: publish that same object for `RefValue`, consume the Struct fields, and let later `RefFlag` values resolve to it. This preserves reference numbering and identity without registering the Struct; an independent dynamic root still requires normal registration. Do not add parallel reference state, a sentinel, a rejection, or a common-path branch for this case.
 - Respect ownership. Keep logic, state, and helpers in their natural owner, and do not move serializer-local, context-local, runtime-type-local, or protocol-local problems into global utilities.
+- Low-level APIs explicitly named `unsafe` or `unchecked` may be public and may omit local bounds or
+  capacity checks. Their callers own the proof required by the operation. Do not hide these APIs
+  behind private access, checked forwarding wrappers, friend adapters, or duplicate implementations
+  solely to prevent misuse; add validation only at the caller or owner that lacks the required proof.
+- Keep hardening changes causal. A shared wire defect may require aligned runtime fixes, but it does
+  not justify unrelated buffer checks, performance rewrites, or cleanup without their own concrete
+  consequence and evidence.
 - Check the spec before implementation. For wire behavior and xlang mapping, use the specs as the source of truth and never copy one runtime's bug into another runtime just to make tests pass.
 - `foryc` is a build-time compiler for trusted schema inputs and is never invoked by runtime serialization or deserialization. Schema provenance, package/namespace options, output-path options, and generated-source review belong to the application or build owner. Do not classify hostile-schema source injection or path traversal as a Fory runtime security vulnerability; `foryc` does not promise to sandbox untrusted schemas.
 - Row format accepts only trusted input and is outside Fory's untrusted binary-deserialization security boundary. Rust `check_string_read(false)` is likewise an explicit trusted-input mode that disables UTF-8 validation; its caller owns the validity guarantee. Classify issues in those paths as correctness, soundness, or hardening bugs when applicable, not as attacker-controlled deserialization vulnerabilities under the default security model.
@@ -45,20 +52,6 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   hot-path branches, helper APIs, allocations, or generated-code expansion
   solely to make an error earlier, more specific, or more uniform, and do not
   write tests that force such error normalization.
-- Non-strict, non-precise, delayed, masked, differently typed, or differently layered controlled
-  errors are not security findings. Security remediation must not add checks solely to normalize,
-  sharpen, advance, or otherwise make such errors deterministic. Security tests must not require a
-  particular error type, message, layer, offset, or detection point unless an explicit public
-  contract makes that precision part of the policy boundary.
-- Runtimes with an established lazy-error accumulator, including C++ and Go,
-  may keep executing bounds-safe codec work after recording an error and inspect
-  it at an existing serializer or root-operation safepoint. Deferred inspection
-  is an intentional hot-path design, not by itself a correctness or security
-  defect. Do not add per-field or per-element error branches, cursor rollback,
-  or tests that require immediate propagation solely because an earlier check is
-  possible. Treat the behavior as a defect only when the deferred path has a
-  concrete consequence listed below or an established safepoint can return
-  success instead of a controlled root error.
 - Never add a reader-side check solely to produce a more precise malformed-input
   error. Retain or add a check only when the unchecked path has a concrete
   consequence such as a crash, panic, undefined behavior, out-of-bounds access,
@@ -69,15 +62,6 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   helper when the language supports it. A bounds-safe downstream operation that
   already raises a controlled root error is sufficient; do not duplicate it for
   error precision.
-- Buffer and memory-buffer checks require a stricter consequence test. Security remediation may add
-  a check only when its absence can cause a process crash or panic, undefined memory access, OOM, or
-  attacker-controlled memory amplification. Delayed, masked, less precise, or differently typed
-  errors are not sufficient reasons. Neither is an incorrect decoded result when the unchecked
-  path cannot cause one of those crash or memory consequences. A downstream bounds owner that
-  already fails in a controlled way is sufficient; do not duplicate its check in a hotter wrapper.
-  Apply this admission rule prospectively: do not remove an already completed and validated check
-  solely by reclassifying it when it has no demonstrated performance cost. Preserve that check as
-  a correctness fix unless an explicit task requires the behavioral rollback.
 - Before reporting or fixing a robustness finding, prove that the current path
   causes at least one concrete consequence: crash, panic, undefined behavior,
   or out-of-bounds access; disproportionate allocation, CPU work, or stream
@@ -88,16 +72,6 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   malformed or noncanonical flag, enum value, marker, length form, or reserved
   value is accepted, rejected late, decoded differently, or produces a less
   precise error.
-- Keep security remediation scope frozen. Do not fix a standalone non-security
-  correctness, interoperability, API, or lifecycle issue merely because it is
-  discovered during security work. Include an adjacent non-security change only
-  when omitting it would leave the security fix incomplete or force the same
-  owner into an ugly, duplicated, or knowingly unsound design; otherwise record
-  the issue separately and leave production code unchanged. This rule prevents
-  new scope; it does not authorize rolling back a non-security fix that is
-  already implemented and validated. Preserve such fixes. If one may affect
-  performance, inspect and measure the affected path first, then optimize it on
-  evidence instead of removing it by classification.
 - Arbitrary-precision binary Decimal codecs accept only scales in
   `[-10_000, 10_000]` and an absolute unscaled magnitude of at most `10_000`
   binary bytes. The Java standalone `BigInteger` serializer uses the same

@@ -1790,22 +1790,12 @@ public final class MemoryBuffer {
       MemoryOps.writeBooleansWithSize(this, values);
     } else {
       writeVarUInt32Small7(values.length);
-      writeBooleans(values);
+      writeBooleans(values, 0, values.length);
     }
   }
 
-  // Full-array overloads own their source range and stay direct so serializers do not inline the
-  // larger arbitrary-range validation path. Offset/count overloads below retain that validation.
   public void writeBooleans(boolean[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeBooleans(this, values, 0, values.length);
-    } else {
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + values.length;
-      ensure(newIdx);
-      copyMemory(values, BOOLEAN_ARRAY_OFFSET, heapMemory, address + writerIdx, values.length);
-      writerIndex = newIdx;
-    }
+    writeBooleans(values, 0, values.length);
   }
 
   public void writeBooleans(boolean[] values, int offset, int numElements) {
@@ -1830,21 +1820,12 @@ public final class MemoryBuffer {
     } else {
       int numBytes = Math.multiplyExact(values.length, 2);
       writeVarUInt32Small7(numBytes);
-      writeChars(values);
+      writeChars(values, 0, values.length);
     }
   }
 
   public void writeChars(char[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeChars(this, values, 0, values.length);
-    } else {
-      int numBytes = Math.multiplyExact(values.length, 2);
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + numBytes;
-      ensure(newIdx);
-      copyMemory(values, CHAR_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
-      writerIndex = newIdx;
-    }
+    writeChars(values, 0, values.length);
   }
 
   public void writeChars(char[] values, int offset, int numElements) {
@@ -1874,21 +1855,12 @@ public final class MemoryBuffer {
     } else {
       int numBytes = Math.multiplyExact(values.length, 2);
       writeVarUInt32Small7(numBytes);
-      writeShorts(values);
+      writeShorts(values, 0, values.length);
     }
   }
 
   public void writeShorts(short[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeShorts(this, values, 0, values.length);
-    } else {
-      int numBytes = Math.multiplyExact(values.length, 2);
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + numBytes;
-      ensure(newIdx);
-      copyMemory(values, SHORT_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
-      writerIndex = newIdx;
-    }
+    writeShorts(values, 0, values.length);
   }
 
   public void writeShorts(short[] values, int offset, int numElements) {
@@ -1918,21 +1890,12 @@ public final class MemoryBuffer {
     } else {
       int numBytes = Math.multiplyExact(values.length, 4);
       writeVarUInt32Small7(numBytes);
-      writeInts(values);
+      writeInts(values, 0, values.length);
     }
   }
 
   public void writeInts(int[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeInts(this, values, 0, values.length);
-    } else {
-      int numBytes = Math.multiplyExact(values.length, 4);
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + numBytes;
-      ensure(newIdx);
-      copyMemory(values, INT_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
-      writerIndex = newIdx;
-    }
+    writeInts(values, 0, values.length);
   }
 
   public void writeInts(int[] values, int offset, int numElements) {
@@ -1962,21 +1925,12 @@ public final class MemoryBuffer {
     } else {
       int numBytes = Math.multiplyExact(values.length, 8);
       writeVarUInt32Small7(numBytes);
-      writeLongs(values);
+      writeLongs(values, 0, values.length);
     }
   }
 
   public void writeLongs(long[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeLongs(this, values, 0, values.length);
-    } else {
-      int numBytes = Math.multiplyExact(values.length, 8);
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + numBytes;
-      ensure(newIdx);
-      copyMemory(values, LONG_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
-      writerIndex = newIdx;
-    }
+    writeLongs(values, 0, values.length);
   }
 
   public void writeLongs(long[] values, int offset, int numElements) {
@@ -2006,21 +1960,12 @@ public final class MemoryBuffer {
     } else {
       int numBytes = Math.multiplyExact(values.length, 4);
       writeVarUInt32Small7(numBytes);
-      writeFloats(values);
+      writeFloats(values, 0, values.length);
     }
   }
 
   public void writeFloats(float[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeFloats(this, values, 0, values.length);
-    } else {
-      int numBytes = Math.multiplyExact(values.length, 4);
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + numBytes;
-      ensure(newIdx);
-      copyMemory(values, FLOAT_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
-      writerIndex = newIdx;
-    }
+    writeFloats(values, 0, values.length);
   }
 
   public void writeFloats(float[] values, int offset, int numElements) {
@@ -2050,21 +1995,12 @@ public final class MemoryBuffer {
     } else {
       int numBytes = Math.multiplyExact(values.length, 8);
       writeVarUInt32Small7(numBytes);
-      writeDoubles(values);
+      writeDoubles(values, 0, values.length);
     }
   }
 
   public void writeDoubles(double[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeDoubles(this, values, 0, values.length);
-    } else {
-      int numBytes = Math.multiplyExact(values.length, 8);
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + numBytes;
-      ensure(newIdx);
-      copyMemory(values, DOUBLE_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
-      writerIndex = newIdx;
-    }
+    writeDoubles(values, 0, values.length);
   }
 
   public void writeDoubles(double[] values, int offset, int numElements) {

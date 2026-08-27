@@ -343,62 +343,16 @@ mixin _BufferMixin {
     if (value < 0 || value > 0xfffffffff) {
       _throwInvalidVarUint36();
     }
-    ensureWritable(6);
-    if (value > 0x7fffffff) {
-      _writeLargeVarUint36(value);
-      return;
-    }
-    var remaining = value;
-    while (remaining >= 0x80) {
-      _bytes[_writerIndex] = (remaining & 0x7f) | 0x80;
-      _writerIndex += 1;
-      remaining >>>= 7;
-    }
-    _bytes[_writerIndex] = remaining;
-    _writerIndex += 1;
-  }
-
-  @pragma('vm:never-inline')
-  void _writeLargeVarUint36(int value) {
-    var remaining = value;
-    while (remaining >= 0x80) {
-      _bytes[_writerIndex] = (remaining % 0x80) | 0x80;
-      _writerIndex += 1;
-      remaining ~/= 0x80;
-    }
-    _bytes[_writerIndex] = remaining;
-    _writerIndex += 1;
+    writeVarUint64(Uint64(value));
   }
 
   /// Reads a small unsigned integer written by [writeVarUint36Small].
-  @pragma('vm:prefer-inline')
   int readVarUint36Small() {
-    final byte = readUint8();
-    if (byte < 0x80) {
-      return byte;
-    }
-    return _readVarUint36SmallTail(byte & 0x7f);
-  }
-
-  @pragma('vm:never-inline')
-  int _readVarUint36SmallTail(int result) {
-    var value = result;
-    var factor = 0x80;
-    // The multi-byte form is a standard varuint: the fifth byte still has a
-    // continuation bit, and 36-bit values can therefore require six bytes.
-    for (var index = 1; index < 5; index += 1) {
-      final byte = readUint8();
-      value += (byte & 0x7f) * factor;
-      if (byte < 0x80) {
-        return value;
-      }
-      factor *= 0x80;
-    }
-    final sixthByte = readUint8();
-    if (sixthByte > 1) {
+    final value = readVarUint64();
+    if (value > 0xfffffffff) {
       _throwInvalidVarUint36();
     }
-    return value + sixthByte * factor;
+    return value.toInt();
   }
 }
 

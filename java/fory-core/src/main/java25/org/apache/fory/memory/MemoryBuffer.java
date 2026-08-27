@@ -57,11 +57,11 @@ import org.apache.fory.io.ForyStreamReader;
  * <p>Warning: The instance of this class should not be held at GraalVM build time; build-time heap
  * buffers do not represent the runtime heap layout.
  *
- * <p>The Java 25 multi-release implementation intentionally does not duplicate logical range
- * checks around indexed array, absolute {@link ByteBuffer}, or {@link VarHandle} access. Those JVM
- * accessors own bounds enforcement and already fail safely. The exact exception type, message, and
- * detection point are not contracts, so adding checks only to make an invalid access fail earlier
- * or more precisely would burden every hot buffer operation without improving memory safety.
+ * <p>In the Java 25 multi-release implementation, absolute random-access get/put methods are
+ * internal fast paths. Callers must pass legal indices and ranges; read/write entry points perform
+ * logical {@link MemoryBuffer} range validation before reaching these methods. The implementation
+ * relies on {@link VarHandle}, array, and {@link ByteBuffer} access only for JVM memory safety and
+ * does not repeat root Unsafe-style logical bounds checks.
  *
  * <p>Note(chaokunyang): Buffer operations are very common, and jvm inline and branch elimination is
  * not reliable even in c2 compiler, so we try to inline and avoid checks as we can manually. jvm
@@ -157,12 +157,7 @@ public final class MemoryBuffer {
       throw new IllegalArgumentException(
           String.format("%d exceeds buffer size %d", offset + length, buffer.length));
     }
-    this.heapMemory = buffer;
-    this.heapOffset = offset;
-    final long startPos = BYTE_ARRAY_OFFSET + offset;
-    this.address = startPos;
-    this.size = length;
-    this.addressLimit = startPos + length;
+    initHeapBuffer(buffer, offset, length);
     if (streamReader != null) {
       this.streamReader = streamReader;
     } else {
@@ -2024,7 +2019,6 @@ public final class MemoryBuffer {
   public void grow(int neededSize) {
     int length = writerIndex + neededSize;
     if (length > size) {
-      // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
       globalAllocator.grow(this, length);
     }
   }
@@ -2032,7 +2026,6 @@ public final class MemoryBuffer {
   /** For off-heap buffer, this will make a heap buffer internally. */
   public void ensure(int length) {
     if (length > size) {
-      // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
       globalAllocator.grow(this, length);
     }
   }

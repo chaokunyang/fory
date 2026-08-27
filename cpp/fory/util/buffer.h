@@ -39,11 +39,6 @@ namespace fory {
 
 class StdInputStream;
 class PyInputStream;
-namespace serialization::detail {
-struct PrimitiveVectorWriter;
-struct StructFieldWriter;
-struct StringFieldWriter;
-} // namespace serialization::detail
 
 // A buffer class for storing raw bytes with various methods for reading and
 // writing the bytes.
@@ -235,9 +230,15 @@ public:
     reader_index_ += diff;
   }
 
-  // Unsafe methods don't check bound
+  // Unsafe operations deliberately trust their callers to prove the complete
+  // physical extent or cursor position. Keep that contract explicit instead of
+  // adding local checks or access-control wrappers that duplicate the proof.
   FORY_ALWAYS_INLINE void unsafe_increase_reader_index(uint32_t diff) {
     reader_index_ += diff;
+  }
+
+  FORY_ALWAYS_INLINE void unsafe_set_writer_index(uint32_t writer_index) {
+    writer_index_ = writer_index;
   }
 
   template <typename T>
@@ -361,18 +362,116 @@ public:
     return Result<void, Error>();
   }
 
-  /// Put unsigned varint32 at offset using optimized bulk writes.
-  /// Returns number of bytes written (1-5).
-  /// Uses bit manipulation to build encoded value, then single memory write.
-  FORY_ALWAYS_INLINE uint32_t put_var_uint32(uint32_t offset, uint32_t value) {
-    const uint32_t extent = value < 0x80         ? 1
-                            : value < 0x4000     ? 2
-                            : value < 0x10000000 ? 4
-                                                 : 8;
-    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, extent))) {
-      fail_range(offset, extent);
+  /// Put unsigned varint32 at an unchecked offset using optimized bulk writes.
+  /// The caller must reserve the complete physical store extent, which can be
+  /// larger than the returned logical byte count.
+  FORY_ALWAYS_INLINE uint32_t put_var_uint32_unchecked(uint32_t offset,
+                                                       uint32_t value) {
+    if (value < 0x80) {
+      data_[offset] = static_cast<uint8_t>(value);
+      return 1;
     }
-    return put_var_uint32_unchecked(offset, value);
+    // Bulk stores keep the hot path branch-light. Callers must establish the
+    // physical extent selected below, which may exceed the logical encoding.
+    uint64_t encoded = (value & 0x7F) | 0x80;
+    encoded |= (static_cast<uint64_t>(value & 0x3F80) << 1);
+    if (value < 0x4000) {
+      store_unaligned<uint16_t>(data_ + offset, static_cast<uint16_t>(encoded));
+      return 2;
+    }
+    encoded |= (static_cast<uint64_t>(value & 0x1FC000) << 2) | 0x8000;
+    if (value < 0x200000) {
+      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(encoded));
+      return 3;
+    }
+    encoded |= (static_cast<uint64_t>(value & 0xFE00000) << 3) | 0x800000;
+    if (value < 0x10000000) {
+      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(encoded));
+      return 4;
+    }
+    encoded |= (static_cast<uint64_t>(value >> 28) << 32) | 0x80000000;
+    store_unaligned<uint64_t>(data_ + offset, encoded);
+    return 5;
+  }
+
+  /// Put unsigned varint64 at an unchecked offset using PVL encoding.
+  /// The caller must reserve the complete physical store extent.
+  FORY_ALWAYS_INLINE uint32_t put_var_uint64_unchecked(uint32_t offset,
+                                                       uint64_t value) {
+    if (value < 0x80) {
+      data_[offset] = static_cast<uint8_t>(value);
+      return 1;
+    }
+    uint64_t encoded = (value & 0x7F) | 0x80;
+    encoded |= ((value & 0x3F80) << 1);
+    if (value < 0x4000) {
+      store_unaligned<uint16_t>(data_ + offset, static_cast<uint16_t>(encoded));
+      return 2;
+    }
+    encoded |= ((value & 0x1FC000) << 2) | 0x8000;
+    if (value < 0x200000) {
+      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(encoded));
+      return 3;
+    }
+    encoded |= ((value & 0xFE00000) << 3) | 0x800000;
+    if (value < 0x10000000) {
+      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(encoded));
+      return 4;
+    }
+    encoded |= ((value & 0x7F0000000ULL) << 4) | 0x80000000;
+    if (value < 0x800000000ULL) {
+      store_unaligned<uint64_t>(data_ + offset, encoded);
+      return 5;
+    }
+    encoded |= ((value & 0x3F800000000ULL) << 5) | 0x8000000000ULL;
+    if (value < 0x40000000000ULL) {
+      store_unaligned<uint64_t>(data_ + offset, encoded);
+      return 6;
+    }
+    encoded |= ((value & 0x1FC0000000000ULL) << 6) | 0x800000000000ULL;
+    if (value < 0x2000000000000ULL) {
+      store_unaligned<uint64_t>(data_ + offset, encoded);
+      return 7;
+    }
+    encoded |= ((value & 0xFE000000000000ULL) << 7) | 0x80000000000000ULL;
+    if (value < 0x100000000000000ULL) {
+      store_unaligned<uint64_t>(data_ + offset, encoded);
+      return 8;
+    }
+    encoded |= 0x8000000000000000ULL;
+    store_unaligned<uint64_t>(data_ + offset, encoded);
+    data_[offset + 8] = static_cast<uint8_t>(value >> 56);
+    return 9;
+  }
+
+  /// Put a tagged uint64 at an unchecked offset. Returns 4 or 9 bytes.
+  FORY_ALWAYS_INLINE uint32_t put_tagged_uint64_unchecked(uint32_t offset,
+                                                          uint64_t value) {
+    constexpr uint64_t MAX_SMALL_VALUE = 0x7fffffff;
+    if (value <= MAX_SMALL_VALUE) {
+      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(value)
+                                                    << 1);
+      return 4;
+    }
+    data_[offset] = 0b1;
+    store_unaligned<uint64_t>(data_ + offset + 1, value);
+    return 9;
+  }
+
+  /// Put a tagged int64 at an unchecked offset. Returns 4 or 9 bytes.
+  FORY_ALWAYS_INLINE uint32_t put_tagged_int64_unchecked(uint32_t offset,
+                                                         int64_t value) {
+    constexpr int64_t MIN_SMALL_VALUE = -1073741824;
+    constexpr int64_t MAX_SMALL_VALUE = 1073741823;
+    if (value >= MIN_SMALL_VALUE && value <= MAX_SMALL_VALUE) {
+      const uint32_t encoded =
+          static_cast<uint32_t>(static_cast<int32_t>(value)) << 1;
+      store_unaligned<uint32_t>(data_ + offset, encoded);
+      return 4;
+    }
+    data_[offset] = 0b1;
+    store_unaligned<int64_t>(data_ + offset + 1, value);
+    return 9;
   }
 
   /// get unsigned varint32 from offset using optimized bulk read.
@@ -465,21 +564,6 @@ public:
     }
     *read_bytes_length = position - offset;
     return result;
-  }
-
-  /// Put unsigned varint64 at offset using optimized bulk writes.
-  /// Returns number of bytes written (1-9).
-  /// Uses PVL (Progressive Variable-length Long) encoding per xlang spec.
-  FORY_ALWAYS_INLINE uint32_t put_var_uint64(uint32_t offset, uint64_t value) {
-    const uint32_t extent = value < 0x80                   ? 1
-                            : value < 0x4000               ? 2
-                            : value < 0x10000000           ? 4
-                            : value < 0x100000000000000ULL ? 8
-                                                           : 9;
-    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, extent))) {
-      fail_range(offset, extent);
-    }
-    return put_var_uint64_unchecked(offset, value);
   }
 
   /// get unsigned varint64 from offset using optimized bulk read.
@@ -619,36 +703,6 @@ public:
       *read_bytes_length = 9;
       return load_unaligned<int64_t>(data_ + offset + 1);
     }
-  }
-
-  /// write uint64_t using tagged encoding at given offset. Returns bytes
-  /// written.
-  /// - If value is in [0, 0x7fffffff]: write 4 bytes (value << 1), return 4
-  /// - Otherwise: write 1 byte flag + 8 bytes uint64, return 9
-  FORY_ALWAYS_INLINE uint32_t put_tagged_uint64(uint32_t offset,
-                                                uint64_t value) {
-    constexpr uint64_t MAX_SMALL_VALUE = 0x7fffffff; // INT32_MAX as u64
-    const uint32_t extent = value <= MAX_SMALL_VALUE ? 4 : 9;
-    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, extent))) {
-      fail_range(offset, extent);
-    }
-    return put_tagged_uint64_unchecked(offset, value);
-  }
-
-  /// write int64_t using tagged encoding at given offset. Returns bytes
-  /// written.
-  /// - If value is in [-1073741824, 1073741823]: write 4 bytes (value << 1),
-  /// return 4
-  /// - Otherwise: write 1 byte flag + 8 bytes int64, return 9
-  FORY_ALWAYS_INLINE uint32_t put_tagged_int64(uint32_t offset, int64_t value) {
-    constexpr int64_t MIN_SMALL_VALUE = -1073741824; // -2^30
-    constexpr int64_t MAX_SMALL_VALUE = 1073741823;  // 2^30 - 1
-    const uint32_t extent =
-        value >= MIN_SMALL_VALUE && value <= MAX_SMALL_VALUE ? 4 : 9;
-    if (FORY_PREDICT_FALSE(!range_in_bounds(offset, extent))) {
-      fail_range(offset, extent);
-    }
-    return put_tagged_int64_unchecked(offset, value);
   }
 
   /// write uint8_t value to buffer at current writer index.
@@ -1201,9 +1255,6 @@ public:
   std::string hex() const;
 
 private:
-  friend struct serialization::detail::PrimitiveVectorWriter;
-  friend struct serialization::detail::StructFieldWriter;
-  friend struct serialization::detail::StringFieldWriter;
   friend class StdInputStream;
   friend class PyInputStream;
   friend class OutputStream;
@@ -1298,111 +1349,6 @@ private:
     result |= static_cast<uint64_t>(b) << 56;
     reader_index_ = position;
     return result;
-  }
-
-  FORY_ALWAYS_INLINE uint32_t put_var_uint32_unchecked(uint32_t offset,
-                                                       uint32_t value) {
-    if (value < 0x80) {
-      data_[offset] = static_cast<uint8_t>(value);
-      return 1;
-    }
-    // Bulk stores keep the hot path branch-light. Callers must establish the
-    // physical extent selected below, which may exceed the logical encoding.
-    uint64_t encoded = (value & 0x7F) | 0x80;
-    encoded |= (static_cast<uint64_t>(value & 0x3F80) << 1);
-    if (value < 0x4000) {
-      store_unaligned<uint16_t>(data_ + offset, static_cast<uint16_t>(encoded));
-      return 2;
-    }
-    encoded |= (static_cast<uint64_t>(value & 0x1FC000) << 2) | 0x8000;
-    if (value < 0x200000) {
-      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(encoded));
-      return 3;
-    }
-    encoded |= (static_cast<uint64_t>(value & 0xFE00000) << 3) | 0x800000;
-    if (value < 0x10000000) {
-      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(encoded));
-      return 4;
-    }
-    encoded |= (static_cast<uint64_t>(value >> 28) << 32) | 0x80000000;
-    store_unaligned<uint64_t>(data_ + offset, encoded);
-    return 5;
-  }
-
-  FORY_ALWAYS_INLINE uint32_t put_var_uint64_unchecked(uint32_t offset,
-                                                       uint64_t value) {
-    if (value < 0x80) {
-      data_[offset] = static_cast<uint8_t>(value);
-      return 1;
-    }
-    uint64_t encoded = (value & 0x7F) | 0x80;
-    encoded |= ((value & 0x3F80) << 1);
-    if (value < 0x4000) {
-      store_unaligned<uint16_t>(data_ + offset, static_cast<uint16_t>(encoded));
-      return 2;
-    }
-    encoded |= ((value & 0x1FC000) << 2) | 0x8000;
-    if (value < 0x200000) {
-      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(encoded));
-      return 3;
-    }
-    encoded |= ((value & 0xFE00000) << 3) | 0x800000;
-    if (value < 0x10000000) {
-      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(encoded));
-      return 4;
-    }
-    encoded |= ((value & 0x7F0000000ULL) << 4) | 0x80000000;
-    if (value < 0x800000000ULL) {
-      store_unaligned<uint64_t>(data_ + offset, encoded);
-      return 5;
-    }
-    encoded |= ((value & 0x3F800000000ULL) << 5) | 0x8000000000ULL;
-    if (value < 0x40000000000ULL) {
-      store_unaligned<uint64_t>(data_ + offset, encoded);
-      return 6;
-    }
-    encoded |= ((value & 0x1FC0000000000ULL) << 6) | 0x800000000000ULL;
-    if (value < 0x2000000000000ULL) {
-      store_unaligned<uint64_t>(data_ + offset, encoded);
-      return 7;
-    }
-    encoded |= ((value & 0xFE000000000000ULL) << 7) | 0x80000000000000ULL;
-    if (value < 0x100000000000000ULL) {
-      store_unaligned<uint64_t>(data_ + offset, encoded);
-      return 8;
-    }
-    encoded |= 0x8000000000000000ULL;
-    store_unaligned<uint64_t>(data_ + offset, encoded);
-    data_[offset + 8] = static_cast<uint8_t>(value >> 56);
-    return 9;
-  }
-
-  FORY_ALWAYS_INLINE uint32_t put_tagged_uint64_unchecked(uint32_t offset,
-                                                          uint64_t value) {
-    constexpr uint64_t MAX_SMALL_VALUE = 0x7fffffff;
-    if (value <= MAX_SMALL_VALUE) {
-      store_unaligned<uint32_t>(data_ + offset, static_cast<uint32_t>(value)
-                                                    << 1);
-      return 4;
-    }
-    data_[offset] = 0b1;
-    store_unaligned<uint64_t>(data_ + offset + 1, value);
-    return 9;
-  }
-
-  FORY_ALWAYS_INLINE uint32_t put_tagged_int64_unchecked(uint32_t offset,
-                                                         int64_t value) {
-    constexpr int64_t MIN_SMALL_VALUE = -1073741824;
-    constexpr int64_t MAX_SMALL_VALUE = 1073741823;
-    if (value >= MIN_SMALL_VALUE && value <= MAX_SMALL_VALUE) {
-      const uint32_t encoded =
-          static_cast<uint32_t>(static_cast<int32_t>(value)) << 1;
-      store_unaligned<uint32_t>(data_ + offset, encoded);
-      return 4;
-    }
-    data_[offset] = 0b1;
-    store_unaligned<int64_t>(data_ + offset + 1, value);
-    return 9;
   }
 
   FORY_ALWAYS_INLINE bool range_in_bounds(uint32_t offset,

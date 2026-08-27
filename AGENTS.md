@@ -160,9 +160,15 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - JavaScript root entry releases reference and metadata state left by the previous root, including a
   failed root, before the context is reused. Do not add full cleanup to the root exit path or copy
   Java backing-array retention policies onto native JavaScript arrays. Read-side occurrence arrays
-  use native replacement reset. The writer metadata-owner table has a separate logical size: reset
-  owner IDs and the logical size without clearing bounded backing, and replace backing only after
-  more than 8192 owners.
+  use native replacement reset. The MetaString and TypeMeta writer owner tables each have their own
+  logical size: reset active owner IDs and that table's logical size without clearing bounded
+  backing, and replace either backing only after its root has more than 8192 owners.
+- JavaScript generated registration must build and initialize the complete recursive serializer
+  graph against generation-local owners before one `TypeResolver` batch publication. Factory-init
+  serializer lookup may see those local owners, but runtime and dynamic lookup must retain the real
+  resolver. Existing published forward owners are initialized in place only during commit so prior
+  generated captures retain identity. Do not publish placeholders, nested serializers, descriptors,
+  or cache state before every generated factory and application code hook succeeds.
 - Root failure exceptions must not copy or retain the operation reference table or materialized
   object graph for diagnostics. Root cleanup owns releasing that graph, and failure reporting must
   remain bounded independently of graph size.
@@ -187,11 +193,22 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   machinery. Registration-order finalization before the first root operation
   remains registration-owned and must not create a runtime invalidation path.
   If serializer construction, factory execution, or another application callback
-  can reenter a root, recheck the authoritative per-instance freeze owner after
-  that callback and before the first registry mutation or replay-log publication.
+  can reenter a root, complete that callback before publishing the entry it
+  prepares, then recheck the authoritative per-instance freeze owner immediately
+  before publication. Kotlin and Scala combined generated-struct registration are
+  the sole type-first exception: publish the canonical type needed by generated
+  serializer construction, then recheck after construction and before replacing
+  its serializer. Do not add rollback, staging, or a parallel registration path
+  for this exception. A module installation may perform complete nested
+  registrations; recheck after installation before publishing only the module's
+  installed marker.
 - Python `TypeResolver` is the sole registry freeze and finalization owner. Its Cython resolver
   companion may cache completion of the Python-owner dispatch needed to populate native tables,
   but the `Fory` facade must not mirror that state; Cython roots call the resolver owner directly.
+  Allocate automatic type IDs only after callback preparation and the final freeze recheck, at the
+  common registry publication point; do not reserve IDs early or maintain counter rollback state.
+  `ThreadSafeFory` validates registrations before publishing replay callbacks and never invokes an
+  application factory or callback under its non-reentrant pool lock.
 - Use semantic naming only. Name things after protocol or domain concepts, not history, runtime origin, or workaround style; avoid vague names such as `Internal`, `java_style_*`, `Runtime`, `Session`, `Plan`, `Payload`, or `Binding` when they do not name the real concept. Keep class, method, function, and variable names concise; do not encode the whole scenario or implementation history into one identifier. Never name a class or method with a `Plan` suffix; use the real domain concept instead. For Fory codec/read APIs, do not use generic `payload` naming; name the exact owner and data shape, such as bytes, body, frame, field, string, list, map, compressed bytes, or primitive-array encoding.
 - Keep one implementation path. Do not keep parallel helpers, serializers, harnesses, wrappers, or registration flows for the same concept; extend the existing owner path instead of inventing another one.
 - Follow current scope exactly. The latest explicit user instruction overrides earlier plans, and when scope narrows, remove leaked out-of-scope edits immediately.

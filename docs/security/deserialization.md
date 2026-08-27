@@ -619,9 +619,22 @@ that case, classify the behavior by concrete impact:
 
 Registration code that invokes serializer constructors, factories, or application callbacks must
 recheck the authoritative per-instance registry freeze after the callback and before publishing
-resolver or replay-log state. A callback that starts the first root permanently closes the
+the entry prepared by that callback. A callback that starts the first root permanently closes the
 in-progress registration; implementations must not publish and then repair or invalidate late
-state.
+state. Kotlin and Scala combined generated-struct registration retain their canonical type-first
+owner because generated construction resolves that type, but must recheck before the subsequent
+serializer replacement. Module installation may perform complete nested registrations and must
+recheck before publishing its installed marker. Automatic type IDs are allocated only at their
+publication point, after callback preparation and the freeze recheck, so failed or nested
+registration needs no reservation or rollback state. Thread-safe facades validate a registration
+before retaining its replay callback, and application factories and callbacks execute outside
+non-reentrant pool locks.
+
+JavaScript generated registration initializes its recursive serializer graph against local owners
+before one guarded resolver publication. Application code hooks and generated factories complete
+before global placeholders, nested serializers, descriptors, or cache state are changed. Runtime
+and dynamic serializer lookup continues to use the authoritative resolver; the local lookup exists
+only while generated factories capture fixed serializer owners.
 
 ## Metadata And Type Resolution
 
@@ -657,12 +670,9 @@ an eight-slot array so an unusual metadata high-water mark is not retained.
 
 JavaScript root entry releases reference and metadata state left by the
 previous operation, including a failed operation, before the context is reused.
-Read-side occurrence arrays use native replacement reset instead of copying the
-Java backing-array retention policy. Writer metadata owners restore their
-dynamic IDs and reset a separate logical owner count, so a bounded backing
-array is reused without making prior-root entries visible or accumulating
-duplicate work. After more than 8192 owners, reset replaces that backing array.
-Full reference and metadata cleanup does not run on the root exit path.
+Operation-local reader occurrences and writer metadata owner IDs are reset at
+that reuse boundary. Full reference and metadata cleanup does not run on the
+root exit path.
 
 A class-resolution cache reachable from untrusted deserialization may publish
 an entry only from explicit trusted configuration or after the active class

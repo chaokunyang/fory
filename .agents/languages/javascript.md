@@ -14,9 +14,15 @@ Load this file when changing `javascript/`.
 - Root entry releases reference and metadata state left by the previous operation, including a
   failed operation, before the context is reused. Do not put full cleanup on the root exit path or
   copy Java backing-array retention policies onto native JavaScript arrays. Read-side occurrence
-  arrays use native replacement reset. The writer metadata-owner table has a separate logical size:
-  reset owner IDs and the logical size without clearing bounded backing, and replace backing only
-  after more than 8192 owners.
+  arrays use native replacement reset. The MetaString and TypeMeta writer owner tables each have
+  their own logical size: reset active owner IDs and that table's logical size without clearing
+  bounded backing, and replace either backing only after its root has more than 8192 owners.
+- Generated registration must initialize the complete recursive serializer graph against
+  generation-local owners before one `TypeResolver` batch publication. Factory-init serializer
+  lookup may resolve those local owners for fixed captures; runtime and dynamic lookup must keep the
+  real resolver. Initialize an existing published forward owner in place during commit so previous
+  captures retain identity. Do not publish placeholders, nested serializers, descriptors, or cache
+  state before every generated factory and application code hook succeeds.
 - Runtime value carriers such as decimal or reduced-precision numeric types belong under the core `types/` ownership boundary, with imports, exports, and codegen externals updated together.
 - Keep `TypeInfo` as schema metadata. Compatibility-sensitive decisions belong on `TypeResolver` or explicit operations, not as retained resolver state on metadata objects.
 - Normalize optional boolean config values at config construction; do not carry `null` through runtime paths when it means `false`.

@@ -83,10 +83,21 @@ not the place where nested serializers do their work.
 - resetting operation-local context state at the top-level root boundary
 
 Registration preparation may invoke serializer constructors, generated factories, or application
-callbacks before any registry mutation. If such a callback starts a root operation, registration
-must recheck the authoritative per-instance freeze owner when the callback returns and reject the
-in-progress registration before publishing type, serializer, name, ID, or replay state. Do not
-publish late state and then repair it through invalidation or rollback.
+callbacks. Complete the callback before publishing the registry entry it prepares. If the callback
+starts a root operation, registration must recheck the authoritative per-instance freeze owner
+when the callback returns and reject that publication. Kotlin and Scala combined generated-struct
+registration are the type-first exception: publish the canonical type required by generated
+serializer construction, then recheck after construction and before replacing its serializer.
+Do not add rollback, staging, or a parallel registration path for that exception. Module
+installation may consist of complete nested registrations; publish the module-installed marker
+only after installation returns and the lifecycle is rechecked.
+
+JavaScript generated registration constructs and initializes the complete recursive serializer
+graph against generation-local owners. Generated factories may use a construction-only lookup for
+fixed serializer captures, while runtime and dynamic dispatch retain the real `TypeResolver`.
+After every factory and application code hook succeeds, the resolver performs one guarded batch
+publication. An already-published forward owner is initialized in place during that commit so
+previous generated captures retain its identity.
 
 Nested serializers must not call back into root `serialize(...)` or
 `deserialize(...)` entry points.
@@ -100,11 +111,12 @@ the context is reused.
 `prepare(...)` should only bind the active buffer and root-operation inputs.
 `reset()` should clear operation-local mutable state.
 
-When writer metadata objects carry root-local dynamic IDs, reset must restore
-those IDs and reset the active owner count. A bounded owner table may retain its
-backing storage, but only entries below the current logical count participate in
-the next reset; otherwise prior owners create duplicate cleanup work across
-roots. Implementations should release an unusual high-water backing table.
+When MetaString and TypeMeta writer objects carry root-local dynamic IDs, each
+owning table must restore those IDs and reset its own active owner count. A
+bounded owner table may retain its backing storage, but only entries below that
+table's current logical count participate in the next reset; otherwise prior
+owners create duplicate cleanup work across roots. Implementations should
+release an unusual high-water backing table.
 
 That operation-local state includes:
 

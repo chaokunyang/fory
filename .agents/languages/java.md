@@ -84,6 +84,18 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   work, dynamic stream bytes-read accounting, or stale narrower-scope formulas.
 - Generated serializers must not retain runtime context fields. `Fory` should stay a root-operation facade rather than accumulating serializer or convenience state.
 - When the serializer class and constructor shape are known at the call site, prefer direct constructor lambdas or direct instantiation over reflective `Serializers.newSerializer(...)`.
+- `FacadeRegistrationGate` owns registration linearization for Java thread-local and pooled
+  facades. Starting a root closes registration before child or pool access, then finishes every
+  already-created child before exposing that root. A child created after closure must replay every
+  accepted registration, finish registration, and only then become visible; discard a provisional
+  child when replay or finalization fails. Keep the lock order gate before pool or child storage.
+- Registration callbacks must recheck the authoritative freeze owner after returning and before
+  publishing the entry they prepared. Combined type-and-serializer registration may construct a
+  serializer only after the canonical type is registered when construction resolves that
+  `TypeInfo`; recheck before replacing the serializer and do not add rollback or a second
+  registration path. `ForyModule.install` may perform complete nested registrations, but the
+  module-installed marker is published only after installation returns and the lifecycle is
+  rechecked.
 - For GraalVM, use `fory codegen` to generate serializers when building native images. Do not add reflection configuration except for JDK `proxy`.
 - In Java native mode (`xlang=false`), only `Types.BOOL` through `Types.STRING` share type IDs with xlang mode. Other native-mode type IDs differ.
 - Choose one serializer ownership location per logical Java type family. Add native/xlang serializer variants only when the wire format or constructor contract truly differs.

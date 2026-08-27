@@ -218,46 +218,34 @@ public class KotlinSerializers {
 
   public static void register(Fory fory, Class<?> cls) {
     fory.register(cls);
-    registerSerializerAfterType(fory, cls);
+    registerSerializer(fory, cls);
   }
 
   public static void register(Fory fory, Class<?> cls, long typeId) {
     registerType(fory, cls, typeId);
-    registerSerializerAfterType(fory, cls);
+    registerSerializer(fory, cls);
   }
 
   public static void register(Fory fory, Class<?> cls, String name) {
     registerType(fory, cls, name);
-    registerSerializerAfterType(fory, cls);
+    registerSerializer(fory, cls);
   }
 
   public static void register(Fory fory, Class<?> cls, String namespace, String typeName) {
     registerType(fory, cls, namespace, typeName);
-    registerSerializerAfterType(fory, cls);
+    registerSerializer(fory, cls);
   }
 
   public static void registerSerializer(Fory fory, Class<?> cls) {
     TypeResolver resolver = fory.getTypeResolver();
-    Serializer serializer = newRegistrationSerializer(resolver, cls);
+    checkRegistrationOpen(resolver);
+    Serializer serializer = newGeneratedSerializer(resolver, cls);
+    checkRegistrationOpen(resolver);
     if (resolver.isRegistered(cls)) {
       resolver.setSerializer(cls, serializer);
     } else {
       resolver.registerSerializer(cls, serializer);
     }
-  }
-
-  private static Serializer<?> newRegistrationSerializer(TypeResolver resolver, Class<?> cls) {
-    checkRegistrationOpen(resolver);
-    Serializer<?> serializer = newGeneratedSerializer(resolver, cls);
-    checkRegistrationOpen(resolver);
-    return serializer;
-  }
-
-  private static void registerSerializerAfterType(Fory fory, Class<?> cls) {
-    TypeResolver resolver = fory.getTypeResolver();
-    Serializer serializer = newGeneratedSerializer(resolver, cls);
-    checkRegistrationOpen(resolver);
-    resolver.setSerializer(cls, serializer);
   }
 
   private static void checkRegistrationOpen(TypeResolver resolver) {

@@ -148,7 +148,6 @@ object ForySerializer {
       val generatedSerializer = serializer.createSerializer(resolver)
       checkRegistrationOpen(resolver)
       val runtimeClasses = serializer.handledRuntimeClasses(cls)
-      checkRegistrationOpen(resolver)
       if typeId != null then {
         resolver.registerUnion(cls, typeId.longValue(), generatedSerializer)
       } else {

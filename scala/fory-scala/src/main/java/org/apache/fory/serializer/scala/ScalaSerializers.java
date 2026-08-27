@@ -197,7 +197,6 @@ public class ScalaSerializers {
     TypeResolver resolver = fory.getTypeResolver();
     checkRegistrationOpen(resolver);
     ScalaEnumSerializer serializer = new ScalaEnumSerializer(resolver, cls);
-    checkRegistrationOpen(resolver);
     Object[] values = serializer.getEnumConstants();
     resolver.registerEnum(cls, typeId, serializer);
     registerEnumRuntimeAliases(fory, cls, values);
@@ -230,7 +229,6 @@ public class ScalaSerializers {
     String[] parts = splitName(name);
     checkRegistrationOpen(resolver);
     ScalaEnumSerializer serializer = new ScalaEnumSerializer(resolver, cls);
-    checkRegistrationOpen(resolver);
     Object[] values = serializer.getEnumConstants();
     resolver.registerEnum(cls, parts[0], parts[1], serializer);
     registerEnumRuntimeAliases(fory, cls, values);
@@ -241,7 +239,6 @@ public class ScalaSerializers {
     TypeResolver resolver = fory.getTypeResolver();
     checkRegistrationOpen(resolver);
     ScalaEnumSerializer serializer = new ScalaEnumSerializer(resolver, cls);
-    checkRegistrationOpen(resolver);
     Object[] values = serializer.getEnumConstants();
     resolver.registerEnum(cls, namespace, typeName, serializer);
     registerEnumRuntimeAliases(fory, cls, values);

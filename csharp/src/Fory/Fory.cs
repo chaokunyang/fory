@@ -73,7 +73,8 @@ public sealed class Fory
     public Fory Register<T>(uint typeId)
     {
         EnsureRegistrationOpen();
-        _typeResolver.Register(typeof(T), typeId);
+        TypeInfo typeInfo = PrepareRegistration(typeof(T));
+        _typeResolver.Register(typeof(T), typeId, typeInfo);
         return this;
     }
 
@@ -89,7 +90,8 @@ public sealed class Fory
     {
         EnsureRegistrationOpen();
         (string namespaceName, string typeName) = TypeResolver.SplitTypeName(name);
-        _typeResolver.Register(typeof(T), namespaceName, typeName);
+        TypeInfo typeInfo = PrepareRegistration(typeof(T));
+        _typeResolver.Register(typeof(T), namespaceName, typeName, typeInfo);
         return this;
     }
 
@@ -105,7 +107,9 @@ public sealed class Fory
     public Fory Register<T>(string typeNamespace, string typeName)
     {
         EnsureRegistrationOpen();
-        _typeResolver.Register(typeof(T), typeNamespace, typeName);
+        TypeResolver.ValidateSplitTypeName(typeNamespace, typeName);
+        TypeInfo typeInfo = PrepareRegistration(typeof(T));
+        _typeResolver.Register(typeof(T), typeNamespace, typeName, typeInfo);
         return this;
     }
 
@@ -122,7 +126,7 @@ public sealed class Fory
         where TSerializer : Serializer<T>, new()
     {
         EnsureRegistrationOpen();
-        TypeInfo typeInfo = _typeResolver.RegisterSerializer<T, TSerializer>();
+        TypeInfo typeInfo = PrepareRegistration<T, TSerializer>();
         _typeResolver.Register(typeof(T), typeId, typeInfo);
         return this;
     }
@@ -141,7 +145,7 @@ public sealed class Fory
     {
         EnsureRegistrationOpen();
         (string namespaceName, string typeName) = TypeResolver.SplitTypeName(name);
-        TypeInfo typeInfo = _typeResolver.RegisterSerializer<T, TSerializer>();
+        TypeInfo typeInfo = PrepareRegistration<T, TSerializer>();
         _typeResolver.Register(typeof(T), namespaceName, typeName, typeInfo);
         return this;
     }
@@ -161,7 +165,7 @@ public sealed class Fory
     {
         EnsureRegistrationOpen();
         TypeResolver.ValidateSplitTypeName(typeNamespace, typeName);
-        TypeInfo typeInfo = _typeResolver.RegisterSerializer<T, TSerializer>();
+        TypeInfo typeInfo = PrepareRegistration<T, TSerializer>();
         _typeResolver.Register(typeof(T), typeNamespace, typeName, typeInfo);
         return this;
     }
@@ -353,6 +357,25 @@ public sealed class Fory
         {
             ThrowRegistryFrozen();
         }
+    }
+
+    private TypeInfo PrepareRegistration(Type type)
+    {
+        TypeInfo typeInfo = _typeResolver.PrepareRegistration(type);
+        // Serializer factories can call application code that starts a root. Recheck before
+        // the resolver publishes any type or serializer state.
+        EnsureRegistrationOpen();
+        return typeInfo;
+    }
+
+    private TypeInfo PrepareRegistration<T, TSerializer>()
+        where TSerializer : Serializer<T>, new()
+    {
+        TypeInfo typeInfo = _typeResolver.PrepareRegistration<T, TSerializer>();
+        // Serializer construction can call application code that starts a root. Recheck before
+        // the resolver publishes any type or serializer state.
+        EnsureRegistrationOpen();
+        return typeInfo;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

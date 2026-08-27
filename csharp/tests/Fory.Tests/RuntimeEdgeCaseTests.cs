@@ -87,10 +87,12 @@ public sealed class FrozenPayload
 public sealed class FrozenPayloadSerializer : Serializer<FrozenPayload>
 {
     public static int Constructions;
+    public static Action? ConstructionAction;
 
     public FrozenPayloadSerializer()
     {
         Interlocked.Increment(ref Constructions);
+        ConstructionAction?.Invoke();
     }
 
     public override FrozenPayload DefaultValue => null!;
@@ -104,6 +106,35 @@ public sealed class FrozenPayloadSerializer : Serializer<FrozenPayload>
     public override FrozenPayload ReadData(ReadContext context)
     {
         return new FrozenPayload { Value = context.Reader.ReadVarInt32() };
+    }
+}
+
+public enum GeneratedFrozenValue
+{
+    Zero,
+    One,
+}
+
+public sealed class GeneratedFrozenSerializer : Serializer<GeneratedFrozenValue>
+{
+    public static Action? ConstructionAction;
+
+    public GeneratedFrozenSerializer()
+    {
+        ConstructionAction?.Invoke();
+    }
+
+    public override GeneratedFrozenValue DefaultValue => GeneratedFrozenValue.Zero;
+
+    public override void WriteData(WriteContext context, in GeneratedFrozenValue value, bool hasGenerics)
+    {
+        _ = hasGenerics;
+        context.Writer.WriteVarInt32((int)value);
+    }
+
+    public override GeneratedFrozenValue ReadData(ReadContext context)
+    {
+        return (GeneratedFrozenValue)context.Reader.ReadVarInt32();
     }
 }
 
@@ -839,6 +870,142 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
+    public void ReentrantRegistrationFreezes()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+        FrozenPayloadSerializer.ConstructionAction = () => _ = fory.Serialize(1);
+
+        try
+        {
+            Assert.Throws<InvalidOperationException>(
+                () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(721));
+            Assert.Throws<InvalidOperationException>(() => fory.Register<TimeEnvelope>(722));
+        }
+        finally
+        {
+            FrozenPayloadSerializer.ConstructionAction = null;
+        }
+    }
+
+    [Fact]
+    public void GeneratedReentryFreezes()
+    {
+        TypeResolver.RegisterGenerated<GeneratedFrozenValue, GeneratedFrozenSerializer>();
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+        GeneratedFrozenSerializer.ConstructionAction = () => _ = fory.Serialize(1);
+
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() => fory.Register<GeneratedFrozenValue>(725));
+            Assert.Throws<InvalidOperationException>(() => fory.Register<TimeEnvelope>(726));
+        }
+        finally
+        {
+            GeneratedFrozenSerializer.ConstructionAction = null;
+        }
+
+        Assert.Throws<TypeNotRegisteredException>(
+            () => fory.Serialize<object?>(GeneratedFrozenValue.One));
+    }
+
+    [Fact]
+    public void ThreadSafeReentryFreezes()
+    {
+        using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
+        FrozenPayloadSerializer.ConstructionAction = () => _ = fory.Serialize(1);
+
+        try
+        {
+            Assert.Throws<InvalidOperationException>(
+                () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(723));
+            Assert.Throws<InvalidOperationException>(() => fory.Register<TimeEnvelope>(724));
+        }
+        finally
+        {
+            FrozenPayloadSerializer.ConstructionAction = null;
+        }
+
+        Assert.Throws<TypeNotRegisteredException>(() =>
+            Task.Run(() => fory.Serialize<object?>(new FrozenPayload { Value = 1 }))
+                .GetAwaiter()
+                .GetResult());
+    }
+
+    [Fact]
+    public void ThreadSafeDisposeReentryStops()
+    {
+        ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
+        FrozenPayloadSerializer.ConstructionAction = fory.Dispose;
+
+        try
+        {
+            Assert.Throws<ObjectDisposedException>(
+                () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(727));
+        }
+        finally
+        {
+            FrozenPayloadSerializer.ConstructionAction = null;
+            fory.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ThreadSafeFailedReentryClears()
+    {
+        using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
+        fory.Register<TimeEnvelope>(728);
+        FrozenPayloadSerializer.ConstructionAction =
+            () => _ = fory.Deserialize<int>(Array.Empty<byte>());
+
+        try
+        {
+            Exception error = Assert.ThrowsAny<Exception>(
+                () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(729));
+            Assert.IsAssignableFrom<ForyException>(error.InnerException ?? error);
+            Assert.Null(RegistrationForyFor(fory));
+            Assert.Throws<InvalidOperationException>(() => fory.Register<GeneratedFrozenValue>(730));
+        }
+        finally
+        {
+            FrozenPayloadSerializer.ConstructionAction = null;
+        }
+    }
+
+    [Fact]
+    public void ThreadSafeRebuildFreezeClears()
+    {
+        using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
+        fory.Register<FrozenPayload, FrozenPayloadSerializer>(731);
+        bool rootStarted = false;
+        FrozenPayloadSerializer.ConstructionAction = () =>
+        {
+            if (rootStarted)
+            {
+                return;
+            }
+
+            rootStarted = true;
+            _ = fory.Serialize(1);
+        };
+        GeneratedFrozenSerializer.ConstructionAction =
+            () => throw new InvalidOperationException("registration failure");
+
+        try
+        {
+            Exception error = Assert.ThrowsAny<Exception>(
+                () => fory.Register<GeneratedFrozenValue, GeneratedFrozenSerializer>(732));
+            Assert.IsType<InvalidOperationException>(error.InnerException ?? error);
+            Assert.Null(RegistrationForyFor(fory));
+            Assert.Throws<InvalidOperationException>(() => fory.Register<TimeEnvelope>(733));
+        }
+        finally
+        {
+            FrozenPayloadSerializer.ConstructionAction = null;
+            GeneratedFrozenSerializer.ConstructionAction = null;
+        }
+    }
+
+    [Fact]
     public void FailedRootFreezesRegistry()
     {
         ForyRuntime fory = ForyRuntime.Builder().Build();
@@ -1033,6 +1200,15 @@ public sealed class RuntimeEdgeCaseTests
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(field);
         return Assert.IsType<WriteContext>(field.GetValue(fory));
+    }
+
+    private static ForyRuntime? RegistrationForyFor(ThreadSafeFory fory)
+    {
+        System.Reflection.FieldInfo? field = typeof(ThreadSafeFory).GetField(
+            "_registrationFory",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return field.GetValue(fory) as ForyRuntime;
     }
 
     [Fact]

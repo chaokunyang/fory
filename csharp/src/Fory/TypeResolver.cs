@@ -485,17 +485,28 @@ public sealed class TypeResolver
         return typeInfo;
     }
 
-    internal TypeInfo RegisterSerializer<T, TSerializer>()
-        where TSerializer : Serializer<T>, new()
+    internal TypeInfo PrepareRegistration(Type type)
     {
-        TypeInfo typeInfo = TypeInfo.Create(typeof(T), new TSerializer());
-        RegisterSerializer(typeof(T), typeInfo);
+        if (_typeInfos.TryGetValue(TypeMapKey.Get(type), out TypeInfo? existing))
+        {
+            return existing;
+        }
+
+        // Registration factories can run application code. Return the binding without publishing
+        // it so the facade can recheck its lifecycle boundary first.
+        TypeInfo typeInfo = CreateBindingCore(type);
+        if (typeInfo.Type != type)
+        {
+            throw new InvalidDataException($"serializer type mismatch for {type}, got {typeInfo.Type}");
+        }
+
         return typeInfo;
     }
 
-    internal void RegisterSerializer(Type type, TypeInfo typeInfo)
+    internal TypeInfo PrepareRegistration<T, TSerializer>()
+        where TSerializer : Serializer<T>, new()
     {
-        GetOrCreateTypeInfo(type, typeInfo);
+        return TypeInfo.Create(typeof(T), new TSerializer());
     }
 
     internal void Register(Type type, uint id, TypeInfo? explicitTypeInfo = null)

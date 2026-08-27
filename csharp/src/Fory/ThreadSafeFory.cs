@@ -235,8 +235,22 @@ public sealed class ThreadSafeFory : IDisposable
             }
             catch
             {
-                _registrationFory = _registrations.Count == 0 ? null : RebuildRegistrationFory();
+                if (!_disposed && _registryFrozen == 0)
+                {
+                    Fory? rebuilt = _registrations.Count == 0 ? null : RebuildRegistrationFory();
+                    // Rebuilding replays serializer constructors, which can close this wrapper.
+                    if (!_disposed && _registryFrozen == 0)
+                    {
+                        _registrationFory = rebuilt;
+                    }
+                }
                 throw;
+            }
+
+            ThrowIfDisposed();
+            if (_registryFrozen != 0)
+            {
+                ThrowRegistryFrozen();
             }
 
             _registrations.Add(registration);

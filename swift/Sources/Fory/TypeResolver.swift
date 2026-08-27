@@ -848,6 +848,11 @@ final class TypeResolver {
         if let registrationFailure {
             throw registrationFailure
         }
+        // Application-owned field metadata can invoke another root on this Fory. Once frozen,
+        // an unfinished registry is already inside finalization and must not rerun its builders.
+        guard !registryFrozen else {
+            throw ForyError.invalidData("registration finalization is already in progress")
+        }
         registryFrozen = true
         do {
             for typeInfo in registeredTypeInfos {

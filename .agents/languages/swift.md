@@ -41,6 +41,9 @@ Load this file when changing `swift/` or Swift xlang behavior.
   finalization because macros cannot inspect inherited storage. SwiftSyntax represents both in one
   inheritance clause, and Swift provides no public superclass query for arbitrary Swift classes;
   keep the minimal `_getSuperclass` check finalization-owned and out of root hot paths.
+- Swift registration finalization invokes application-owned `StructSerializer.foryFieldsInfo`.
+  Reject a same-`Fory` root that reenters while finalization is in progress, cache that first
+  failure, and do not retry partially finalized metadata builders.
 - Direct `Any` and `AnyObject` root overloads remain disfavored forwarding facades over
   `DynamicSerializer<Any>` and `DynamicSerializer<AnyObject>`, including their Data-buffer forms.
   Arbitrary protocol roots explicitly select `DynamicSerializer<T>`. Do not add an unconstrained

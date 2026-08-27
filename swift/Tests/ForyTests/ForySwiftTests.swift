@@ -223,6 +223,26 @@ private struct FailingRegistrationSerializer: StructSerializer {
     }
 }
 
+private struct ReentrantRegistrationSerializer: StructSerializer {
+    typealias Target = Self
+
+    nonisolated(unsafe) static var fieldsCallback: (() throws -> Void)?
+    static var staticTypeId: TypeId { .structType }
+
+    static func defaultValue(_: ReadContext) throws -> Self { Self() }
+    static func writeData(_: Self, _: WriteContext) throws {}
+    static func readData(_: ReadContext) throws -> Self { Self() }
+    static func readCompatible(_: ReadContext, typeInfo _: TypeInfo) throws -> Self { Self() }
+
+    static func foryFieldsInfo(
+        trackRef _: Bool,
+        resolveSerializerTypeId _: (Any.Type) throws -> TypeId
+    ) throws -> [TypeMeta.FieldInfo] {
+        try fieldsCallback?()
+        return []
+    }
+}
+
 @ForyStruct
 struct LateMetaHolder: Equatable {
     var ext: LateMetaExt
@@ -1216,6 +1236,30 @@ func finalizationPreservesFailure() throws {
                     === FailingRegistrationSerializer.failure
             )
         }
+    }
+}
+
+@Test
+func reentrantFinalizationIsRejected() throws {
+    let fory = Fory()
+    var callbackCount = 0
+    ReentrantRegistrationSerializer.fieldsCallback = {
+        callbackCount += 1
+        _ = try fory.serialize(Int32(1))
+    }
+    defer {
+        ReentrantRegistrationSerializer.fieldsCallback = nil
+    }
+    try fory.register(ReentrantRegistrationSerializer.self, id: 702)
+
+    for _ in 0..<2 {
+        #expect(throws: ForyError.self) {
+            _ = try fory.serialize(ReentrantRegistrationSerializer())
+        }
+    }
+    #expect(callbackCount == 1)
+    #expect(throws: ForyError.self) {
+        try fory.register(Address.self, id: 703)
     }
 }
 

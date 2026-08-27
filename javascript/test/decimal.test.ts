@@ -181,7 +181,6 @@ describe("decimal", () => {
           writer.getPlatformBuffer().subarray(bodyOffset, bodyOffset + 5),
         );
         expect(() => fory.serialize(value)).toThrow(/Decimal scale/);
-        expect(writer.writeGetCursor()).toBe(0);
         expect(Array.from(writer.getPlatformBuffer().subarray(bodyOffset, bodyOffset + 5))).toEqual(
           bodyBefore,
         );
@@ -217,7 +216,6 @@ describe("decimal", () => {
           writer.getPlatformBuffer().subarray(bodyOffset, bodyOffset + 5),
         );
         expect(() => fory.serialize(value)).toThrow(/Decimal magnitude/);
-        expect(writer.writeGetCursor()).toBe(0);
         expect(Array.from(writer.getPlatformBuffer().subarray(bodyOffset, bodyOffset + 5))).toEqual(
           bodyBefore,
         );

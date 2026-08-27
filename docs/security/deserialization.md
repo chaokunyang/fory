@@ -647,10 +647,11 @@ for tables of at most 8192 entries to avoid clearing or allocating on the normal
 path. After a root exceeds 8192 entries, cleanup replaces the backing array with
 an eight-slot array so an unusual metadata high-water mark is not retained.
 
-JavaScript applies the same 8192-entry boundary to its root-local read-side
-MetaString and TypeMeta occurrence arrays. Bounded roots clear only the logical
-length; larger roots replace the arrays so ordinary compatible reads do not
-allocate during cleanup.
+JavaScript root entry releases reference and metadata state left by the
+previous operation, including a failed operation, before the context is reused.
+Its native arrays keep their O(1) replacement reset instead of copying the Java
+backing-array retention policy. Full reference and metadata cleanup does not
+run on the root exit path.
 
 A class-resolution cache reachable from untrusted deserialization may publish
 an entry only from explicit trusted configuration or after the active class

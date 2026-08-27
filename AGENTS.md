@@ -157,11 +157,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   only the size to zero; do not clear retained slots. When the size exceeds 8192, replace the
   backing array with an eight-slot array. Do not add per-count or benchmark-shape specializations
   to this path.
-- JavaScript root-local read metadata occurrence arrays and write metadata owner arrays use the
-  same 8192-entry retention boundary. Reset a bounded array by clearing its logical length and
-  replace it only after the root exceeds 8192 entries; ordinary compatible roots must not allocate
-  replacement arrays during cleanup. Root serializers clear reference and metadata owner state in
-  `finally` after success or failure.
+- JavaScript root entry releases reference and metadata state left by the previous root, including a
+  failed root, before the context is reused. Do not add full cleanup to the root exit path or copy
+  Java backing-array retention policies onto native JavaScript arrays.
 - Root failure exceptions must not copy or retain the operation reference table or materialized
   object graph for diagnostics. Root cleanup owns releasing that graph, and failure reporting must
   remain bounded independently of graph size.

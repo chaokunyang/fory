@@ -178,16 +178,12 @@ export default class Fory {
   deserialize<T = any>(bytes: Uint8Array, serializer: Serializer = this.anySerializer): T | null {
     this.typeResolver.freezeRegistration();
     this.readContext.reset(bytes);
-    try {
-      const reader = this.readContext.reader;
-      const bitmap = reader.readUint8();
-      if (bitmap !== ConfigFlags.isCrossLanguageFlag) {
-        this.throwInvalidRootHeader(bitmap);
-      }
-      return serializer.readRef();
-    } finally {
-      this.readContext.resetRootState();
+    const reader = this.readContext.reader;
+    const bitmap = reader.readUint8();
+    if (bitmap !== ConfigFlags.isCrossLanguageFlag) {
+      this.throwInvalidRootHeader(bitmap);
     }
+    return serializer.readRef();
   }
 
   private throwInvalidRootHeader(bitmap: number): never {
@@ -211,15 +207,12 @@ export default class Fory {
     const rootHeader = ConfigFlags.isCrossLanguageFlag;
     rootSerializer = (data: any) => {
       this.typeResolver.freezeRegistration();
-      try {
-        writer.writeUint8(rootHeader);
-        writer.reserve(serializer.fixedSize);
-        serializer.writeRef(data);
-        return writer.dump();
-      } finally {
-        // dump() returns an owned copy, so cleanup cannot invalidate a successful result.
-        writeContext.reset();
-      }
+      // The entry reset releases state from the previous root before this context is reused.
+      writeContext.reset();
+      writer.writeUint8(rootHeader);
+      writer.reserve(serializer.fixedSize);
+      serializer.writeRef(data);
+      return writer.dump();
     };
     this.rootSerializers.set(serializer, rootSerializer);
     return rootSerializer;
@@ -239,15 +232,11 @@ export default class Fory {
     rootDeserializer = (bytes: Uint8Array) => {
       this.typeResolver.freezeRegistration();
       readContext.reset(bytes);
-      try {
-        const bitmap = reader.readUint8();
-        if (bitmap !== rootHeader) {
-          this.throwInvalidRootHeader(bitmap);
-        }
-        return rootSerializer.readRef();
-      } finally {
-        readContext.resetRootState();
+      const bitmap = reader.readUint8();
+      if (bitmap !== rootHeader) {
+        this.throwInvalidRootHeader(bitmap);
       }
+      return rootSerializer.readRef();
     };
     this.rootDeserializers.set(serializer, rootDeserializer);
     return rootDeserializer;

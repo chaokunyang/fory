@@ -80,15 +80,16 @@ not the place where nested serializers do their work.
 - delegating nested value encoding to `WriteContext`
 - delegating nested value decoding to `ReadContext`
 - owning registration through `TypeResolver`
-- resetting operation-local context state in a top-level `finally`
+- resetting operation-local context state at the top-level root boundary
 
 Nested serializers must not call back into root `serialize(...)` or
 `deserialize(...)` entry points.
 
 ### `WriteContext` and `ReadContext` hold operation-local state
 
-`WriteContext` and `ReadContext` are prepared by `Fory` for one root operation
-and reset by `Fory` in a `finally` block before reuse.
+`WriteContext` and `ReadContext` are prepared by `Fory` for one root operation.
+`Fory` resets state left by the previous root, including a failed root, before
+the context is reused.
 
 `prepare(...)` should only bind the active buffer and root-operation inputs.
 `reset()` should clear operation-local mutable state.
@@ -919,7 +920,7 @@ The current root write flow is:
 2. `Fory` calls `writeContext.prepare(...)`.
 3. `Fory` writes the root bitmap.
 4. `Fory` delegates the root object to `WriteContext`.
-5. `writeContext.reset()` runs in `finally`.
+5. State left by the write resets before the next root reuses the context.
 
 For a non-null root value, `WriteContext.writeRootValue(...)` performs:
 
@@ -941,7 +942,7 @@ Important rules:
 - repeated primitive writes should go directly through the buffer
 - nested serializer flow should stay straight-line; do not add internal
   `try/finally` blocks just to clean per-operation state
-- top-level `Fory.serialize(...)` owns the operation reset `finally`
+- top-level `Fory.serialize(...)` owns the operation reset boundary
 
 ## Deserialization Flow
 
@@ -954,7 +955,7 @@ The current root read flow mirrors the write flow:
 3. `Fory` validates xlang mode and other root framing requirements.
 4. `Fory` calls `readContext.prepare(...)`.
 5. `Fory` delegates to `ReadContext`.
-6. `readContext.reset()` runs in `finally`.
+6. State left by the read resets before the next root reuses the context.
 
 ### `ReadContext` owns ref reservation and payload materialization
 
@@ -1228,7 +1229,7 @@ Important rules:
   it
 - nested serializer flow should stay straight-line; do not add internal
   `try/finally` blocks just to restore operation-local state
-- top-level `Fory.deserialize(...)` owns the operation reset `finally`
+- top-level `Fory.deserialize(...)` owns the operation reset boundary
 
 ## Depth Tracking
 
@@ -1237,8 +1238,9 @@ Important rules:
 
 Depth should stay explicit on the contexts rather than relying on the native
 call stack alone. At the same time, depth cleanup should not depend on nested
-`try/finally` blocks throughout serializer code. Top-level context reset must be
-able to recover operation-local state after failures.
+`try/finally` blocks throughout serializer code. Top-level context reset must
+recover operation-local state before the context is reused after a root
+failure.
 
 ## Struct Compatibility
 

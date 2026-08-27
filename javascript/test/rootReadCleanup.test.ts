@@ -44,7 +44,7 @@ describe.each([
       registered.deserialize(bytes),
   },
 ])("$name root cleanup", ({ invoke }) => {
-  test.each(["success", "failure"] as const)("clears generated root state after %s", (outcome) => {
+  test.each(["success", "failure"] as const)("restores generated root state for %s", (outcome) => {
     const writerFory = new Fory({ compatible: true, ref: true });
     const readerFory = new Fory({ compatible: true, ref: true });
     const writer = writerFory.register(
@@ -63,15 +63,17 @@ describe.each([
 
     if (outcome === "failure") {
       expect(read).toThrow();
+      expect(invoke(readerFory, reader, bytes)).toEqual({ value: 7 });
     } else {
-      expect(read()).toEqual({ value: 7 });
+      const first = read();
+      const second = read();
+      expect(first).toEqual({ value: 7 });
+      expect(second).toEqual({ value: 7 });
+      expect(second).not.toBe(first);
     }
-
-    const readContext = (readerFory as any).readContext;
-    expectRootStateCleared(readContext);
   });
 
-  test.each(["success", "failure"] as const)("clears logical tables after %s", (outcome) => {
+  test.each(["success", "failure"] as const)("restores logical tables for %s", (outcome) => {
     const fory = new Fory({ compatible: true, ref: true });
     const registered = fory.register(Type.struct(7602, {}));
     const readContext = (fory as any).readContext;
@@ -92,71 +94,21 @@ describe.each([
     const read = () => invoke(fory, registered, new Uint8Array([1]));
     if (outcome === "failure") {
       expect(read).toThrow();
+      registered.serializer.readRef = () => {
+        expectRootStateCleared(readContext);
+        return 7;
+      };
+      expect(read()).toBe(7);
     } else {
+      expect(read()).toBe(7);
       expect(read()).toBe(7);
     }
 
-    expectRootStateCleared(readContext);
     expect(readContext.typeMetaCache.get(headerHash)).toBe(typeMeta);
   });
 });
 
-test("retains bounded read metadata", () => {
-  const fory = new Fory({ compatible: true });
-  const readContext = (fory as any).readContext;
-  const typeMeta = TypeMeta.fromTypeInfo(Type.struct(7604, {}));
-
-  readContext.typeMeta.push(...new Array(8192).fill(typeMeta));
-  const bounded = readContext.typeMeta;
-  readContext.metaStringReader.names.push(...new Array(8192).fill("stale"));
-  const boundedNames = readContext.metaStringReader.names;
-  readContext.resetRootState();
-  expect(readContext.typeMeta).toBe(bounded);
-  expect(readContext.metaStringReader.names).toBe(boundedNames);
-  expect(readContext.typeMeta).toHaveLength(0);
-  expect(readContext.metaStringReader.names).toHaveLength(0);
-
-  readContext.typeMeta.push(...new Array(8193).fill(typeMeta));
-  const oversized = readContext.typeMeta;
-  readContext.metaStringReader.names.push(...new Array(8193).fill("stale"));
-  const oversizedNames = readContext.metaStringReader.names;
-  readContext.resetRootState();
-  expect(readContext.typeMeta).not.toBe(oversized);
-  expect(readContext.metaStringReader.names).not.toBe(oversizedNames);
-  expect(readContext.typeMeta).toHaveLength(0);
-  expect(readContext.metaStringReader.names).toHaveLength(0);
-});
-
-test("retains bounded write metadata", () => {
-  const fory = new Fory({ compatible: true });
-  const writeContext = (fory as any).writeContext;
-  const typeMetaOwners = Array.from({ length: 8192 }, (_, dynamicTypeId) => ({
-    dynamicTypeId,
-  }));
-  const metaStringOwners = Array.from({ length: 8192 }, (_, dynamicWriteStringId) => ({
-    dynamicWriteStringId,
-  }));
-
-  writeContext.disposeTypeMetaOwners.push(...typeMetaOwners);
-  const bounded = writeContext.disposeTypeMetaOwners;
-  writeContext.metaStringWriter.disposeMetaStringBytes.push(...metaStringOwners);
-  const boundedNames = writeContext.metaStringWriter.disposeMetaStringBytes;
-  writeContext.reset();
-  expect(writeContext.disposeTypeMetaOwners).toBe(bounded);
-  expect(writeContext.metaStringWriter.disposeMetaStringBytes).toBe(boundedNames);
-
-  writeContext.disposeTypeMetaOwners.push(...typeMetaOwners, { dynamicTypeId: 8192 });
-  const oversized = writeContext.disposeTypeMetaOwners;
-  writeContext.metaStringWriter.disposeMetaStringBytes.push(...metaStringOwners, {
-    dynamicWriteStringId: 8192,
-  });
-  const oversizedNames = writeContext.metaStringWriter.disposeMetaStringBytes;
-  writeContext.reset();
-  expect(writeContext.disposeTypeMetaOwners).not.toBe(oversized);
-  expect(writeContext.metaStringWriter.disposeMetaStringBytes).not.toBe(oversizedNames);
-});
-
-test.each(["success", "failure"] as const)("clears root write state after %s", (outcome) => {
+test.each(["success", "failure"] as const)("restores root write state for %s", (outcome) => {
   const fory = new Fory({ compatible: true, ref: true });
   const registered = fory.register(Type.struct(7606, {}));
   const writeContext = (fory as any).writeContext;
@@ -175,19 +127,18 @@ test.each(["success", "failure"] as const)("clears root write state after %s", (
 
   if (outcome === "failure") {
     expect(() => registered.serialize(value)).toThrow("root write failed");
+    expect(fory.serialize(7)).toBeDefined();
   } else {
     expect(registered.serialize(value)).toBeDefined();
+    expect(fory.serialize(7)).toBeDefined();
   }
   expect(writeContext.refWriter.writeObjects.size).toBe(0);
-  expect(writeContext.metaStringWriter.disposeMetaStringBytes).toHaveLength(0);
   expect(writeContext.disposeTypeMetaOwners).toHaveLength(0);
   expect(name.dynamicWriteStringId).toBe(-1);
   expect(typeMeta.dynamicTypeId).toBe(-1);
-  expect(writeContext.writer.writeGetCursor()).toBe(0);
-  expect(fory.serialize(7)).toBeDefined();
 });
 
-test("releases a failed root write buffer", () => {
+test("releases a failed root write buffer before reuse", () => {
   const fory = new Fory({ compatible: true });
   const registered = fory.register(Type.struct(7608, {}));
   const writer = (fory as any).writeContext.writer;
@@ -198,6 +149,6 @@ test("releases a failed root write buffer", () => {
   };
 
   expect(() => registered.serialize({})).toThrow("root write failed");
+  expect(fory.serialize(7)).toBeDefined();
   expect(writer.getPlatformBuffer().byteLength).toBeLessThan(4 * 1024 * 1024);
-  expect(writer.writeGetCursor()).toBe(0);
 });

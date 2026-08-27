@@ -209,7 +209,6 @@ describe("map", () => {
       malformed[chunkSizeOffset] = chunkSize;
 
       expect(() => serializer.deserialize(malformed)).toThrow();
-      expect(fory.readContext.depth).toBe(0);
       expect(serializer.deserialize(valid)).toEqual(value);
     }
   });

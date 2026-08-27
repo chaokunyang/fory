@@ -839,11 +839,13 @@ func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v any, buffers
 	origBuffer := f.readCtx.buffer
 	f.readCtx.buffer = buffer
 	defer func() {
+		// Restore the owned buffer before reset so a cleanup panic cannot retain
+		// the caller-owned buffer.
+		f.readCtx.buffer = origBuffer
 		f.readCtx.Reset()
 		if f.metaContext != nil {
 			f.metaContext.Reset()
 		}
-		f.readCtx.buffer = origBuffer
 		f.readCtx.outOfBandBuffers = nil
 	}()
 	// Set up out-of-band buffers if provided

@@ -189,6 +189,20 @@ func TestBorrowedBufferPanicRestore(t *testing.T) {
 		ErrRegistryFrozen)
 }
 
+func TestCallbackBufferRestoreOrder(t *testing.T) {
+	f := New(WithXlang(false), WithCompatible(false))
+	owned := f.readCtx.buffer
+	borrowed := NewByteBuffer(nil)
+	// Force root cleanup to panic so restoring the owned buffer after Reset
+	// cannot accidentally satisfy this test.
+	f.readCtx.refReader = nil
+
+	require.Panics(t, func() {
+		_ = f.DeserializeWithCallbackBuffers(borrowed, nil, nil)
+	})
+	require.Same(t, owned, f.readCtx.buffer)
+}
+
 func TestStreamBufferPanicRestore(t *testing.T) {
 	f := New(WithXlang(false), WithCompatible(false))
 	owned := f.readCtx.buffer

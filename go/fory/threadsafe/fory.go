@@ -59,18 +59,29 @@ func NewWithFactory(factory func() *fory.Fory) *Fory {
 	return &Fory{factory: factory}
 }
 
-func (f *Fory) newInner() (*fory.Fory, error) {
+func (f *Fory) createInner() *fory.Fory {
 	inner := f.factory()
 	if inner == nil {
 		panic("threadsafe.NewWithFactory factory returned nil")
 	}
-	// Before the first root, callers hold registrationMu. After registryFrozen
-	// is published, registrations are immutable, so pool misses can replay them
-	// without extending the root hot-path lock.
+	return inner
+}
+
+func (f *Fory) applyRegistrations(inner *fory.Fory) error {
 	for _, registration := range f.registrations {
 		if err := inner.RegisterStructByName(registration.typ, registration.name); err != nil {
-			return nil, fmt.Errorf("apply registration %q to new Fory instance: %w", registration.name, err)
+			return fmt.Errorf("apply registration %q to new Fory instance: %w", registration.name, err)
 		}
+	}
+	return nil
+}
+
+func (f *Fory) newInner() (*fory.Fory, error) {
+	inner := f.createInner()
+	// Registry freeze is published before pool misses reach this path, so the
+	// registration log is immutable and needs no root hot-path lock.
+	if err := f.applyRegistrations(inner); err != nil {
+		return nil, err
 	}
 	return inner, nil
 }
@@ -136,17 +147,35 @@ func (f *Fory) Deserialize(data []byte, v any) error {
 // RegisterStructByName registers a struct type by name before the first root operation.
 func (f *Fory) RegisterStructByName(type_ any, name string) error {
 	f.registrationMu.Lock()
+	if f.registryFrozen.Load() {
+		f.registrationMu.Unlock()
+		return fory.ErrRegistryFrozen
+	}
+	if f.prepared != nil {
+		defer f.registrationMu.Unlock()
+		return f.registerPrepared(type_, name)
+	}
+	f.registrationMu.Unlock()
+
+	// The factory is application code and may reenter a root. Never hold the
+	// registration mutex across it, and recheck freeze before publishing its result.
+	inner := f.createInner()
+
+	f.registrationMu.Lock()
 	defer f.registrationMu.Unlock()
 	if f.registryFrozen.Load() {
 		return fory.ErrRegistryFrozen
 	}
 	if f.prepared == nil {
-		inner, err := f.newInner()
-		if err != nil {
+		if err := f.applyRegistrations(inner); err != nil {
 			return err
 		}
 		f.prepared = inner
 	}
+	return f.registerPrepared(type_, name)
+}
+
+func (f *Fory) registerPrepared(type_ any, name string) error {
 	registration := structRegistration{name: name}
 	if err := f.prepared.RegisterStructByName(type_, name); err != nil {
 		// A failed registration is not part of the facade registry. Rebuild from

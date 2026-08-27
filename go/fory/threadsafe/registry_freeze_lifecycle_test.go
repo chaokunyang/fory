@@ -34,6 +34,31 @@ type registryFreezeRace struct {
 	Value int32
 }
 
+func TestFactoryRootReentry(t *testing.T) {
+	var f *Fory
+	var factoryEntered atomic.Bool
+	var factoryUnlocked bool
+	var rootErr error
+	f = NewWithFactory(func() *fory.Fory {
+		if factoryEntered.CompareAndSwap(false, true) {
+			factoryUnlocked = f.registrationMu.TryLock()
+			if factoryUnlocked {
+				f.registrationMu.Unlock()
+				_, rootErr = f.Serialize(int32(1))
+			}
+		}
+		return fory.New(fory.WithXlang(false), fory.WithCompatible(false))
+	})
+
+	err := f.RegisterStructByName(registryFreezePooled{}, "test.FactoryRootReentry")
+	require.True(t, factoryUnlocked)
+	require.NoError(t, rootErr)
+	require.ErrorIs(t, err, fory.ErrRegistryFrozen)
+	require.True(t, f.registryFrozen.Load())
+	require.Empty(t, f.registrations)
+	require.Nil(t, f.prepared)
+}
+
 func TestRegistryFreezePropagation(t *testing.T) {
 	var factoryCalls atomic.Int32
 	f := NewWithFactory(func() *fory.Fory {

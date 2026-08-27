@@ -390,7 +390,9 @@ f := threadsafe.New(
     fory.WithXlang(true),
     fory.WithMaxDepth(30),
 )
-f.RegisterStruct(Request{}, 1)
+if err := f.RegisterStructByName(Request{}, "example.Request"); err != nil {
+    panic(err)
+}
 
 // Process requests concurrently
 for req := range requests {

@@ -78,6 +78,7 @@ func (c *WriteContext) Reset() {
 func (c *WriteContext) ResetState() {
 	c.refWriter.Reset()
 	c.depth = 0
+	c.err = Error{}
 	c.bufferCallback = nil
 	c.outOfBand = false
 	if c.refResolver != nil {

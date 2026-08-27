@@ -128,7 +128,9 @@ f2.RegisterStruct(User{}, 1)
 
 ## Registration Timing
 
-Register types after creating a Fory instance and before any serialize/deserialize calls:
+Register types after creating a Fory instance and before the first serialization or deserialization
+attempt. Starting that first root permanently freezes the instance registry, even when the root
+fails. Later registration returns `fory.ErrRegistryFrozen` without changing the registry:
 
 ```go
 f := fory.New(fory.WithXlang(true))

@@ -7,6 +7,11 @@ Load this file when changing `go/fory/` or Go xlang behavior.
 - Run Go commands from within `go/fory/`.
 - Changes under `go/` must pass formatting and tests.
 - The Go implementation focuses on fast serializers.
+- A Go `Fory` instance owns permanent registry freeze at the start of its first root, including a
+  failed root. Exported resolver registration entries recheck that facade-owned state before
+  mutation. `threadsafe.Fory` owns the cross-pool boundary with one frozen state, one prepared
+  validation instance, and one log of successful named-struct registrations. Failed registrations
+  are not logged; pool misses after freeze replay the immutable successful log.
 - Go `ReadContext` intentionally defers codec errors to existing `HasError` or `CheckError`
   boundaries. After an error, work may continue only while it remains panic- and bounds-safe and
   cannot cause disproportionate work or allocation, publish state that survives root cleanup, or

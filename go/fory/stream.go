@@ -96,15 +96,18 @@ func (is *InputStream) Shrink() {
 // DeserializeFromStream reads the next object from the stream into the provided value.
 // It preserves the stream buffer while clearing root-scoped read metadata between calls.
 func (f *Fory) DeserializeFromStream(is *InputStream, v any) error {
+	f.beginRoot()
 	origBuffer := f.readCtx.buffer
 	f.readCtx.buffer = is.buffer
-	target := reflect.ValueOf(v).Elem()
-	f.readCtx.remainingGraphMemoryBytes = f.config.MaxGraphMemoryBytes
-	f.readCtx.remainingUnbackedContainerItems = f.config.MaxUnbackedContainerItems
 	defer func() {
+		// Restore the owned buffer before reset so caller validation panics cannot retain the
+		// stream-owned buffer.
 		f.readCtx.buffer = origBuffer
 		f.resetReadState()
 	}()
+	target := reflect.ValueOf(v).Elem()
+	f.readCtx.remainingGraphMemoryBytes = f.config.MaxGraphMemoryBytes
+	f.readCtx.remainingUnbackedContainerItems = f.config.MaxUnbackedContainerItems
 
 	readHeader(f.readCtx)
 	if f.readCtx.HasError() {
@@ -124,6 +127,7 @@ func (f *Fory) DeserializeFromStream(is *InputStream, v any) error {
 // each call, discarding any prefetched data and type metadata.
 // For sequential multi-object reads on the same stream, use NewInputStream instead.
 func (f *Fory) DeserializeFromReader(r io.Reader, v any) error {
+	f.beginRoot()
 	defer f.resetReadState()
 	// Always reset to enforce stateless semantics.
 	f.readCtx.buffer.ResetWithReader(r, 0)

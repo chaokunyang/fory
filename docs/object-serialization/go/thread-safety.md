@@ -66,33 +66,6 @@ go func() {
 }()
 ```
 
-### How It Works
-
-The thread-safe wrapper uses `sync.Pool`:
-
-1. **Acquire**: Gets a Fory instance from the pool
-2. **Use**: Performs serialization/deserialization
-3. **Copy**: Copies result data (buffer will be reused)
-4. **Release**: Returns instance to pool
-
-```go
-// Simplified implementation
-func (f *Fory) Serialize(v any) ([]byte, error) {
-    fory := f.pool.Get().(*fory.Fory)
-    defer f.pool.Put(fory)
-
-    data, err := fory.Serialize(v)
-    if err != nil {
-        return nil, err
-    }
-
-    // Copy because underlying buffer will be reused
-    result := make([]byte, len(data))
-    copy(result, data)
-    return result, nil
-}
-```
-
 ### API
 
 ```go
@@ -114,14 +87,20 @@ err = threadsafe.Unmarshal(data, &target)
 
 ## Type Registration
 
-Type registration should be done before concurrent use:
+Register every type before the first serialization or deserialization attempt. Starting a root
+operation permanently freezes registration on that Fory instance, including when the operation
+fails:
 
 ```go
 f := threadsafe.New()
 
 // Register types BEFORE concurrent access
-f.RegisterStruct(User{}, 1)
-f.RegisterStruct(Order{}, 2)
+if err := f.RegisterStructByName(User{}, "example.User"); err != nil {
+    panic(err)
+}
+if err := f.RegisterStructByName(Order{}, "example.Order"); err != nil {
+    panic(err)
+}
 
 // Now safe to use concurrently
 go func() {
@@ -131,15 +110,19 @@ go func() {
 
 ### Thread-Safe Registration
 
-The thread-safe wrapper handles registration safely:
+The thread-safe wrapper exposes named struct registration and serializes it against the first root
+operation:
 
 ```go
-// Safe: Registration is synchronized
 f := threadsafe.New()
-f.RegisterStruct(User{}, 1)  // Thread-safe
+if err := f.RegisterStructByName(User{}, "example.User"); err != nil {
+    panic(err)
+}
 ```
 
-However, for best performance, register all types at startup before concurrent use.
+If registration races with the first root, one operation wins the boundary. When the root wins,
+the registration call returns `fory.ErrRegistryFrozen` without changing the registry. Register all
+types during startup so the application does not depend on race ordering.
 
 ## Zero-Copy Considerations
 
@@ -185,7 +168,9 @@ This is safer but has allocation overhead.
 ```go
 func BenchmarkNonThreadSafe(b *testing.B) {
     f := fory.New(fory.WithXlang(true))
-    f.RegisterStruct(User{}, 1)
+    if err := f.RegisterStruct(User{}, 1); err != nil {
+        b.Fatal(err)
+    }
     user := &User{ID: 1, Name: "Alice"}
 
     for i := 0; i < b.N; i++ {
@@ -196,7 +181,9 @@ func BenchmarkNonThreadSafe(b *testing.B) {
 
 func BenchmarkThreadSafe(b *testing.B) {
     f := threadsafe.New()
-    f.RegisterStruct(User{}, 1)
+    if err := f.RegisterStructByName(User{}, "example.User"); err != nil {
+        b.Fatal(err)
+    }
     user := &User{ID: 1, Name: "Alice"}
 
     for i := 0; i < b.N; i++ {
@@ -216,7 +203,9 @@ For maximum performance with known goroutine count:
 func worker(id int) {
     // Each worker has its own Fory instance
     f := fory.New(fory.WithXlang(true))
-    f.RegisterStruct(User{}, 1)
+    if err := f.RegisterStruct(User{}, 1); err != nil {
+        panic(err)
+    }
 
     for task := range tasks {
         data, _ := f.Serialize(task)
@@ -239,7 +228,9 @@ For dynamic goroutine count or simplicity:
 var f = threadsafe.New()
 
 func init() {
-    f.RegisterStruct(User{}, 1)
+    if err := f.RegisterStructByName(User{}, "example.User"); err != nil {
+        panic(err)
+    }
 }
 
 func handleRequest(user *User) []byte {
@@ -255,7 +246,9 @@ func handleRequest(user *User) []byte {
 var fory = threadsafe.New()
 
 func init() {
-    fory.RegisterStruct(Response{}, 1)
+    if err := fory.RegisterStructByName(Response{}, "example.Response"); err != nil {
+        panic(err)
+    }
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -322,16 +315,19 @@ data, _ := f.Serialize(value1)  // Already copied
 ### Registering Types Concurrently
 
 ```go
-// RISKY: Concurrent registration
+// The root may freeze the registry first.
 go func() {
-    f.RegisterStruct(TypeA{}, 1)
+    if err := f.RegisterStructByName(TypeA{}, "example.TypeA"); err != nil {
+        panic(err)
+    }
 }()
 go func() {
-    f.Serialize(value)  // May not see TypeA
+    _, _ = f.Serialize(value)
 }()
 ```
 
-**Fix**: Register all types before concurrent use.
+If serialization wins, registration returns `fory.ErrRegistryFrozen`. Register all types before
+starting concurrent roots.
 
 ## Best Practices
 

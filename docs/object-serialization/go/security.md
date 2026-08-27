@@ -30,7 +30,7 @@ Before deserialization:
 - Authenticate the sender and protect message integrity at the transport or storage layer.
 - Enforce request or file size, timeout, and concurrency limits outside Fory.
 - Register only the application types the endpoint accepts and configure the reader before its
-  first root operation.
+  first root operation. The first root attempt freezes registration even if it fails.
 - Validate the deserialized value against application authorization and domain rules before use.
 
 ## Built-in safeguards

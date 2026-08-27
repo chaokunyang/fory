@@ -121,6 +121,16 @@ func joinRegisteredName(namespace, typeName string) string {
 	return namespace + "." + typeName
 }
 
+func (r *TypeResolver) validateNamedRegistration(namespace, typeName string) error {
+	if _, err := r.namespaceEncoder.EncodePackage(namespace); err != nil {
+		return fmt.Errorf("invalid type namespace: %w", err)
+	}
+	if _, err := r.typeNameEncoder.EncodeTypeName(typeName); err != nil {
+		return fmt.Errorf("invalid type name: %w", err)
+	}
+	return nil
+}
+
 type TypeInfo struct {
 	Type          reflect.Type
 	FullNameBytes []byte
@@ -472,6 +482,9 @@ func validateOptionalFields(type_ reflect.Type) error {
 	if type_.Kind() != reflect.Struct {
 		return nil
 	}
+	if err := validateForyTags(type_); err != nil {
+		return err
+	}
 	for i := 0; i < type_.NumField(); i++ {
 		field := type_.Field(i)
 		if field.PkgPath != "" {
@@ -496,6 +509,9 @@ func validateOptionalFields(type_ reflect.Type) error {
 
 // RegisterStruct registers a type with a numeric user type ID for cross-language serialization.
 func (r *TypeResolver) RegisterStruct(type_ reflect.Type, typeID TypeId, userTypeID uint32) error {
+	if err := r.fory.checkRegistrationOpen(); err != nil {
+		return err
+	}
 	// Check if already registered
 	if info, ok := r.userTypeIdToTypeInfo[userTypeID]; ok {
 		if info.Type == type_ {
@@ -506,9 +522,6 @@ func (r *TypeResolver) RegisterStruct(type_ reflect.Type, typeID TypeId, userTyp
 
 	switch type_.Kind() {
 	case reflect.Struct:
-		if err := validateForyTags(type_); err != nil {
-			return err
-		}
 		if err := validateOptionalFields(type_); err != nil {
 			return err
 		}
@@ -556,6 +569,9 @@ func (r *TypeResolver) RegisterStruct(type_ reflect.Type, typeID TypeId, userTyp
 
 // RegisterUnion registers a union type with a numeric user type ID for cross-language serialization.
 func (r *TypeResolver) RegisterUnion(type_ reflect.Type, userTypeID uint32, serializer Serializer) error {
+	if err := r.fory.checkRegistrationOpen(); err != nil {
+		return err
+	}
 	if serializer == nil {
 		return fmt.Errorf("RegisterUnion requires a non-nil serializer")
 	}
@@ -591,6 +607,9 @@ func (r *TypeResolver) RegisterUnion(type_ reflect.Type, userTypeID uint32, seri
 
 // RegisterEnum registers an enum type (numeric type in Go) with a user type ID.
 func (r *TypeResolver) RegisterEnum(type_ reflect.Type, userTypeID uint32) error {
+	if err := r.fory.checkRegistrationOpen(); err != nil {
+		return err
+	}
 	// Check if already registered
 	if info, ok := r.userTypeIdToTypeInfo[userTypeID]; ok {
 		return fmt.Errorf("type %s with id %d has been registered", info.Type, userTypeID)
@@ -637,6 +656,9 @@ func (r *TypeResolver) registerEnumByName(type_ reflect.Type, namespace, typeNam
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
 	}
+	if err := r.validateNamedRegistration(namespace, typeName); err != nil {
+		return err
+	}
 
 	// Verify it's a numeric type
 	switch type_.Kind() {
@@ -674,7 +696,10 @@ func (r *TypeResolver) registerStructByName(type_ reflect.Type, namespace, typeN
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
 	}
-	if err := validateForyTags(type_); err != nil {
+	if err := r.validateNamedRegistration(namespace, typeName); err != nil {
+		return err
+	}
+	if err := validateOptionalFields(type_); err != nil {
 		return err
 	}
 	tag := joinRegisteredName(namespace, typeName)
@@ -722,6 +747,9 @@ func (r *TypeResolver) registerUnionByName(
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
 	}
+	if err := r.validateNamedRegistration(namespace, typeName); err != nil {
+		return err
+	}
 	tag := joinRegisteredName(namespace, typeName)
 	r.typeToSerializers[type_] = serializer
 	r.typeToTypeInfo[type_] = "@" + tag
@@ -758,6 +786,9 @@ func (r *TypeResolver) registerExtensionByName(
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
 	}
+	if err := r.validateNamedRegistration(namespace, typeName); err != nil {
+		return err
+	}
 	tag := joinRegisteredName(namespace, typeName)
 
 	// Create adapter wrapping the user's ExtensionSerializer
@@ -791,6 +822,9 @@ func (r *TypeResolver) RegisterExtension(
 	userTypeID uint32,
 	userSerializer ExtensionSerializer,
 ) error {
+	if err := r.fory.checkRegistrationOpen(); err != nil {
+		return err
+	}
 	if userTypeID > maxUserTypeID {
 		return fmt.Errorf("typeID must be in range [0, 0xfffffffe], got %d", userTypeID)
 	}
@@ -1197,12 +1231,18 @@ func (r *TypeResolver) registerType(
 			}
 		}
 
-		nsMeta, _ := r.namespaceEncoder.EncodePackage(namespace)
+		nsMeta, encodeErr := r.namespaceEncoder.EncodePackage(namespace)
+		if encodeErr != nil {
+			return nil, fmt.Errorf("invalid type namespace: %w", encodeErr)
+		}
 		if nsBytes = r.metaStringResolver.GetMetaStrBytes(&nsMeta); nsBytes == nil {
 			panic("failed to encode namespace")
 		}
 
-		typeMeta, _ := r.typeNameEncoder.EncodeTypeName(typeName)
+		typeMeta, encodeErr := r.typeNameEncoder.EncodeTypeName(typeName)
+		if encodeErr != nil {
+			return nil, fmt.Errorf("invalid type name: %w", encodeErr)
+		}
 		if typeBytes = r.metaStringResolver.GetMetaStrBytes(&typeMeta); typeBytes == nil {
 			panic("failed to encode type name")
 		}

@@ -78,35 +78,6 @@ struct SerializationMeta<T,
 
 namespace detail {
 
-/// Generated struct writers reserve the complete primitive-field extent once.
-/// Repeating public offset and cursor checks for each field only expands the
-/// generated hot path; this owner may bypass them after that reservation.
-struct StructFieldWriter {
-  FORY_ALWAYS_INLINE static uint32_t
-  put_var_uint32(Buffer &buffer, uint32_t offset, uint32_t value) {
-    return buffer.put_var_uint32_unchecked(offset, value);
-  }
-
-  FORY_ALWAYS_INLINE static uint32_t
-  put_var_uint64(Buffer &buffer, uint32_t offset, uint64_t value) {
-    return buffer.put_var_uint64_unchecked(offset, value);
-  }
-
-  FORY_ALWAYS_INLINE static uint32_t
-  put_tagged_uint64(Buffer &buffer, uint32_t offset, uint64_t value) {
-    return buffer.put_tagged_uint64_unchecked(offset, value);
-  }
-
-  FORY_ALWAYS_INLINE static uint32_t
-  put_tagged_int64(Buffer &buffer, uint32_t offset, int64_t value) {
-    return buffer.put_tagged_int64_unchecked(offset, value);
-  }
-
-  FORY_ALWAYS_INLINE static void commit(Buffer &buffer, uint32_t offset) {
-    buffer.writer_index_ = offset;
-  }
-};
-
 /// Helper to check if a TypeId represents a primitive type.
 /// Per xlang spec, primitive types are: bool, int8-64, var_int32/64,
 /// sli_int64, float8/16/bfloat16/32/64. For native mode (xlang=false), also
@@ -202,22 +173,22 @@ FORY_ALWAYS_INLINE uint32_t put_primitive_at(T value, Buffer &buffer,
     int32_t val = static_cast<int32_t>(value);
     uint32_t zigzag =
         (static_cast<uint32_t>(val) << 1) ^ static_cast<uint32_t>(val >> 31);
-    return StructFieldWriter::put_var_uint32(buffer, offset, zigzag);
+    return buffer.put_var_uint32_unchecked(offset, zigzag);
   } else if constexpr (std::is_same_v<T, uint32_t> ||
                        std::is_same_v<T, unsigned int>) {
-    return StructFieldWriter::put_var_uint32(buffer, offset,
-                                             static_cast<uint32_t>(value));
+    return buffer.put_var_uint32_unchecked(offset,
+                                           static_cast<uint32_t>(value));
   } else if constexpr (std::is_same_v<T, int64_t> ||
                        std::is_same_v<T, long long>) {
     // varint64 with zigzag encoding
     int64_t val = static_cast<int64_t>(value);
     uint64_t zigzag =
         (static_cast<uint64_t>(val) << 1) ^ static_cast<uint64_t>(val >> 63);
-    return StructFieldWriter::put_var_uint64(buffer, offset, zigzag);
+    return buffer.put_var_uint64_unchecked(offset, zigzag);
   } else if constexpr (std::is_same_v<T, uint64_t> ||
                        std::is_same_v<T, unsigned long long>) {
-    return StructFieldWriter::put_var_uint64(buffer, offset,
-                                             static_cast<uint64_t>(value));
+    return buffer.put_var_uint64_unchecked(offset,
+                                           static_cast<uint64_t>(value));
   } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int>) {
     buffer.unsafe_put<int32_t>(offset, static_cast<int32_t>(value));
     return 4;
@@ -301,25 +272,25 @@ FORY_ALWAYS_INLINE uint32_t put_varint_at(T value, Buffer &buffer,
     int32_t val = static_cast<int32_t>(value);
     uint32_t zigzag =
         (static_cast<uint32_t>(val) << 1) ^ static_cast<uint32_t>(val >> 31);
-    return StructFieldWriter::put_var_uint32(buffer, offset, zigzag);
+    return buffer.put_var_uint32_unchecked(offset, zigzag);
   } else if constexpr (std::is_same_v<T, int64_t> ||
                        std::is_same_v<T, long long>) {
     // varint64 with zigzag encoding
     int64_t val = static_cast<int64_t>(value);
     uint64_t zigzag =
         (static_cast<uint64_t>(val) << 1) ^ static_cast<uint64_t>(val >> 63);
-    return StructFieldWriter::put_var_uint64(buffer, offset, zigzag);
+    return buffer.put_var_uint64_unchecked(offset, zigzag);
   } else if constexpr (std::is_same_v<T, uint32_t> ||
                        std::is_same_v<T, unsigned int>) {
     // Unsigned 32-bit varint (no zigzag)
-    return StructFieldWriter::put_var_uint32(buffer, offset,
-                                             static_cast<uint32_t>(value));
+    return buffer.put_var_uint32_unchecked(offset,
+                                           static_cast<uint32_t>(value));
   } else if constexpr (std::is_same_v<T, uint64_t> ||
                        std::is_same_v<T, unsigned long long>) {
     // Unsigned 64-bit varint (no zigzag) - used for VAR_UINT64 and
     // TAGGED_UINT64
-    return StructFieldWriter::put_var_uint64(buffer, offset,
-                                             static_cast<uint64_t>(value));
+    return buffer.put_var_uint64_unchecked(offset,
+                                           static_cast<uint64_t>(value));
   } else {
     static_assert(sizeof(T) == 0, "Unsupported varint type");
     return 0;
@@ -461,8 +432,8 @@ FORY_ALWAYS_INLINE uint32_t write_configurable_int_at(FieldType value,
       return 8;
     }
     if constexpr (enc == Encoding::Tagged) {
-      return StructFieldWriter::put_tagged_int64(buffer, offset,
-                                                 static_cast<int64_t>(value));
+      return buffer.put_tagged_int64_unchecked(offset,
+                                               static_cast<int64_t>(value));
     }
     return put_varint_at<FieldType>(value, buffer, offset);
   } else {
@@ -476,8 +447,8 @@ FORY_ALWAYS_INLINE uint32_t write_configurable_int_at(FieldType value,
     }
     if constexpr (enc == Encoding::Tagged) {
       if constexpr (is_configurable_int64_v<FieldType>) {
-        return StructFieldWriter::put_tagged_uint64(
-            buffer, offset, static_cast<uint64_t>(value));
+        return buffer.put_tagged_uint64_unchecked(offset,
+                                                  static_cast<uint64_t>(value));
       }
       return put_varint_at<FieldType>(value, buffer, offset);
     }
@@ -2647,8 +2618,8 @@ write_fixed_primitive_fields(const T &obj, Buffer &buffer,
   (write_single_fixed_field<T, Indices>(obj, buffer, base_offset), ...);
 
   // Update writer_index once with total fixed bytes (compile-time constant)
-  StructFieldWriter::commit(buffer,
-                            base_offset + Helpers::leading_fixed_size_bytes);
+  buffer.unsafe_set_writer_index(base_offset +
+                                 Helpers::leading_fixed_size_bytes);
 }
 
 /// Helper to write a single varint primitive field.
@@ -2761,7 +2732,7 @@ write_primitive_fields_fast(const T &obj, Buffer &buffer,
     uint32_t offset = buffer.writer_index();
     write_varint_primitive_fields<T, fixed_count>(
         obj, buffer, offset, std::make_index_sequence<varint_count>{});
-    StructFieldWriter::commit(buffer, offset);
+    buffer.unsafe_set_writer_index(offset);
   }
 
   // Phase 3: write remaining primitives (if any) using dedicated helper
@@ -2771,7 +2742,7 @@ write_primitive_fields_fast(const T &obj, Buffer &buffer,
     write_remaining_primitive_fields<T, fast_count>(
         obj, buffer, offset,
         std::make_index_sequence<total_count - fast_count>{});
-    StructFieldWriter::commit(buffer, offset);
+    buffer.unsafe_set_writer_index(offset);
   }
 }
 

@@ -470,7 +470,7 @@ TEST(SerializationTest, PrimitiveVectorWriteChecksCompleteRange) {
       Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   WriteContext write_ctx(fory.config(), fory.type_resolver().clone());
 
-  EXPECT_FALSE(detail::PrimitiveVectorWriter::reserve(
+  EXPECT_FALSE(detail::reserve_primitive_vector(
       write_ctx, std::numeric_limits<uint32_t>::max()));
   EXPECT_TRUE(write_ctx.has_error());
   EXPECT_EQ(write_ctx.buffer().writer_index(), 0U);

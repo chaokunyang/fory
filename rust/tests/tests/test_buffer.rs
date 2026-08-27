@@ -112,6 +112,11 @@ fn test_var_u36_bad_framing() {
         let mut reader = Reader::new(&bytes);
         assert!(reader.read_var_u36_small().is_err());
     }
+
+    let padded = [0x80, 0x80, 0x80, 0x80, 0x80, 0x02, 0x2a, 0x2b];
+    let mut reader = Reader::new(&padded);
+    assert!(reader.read_var_u36_small().is_err());
+    assert_eq!(reader.get_cursor(), 0);
 }
 
 #[test]

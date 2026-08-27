@@ -13,12 +13,11 @@ Load this file when changing `cpp/`, Cython build plumbing, or C++ xlang behavio
 - When invoking a method that returns `Result`, use `FORY_TRY` unless you are in control-flow logic that cannot use it cleanly.
 - Wrap error checks with `FORY_PREDICT_FALSE` for branch prediction.
 - Continue on trivial errors; return early only for critical errors such as buffer overflow.
-- `ReadContext` and related codec owners intentionally accumulate non-critical
-  errors and inspect them at established serializer or root safepoints. Bounds-safe
-  work may continue after an error is recorded. Do not add eager per-field checks,
-  cursor rollback, or tests that pin the first detection point unless deferral can
-  cause out-of-bounds access, undefined behavior, resource amplification, state
-  pollution, or success past the required safepoint.
+- `ReadContext` intentionally records codec errors for inspection at existing serializer or root
+  safepoints. After an error, work may continue only while it remains bounds-safe and cannot cause
+  resource amplification, publish reference or cache state that survives root cleanup, or return
+  success past the required safepoint. Do not add per-field checks, cursor rollback, or tests that
+  pin the first detection point solely to make an error earlier or more precise.
 - Deserialization depth is decoder-owned state. `WriteContext` must never expose or mutate it, even
   when the application-owned object graph is recursive. A generated `Serializer<T>` computes
   whether its own read body may recurse from its field metadata and guards only that body. Leaf-only

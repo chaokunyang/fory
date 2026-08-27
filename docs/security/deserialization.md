@@ -251,14 +251,6 @@ downstream buffer-underflow, type, reference, depth, or serializer error is a
 valid rejection. A decoder does not need a new local check merely to replace
 that controlled failure with a more specific or more uniform error.
 
-Non-strict, non-precise, delayed, masked, differently typed, or differently
-layered controlled errors are not security findings. Security remediation MUST
-NOT add checks solely to normalize, sharpen, advance, or otherwise make such an
-error deterministic. This remains true when malformed input decodes to an
-incorrect value, provided the path cannot cause a crash, panic, undefined memory
-access, OOM, attacker-controlled memory amplification, or another security
-invariant violation defined by this document.
-
 Tests for malformed input should prove that the root operation fails, cleanup
 remains correct, and any relevant security invariant is preserved. They should
 not pin an exact error type or message when doing so would require additional

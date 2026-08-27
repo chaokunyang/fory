@@ -206,21 +206,7 @@ public final class MemoryBuffer {
    * @param streamReader a reader for reading from a stream.
    */
   private MemoryBuffer(byte[] buffer, int offset, int length, ForyStreamReader streamReader) {
-    checkArgument(offset >= 0 && length >= 0);
-    if (offset > buffer.length - length) {
-      throw new IllegalArgumentException(
-          String.format("%d exceeds buffer size %d", (long) offset + length, buffer.length));
-    }
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.initHeapBuffer(this, buffer, offset, length);
-    } else {
-      this.heapMemory = buffer;
-      this.heapOffset = offset;
-      final long startPos = BYTE_ARRAY_OFFSET + offset;
-      this.address = startPos;
-      this.size = length;
-      this.addressLimit = startPos + length;
-    }
+    initHeapBuffer(buffer, offset, length);
     if (streamReader != null) {
       this.streamReader = streamReader;
     } else {
@@ -343,17 +329,17 @@ public final class MemoryBuffer {
   }
 
   public void initHeapBuffer(byte[] buffer, int offset, int length) {
+    if (buffer == null) {
+      throw new NullPointerException("buffer");
+    }
+    if (offset < 0 || length < 0 || offset > buffer.length - length) {
+      throw new IllegalArgumentException(
+          String.format(
+              "offset %d and length %d exceed buffer size %d", offset, length, buffer.length));
+    }
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.initHeapBuffer(this, buffer, offset, length);
     } else {
-      if (buffer == null) {
-        throw new NullPointerException("buffer");
-      }
-      if (offset < 0 || length < 0 || offset > buffer.length - length) {
-        throw new IllegalArgumentException(
-            String.format(
-                "offset %d and length %d exceed buffer size %d", offset, length, buffer.length));
-      }
       this.heapMemory = buffer;
       this.heapOffset = offset;
       final long startPos = BYTE_ARRAY_OFFSET + offset;
@@ -1842,7 +1828,11 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(values, CHAR_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(values, CHAR_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      } else {
+        writeCharsBigEndian(values, 0, values.length, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1858,12 +1848,16 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(
-          values,
-          CHAR_ARRAY_OFFSET + ((long) offset << 1),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            values,
+            CHAR_ARRAY_OFFSET + ((long) offset << 1),
+            heapMemory,
+            address + writerIdx,
+            numBytes);
+      } else {
+        writeCharsBigEndian(values, offset, numElements, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1886,7 +1880,11 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(values, SHORT_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(values, SHORT_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      } else {
+        writeShortsBigEndian(values, 0, values.length, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1902,12 +1900,16 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(
-          values,
-          SHORT_ARRAY_OFFSET + ((long) offset << 1),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            values,
+            SHORT_ARRAY_OFFSET + ((long) offset << 1),
+            heapMemory,
+            address + writerIdx,
+            numBytes);
+      } else {
+        writeShortsBigEndian(values, offset, numElements, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1930,7 +1932,11 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(values, INT_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(values, INT_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      } else {
+        writeIntsBigEndian(values, 0, values.length, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1946,12 +1952,16 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(
-          values,
-          INT_ARRAY_OFFSET + ((long) offset << 2),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            values,
+            INT_ARRAY_OFFSET + ((long) offset << 2),
+            heapMemory,
+            address + writerIdx,
+            numBytes);
+      } else {
+        writeIntsBigEndian(values, offset, numElements, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1974,7 +1984,11 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(values, LONG_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(values, LONG_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      } else {
+        writeLongsBigEndian(values, 0, values.length, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1990,12 +2004,16 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(
-          values,
-          LONG_ARRAY_OFFSET + ((long) offset << 3),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            values,
+            LONG_ARRAY_OFFSET + ((long) offset << 3),
+            heapMemory,
+            address + writerIdx,
+            numBytes);
+      } else {
+        writeLongsBigEndian(values, offset, numElements, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -2018,7 +2036,11 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(values, FLOAT_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(values, FLOAT_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      } else {
+        writeFloatsBigEndian(values, 0, values.length, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -2034,12 +2056,16 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(
-          values,
-          FLOAT_ARRAY_OFFSET + ((long) offset << 2),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            values,
+            FLOAT_ARRAY_OFFSET + ((long) offset << 2),
+            heapMemory,
+            address + writerIdx,
+            numBytes);
+      } else {
+        writeFloatsBigEndian(values, offset, numElements, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -2062,7 +2088,11 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(values, DOUBLE_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(values, DOUBLE_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      } else {
+        writeDoublesBigEndian(values, 0, values.length, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -2078,13 +2108,55 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(
-          values,
-          DOUBLE_ARRAY_OFFSET + ((long) offset << 3),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            values,
+            DOUBLE_ARRAY_OFFSET + ((long) offset << 3),
+            heapMemory,
+            address + writerIdx,
+            numBytes);
+      } else {
+        writeDoublesBigEndian(values, offset, numElements, writerIdx);
+      }
       writerIndex = newIdx;
+    }
+  }
+
+  // Big-endian JVMs use the scalar little-endian primitives here. Keeping these methods separate
+  // leaves native bulk copy as the only little-endian hot path.
+  private void writeCharsBigEndian(char[] values, int offset, int length, int writerIdx) {
+    for (int i = 0; i < length; i++) {
+      _unsafePutInt16(writerIdx + i * 2, (short) values[offset + i]);
+    }
+  }
+
+  private void writeShortsBigEndian(short[] values, int offset, int length, int writerIdx) {
+    for (int i = 0; i < length; i++) {
+      _unsafePutInt16(writerIdx + i * 2, values[offset + i]);
+    }
+  }
+
+  private void writeIntsBigEndian(int[] values, int offset, int length, int writerIdx) {
+    for (int i = 0; i < length; i++) {
+      _unsafePutInt32(writerIdx + i * 4, values[offset + i]);
+    }
+  }
+
+  private void writeLongsBigEndian(long[] values, int offset, int length, int writerIdx) {
+    for (int i = 0; i < length; i++) {
+      _unsafePutInt64(writerIdx + i * 8, values[offset + i]);
+    }
+  }
+
+  private void writeFloatsBigEndian(float[] values, int offset, int length, int writerIdx) {
+    for (int i = 0; i < length; i++) {
+      _unsafePutInt32(writerIdx + i * 4, Float.floatToRawIntBits(values[offset + i]));
+    }
+  }
+
+  private void writeDoublesBigEndian(double[] values, int offset, int length, int writerIdx) {
+    for (int i = 0; i < length; i++) {
+      _unsafePutInt64(writerIdx + i * 8, Double.doubleToRawLongBits(values[offset + i]));
     }
   }
 
@@ -2097,7 +2169,7 @@ public final class MemoryBuffer {
   }
 
   private void growSlow(long length) {
-    if (length > Integer.MAX_VALUE) {
+    if (length < 0 || length > Integer.MAX_VALUE) {
       throwOOBException();
     }
     // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
@@ -2109,16 +2181,8 @@ public final class MemoryBuffer {
     // Negative extents are overflowed writer positions. Compare as unsigned so the common path
     // keeps one branch while overflow rejection and allocation stay cold before any Unsafe access.
     if (Integer.compareUnsigned(length, size) > 0) {
-      ensureSlow(length);
+      growSlow(length);
     }
-  }
-
-  private void ensureSlow(int length) {
-    if (length < 0) {
-      throwOOBException();
-    }
-    // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
-    globalAllocator.grow(this, length);
   }
 
   // -------------------------------------------------------------------------
@@ -3535,7 +3599,11 @@ public final class MemoryBuffer {
         streamReader.readChars(values, 0, numBytes >>> 1);
         return;
       }
-      copyMemory(heapMemory, address + readerIdx, values, CHAR_ARRAY_OFFSET, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(heapMemory, address + readerIdx, values, CHAR_ARRAY_OFFSET, numBytes);
+      } else {
+        readCharsBigEndian(values, 0, numBytes >>> 1, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3556,7 +3624,11 @@ public final class MemoryBuffer {
         streamReader.readShorts(values, 0, numBytes >>> 1);
         return;
       }
-      copyMemory(heapMemory, address + readerIdx, values, SHORT_ARRAY_OFFSET, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(heapMemory, address + readerIdx, values, SHORT_ARRAY_OFFSET, numBytes);
+      } else {
+        readShortsBigEndian(values, 0, numBytes >>> 1, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3577,7 +3649,11 @@ public final class MemoryBuffer {
         streamReader.readInts(values, 0, numBytes >>> 2);
         return;
       }
-      copyMemory(heapMemory, address + readerIdx, values, INT_ARRAY_OFFSET, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(heapMemory, address + readerIdx, values, INT_ARRAY_OFFSET, numBytes);
+      } else {
+        readIntsBigEndian(values, 0, numBytes >>> 2, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3598,7 +3674,11 @@ public final class MemoryBuffer {
         streamReader.readLongs(values, 0, numBytes >>> 3);
         return;
       }
-      copyMemory(heapMemory, address + readerIdx, values, LONG_ARRAY_OFFSET, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(heapMemory, address + readerIdx, values, LONG_ARRAY_OFFSET, numBytes);
+      } else {
+        readLongsBigEndian(values, 0, numBytes >>> 3, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3619,7 +3699,11 @@ public final class MemoryBuffer {
         streamReader.readFloats(values, 0, numBytes >>> 2);
         return;
       }
-      copyMemory(heapMemory, address + readerIdx, values, FLOAT_ARRAY_OFFSET, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(heapMemory, address + readerIdx, values, FLOAT_ARRAY_OFFSET, numBytes);
+      } else {
+        readFloatsBigEndian(values, 0, numBytes >>> 2, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3640,7 +3724,11 @@ public final class MemoryBuffer {
         streamReader.readDoubles(values, 0, numBytes >>> 3);
         return;
       }
-      copyMemory(heapMemory, address + readerIdx, values, DOUBLE_ARRAY_OFFSET, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(heapMemory, address + readerIdx, values, DOUBLE_ARRAY_OFFSET, numBytes);
+      } else {
+        readDoublesBigEndian(values, 0, numBytes >>> 3, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3682,12 +3770,16 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      copyMemory(
-          heapMemory,
-          address + readerIdx,
-          chars,
-          CHAR_ARRAY_OFFSET + ((long) offset << 1),
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            heapMemory,
+            address + readerIdx,
+            chars,
+            CHAR_ARRAY_OFFSET + ((long) offset << 1),
+            numBytes);
+      } else {
+        readCharsBigEndian(chars, offset, numElements, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3720,12 +3812,16 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          SHORT_ARRAY_OFFSET + ((long) offset << 1),
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            heapMemory,
+            address + readerIdx,
+            values,
+            SHORT_ARRAY_OFFSET + ((long) offset << 1),
+            numBytes);
+      } else {
+        readShortsBigEndian(values, offset, numElements, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3744,12 +3840,16 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          INT_ARRAY_OFFSET + ((long) offset << 2),
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            heapMemory,
+            address + readerIdx,
+            values,
+            INT_ARRAY_OFFSET + ((long) offset << 2),
+            numBytes);
+      } else {
+        readIntsBigEndian(values, offset, numElements, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3768,12 +3868,16 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          LONG_ARRAY_OFFSET + ((long) offset << 3),
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            heapMemory,
+            address + readerIdx,
+            values,
+            LONG_ARRAY_OFFSET + ((long) offset << 3),
+            numBytes);
+      } else {
+        readLongsBigEndian(values, offset, numElements, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3792,12 +3896,16 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          FLOAT_ARRAY_OFFSET + ((long) offset << 2),
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            heapMemory,
+            address + readerIdx,
+            values,
+            FLOAT_ARRAY_OFFSET + ((long) offset << 2),
+            numBytes);
+      } else {
+        readFloatsBigEndian(values, offset, numElements, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3816,13 +3924,53 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          DOUBLE_ARRAY_OFFSET + ((long) offset << 3),
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            heapMemory,
+            address + readerIdx,
+            values,
+            DOUBLE_ARRAY_OFFSET + ((long) offset << 3),
+            numBytes);
+      } else {
+        readDoublesBigEndian(values, offset, numElements, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
+    }
+  }
+
+  private void readCharsBigEndian(char[] values, int offset, int length, int readerIdx) {
+    for (int i = 0; i < length; i++) {
+      values[offset + i] = (char) _unsafeGetInt16(readerIdx + i * 2);
+    }
+  }
+
+  private void readShortsBigEndian(short[] values, int offset, int length, int readerIdx) {
+    for (int i = 0; i < length; i++) {
+      values[offset + i] = _unsafeGetInt16(readerIdx + i * 2);
+    }
+  }
+
+  private void readIntsBigEndian(int[] values, int offset, int length, int readerIdx) {
+    for (int i = 0; i < length; i++) {
+      values[offset + i] = _unsafeGetInt32(readerIdx + i * 4);
+    }
+  }
+
+  private void readLongsBigEndian(long[] values, int offset, int length, int readerIdx) {
+    for (int i = 0; i < length; i++) {
+      values[offset + i] = _unsafeGetInt64(readerIdx + i * 8);
+    }
+  }
+
+  private void readFloatsBigEndian(float[] values, int offset, int length, int readerIdx) {
+    for (int i = 0; i < length; i++) {
+      values[offset + i] = Float.intBitsToFloat(_unsafeGetInt32(readerIdx + i * 4));
+    }
+  }
+
+  private void readDoublesBigEndian(double[] values, int offset, int length, int readerIdx) {
+    for (int i = 0; i < length; i++) {
+      values[offset + i] = Double.longBitsToDouble(_unsafeGetInt64(readerIdx + i * 8));
     }
   }
 

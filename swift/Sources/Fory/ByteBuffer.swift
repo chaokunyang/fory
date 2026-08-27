@@ -192,13 +192,6 @@ public final class ByteBuffer {
         cursor -= amount
     }
 
-    @usableFromInline
-    @inline(__always)
-    internal func moveBackUnchecked(_ amount: Int) {
-        // Hot read owners use this only to rewind bytes they just consumed successfully.
-        cursor -= amount
-    }
-
     @inlinable
     @inline(__always)
     internal func appendLittleEndian<T: FixedWidthInteger>(_ value: T) {
@@ -768,7 +761,7 @@ public final class ByteBuffer {
         if (first & 1) == 0 {
             return Int64(first >> 1)
         }
-        moveBackUnchecked(3)
+        cursor -= 3
         return try readInt64()
     }
 
@@ -778,7 +771,7 @@ public final class ByteBuffer {
         if (first & 1) == 0 {
             return UInt64(first >> 1)
         }
-        moveBackUnchecked(3)
+        cursor -= 3
         return try readUInt64()
     }
 
@@ -851,6 +844,8 @@ public final class ByteBuffer {
                 }
             }
             if isASCII {
+                // ASCII bytes are always valid UTF-8.
+                // swiftlint:disable:next optional_data_string_conversion
                 return String(decoding: utf8Bytes, as: UTF8.self)
             }
             if #available(macOS 15.0, iOS 18.0, tvOS 18.0, watchOS 11.0, visionOS 2.0, *) {

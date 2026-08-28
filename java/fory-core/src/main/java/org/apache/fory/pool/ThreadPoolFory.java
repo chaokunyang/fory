@@ -164,6 +164,10 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
         () -> {
           for (Fory fory : pooledFory) {
             callback.accept(fory);
+            if (fory.getTypeResolver().isRegistrationFrozen()) {
+              throw new IllegalStateException(
+                  "A ThreadSafeFory child started a root operation during registration.");
+            }
           }
         });
   }

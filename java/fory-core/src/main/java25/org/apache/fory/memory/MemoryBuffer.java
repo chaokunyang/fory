@@ -205,13 +205,16 @@ public final class MemoryBuffer {
     checkNotNull(offHeapBuffer, "JDK25 MemoryBuffer requires a ByteBuffer owner for off-heap data");
     checkArgument(
         offHeapBuffer.isDirect(), "Only direct ByteBuffers can back off-heap MemoryBuffer");
-    this.offHeapBuffer = offHeapBuffer;
-    ByteBuffer nativeBuffer = offHeapBuffer.duplicate().order(NATIVE_ORDER);
-    // Stream readers can expand the owner buffer limit after this duplicate is created. Keep the
-    // absolute-access view capacity-wide so JDK25 public ByteBuffer checks match the logical buffer
-    // size tracked by MemoryBuffer.
-    nativeBuffer.clear();
-    this.nativeOffHeapBuffer = nativeBuffer;
+    if (this.offHeapBuffer != offHeapBuffer || nativeOffHeapBuffer == null) {
+      this.offHeapBuffer = offHeapBuffer;
+      ByteBuffer nativeBuffer = offHeapBuffer.duplicate().order(NATIVE_ORDER);
+      // Stream readers can expand the owner buffer limit after this duplicate is created. Keep the
+      // absolute-access view capacity-wide so JDK25 public ByteBuffer checks match the logical
+      // buffer size tracked by MemoryBuffer. Reinitializing the same owner only changes its logical
+      // span, so retain this view instead of allocating one for every stream-root compaction.
+      nativeBuffer.clear();
+      this.nativeOffHeapBuffer = nativeBuffer;
+    }
     this.heapMemory = null;
     this.address = offHeapAddress;
     this.addressLimit = this.address + size;

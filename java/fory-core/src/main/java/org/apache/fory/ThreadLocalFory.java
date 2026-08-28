@@ -35,6 +35,7 @@ import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.serializer.BufferCallback;
+import org.apache.fory.util.ExceptionUtils;
 
 /**
  * A thread safe serialization entrance for {@link Fory} by binding a {@link Fory} for every thread.
@@ -66,20 +67,23 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   private Fory newFory() {
     return registrationGate.initializeChild(
         () -> {
-          Fory fory = foryFactory.get();
-          // Bind and publish the same provisional child before callbacks. A callback which
-          // reenters the facade then freezes this child instead of recursively creating another.
-          foryThreadLocal.set(fory);
+          Fory fory = null;
           try {
+            fory = foryFactory.get();
             allFory.put(fory, null);
             factoryCallback.accept(fory);
+            if (fory.getTypeResolver().isRegistrationFrozen()) {
+              throw new IllegalStateException(
+                  "A ThreadSafeFory child started a root operation during registration replay.");
+            }
             // Keep finalization in this failure scope so an unusable late child is not retained.
             registrationGate.finishChildIfFrozen(fory);
             return fory;
-          } catch (RuntimeException | Error e) {
-            foryThreadLocal.remove();
-            allFory.remove(fory);
-            throw e;
+          } catch (Throwable e) {
+            if (fory != null) {
+              allFory.remove(fory);
+            }
+            throw ExceptionUtils.throwException(e);
           }
         });
   }
@@ -103,7 +107,13 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
     registrationGate.applyRegistration(
         () -> {
           synchronized (allFory) {
-            allFory.keySet().forEach(callback);
+            for (Fory fory : allFory.keySet()) {
+              callback.accept(fory);
+              if (fory.getTypeResolver().isRegistrationFrozen()) {
+                throw new IllegalStateException(
+                    "A ThreadSafeFory child started a root operation during registration.");
+              }
+            }
           }
         },
         () -> factoryCallback = factoryCallback.andThen(callback));
@@ -111,8 +121,7 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
 
   @Override
   public <R> R execute(Function<Fory, R> action) {
-    registrationGate.freeze();
-    return action.apply(foryThreadLocal.get());
+    return action.apply(currentFory());
   }
 
   @Override

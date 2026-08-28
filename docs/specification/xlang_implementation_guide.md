@@ -89,15 +89,37 @@ when the callback returns and reject that publication. Kotlin and Scala combined
 registration are the type-first exception: publish the canonical type required by generated
 serializer construction, then recheck after construction and before replacing its serializer.
 Do not add rollback, staging, or a parallel registration path for that exception. Module
-installation may consist of complete nested registrations; publish the module-installed marker
-only after installation returns and the lifecycle is rechecked.
+installation may consist of complete nested registrations. `Fory.register(ForyModule)` alone owns
+module identity, cycle breaking, and idempotence; language bootstrap helpers must not add markers,
+monitors, or separate reentry policies. Keep a retryable install body replay-safe until its final
+non-repeatable publication.
 
-Java combined type-and-serializer registration constructs against an unpublished type, rechecks
-the registry lifecycle, and then publishes the type and serializer together. The exact
-`ObjectSerializer` path uses its nonpublishing constructor. Static-generated serializer classes
-require an already registered canonical type and are therefore rejected by the combined class
-overload. Direct Java `Fory` instances may install a module before their first root operation;
-thread-safe facades install modules only through `ForyBuilder.withModule` during construction.
+Java thread-safe facades serialize each registration callback across their children. A root or
+facade registration reentered by that callback rejects the in-progress registration, and any
+callback failure closes the facade permanently. This fail-closed boundary prevents partially
+applied child state or divergent callback order from becoming observable without adding resolver
+rollback, snapshots, or a second registration path. A late thread-local child remains provisional
+until every accepted callback has replayed and its resolver has finalized; facade access cannot
+expose that child sooner.
+
+C# `ThreadSafeFory` validates registration on its staging runtime and publishes only a successful
+replay action. The resolver prepares serializer bindings and encoded names before one map commit;
+a failed callback does not require rebuilding or replacing the staging runtime.
+
+Python `ThreadSafeFory` likewise validates callbacks before retaining them. Retained callbacks may
+capture a serializer class or factory so every child constructs a serializer against its own
+resolver; they must not replay one resolver-bound serializer instance. Use the existing
+`fory_factory` when each child needs a separately configured serializer instance.
+
+Java `TypeResolver` owns one construction-local `TypeInfo` graph for serializer constructors,
+including self and mutual recursion. After construction and the registry lifecycle recheck
+succeed, the normal Class/Xtype resolver commit path publishes the graph. It retains an existing
+canonical `TypeInfo` owner when its wire and user IDs match because generated serializers and field
+metadata may already capture that owner. There is no constructor-specific publication path or
+nonpublishing serializer factory. Static-generated serializer classes require an already
+registered canonical type and are therefore rejected by the combined class overload. Direct Java
+`Fory` instances may install a module before their first root operation; thread-safe facades
+install modules only through `ForyBuilder.withModule` during construction.
 
 JavaScript generated registration freezes the complete `TypeInfo` schema graph before code
 generation, including nested schemas and field occurrence modifiers. The writer-owned
@@ -105,10 +127,11 @@ generation, including nested schemas and field occurrence modifiers. The writer-
 initializes the complete recursive serializer graph against generation-local owners. Generated
 factories may use a construction-only lookup for fixed serializer captures, while runtime and
 dynamic dispatch retain the real `TypeResolver`. After every factory and application code hook
-succeeds, the resolver performs one guarded batch publication. An uninitialized, already-published
-forward owner is initialized in place during that commit so previous generated captures retain its
-identity. An initialized owner published by a nested registration is authoritative and must not be
-overwritten by the outer registration.
+succeeds, the resolver performs one guarded batch publication. A nested identity-only Struct must
+already have a fully initialized registered owner or belong to the current complete recursive
+schema graph. An unresolved nested identity fails registration before resolver publication. An
+initialized owner published by a nested registration is authoritative and must not be overwritten
+by the outer registration.
 
 Nested serializers must not call back into root `serialize(...)` or
 `deserialize(...)` entry points.
@@ -133,8 +156,8 @@ Java scoped meta-share `TypeInfo` occurrence tables use their logical size as th
 visibility boundary. A table with at most 8192 active entries resets only that size and retains its
 slots; a larger table replaces its backing with eight slots. This uniform owner rule keeps normal
 cleanup allocation-free and must not be specialized for particular entry counts or benchmark
-shapes. JavaScript read-side occurrence arrays use native replacement reset instead. Its MetaString
-and TypeMeta writer owner tables retain bounded backing through 8192 active owners, reset only
+shapes. JavaScript read-side metadata occurrence arrays use native replacement reset instead. Its
+MetaString and TypeMeta writer owner tables retain bounded backing through 8192 active owners, reset only
 their own logical size after restoring active owner IDs, and release backing above that boundary.
 
 That operation-local state includes:
@@ -959,11 +982,12 @@ Keep the root bitmap separate from per-object ref markers:
 
 The current root write flow is:
 
-1. `Fory.serialize(...)` or `serializeTo(...)` prepares the target buffer.
-2. `Fory` calls `writeContext.prepare(...)`.
-3. `Fory` writes the root bitmap.
-4. `Fory` delegates the root object to `WriteContext`.
-5. State left by the write resets before the next root reuses the context.
+1. `Fory.serialize(...)` or `serializeTo(...)` permanently freezes registration.
+2. `Fory` prepares the target buffer.
+3. `Fory` calls `writeContext.prepare(...)`.
+4. `Fory` writes the root bitmap.
+5. `Fory` delegates the root object to `WriteContext`.
+6. State left by the write resets before the next root reuses the context.
 
 For a non-null root value, `WriteContext.writeRootValue(...)` performs:
 
@@ -993,12 +1017,13 @@ Important rules:
 
 The current root read flow mirrors the write flow:
 
-1. `Fory.deserialize(...)` or `deserializeFrom(...)` reads the root bitmap.
-2. null roots return immediately.
-3. `Fory` validates xlang mode and other root framing requirements.
-4. `Fory` calls `readContext.prepare(...)`.
-5. `Fory` delegates to `ReadContext`.
-6. State left by the read resets before the next root reuses the context.
+1. `Fory.deserialize(...)` or `deserializeFrom(...)` permanently freezes registration.
+2. `Fory` reads the root bitmap.
+3. null roots return immediately.
+4. `Fory` validates xlang mode and other root framing requirements.
+5. `Fory` calls `readContext.prepare(...)`.
+6. `Fory` delegates to `ReadContext`.
+7. State left by the read resets before the next root reuses the context.
 
 ### `ReadContext` owns ref reservation and payload materialization
 

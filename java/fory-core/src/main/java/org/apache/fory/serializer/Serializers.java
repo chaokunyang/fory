@@ -108,7 +108,7 @@ public class Serializers {
    */
   public static <T> Serializer<T> newSerializer(
       TypeResolver typeResolver, Class type, Class<? extends Serializer> serializerClass) {
-    TypeInfo typeInfo = typeResolver.getTypeInfo(type, false);
+    TypeInfo typeInfo = typeResolver.getConstructionTypeInfo(type);
     Serializer serializer = typeInfo == null ? null : typeInfo.getSerializer();
     try {
       return buildSerializer(typeResolver, type, serializerClass);

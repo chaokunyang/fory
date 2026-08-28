@@ -22,7 +22,9 @@ package org.apache.fory;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -99,7 +101,8 @@ public final class Fory implements BaseFory {
   private final WriteContext writeContext;
   private final ReadContext readContext;
   private final CopyContext copyContext;
-  private final IdentityHashMap<ForyModule, Boolean> installedModules = new IdentityHashMap<>();
+  private final Set<ForyModule> moduleRegistrations =
+      Collections.newSetFromMap(new IdentityHashMap<>());
   private final byte headerBitmap;
   private MemoryBuffer buffer;
 
@@ -227,12 +230,18 @@ public final class Fory implements BaseFory {
   public void register(ForyModule module) {
     Preconditions.checkNotNull(module);
     checkRegisterAllowed();
-    if (installedModules.containsKey(module)) {
+    if (!moduleRegistrations.add(module)) {
       return;
     }
-    module.install(this);
-    checkRegisterAllowed();
-    installedModules.put(module, Boolean.TRUE);
+    try {
+      // Publishing the identity before the callback breaks self and mutual installation cycles.
+      // A failure removes it, while a successful installation retains the identity for idempotence.
+      module.install(this);
+      checkRegisterAllowed();
+    } catch (Throwable e) {
+      moduleRegistrations.remove(module);
+      throw ExceptionUtils.throwException(e);
+    }
   }
 
   @Override
@@ -271,7 +280,7 @@ public final class Fory implements BaseFory {
   public void registerSerializer(
       Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator) {
     checkRegisterAllowed();
-    getTypeResolver().registerSerializer(type, serializerCreator.apply(typeResolver));
+    getTypeResolver().registerSerializer(type, serializerCreator);
   }
 
   @Override
@@ -291,7 +300,7 @@ public final class Fory implements BaseFory {
   public void registerSerializerAndType(
       Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator) {
     checkRegisterAllowed();
-    getTypeResolver().registerSerializerAndType(type, serializerCreator.apply(typeResolver));
+    getTypeResolver().registerSerializerAndType(type, serializerCreator);
   }
 
   @Override
@@ -709,7 +718,7 @@ public final class Fory implements BaseFory {
   }
 
   private void checkRegisterAllowed() {
-    if (typeResolver.isRegistrationFinished()) {
+    if (typeResolver.isRegistrationFrozen()) {
       throw new ForyException(
           "Cannot register class/serializer after registration has been frozen. Please register "
               + "all classes before invoking top-level `serialize/deserialize/copy` methods of "

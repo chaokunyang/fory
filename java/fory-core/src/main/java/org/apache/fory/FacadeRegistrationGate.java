@@ -22,12 +22,14 @@ package org.apache.fory;
 import java.util.function.Supplier;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.util.ExceptionUtils;
 
-/** Owns the permanent registration freeze before a thread-safe facade's first root or callback. */
+/** Owns registration/root linearization and the permanent freeze at the first facade root. */
 @Internal
 public final class FacadeRegistrationGate {
   private enum RegistrationState {
     OPEN,
+    REGISTERING,
     FINALIZING,
     FROZEN,
     FAILED
@@ -35,6 +37,7 @@ public final class FacadeRegistrationGate {
 
   private final Object lock = new Object();
   private final Runnable finishChildren;
+  private boolean childInitializing;
   private volatile RegistrationState state = RegistrationState.OPEN;
 
   public FacadeRegistrationGate(Runnable finishChildren) {
@@ -43,25 +46,50 @@ public final class FacadeRegistrationGate {
 
   public void applyRegistration(Runnable action) {
     synchronized (lock) {
-      checkRegistrationAllowed();
-      action.run();
-      checkRegistrationAllowed();
+      beginRegistration();
+      try {
+        action.run();
+        finishRegistration();
+      } catch (Throwable e) {
+        state = RegistrationState.FAILED;
+        throw ExceptionUtils.throwException(e);
+      }
     }
   }
 
   public void applyRegistration(Runnable prepare, Runnable publish) {
     synchronized (lock) {
-      checkRegistrationAllowed();
-      prepare.run();
-      checkRegistrationAllowed();
-      publish.run();
+      beginRegistration();
+      try {
+        prepare.run();
+        requireRegistrationActive();
+        publish.run();
+        finishRegistration();
+      } catch (Throwable e) {
+        state = RegistrationState.FAILED;
+        throw ExceptionUtils.throwException(e);
+      }
     }
   }
 
   /** Initializes a child while registration callbacks cannot change. */
   public Fory initializeChild(Supplier<Fory> initializer) {
     synchronized (lock) {
-      return initializer.get();
+      // The monitor is reentrant, so an active initialization here is necessarily the same
+      // thread reentering the facade before its provisional child is ready.
+      if (childInitializing) {
+        throw new IllegalStateException(
+            "ThreadSafeFory cannot start a root while a child is being initialized.");
+      }
+      childInitializing = true;
+      try {
+        return initializer.get();
+      } catch (Throwable e) {
+        state = RegistrationState.FAILED;
+        throw ExceptionUtils.throwException(e);
+      } finally {
+        childInitializing = false;
+      }
     }
   }
 
@@ -84,6 +112,11 @@ public final class FacadeRegistrationGate {
       if (current == RegistrationState.FAILED) {
         throw new ForyException("ThreadSafeFory registration finalization previously failed.");
       }
+      if (current == RegistrationState.REGISTERING) {
+        state = RegistrationState.FAILED;
+        throw new ForyException(
+            "Cannot start a root operation while ThreadSafeFory registration is in progress.");
+      }
       if (current == RegistrationState.FINALIZING) {
         throw new ForyException("ThreadSafeFory registration finalization is already in progress.");
       }
@@ -91,20 +124,43 @@ public final class FacadeRegistrationGate {
       try {
         finishChildren.run();
         state = RegistrationState.FROZEN;
-      } catch (RuntimeException | Error e) {
+      } catch (Throwable e) {
         // Registration remains permanently closed after a failed first finalization.
         state = RegistrationState.FAILED;
-        throw e;
+        throw ExceptionUtils.throwException(e);
       }
     }
   }
 
-  private void checkRegistrationAllowed() {
-    if (state != RegistrationState.OPEN) {
-      throw new ForyException(
-          "Cannot register class/serializer after registration has been frozen. Please register "
-              + "all classes before invoking top-level `serialize/deserialize/copy` methods of "
-              + "ThreadSafeFory.");
+  private void beginRegistration() {
+    RegistrationState current = state;
+    if (current == RegistrationState.OPEN) {
+      state = RegistrationState.REGISTERING;
+      return;
     }
+    // The lock is reentrant, so REGISTERING here can only be same-thread facade reentry. Applying
+    // its callback now would give existing children and future replay different registration order.
+    if (current == RegistrationState.REGISTERING) {
+      state = RegistrationState.FAILED;
+    }
+    throw registrationClosed();
+  }
+
+  private void finishRegistration() {
+    requireRegistrationActive();
+    state = RegistrationState.OPEN;
+  }
+
+  private void requireRegistrationActive() {
+    if (state != RegistrationState.REGISTERING) {
+      throw registrationClosed();
+    }
+  }
+
+  private ForyException registrationClosed() {
+    return new ForyException(
+        "Cannot register class/serializer after registration has been frozen or failed. Please "
+            + "register all classes before invoking top-level `serialize/deserialize/copy` "
+            + "methods of ThreadSafeFory.");
   }
 }

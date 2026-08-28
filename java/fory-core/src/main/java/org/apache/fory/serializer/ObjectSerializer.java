@@ -84,10 +84,9 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     super(typeResolver, cls, objectInstantiator);
     trackingRef = config.trackingRef();
     checkClassVersion = typeResolver.checkClassVersion();
-    // avoid recursive building serializers.
-    // Use `setSerializerIfAbsent` to avoid overwriting existing serializer for class when used
-    // as data serializer.
     if (resolveParent) {
+      // Recursive field construction must see this serializer before its fields are resolved. The
+      // resolver keeps this binding construction-local during combined registration.
       typeResolver.setSerializerIfAbsent(cls, this);
     }
     Collection<Descriptor> descriptors;

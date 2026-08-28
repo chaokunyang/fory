@@ -210,7 +210,7 @@ public class FieldGroups {
               && resolver.isCollectionDescriptor(d);
       // invoke `copy` to avoid ObjectSerializer construct clear serializer by `clearSerializer`.
       if (resolver.isMonomorphic(descriptor)) {
-        typeInfo = resolver.getTypeInfo(typeRef.getRawType());
+        typeInfo = resolver.getFieldTypeInfo(typeRef.getRawType());
         if (!resolver.isShareMeta()
             && !resolver.isCompatible()
             && typeInfo.getSerializer() instanceof ReplaceResolveSerializer) {
@@ -301,7 +301,7 @@ public class FieldGroups {
       } else {
         if (!primitiveListCollection
             && (resolver.isMap(cls) || resolver.isCollection(cls) || resolver.isSet(cls))) {
-          containerTypeInfo = resolver.getTypeInfo(cls);
+          containerTypeInfo = resolver.getFieldTypeInfo(cls);
         } else {
           containerTypeInfo = null;
         }

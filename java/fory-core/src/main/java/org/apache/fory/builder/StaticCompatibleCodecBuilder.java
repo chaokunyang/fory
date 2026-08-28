@@ -239,19 +239,21 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
     Code.ExprCode newRecord =
         new Invoke(generatedObjectInstantiator(), "newInstanceWithArguments", OBJECT_TYPE, values)
             .genCode(ctx);
-    code.append("try {\n");
+    code.append("Object _f_record;\n").append("try {\n");
     if (StringUtils.isNotBlank(newRecord.code())) {
       code.append(indent(newRecord.code(), 2)).append('\n');
     }
-    code.append("  Object _f_record = ")
+    code.append("  _f_record = ")
         .append(newRecord.value())
         .append(";\n")
-        .append("  return _f_record;\n")
-        .append("} finally {\n");
+        .append("} catch (Throwable _f_error) {\n")
+        .append("  java.util.Arrays.fill(_f_recordArgs, null);\n")
+        .append("  throw org.apache.fory.util.ExceptionUtils.throwException(_f_error);\n")
+        .append("}\n");
     for (int i = 0; i < components.length; i++) {
-      code.append("  _f_recordArgs[").append(i).append("] = null;\n");
+      code.append("_f_recordArgs[").append(i).append("] = null;\n");
     }
-    code.append("}");
+    code.append("return _f_record;");
     return code.toString();
   }
 

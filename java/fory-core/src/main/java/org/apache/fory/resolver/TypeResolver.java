@@ -140,6 +140,21 @@ public abstract class TypeResolver {
     }
   }
 
+  private static final class SerializerConstruction {
+    // Self and mutually recursive constructors must capture these exact TypeInfo owners. Publishing
+    // them before the callback and lifecycle recheck succeeds would leave stale recursive captures
+    // and partially registered types after failure.
+    final Class<?> registrationType;
+    final boolean registerType;
+    final IdentityHashMap<Class<?>, TypeInfo> typeInfos = new IdentityHashMap<>();
+    boolean rejected;
+
+    SerializerConstruction(Class<?> registrationType, boolean registerType) {
+      this.registrationType = registrationType;
+      this.registerType = registerType;
+    }
+  }
+
   final Config config;
   final boolean metaContextShareEnabled;
   final SharedRegistry sharedRegistry;
@@ -155,7 +170,9 @@ public abstract class TypeResolver {
   // Caches for readTypeInfo(ReadContext) - persist between calls to avoid reloading
   // dynamically created classes that can't be found by Class.forName
   private final TypeInfo[] typeInfoCache;
+  private boolean registrationFrozen;
   private boolean registrationFinished;
+  private SerializerConstruction serializerConstruction;
 
   protected TypeResolver(
       Config config,
@@ -197,7 +214,13 @@ public abstract class TypeResolver {
     return registrationFinished;
   }
 
+  @Internal
+  public final boolean isRegistrationFrozen() {
+    return registrationFrozen;
+  }
+
   protected final void setRegistrationFinished() {
+    registrationFrozen = true;
     registrationFinished = true;
   }
 
@@ -230,11 +253,11 @@ public abstract class TypeResolver {
   }
 
   protected final void checkRegisterAllowed() {
-    if (registrationFinished) {
+    checkRegistrationOpen();
+    if (serializerConstruction != null) {
+      serializerConstruction.rejected = true;
       throw new ForyException(
-          "Cannot register class/serializer after registration has been frozen. Please register "
-              + "all classes before invoking top-level `serialize/deserialize/copy` methods of "
-              + "Fory.");
+          "Cannot start an independent registration while a serializer is being constructed.");
     }
   }
 
@@ -378,6 +401,14 @@ public abstract class TypeResolver {
   public abstract <T> void registerSerializer(
       Class<T> type, Class<? extends Serializer> serializerClass);
 
+  /** Registers a serializer produced by {@code serializerCreator}. */
+  @Internal
+  public final void registerSerializer(
+      Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator) {
+    checkRegisterAllowed();
+    constructSerializer(type, serializerCreator, false);
+  }
+
   /**
    * Registers a serializer for internal types (those with fixed IDs in the type system). This
    * method is used for built-in types like ArrayList, HashMap, etc.
@@ -400,6 +431,13 @@ public abstract class TypeResolver {
     if (registrationFinished) {
       return;
     }
+    registrationFrozen = true;
+    boolean constructionActive = serializerConstruction != null;
+    if (constructionActive) {
+      serializerConstruction.rejected = true;
+      throw new ForyException(
+          "Cannot start a root operation while a serializer is being constructed.");
+    }
     sharedRegistry.setRegistrationIfAbsent(
         extRegistry.registeredClassIdMap, extRegistry.registeredClasses);
     extRegistry.finishRegistration(
@@ -417,19 +455,21 @@ public abstract class TypeResolver {
   public <T> void registerSerializerAndType(
       Class<T> type, Class<? extends Serializer> serializerClass) {
     checkRegisterAllowed();
+    checkSerializerRegistration(type, serializerClass);
     if (StaticGeneratedStructSerializer.class.isAssignableFrom(serializerClass)) {
       throw new ForyException(
           "Static generated serializers require registering the type first, then installing a "
               + "constructed serializer instance with registerSerializer.");
     }
-    Serializer<?> serializer =
-        serializerClass == ObjectSerializer.class
-            ? new ObjectSerializer<>(this, type, false)
-            : newSerializer(type, serializerClass);
-    // Serializer construction may invoke application code which starts a root operation. Keep
-    // type and serializer publication together after the authoritative lifecycle check.
+    constructSerializer(type, resolver -> resolver.newSerializer(type, serializerClass), true);
+  }
+
+  /** Registers a type and a serializer produced by {@code serializerCreator}. */
+  @Internal
+  public final void registerSerializerAndType(
+      Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator) {
     checkRegisterAllowed();
-    registerSerializerAndType(type, serializer);
+    constructSerializer(type, serializerCreator, true);
   }
 
   /**
@@ -439,11 +479,87 @@ public abstract class TypeResolver {
    * @param serializer the serializer instance to use
    */
   public void registerSerializerAndType(Class<?> type, Serializer<?> serializer) {
-    if (!isRegistered(type)) {
-      register(type);
-    }
-    registerSerializer(type, serializer);
+    checkRegisterAllowed();
+    checkSerializerRegistration(type, serializer.getClass());
+    TypeInfo typeInfo = newSerializerTypeInfo(type, serializer, true);
+    checkRegistrationOpen();
+    publishSerializerTypeInfo(typeInfo, true, true);
   }
+
+  private void constructSerializer(
+      Class<?> type,
+      Function<TypeResolver, Serializer<?>> serializerCreator,
+      boolean registerType) {
+    jitContext.lock();
+    try {
+      SerializerConstruction construction = new SerializerConstruction(type, registerType);
+      serializerConstruction = construction;
+      try {
+        Serializer<?> serializer = Preconditions.checkNotNull(serializerCreator.apply(this));
+        checkSerializerRegistration(type, serializer.getClass());
+        bindConstructedSerializer(type, serializer);
+        checkRegistrationOpen();
+        if (construction.rejected) {
+          throw new ForyException(
+              "Serializer construction attempted an independent registration for "
+                  + type.getName());
+        }
+        publishConstruction(construction);
+      } finally {
+        serializerConstruction = null;
+      }
+    } finally {
+      jitContext.unlock();
+    }
+  }
+
+  private void publishConstruction(SerializerConstruction construction) {
+    TypeInfo registrationInfo = construction.typeInfos.get(construction.registrationType);
+    Preconditions.checkNotNull(registrationInfo);
+    // The target may still fail shareable-serializer conflict validation. Publish it first so a
+    // rejected target cannot leave otherwise complete recursive dependencies in canonical maps.
+    Serializer<?> constructedSerializer = registrationInfo.serializer;
+    TypeInfo publishedInfo =
+        publishSerializerTypeInfo(registrationInfo, construction.registerType, true);
+    // Reusing a shared serializer discards the candidate constructor and every dependency it
+    // discovered. Only dependencies retained by the published serializer belong in this resolver.
+    if (publishedInfo.serializer != constructedSerializer) {
+      return;
+    }
+    construction.typeInfos.forEach(
+        (type, typeInfo) -> {
+          if (type != construction.registrationType) {
+            publishSerializerTypeInfo(typeInfo, false, false);
+          }
+        });
+  }
+
+  private void checkRegistrationOpen() {
+    if (registrationFrozen) {
+      throw new ForyException(
+          "Cannot register class/serializer after registration has been frozen. Please register "
+              + "all classes before invoking top-level `serialize/deserialize/copy` methods of "
+              + "Fory.");
+    }
+  }
+
+  protected abstract void checkSerializerRegistration(Class<?> type, Class<?> serializerClass);
+
+  protected abstract TypeInfo newSerializerTypeInfo(
+      Class<?> type, Serializer<?> serializer, boolean registerType);
+
+  protected TypeInfo newAutomaticTypeInfo(Class<?> type, Serializer<?> serializer) {
+    return newSerializerTypeInfo(type, serializer, false);
+  }
+
+  /**
+   * Publishes prepared serializer metadata through the resolver's canonical commit path.
+   *
+   * <p>When the wire and user IDs are unchanged, the resolver must update the existing {@link
+   * TypeInfo} owner because generated serializers and field metadata may already retain it.
+   */
+  protected abstract TypeInfo publishSerializerTypeInfo(
+      TypeInfo typeInfo, boolean registerType, boolean explicitRegistration);
 
   /**
    * Whether to track reference for this type. If false, reference tracing of subclasses may be
@@ -1610,10 +1726,64 @@ public abstract class TypeResolver {
 
   public abstract <T> void setSerializerIfAbsent(Class<T> cls, Serializer<T> serializer);
 
+  /** Returns construction-local metadata for a declared field when one exists. */
+  @Internal
+  public final TypeInfo getFieldTypeInfo(Class<?> type) {
+    if (serializerConstruction != null) {
+      TypeInfo typeInfo = serializerConstruction.typeInfos.get(type);
+      if (typeInfo != null) {
+        return typeInfo;
+      }
+    }
+    return getTypeInfo(type);
+  }
+
+  /** Returns the serializer-construction owner without creating type metadata. */
+  @Internal
+  public final TypeInfo getConstructionTypeInfo(Class<?> type) {
+    TypeInfo typeInfo = getConstructedTypeInfo(type);
+    return typeInfo == null ? getTypeInfo(type, false) : typeInfo;
+  }
+
+  protected final TypeInfo getConstructedTypeInfo(Class<?> type) {
+    return serializerConstruction == null ? null : serializerConstruction.typeInfos.get(type);
+  }
+
+  protected final boolean isConstructingSerializer() {
+    return serializerConstruction != null;
+  }
+
+  protected final TypeInfo bindConstructedSerializer(Class<?> type, Serializer<?> serializer) {
+    SerializerConstruction construction = Preconditions.checkNotNull(serializerConstruction);
+    TypeInfo typeInfo = construction.typeInfos.get(type);
+    if (typeInfo == null) {
+      if (type == construction.registrationType) {
+        typeInfo = newSerializerTypeInfo(type, serializer, construction.registerType);
+      } else {
+        typeInfo = newAutomaticTypeInfo(type, serializer);
+      }
+      construction.typeInfos.put(type, typeInfo);
+    } else {
+      typeInfo.setSerializer(this, serializer);
+    }
+    return typeInfo;
+  }
+
+  protected final TypeInfo stageConstructedTypeInfo(Class<?> type, TypeInfo typeInfo) {
+    Preconditions.checkArgument(typeInfo.type == type);
+    Preconditions.checkNotNull(serializerConstruction).typeInfos.put(type, typeInfo);
+    return typeInfo;
+  }
+
   /**
    * Reset serializer if {@code serializer} is not null, otherwise clear serializer for {@code cls}.
    */
   public <T> void resetSerializer(Class<T> cls, Serializer<T> serializer) {
+    TypeInfo constructedTypeInfo = getConstructedTypeInfo(cls);
+    if (constructedTypeInfo != null) {
+      constructedTypeInfo.setSerializer(this, serializer);
+      return;
+    }
     if (serializer == null) {
       TypeInfo typeInfo = getTypeInfo(cls, false);
       if (typeInfo != null) {

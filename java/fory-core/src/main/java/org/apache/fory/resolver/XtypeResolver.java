@@ -204,6 +204,7 @@ public class XtypeResolver extends TypeResolver {
 
   @Override
   public void register(Class<?> type) {
+    checkRegisterAllowed();
     while (containsUserTypeId(xtypeIdGenerator)) {
       xtypeIdGenerator++;
     }
@@ -515,39 +516,20 @@ public class XtypeResolver extends TypeResolver {
 
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
     checkRegisterAllowed();
-    registerSerializer(type, newSerializer(type, serializerClass));
+    checkSerializerRegistration(type, serializerClass);
+    registerSerializer(type, resolver -> resolver.newSerializer(type, serializerClass));
   }
 
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
     checkRegisterAllowed();
-    TypeInfo typeInfo = checkClassRegistration(type);
+    checkClassRegistration(type);
     checkSerializerRegistration(type, serializer.getClass());
-    boolean localOverride = typeInfo.serializer != null;
-    boolean shouldShare = serializer instanceof Shareable && !localOverride;
-    if (shouldShare) {
-      serializer = sharedRegistry.cacheRegisteredSerializer(type, serializer);
-    }
-    int oldTypeId = typeInfo.typeId;
-    int foryId = oldTypeId;
-
-    if (foryId == Types.STRUCT || foryId == Types.COMPATIBLE_STRUCT) {
-      foryId = Types.EXT;
-    } else if (foryId == Types.NAMED_STRUCT || foryId == Types.NAMED_COMPATIBLE_STRUCT) {
-      foryId = Types.NAMED_EXT;
-    }
-    typeInfo = typeInfo.copy(foryId);
-    typeInfo.setSerializer(this, serializer);
-    if (shouldShare) {
-      typeInfo = sharedRegistry.cacheRegisteredTypeInfo(type, typeInfo);
-    }
-    updateTypeInfo(type, typeInfo);
-    if (typeInfo.typeName != null) {
-      TypeNameBytes typeNameBytes = new TypeNameBytes(typeInfo.namespace, typeInfo.typeName);
-      compositeClassNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
-    }
+    TypeInfo typeInfo = newSerializerTypeInfo(type, serializer, false);
+    publishSerializerTypeInfo(typeInfo, false, true);
   }
 
-  private void checkSerializerRegistration(Class<?> type, Class<?> serializerClass) {
+  @Override
+  protected void checkSerializerRegistration(Class<?> type, Class<?> serializerClass) {
     if (isCollection(type) || Collection.class.isAssignableFrom(type)) {
       if (!CollectionLikeSerializer.class.isAssignableFrom(serializerClass)) {
         throw new IllegalArgumentException(
@@ -564,6 +546,110 @@ public class XtypeResolver extends TypeResolver {
                 serializerClass.getName(), type.getName()));
       }
     }
+  }
+
+  @Override
+  protected TypeInfo newSerializerTypeInfo(
+      Class<?> type, Serializer<?> serializer, boolean registerType) {
+    TypeInfo existingInfo = classInfoMap.get(type);
+    if (!registerType && existingInfo == null) {
+      checkClassRegistration(type);
+    }
+    if (registerType && existingInfo == null) {
+      if (type.isArray()) {
+        return newTypeInfo(type, serializer, determineTypeIdForClass(type));
+      }
+      int userTypeId = xtypeIdGenerator;
+      while (containsUserTypeId(userTypeId)) {
+        userTypeId++;
+      }
+      int typeId = type.isEnum() ? Types.ENUM : Types.EXT;
+      return newTypeInfo(type, serializer, typeId, userTypeId);
+    }
+    int typeId = existingInfo == null ? determineTypeIdForClass(type) : existingInfo.typeId;
+    if (typeId == Types.STRUCT || typeId == Types.COMPATIBLE_STRUCT) {
+      typeId = Types.EXT;
+    } else if (typeId == Types.NAMED_STRUCT || typeId == Types.NAMED_COMPATIBLE_STRUCT) {
+      typeId = Types.NAMED_EXT;
+    }
+    TypeInfo typeInfo;
+    if (existingInfo == null) {
+      typeInfo = newTypeInfo(type, serializer, typeId);
+    } else {
+      typeInfo =
+          new TypeInfo(
+              type,
+              existingInfo.namespace,
+              existingInfo.typeName,
+              serializer,
+              typeId,
+              existingInfo.userTypeId);
+      typeInfo.typeDef = existingInfo.typeDef;
+      typeInfo.setSerializer(this, serializer);
+    }
+    return typeInfo;
+  }
+
+  @Override
+  protected TypeInfo newAutomaticTypeInfo(Class<?> type, Serializer<?> serializer) {
+    TypeInfo existingInfo = classInfoMap.get(type);
+    if (existingInfo == null) {
+      return newTypeInfo(type, serializer, determineTypeIdForClass(type));
+    }
+    TypeInfo typeInfo =
+        new TypeInfo(
+            type,
+            existingInfo.namespace,
+            existingInfo.typeName,
+            serializer,
+            existingInfo.typeId,
+            existingInfo.userTypeId);
+    typeInfo.typeDef = existingInfo.typeDef;
+    typeInfo.setSerializer(this, serializer);
+    return typeInfo;
+  }
+
+  @Override
+  protected TypeInfo publishSerializerTypeInfo(
+      TypeInfo typeInfo, boolean registerType, boolean explicitRegistration) {
+    Class<?> type = typeInfo.type;
+    TypeInfo currentInfo = classInfoMap.get(type);
+    TypeInfo publishedInfo = typeInfo;
+    boolean localOverride = currentInfo != null && currentInfo.serializer != null;
+    boolean shareable = explicitRegistration && typeInfo.serializer instanceof Shareable;
+    if (shareable && !localOverride) {
+      Serializer<?> serializer =
+          sharedRegistry.cacheRegisteredSerializer(type, typeInfo.serializer);
+      typeInfo.setSerializer(this, serializer);
+    }
+    if (currentInfo != null
+        && currentInfo.typeId == typeInfo.typeId
+        && currentInfo.userTypeId == typeInfo.userTypeId) {
+      currentInfo.setSerializer(this, typeInfo.serializer);
+      typeInfo = currentInfo;
+      publishedInfo = typeInfo;
+    }
+    if (shareable && !localOverride) {
+      TypeInfo sharedInfo = sharedRegistry.cacheRegisteredTypeInfo(type, typeInfo);
+      if (sharedInfo.typeId == typeInfo.typeId && sharedInfo.userTypeId == typeInfo.userTypeId) {
+        publishedInfo = sharedInfo;
+      }
+    }
+    updateTypeInfo(type, publishedInfo);
+    if (explicitRegistration && typeInfo.typeName != null) {
+      compositeClassNameBytes2TypeInfo.put(
+          new TypeNameBytes(publishedInfo.namespace, publishedInfo.typeName), publishedInfo);
+    }
+    if (registerType && !(type.isArray() && typeInfo.userTypeId == INVALID_USER_TYPE_ID)) {
+      if (typeInfo.userTypeId != INVALID_USER_TYPE_ID && typeInfo.userTypeId >= xtypeIdGenerator) {
+        xtypeIdGenerator = typeInfo.userTypeId + 1;
+      }
+      String namespace = publishedInfo.decodeNamespace();
+      String typeName = publishedInfo.decodeTypeName();
+      extRegistry.registeredClasses.put(qualifiedName(namespace, typeName), type);
+      registerGraalvmClass(type);
+    }
+    return publishedInfo;
   }
 
   @Override
@@ -837,6 +923,10 @@ public class XtypeResolver extends TypeResolver {
   // buildGenericType methods are inherited from TypeResolver
 
   private TypeInfo buildTypeInfo(Class<?> cls) {
+    TypeInfo constructedTypeInfo = getConstructedTypeInfo(cls);
+    if (constructedTypeInfo != null && constructedTypeInfo.serializer != null) {
+      return constructedTypeInfo;
+    }
     TypeInfo typeInfo = classInfoMap.get(cls);
     if (typeInfo != null && typeInfo.serializer != null) {
       return typeInfo;
@@ -844,7 +934,11 @@ public class XtypeResolver extends TypeResolver {
     if (typeInfo != null) {
       Class<? extends Serializer> serializerClass = getSerializerClassFromGraalvmRegistry(cls);
       if (serializerClass != null) {
-        typeInfo.setSerializer(this, Serializers.newSerializer(this, cls, serializerClass));
+        Serializer<?> serializer = Serializers.newSerializer(this, cls, serializerClass);
+        if (isConstructingSerializer()) {
+          return bindConstructedSerializer(cls, serializer);
+        }
+        typeInfo.setSerializer(this, serializer);
         return typeInfo;
       }
     }
@@ -879,11 +973,7 @@ public class XtypeResolver extends TypeResolver {
       typeId = Types.MAP;
     } else if (UnknownClass.class.isAssignableFrom(cls)) {
       serializer = UnknownClassSerializers.getSerializer(this, "Unknown", cls);
-      if (cls.isEnum()) {
-        typeId = Types.ENUM;
-      } else {
-        typeId = shareMeta ? Types.COMPATIBLE_STRUCT : Types.STRUCT;
-      }
+      typeId = cls.isEnum() ? Types.ENUM : shareMeta ? Types.COMPATIBLE_STRUCT : Types.STRUCT;
     } else if (cls == Object.class) {
       // Object.class is handled as unknown type in xlang
       return getTypeInfo(cls);
@@ -891,6 +981,9 @@ public class XtypeResolver extends TypeResolver {
       Class<Enum> enclosingClass = (Class<Enum>) cls.getEnclosingClass();
       if (enclosingClass != null && enclosingClass.isEnum()) {
         TypeInfo enumInfo = getTypeInfo(enclosingClass);
+        if (isConstructingSerializer()) {
+          return enumInfo;
+        }
         classInfoMap.put(cls, enumInfo);
         return enumInfo;
       } else {
@@ -898,8 +991,15 @@ public class XtypeResolver extends TypeResolver {
       }
     }
     TypeInfo info = newTypeInfo(cls, serializer, typeId);
-    classInfoMap.put(cls, info);
-    return info;
+    if (isConstructingSerializer()) {
+      TypeInfo constructedInfo = getConstructedTypeInfo(cls);
+      if (constructedInfo != null) {
+        return bindConstructedSerializer(cls, serializer);
+      }
+      return stageConstructedTypeInfo(cls, info);
+    }
+    publishSerializerTypeInfo(info, false, false);
+    return classInfoMap.get(cls);
   }
 
   private Serializer<?> getCollectionSerializer(Class<?> cls) {
@@ -1240,11 +1340,22 @@ public class XtypeResolver extends TypeResolver {
 
   @Override
   public <T> void setSerializer(Class<T> cls, Serializer<T> serializer) {
+    if (isConstructingSerializer()) {
+      bindConstructedSerializer(cls, serializer);
+      return;
+    }
     getTypeInfo(cls).setSerializer(this, serializer);
   }
 
   @Override
   public <T> void setSerializerIfAbsent(Class<T> cls, Serializer<T> serializer) {
+    if (isConstructingSerializer()) {
+      TypeInfo typeInfo = getConstructedTypeInfo(cls);
+      if (typeInfo == null || typeInfo.serializer == null) {
+        bindConstructedSerializer(cls, serializer);
+      }
+      return;
+    }
     TypeInfo typeInfo = classInfoMap.get(cls);
     Preconditions.checkNotNull(typeInfo);
     if (typeInfo.serializer == null) {

@@ -52,6 +52,7 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.BeanB;
+import org.apache.fory.util.ExceptionUtils;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -739,6 +740,21 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
+  public void testCheckedFailureStaysClosed() {
+    FacadeRegistrationGate gate = new FacadeRegistrationGate(() -> {});
+
+    Assert.assertThrows(
+        Exception.class,
+        () ->
+            gate.applyRegistration(
+                () -> {
+                  throw ExceptionUtils.throwException(new Exception("failed"));
+                }));
+    Assert.assertThrows(ForyException.class, gate::freeze);
+    Assert.assertThrows(ForyException.class, () -> gate.applyRegistration(() -> {}));
+  }
+
+  @Test
   public void testRejectedCallbackNotReplayed() throws Exception {
     ThreadLocalFory facade =
         Fory.builder()
@@ -756,16 +772,38 @@ public class ThreadSafeForyTest extends ForyTestBase {
                   facade.serialize("freeze");
                 }));
     assertEquals(callbackCalls.get(), 1);
+    Assert.assertThrows(ForyException.class, () -> facade.serialize("closed"));
+    assertEquals(callbackCalls.get(), 1);
+  }
 
-    ExecutorService executor = Executors.newSingleThreadExecutor();
-    try {
-      Fory lateChild =
-          executor.submit(() -> facade.execute(child -> child)).get(10, TimeUnit.SECONDS);
-      assertTrue(lateChild.getTypeResolver().isRegistrationFinished());
-      assertEquals(callbackCalls.get(), 1);
-    } finally {
-      executor.shutdownNow();
-    }
+  @Test
+  public void testNestedRegistrationCloses() throws Exception {
+    ThreadLocalFory facade =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .buildThreadLocalFory();
+    threadLocalChildren(facade);
+    AtomicInteger callbackCalls = new AtomicInteger();
+
+    Assert.assertThrows(
+        ForyException.class,
+        () ->
+            facade.registerCallback(
+                child -> {
+                  callbackCalls.incrementAndGet();
+                  try {
+                    facade.register(BeanB.class);
+                  } catch (ForyException ignored) {
+                    // The outer callback must still observe the failed gate before publication.
+                  }
+                  child.register(BeanA.class);
+                }));
+
+    assertTrue(callbackCalls.get() > 0);
+    Assert.assertThrows(ForyException.class, () -> facade.serialize("closed"));
+    Assert.assertThrows(ForyException.class, () -> facade.register(BeanA.class));
   }
 
   @Test
@@ -804,9 +842,9 @@ public class ThreadSafeForyTest extends ForyTestBase {
     Assert.assertEquals(creatorCalls.get(), 1);
     for (Fory child : children) {
       TypeResolver resolver = child.getTypeResolver();
-      assertTrue(resolver.isRegistrationFinished());
       assertNull(((ClassResolver) resolver).getRegisteredClassId(Foo.class));
     }
+    Assert.assertThrows(ForyException.class, () -> facade.serialize("closed"));
   }
 
   private static Fory[] threadLocalChildren(ThreadLocalFory facade) throws Exception {
@@ -908,18 +946,14 @@ public class ThreadSafeForyTest extends ForyTestBase {
     Map<Fory, Object> children = TestUtils.getFieldValue(facade, "allFory");
     ExecutorService executor = Executors.newSingleThreadExecutor();
     try {
-      for (int i = 0; i < 2; i++) {
-        ExecutionException failure =
-            Assert.expectThrows(
-                ExecutionException.class,
-                () ->
-                    executor
-                        .submit(() -> facade.execute(child -> child))
-                        .get(10, TimeUnit.SECONDS));
-        assertTrue(failure.getCause() instanceof ForyException);
-        assertEquals(children.size(), 1);
-      }
-      assertEquals(callbackCalls.get(), 3);
+      Assert.expectThrows(
+          ExecutionException.class,
+          () -> executor.submit(() -> facade.execute(child -> child)).get(10, TimeUnit.SECONDS));
+      assertEquals(children.size(), 1);
+      assertEquals(callbackCalls.get(), 2);
+
+      Assert.assertThrows(ForyException.class, () -> facade.serialize("closed"));
+      assertEquals(callbackCalls.get(), 2);
     } finally {
       executor.shutdownNow();
     }
@@ -967,7 +1001,9 @@ public class ThreadSafeForyTest extends ForyTestBase {
           Assert.expectThrows(
               ExecutionException.class, () -> registration.get(10, TimeUnit.SECONDS));
       assertTrue(registrationFailure.getCause() instanceof ForyException);
-      root.get(10, TimeUnit.SECONDS);
+      ExecutionException rootFailure =
+          Assert.expectThrows(ExecutionException.class, () -> root.get(10, TimeUnit.SECONDS));
+      assertTrue(rootFailure.getCause() instanceof ForyException);
     } finally {
       allowReentrantRoot.countDown();
       executor.shutdownNow();

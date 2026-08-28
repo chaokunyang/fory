@@ -106,6 +106,22 @@ public class MemoryBufferTest {
   }
 
   @Test
+  public void testDirectReinitRetainsView() {
+    if (JdkVersion.MAJOR_VERSION < 25) {
+      throw new SkipException("The retained direct view is specific to JDK 25+");
+    }
+    ByteBuffer owner = ByteBuffer.allocateDirect(8);
+    MemoryBuffer buffer = MemoryBuffer.fromDirectByteBuffer(owner, 8, null);
+    ByteBuffer nativeView = TestUtils.getFieldValue(buffer, "nativeOffHeapBuffer");
+
+    buffer.initByteBuffer(owner, 4);
+    Assert.assertSame(TestUtils.getFieldValue(buffer, "nativeOffHeapBuffer"), nativeView);
+
+    buffer.initByteBuffer(ByteBuffer.allocateDirect(8), 4);
+    Assert.assertNotSame(TestUtils.getFieldValue(buffer, "nativeOffHeapBuffer"), nativeView);
+  }
+
+  @Test
   public void testBackingRangeChecks() {
     requireRootMemoryBuffer();
     byte[] bytes = new byte[8];

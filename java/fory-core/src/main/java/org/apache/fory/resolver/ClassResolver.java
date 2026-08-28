@@ -479,6 +479,7 @@ public class ClassResolver extends TypeResolver {
    */
   @Override
   public void register(Class<?> cls) {
+    checkRegisterAllowed();
     if (!extRegistry.registeredClassIdMap.containsKey(cls)) {
       while (containsUserTypeId(extRegistry.userIdGenerator)) {
         extRegistry.userIdGenerator++;
@@ -1218,7 +1219,7 @@ public class ClassResolver extends TypeResolver {
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
     checkRegisterAllowed();
     checkSerializerRegistration(type, serializerClass);
-    registerSerializerImpl(type, Serializers.newSerializer(this, type, serializerClass));
+    registerSerializer(type, resolver -> resolver.newSerializer(type, serializerClass));
   }
 
   @Override
@@ -1259,38 +1260,12 @@ public class ClassResolver extends TypeResolver {
 
   private void registerSerializerImpl(Class<?> type, Serializer<?> serializer) {
     checkRegisterAllowed();
-    // Serializer registration trusts the Java name, but must not replace an existing custom name.
-    if (extRegistry.registeredClasses.inverse().get(type) == null) {
-      extRegistry.registeredClasses.put(type.getName(), type);
-    }
-    TypeInfo existingTypeInfo = classInfoMap.get(type);
-    boolean localOverride = existingTypeInfo != null && existingTypeInfo.serializer != null;
-    boolean shareable = serializer instanceof Shareable;
-    if (shareable && !localOverride) {
-      serializer = sharedRegistry.cacheRegisteredSerializer(type, serializer);
-    }
-    addSerializer(type, serializer);
-    TypeInfo typeInfo = classInfoMap.get(type);
-    if (shareable && !localOverride) {
-      TypeInfo sharedTypeInfo = sharedRegistry.cacheRegisteredTypeInfo(type, typeInfo);
-      if (sharedTypeInfo != typeInfo) {
-        typeInfo = sharedTypeInfo;
-        updateTypeInfo(type, typeInfo);
-        clearTypeInfoCache();
-      }
-    }
-    if (typeInfo.namespace != null && typeInfo.typeName != null) {
-      compositeNameBytes2TypeInfo.put(
-          new TypeNameBytes(typeInfo.namespace, typeInfo.typeName), typeInfo);
-    }
-    // in order to support custom serializer for abstract or interface.
-    if (!type.isPrimitive() && (ReflectionUtils.isAbstract(type) || type.isInterface())) {
-      extRegistry.abstractTypeInfo.put(type, typeInfo);
-      extRegistry.registeredTypeInfos.add(typeInfo);
-    }
+    TypeInfo typeInfo = newSerializerTypeInfo(type, serializer, false);
+    publishSerializerTypeInfo(typeInfo, false, true);
   }
 
-  private void checkSerializerRegistration(Class<?> type, Class<?> serializerClass) {
+  @Override
+  protected void checkSerializerRegistration(Class<?> type, Class<?> serializerClass) {
     boolean replaceResolveSerializer =
         ReplaceResolveSerializer.class.isAssignableFrom(serializerClass)
             && useReplaceResolveSerializer(type);
@@ -1317,6 +1292,100 @@ public class ClassResolver extends TypeResolver {
     }
   }
 
+  @Override
+  protected TypeInfo newSerializerTypeInfo(
+      Class<?> type, Serializer<?> serializer, boolean registerType) {
+    TypeInfo existingInfo = classInfoMap.get(type);
+    if (registerType && !isRegistered(type)) {
+      int userId = extRegistry.userIdGenerator;
+      while (containsUserTypeId(userId)) {
+        userId++;
+      }
+      checkRegistration(type, userId, type.getName(), false);
+      return new TypeInfo(this, type, serializer, buildUserTypeId(type, serializer), userId);
+    }
+    int typeId;
+    int userTypeId = INVALID_USER_TYPE_ID;
+    Integer registeredId = extRegistry.registeredClassIdMap.get(type);
+    if (registeredId != null) {
+      boolean internal = isInternalRegisteredClassId(type, registeredId);
+      typeId = internal ? registeredId : buildUserTypeId(type, serializer);
+      userTypeId = internal ? INVALID_USER_TYPE_ID : registeredId;
+    } else {
+      typeId = buildUnregisteredTypeId(type, serializer);
+    }
+    TypeInfo typeInfo;
+    if (existingInfo == null) {
+      typeInfo = new TypeInfo(this, type, serializer, typeId, userTypeId);
+    } else {
+      typeInfo =
+          new TypeInfo(
+              type, existingInfo.namespace, existingInfo.typeName, serializer, typeId, userTypeId);
+      typeInfo.typeDef = existingInfo.typeDef;
+      typeInfo.setSerializer(this, serializer);
+    }
+    return typeInfo;
+  }
+
+  @Override
+  protected TypeInfo publishSerializerTypeInfo(
+      TypeInfo typeInfo, boolean registerType, boolean explicitRegistration) {
+    Class<?> type = typeInfo.type;
+    TypeInfo currentInfo = classInfoMap.get(type);
+    TypeInfo publishedInfo = typeInfo;
+    boolean localOverride = currentInfo != null && currentInfo.serializer != null;
+    boolean shareable = explicitRegistration && typeInfo.serializer instanceof Shareable;
+    if (shareable && !localOverride) {
+      Serializer<?> serializer =
+          sharedRegistry.cacheRegisteredSerializer(type, typeInfo.serializer);
+      typeInfo.setSerializer(this, serializer);
+    }
+    if (currentInfo != null
+        && currentInfo.typeId == typeInfo.typeId
+        && currentInfo.userTypeId == typeInfo.userTypeId) {
+      currentInfo.setSerializer(this, typeInfo.serializer);
+      typeInfo = currentInfo;
+      publishedInfo = typeInfo;
+    }
+    if (shareable && !localOverride) {
+      TypeInfo sharedInfo = sharedRegistry.cacheRegisteredTypeInfo(type, typeInfo);
+      if (sharedInfo.typeId == typeInfo.typeId && sharedInfo.userTypeId == typeInfo.userTypeId) {
+        publishedInfo = sharedInfo;
+      }
+    }
+    if (registerType && typeInfo.userTypeId != INVALID_USER_TYPE_ID) {
+      extRegistry.registeredClassIdMap.put(type, typeInfo.userTypeId);
+    }
+    if (publishedInfo.typeId == REPLACE_STUB_ID) {
+      classInfoMap.put(type, publishedInfo);
+    } else {
+      updateTypeInfo(type, publishedInfo);
+    }
+    if (explicitRegistration && extRegistry.registeredClasses.inverse().get(type) == null) {
+      extRegistry.registeredClasses.put(type.getName(), type);
+    }
+    boolean publishName =
+        explicitRegistration
+            || (!config.requireClassRegistration()
+                && (extRegistry.typeChecker == DEFAULT_TYPE_CHECKER
+                    || sharedRegistry.isTypeAccepted(type.getName())));
+    if (publishName && publishedInfo.namespace != null && publishedInfo.typeName != null) {
+      compositeNameBytes2TypeInfo.put(
+          new TypeNameBytes(publishedInfo.namespace, publishedInfo.typeName), publishedInfo);
+    }
+    if (explicitRegistration
+        && !type.isPrimitive()
+        && (ReflectionUtils.isAbstract(type) || type.isInterface())) {
+      extRegistry.abstractTypeInfo.put(type, publishedInfo);
+      extRegistry.registeredTypeInfos.add(publishedInfo);
+    }
+    if (registerType) {
+      registerGraalvmClass(type);
+    }
+    clearTypeInfoCache();
+    return publishedInfo;
+  }
+
   /**
    * Set the serializer for <code>cls</code>, overwrite serializer if exists. Note if class info is
    * already related with a class, this method should try to reuse that class info, otherwise jit
@@ -1325,6 +1394,10 @@ public class ClassResolver extends TypeResolver {
    */
   @Override
   public <T> void setSerializer(Class<T> cls, Serializer<T> serializer) {
+    if (isConstructingSerializer()) {
+      bindConstructedSerializer(cls, serializer);
+      return;
+    }
     addSerializer(cls, serializer);
   }
 
@@ -1336,6 +1409,13 @@ public class ClassResolver extends TypeResolver {
    */
   @Override
   public <T> void setSerializerIfAbsent(Class<T> cls, Serializer<T> serializer) {
+    if (isConstructingSerializer()) {
+      TypeInfo typeInfo = getConstructedTypeInfo(cls);
+      if (typeInfo == null || typeInfo.serializer == null) {
+        bindConstructedSerializer(cls, serializer);
+      }
+      return;
+    }
     Serializer<T> s = getSerializer(cls, false);
     if (s == null) {
       setSerializer(cls, serializer);
@@ -1353,45 +1433,8 @@ public class ClassResolver extends TypeResolver {
   /** Add serializer for specified class. */
   public void addSerializer(Class<?> type, Serializer<?> serializer) {
     Preconditions.checkNotNull(serializer);
-    TypeInfo typeInfo;
-    Integer classId = extRegistry.registeredClassIdMap.get(type);
-    boolean registered = classId != null;
-    if (registered) {
-      int id = classId;
-      boolean internal = isInternalRegisteredClassId(type, id);
-      int typeId = internal ? id : buildUserTypeId(type, serializer);
-      typeInfo = classInfoMap.get(type);
-      if (typeInfo == null) {
-        typeInfo = new TypeInfo(this, type, null, typeId, internal ? INVALID_USER_TYPE_ID : id);
-      } else {
-        typeInfo = typeInfo.copy(typeId);
-      }
-      updateTypeInfo(type, typeInfo);
-    } else {
-      int typeId = buildUnregisteredTypeId(type, serializer);
-      typeInfo = classInfoMap.get(type);
-      if (typeInfo == null) {
-        typeInfo = new TypeInfo(this, type, null, typeId, INVALID_USER_TYPE_ID);
-      } else {
-        typeInfo = typeInfo.copy(typeId);
-      }
-      if (typeId == REPLACE_STUB_ID) {
-        classInfoMap.put(type, typeInfo);
-      } else {
-        updateTypeInfo(type, typeInfo);
-      }
-      // Automatic serializer creation may publish only a name accepted earlier by isSecure.
-      // Explicit registerSerializer publishes below in registerSerializerImpl as a trust event.
-      if (!config.requireClassRegistration()
-          && (extRegistry.typeChecker == DEFAULT_TYPE_CHECKER
-              || sharedRegistry.isTypeAccepted(type.getName()))
-          && typeInfo.namespace != null
-          && typeInfo.typeName != null) {
-        compositeNameBytes2TypeInfo.put(
-            new TypeNameBytes(typeInfo.namespace, typeInfo.typeName), typeInfo);
-      }
-    }
-    typeInfo.setSerializer(this, serializer);
+    TypeInfo typeInfo = newAutomaticTypeInfo(type, serializer);
+    publishSerializerTypeInfo(typeInfo, false, false);
   }
 
   @SuppressWarnings("unchecked")
@@ -1718,7 +1761,9 @@ public class ClassResolver extends TypeResolver {
       if (typeInfo == null || typeInfo.serializer == null) {
         typeInfo = createTypeInfo(cls);
       }
-      typeInfoCache[depth] = typeInfo;
+      if (!isConstructingSerializer()) {
+        typeInfoCache[depth] = typeInfo;
+      }
     }
     return typeInfo;
   }
@@ -1730,7 +1775,11 @@ public class ClassResolver extends TypeResolver {
       // the declaring enum, so its registered ID or class name must be used instead of `$1`.
       return getTypeInfo(enumClass);
     }
-    addSerializer(cls, createSerializer(cls));
+    Serializer<?> serializer = createSerializer(cls);
+    if (isConstructingSerializer()) {
+      return bindConstructedSerializer(cls, serializer);
+    }
+    addSerializer(cls, serializer);
     return Objects.requireNonNull(classInfoMap.get(cls));
   }
 

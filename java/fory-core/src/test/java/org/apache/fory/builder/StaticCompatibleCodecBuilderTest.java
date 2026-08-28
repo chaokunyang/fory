@@ -303,7 +303,8 @@ public class StaticCompatibleCodecBuilderTest {
           new StaticCompatibleCodecBuilder(TypeRef.of(readerType), reader, remoteTypeDef).genCode();
       Assert.assertTrue(generatedSource.contains("newInstanceWithArguments"));
       Assert.assertTrue(generatedSource.contains("Object[] _f_recordArgs = this._f_recordArgs"));
-      Assert.assertTrue(generatedSource.contains("finally"));
+      Assert.assertTrue(generatedSource.contains("java.util.Arrays.fill(_f_recordArgs, null)"));
+      Assert.assertFalse(generatedSource.contains("finally"));
       Assert.assertTrue(generatedSource.contains("_f_recordArgs[0] = null"));
       Assert.assertFalse(
           generatedSource.contains("return new org.apache.fory.builder." + simpleName));

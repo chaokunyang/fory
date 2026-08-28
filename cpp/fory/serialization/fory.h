@@ -753,10 +753,15 @@ private:
   struct PreFinalized {};
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver,
                 PreFinalized)
-      : BaseFory(config, std::move(resolver)), finalized_(false),
+      : BaseFory(config, std::move(resolver)), finalized_(true),
         precomputed_header_(compute_header(config.xlang)) {
-    // Pre-finalized, immediately create contexts
-    ensure_finalized();
+    // The facade only retains finalized registration metadata. Runtime caches
+    // belong to the context clones, which stay distinct per pooled Fory.
+    // Sharing the published facade resolver avoids a third deep clone on every
+    // pool miss and must not be replaced with another finalization pass.
+    registration_frozen_ = true;
+    write_ctx_.emplace(config_, type_resolver_->clone());
+    read_ctx_.emplace(config_, type_resolver_->clone());
   }
 
   /// Finalize the type resolver on first use.
@@ -1062,9 +1067,10 @@ private:
       : BaseFory(config, std::move(resolver)), finalized_resolver_(),
         finalized_once_flag_(), fory_pool_([this]() {
           // Every public root finalizes before pool acquisition, so a pool miss
-          // only clones the resolver already published by that root.
-          return std::unique_ptr<Fory>(new Fory(
-              config_, finalized_resolver_->clone(), Fory::PreFinalized{}));
+          // can share the facade resolver published by that root. The pooled
+          // Fory constructor owns its context clones.
+          return std::unique_ptr<Fory>(
+              new Fory(config_, finalized_resolver_, Fory::PreFinalized{}));
         }) {}
 
   void ensure_finalized() const {

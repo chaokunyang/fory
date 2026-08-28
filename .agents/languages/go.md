@@ -11,12 +11,15 @@ Load this file when changing `go/fory/` or Go xlang behavior.
   failed root. Exported resolver registration entries recheck that facade-owned state before
   mutation. `threadsafe.Fory` owns the cross-pool boundary with one frozen state, one prepared
   validation instance, and one log of successful named-struct registrations. Failed registrations
-  are not logged; pool misses after freeze replay the immutable successful log. Its custom factory
-  runs without the registration mutex because application code may reenter a root; after the
-  factory returns, registration rechecks the frozen state before publishing prepared or replay
-  state. Resolver duplicate diagnostics identify application serializers by concrete type only;
-  they must not invoke application string or format methods while registration holds the lifecycle
-  mutex.
+  are failure-atomic and are not logged, so they leave the prepared instance intact; pool misses
+  after freeze replay the immutable successful log. Its custom factory runs without the
+  registration mutex because application code may reenter a root; after the factory returns,
+  registration rechecks the frozen state before publishing prepared or replay state. Numeric IDs
+  and registered names are bidirectional identities: each identity owns one registered Go value
+  type, and passing that type's pointer form refers to the same registration. Resolver registration
+  must validate both directions before changing serializers or identity indexes. Resolver duplicate
+  diagnostics identify application serializers by concrete type only; they must not invoke
+  application string or format methods while registration holds the lifecycle mutex.
 - Go `ReadContext` intentionally defers codec errors to existing `HasError` or `CheckError`
   boundaries. After an error, work may continue only while it remains panic- and bounds-safe and
   cannot cause disproportionate work or allocation, publish state that survives root cleanup, or

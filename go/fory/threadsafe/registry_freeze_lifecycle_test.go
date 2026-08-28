@@ -36,6 +36,15 @@ type registryFreezeRace struct {
 	Value int32
 }
 
+type registryIdentityPooled struct {
+	Value int32
+}
+
+type registryInvalidPooled struct {
+	First  int32 `fory:"id=0"`
+	Second int32 `fory:"id=0"`
+}
+
 type reentrantStringSerializer struct {
 	f      *Fory
 	called chan struct{}
@@ -73,14 +82,15 @@ func TestDuplicateSerializerFormatting(t *testing.T) {
 	called := make(chan struct{}, 1)
 	serializer := &reentrantStringSerializer{called: called}
 	var f *Fory
+	var prepared *fory.Fory
 	f = NewWithFactory(func() *fory.Fory {
-		inner := fory.New(fory.WithXlang(false), fory.WithCompatible(false))
-		if err := inner.RegisterUnionByName(
+		prepared = fory.New(fory.WithXlang(false), fory.WithCompatible(false))
+		if err := prepared.RegisterUnionByName(
 			registryFreezePooled{}, "test.DuplicateSerializer", serializer,
 		); err != nil {
 			panic(err)
 		}
-		return inner
+		return prepared
 	})
 	serializer.f = f
 
@@ -104,7 +114,7 @@ func TestDuplicateSerializerFormatting(t *testing.T) {
 	}
 	require.False(t, f.registryFrozen.Load())
 	require.Empty(t, f.registrations)
-	require.Nil(t, f.prepared)
+	require.Same(t, prepared, f.prepared)
 }
 
 func TestFactoryRootReentry(t *testing.T) {
@@ -160,6 +170,33 @@ func TestRegistryFreezePropagation(t *testing.T) {
 	for _, inner := range inners {
 		f.release(inner)
 	}
+}
+
+func TestPreparedSurvivesConflict(t *testing.T) {
+	f := New(fory.WithXlang(false), fory.WithCompatible(false))
+	const name = "test.PreparedIdentity"
+	require.NoError(t, f.RegisterStructByName(registryFreezePooled{}, name))
+	prepared := f.prepared
+	require.NotNil(t, prepared)
+
+	require.Error(t, f.RegisterStructByName(registryIdentityPooled{}, name))
+	require.Same(t, prepared, f.prepared)
+	require.Len(t, f.registrations, 1)
+	require.Error(t,
+		f.RegisterStructByName(registryFreezePooled{}, "test.OtherPreparedIdentity"))
+	require.Same(t, prepared, f.prepared)
+	require.Len(t, f.registrations, 1)
+	require.Error(t,
+		f.RegisterStructByName(registryInvalidPooled{}, "test.InvalidPrepared"))
+	require.Same(t, prepared, f.prepared)
+	require.Len(t, f.registrations, 1)
+
+	want := registryFreezePooled{Value: 7}
+	data, err := f.Serialize(&want)
+	require.NoError(t, err)
+	var got registryFreezePooled
+	require.NoError(t, f.Deserialize(data, &got))
+	require.Equal(t, want, got)
 }
 
 func TestRegistryFreezeOnFailure(t *testing.T) {

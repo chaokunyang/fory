@@ -178,9 +178,7 @@ func (f *Fory) RegisterStructByName(type_ any, name string) error {
 func (f *Fory) registerPrepared(type_ any, name string) error {
 	registration := structRegistration{name: name}
 	if err := f.prepared.RegisterStructByName(type_, name); err != nil {
-		// A failed registration is not part of the facade registry. Rebuild from
-		// the successful log before the next registration or first root.
-		f.prepared = nil
+		// Direct registration errors leave the prepared resolver unchanged.
 		return err
 	}
 	if registeredType, ok := type_.(reflect.Type); ok {

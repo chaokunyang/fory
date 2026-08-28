@@ -126,6 +126,10 @@ f1.RegisterStruct(User{}, 1)
 f2.RegisterStruct(User{}, 1)
 ```
 
+Within one Fory instance, each numeric ID or registered name identifies one registered Go value
+type. Passing a pointer value for that type uses the same registration. A conflicting ID, name, or
+type registration returns an error without replacing the first registration.
+
 ## Registration Timing
 
 Register types after creating a Fory instance and before the first serialization or deserialization

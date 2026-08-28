@@ -34,6 +34,8 @@ type registryFreezeUnion struct{}
 
 type registryFreezeEnum int32
 
+type registryIdentityEnum int32
+
 type registryFreezeExtension struct {
 	Value int32
 }
@@ -136,6 +138,112 @@ func TestNamedEncoderPreflight(t *testing.T) {
 
 	require.NoError(t,
 		f.RegisterStructByName(registryFreezeStruct{}, "test.RegistryFreezeStruct"))
+}
+
+func TestNamedRegistryIdentity(t *testing.T) {
+	f := New(WithXlang(false), WithCompatible(false))
+	const name = "test.RegistryIdentity"
+	require.NoError(t, f.RegisterStructByName(registryFreezeStruct{}, name))
+
+	nameKey := namedTypeKey{"test", "RegistryIdentity"}
+	owner := f.typeResolver.namedTypeToTypeInfo[nameKey]
+	require.NotNil(t, owner)
+	hashKey := nsTypeKey{owner.PkgPathBytes.Hashcode, owner.NameBytes.Hashcode}
+	hashOwner := f.typeResolver.nsTypeToTypeInfo[hashKey]
+	require.NotNil(t, hashOwner)
+	before := takeRegistryFreezeSnapshot(f.typeResolver)
+	attempts := []struct {
+		name string
+		call func() error
+	}{
+		{"same name struct", func() error {
+			return f.RegisterStructByName(registryFreezeUnion{}, name)
+		}},
+		{"same name enum", func() error {
+			return f.RegisterEnumByName(registryFreezeEnum(0), name)
+		}},
+		{"same name union", func() error {
+			return f.RegisterUnionByName(registryFreezeUnion{}, name, NewUnionSerializer(
+				UnionCase{ID: 0, Type: reflect.TypeOf(int32(0)), TypeID: INT32}))
+		}},
+		{"same name extension", func() error {
+			return f.RegisterExtensionByName(
+				registryFreezeExtension{}, name, registryPanicSerializer{})
+		}},
+		{"same type name", func() error {
+			return f.RegisterStructByName(&registryFreezeStruct{}, "test.OtherIdentity")
+		}},
+		{"same type ID", func() error {
+			return f.RegisterStruct(&registryFreezeStruct{}, 7110)
+		}},
+	}
+	for _, attempt := range attempts {
+		t.Run(attempt.name, func(t *testing.T) {
+			require.Error(t, attempt.call())
+			require.Equal(t, before, takeRegistryFreezeSnapshot(f.typeResolver))
+			require.Same(t, owner, f.typeResolver.namedTypeToTypeInfo[nameKey])
+			require.Same(t, hashOwner, f.typeResolver.nsTypeToTypeInfo[hashKey])
+		})
+	}
+
+	want := registryFreezeStruct{Value: 7}
+	data, err := f.Serialize(&want)
+	require.NoError(t, err)
+	var got registryFreezeStruct
+	require.NoError(t, f.Deserialize(data, &got))
+	require.Equal(t, want, got)
+}
+
+func TestNumericRegistryIdentity(t *testing.T) {
+	f := New(WithXlang(false), WithCompatible(false))
+	const typeID = 7111
+	require.NoError(t, f.RegisterEnum(registryFreezeEnum(0), typeID))
+
+	owner := f.typeResolver.userTypeIdToTypeInfo[typeID]
+	require.NotNil(t, owner)
+	before := takeRegistryFreezeSnapshot(f.typeResolver)
+	attempts := []struct {
+		name string
+		call func() error
+	}{
+		{"same type new ID", func() error {
+			value := registryFreezeEnum(0)
+			return f.RegisterEnum(&value, typeID+1)
+		}},
+		{"same ID new type", func() error {
+			return f.RegisterEnum(registryIdentityEnum(0), typeID)
+		}},
+		{"same ID struct", func() error {
+			return f.RegisterStruct(registryFreezeStruct{}, typeID)
+		}},
+		{"same ID union", func() error {
+			return f.RegisterUnion(registryFreezeUnion{}, typeID, NewUnionSerializer(
+				UnionCase{ID: 0, Type: reflect.TypeOf(int32(0)), TypeID: INT32}))
+		}},
+		{"same ID extension", func() error {
+			return f.RegisterExtension(
+				registryFreezeExtension{}, typeID, registryPanicSerializer{})
+		}},
+		{"same type name", func() error {
+			value := registryFreezeEnum(0)
+			return f.RegisterEnumByName(&value, "test.RegistryIdentityEnum")
+		}},
+	}
+	for _, attempt := range attempts {
+		t.Run(attempt.name, func(t *testing.T) {
+			require.Error(t, attempt.call())
+			require.Equal(t, before, takeRegistryFreezeSnapshot(f.typeResolver))
+			require.Same(t, owner, f.typeResolver.userTypeIdToTypeInfo[typeID])
+			require.Same(t, owner, f.typeResolver.typesInfo[reflect.TypeOf(registryFreezeEnum(0))])
+		})
+	}
+
+	want := registryFreezeEnum(7)
+	data, err := f.Serialize(want)
+	require.NoError(t, err)
+	var got registryFreezeEnum
+	require.NoError(t, f.Deserialize(data, &got))
+	require.Equal(t, want, got)
 }
 
 func TestRegistryFreezeRoots(t *testing.T) {

@@ -383,8 +383,9 @@ derived from input size, and stream budgeting should not depend on dynamic bytes
 
 Graph budget accounting should:
 
-- be initialized in top-level read state, with cleanup owned by the top-level deserialization
-  `finally`;
+- be initialized in top-level read state, with restoration owned by the runtime's root lifecycle
+  boundary before that read state is reused; runtimes may restore it in the root `finally` or in
+  the next root-entry reset according to their established context lifecycle;
 - account only for Fory-created objects or storage that are retained by the
   returned value graph; temporary helper objects used only during construction
   are outside the graph budget;

@@ -29,7 +29,8 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
   root-started state, registration depth, and the staging instance; the separate instance-build
   boundary covers the factory and complete registration replay. During child replay, a nested
   facade registration is a no-op only when it exactly matches an accepted descriptor in the prefix
-  already applied to that child; reject every unknown or different request before child mutation.
+  already applied to that child; reject every unknown or different request before that request
+  mutates the child.
   Retained descriptors may contain a serializer class or factory, but never a resolver-bound
   serializer instance. A serializer factory must return a supported serializer carrier bound to
   the provided child resolver and normalized declared type; singleton serializers cannot be shared

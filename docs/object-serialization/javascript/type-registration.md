@@ -162,7 +162,7 @@ name also cannot identify different Struct, enum, extension, or union families.
 An anonymous union with declared cases has no registry identity. Keep and use the serializer pair
 returned by `fory.register(...)`; registering another anonymous union does not replace or reuse the
 earlier union's serializer. A union declared without cases remains an open union with the generic
-union owner and reads each value from the type information carried by that union case.
+union encoding and reads each value from the type information carried by that union case.
 
 ## Field Metadata
 

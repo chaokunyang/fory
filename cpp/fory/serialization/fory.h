@@ -1061,8 +1061,10 @@ private:
                           std::shared_ptr<TypeResolver> resolver)
       : BaseFory(config, std::move(resolver)), finalized_resolver_(),
         finalized_once_flag_(), fory_pool_([this]() {
+          // Every public root finalizes before pool acquisition, so a pool miss
+          // only clones the resolver already published by that root.
           return std::unique_ptr<Fory>(new Fory(
-              config_, get_finalized_resolver(), Fory::PreFinalized{}));
+              config_, finalized_resolver_->clone(), Fory::PreFinalized{}));
         }) {}
 
   void ensure_finalized() const {
@@ -1073,11 +1075,6 @@ private:
           << final_result.error().to_string();
       finalized_resolver_ = std::move(final_result).value();
     });
-  }
-
-  std::shared_ptr<TypeResolver> get_finalized_resolver() const {
-    ensure_finalized();
-    return finalized_resolver_->clone();
   }
 
   mutable std::shared_ptr<TypeResolver> finalized_resolver_;

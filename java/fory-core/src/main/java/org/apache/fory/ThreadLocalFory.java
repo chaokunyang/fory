@@ -35,7 +35,6 @@ import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.serializer.BufferCallback;
-import org.apache.fory.util.ExceptionUtils;
 
 /**
  * A thread safe serialization entrance for {@link Fory} by binding a {@link Fory} for every thread.
@@ -67,25 +66,15 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   private Fory newFory() {
     return registrationGate.initializeChild(
         () -> {
-          Fory fory = null;
-          try {
-            fory = foryFactory.get();
-            allFory.put(fory, null);
-            factoryCallback.accept(fory);
-            if (fory.getTypeResolver().isRegistrationFrozen()) {
-              throw new IllegalStateException(
-                  "A ThreadSafeFory child started a root operation during registration replay.");
-            }
-            // Keep finalization in this failure scope so an unusable late child is not retained.
-            registrationGate.finishChildIfFrozen(fory);
-            return fory;
-          } catch (Throwable e) {
-            if (fory != null) {
-              allFory.remove(fory);
-            }
-            throw ExceptionUtils.throwException(e);
+          Fory child = foryFactory.get();
+          factoryCallback.accept(child);
+          if (child.getTypeResolver().isRegistrationFrozen()) {
+            throw new IllegalStateException(
+                "A ThreadSafeFory child started a root operation during registration replay.");
           }
-        });
+          return child;
+        },
+        child -> allFory.put(child, null));
   }
 
   private void finishChildRegistration() {

@@ -19,6 +19,7 @@
 
 package org.apache.fory;
 
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.exception.ForyException;
@@ -72,30 +73,34 @@ public final class FacadeRegistrationGate {
     }
   }
 
-  /** Initializes a child while registration callbacks cannot change. */
-  public Fory initializeChild(Supplier<Fory> initializer) {
+  /** Initializes and publishes a child while registration callbacks cannot change. */
+  public Fory initializeChild(Supplier<Fory> initializer, Consumer<Fory> publisher) {
     synchronized (lock) {
+      if (state == RegistrationState.FAILED) {
+        throw registrationClosed();
+      }
       // The monitor is reentrant, so an active initialization here is necessarily the same
-      // thread reentering the facade before its provisional child is ready.
+      // thread reentering the facade before the current child initialization completes.
       if (childInitializing) {
         throw new IllegalStateException(
             "ThreadSafeFory cannot start a root while a child is being initialized.");
       }
       childInitializing = true;
       try {
-        return initializer.get();
+        Fory child = initializer.get();
+        if (state == RegistrationState.FROZEN) {
+          child.getTypeResolver().finishRegistration();
+        } else if (state != RegistrationState.OPEN) {
+          throw registrationClosed();
+        }
+        publisher.accept(child);
+        return child;
       } catch (Throwable e) {
         state = RegistrationState.FAILED;
         throw ExceptionUtils.throwException(e);
       } finally {
         childInitializing = false;
       }
-    }
-  }
-
-  void finishChildIfFrozen(Fory child) {
-    if (state == RegistrationState.FROZEN) {
-      child.getTypeResolver().finishRegistration();
     }
   }
 

@@ -691,6 +691,62 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
+  public void testFreezeWaitsForChildPublish() throws Exception {
+    AtomicReference<Fory> published = new AtomicReference<>();
+    AtomicInteger finishSawChild = new AtomicInteger();
+    FacadeRegistrationGate gate =
+        new FacadeRegistrationGate(
+            () -> {
+              Fory child = published.get();
+              assertNotNull(child);
+              finishSawChild.incrementAndGet();
+              child.getTypeResolver().finishRegistration();
+            });
+    Fory child =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .build();
+    CountDownLatch publishEntered = new CountDownLatch(1);
+    CountDownLatch releasePublish = new CountDownLatch(1);
+    CountDownLatch freezeStarted = new CountDownLatch(1);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      Future<Fory> initialization =
+          executor.submit(
+              () ->
+                  gate.initializeChild(
+                      () -> child,
+                      value -> {
+                        publishEntered.countDown();
+                        awaitUnchecked(releasePublish);
+                        published.set(value);
+                      }));
+      assertTrue(publishEntered.await(10, TimeUnit.SECONDS));
+      Future<?> freeze =
+          executor.submit(
+              () -> {
+                freezeStarted.countDown();
+                gate.freeze();
+              });
+      assertTrue(freezeStarted.await(10, TimeUnit.SECONDS));
+      Assert.assertThrows(TimeoutException.class, () -> freeze.get(100, TimeUnit.MILLISECONDS));
+
+      releasePublish.countDown();
+      assertSame(initialization.get(10, TimeUnit.SECONDS), child);
+      freeze.get(10, TimeUnit.SECONDS);
+      assertSame(published.get(), child);
+      assertEquals(finishSawChild.get(), 1);
+      assertTrue(child.getTypeResolver().isRegistrationFinished());
+    } finally {
+      releasePublish.countDown();
+      executor.shutdownNow();
+      executor.awaitTermination(10, TimeUnit.SECONDS);
+    }
+  }
+
+  @Test
   public void testFreezeWaitsForChildren() throws Exception {
     CountDownLatch finishEntered = new CountDownLatch(1);
     CountDownLatch releaseFinish = new CountDownLatch(1);
@@ -933,17 +989,19 @@ public class ThreadSafeForyTest extends ForyTestBase {
             .requireClassRegistration(true)
             .withCompatible(false)
             .buildThreadLocalFory();
+    Map<Fory, Object> children = TestUtils.getFieldValue(facade, "allFory");
     AtomicInteger callbackCalls = new AtomicInteger();
+    AtomicInteger replayPublished = new AtomicInteger(-1);
     facade.registerCallback(
         child -> {
           if (callbackCalls.incrementAndGet() > 1) {
+            replayPublished.set(children.containsKey(child) ? 1 : 0);
             facade.serialize("nested");
           }
           child.register(BeanA.class);
         });
     facade.serialize("freeze");
 
-    Map<Fory, Object> children = TestUtils.getFieldValue(facade, "allFory");
     ExecutorService executor = Executors.newSingleThreadExecutor();
     try {
       Assert.expectThrows(
@@ -951,11 +1009,68 @@ public class ThreadSafeForyTest extends ForyTestBase {
           () -> executor.submit(() -> facade.execute(child -> child)).get(10, TimeUnit.SECONDS));
       assertEquals(children.size(), 1);
       assertEquals(callbackCalls.get(), 2);
+      assertEquals(replayPublished.get(), 0);
 
       Assert.assertThrows(ForyException.class, () -> facade.serialize("closed"));
       assertEquals(callbackCalls.get(), 2);
     } finally {
       executor.shutdownNow();
+    }
+  }
+
+  @Test
+  public void testLateChildFailureRace() throws Exception {
+    ThreadLocalFory facade =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .buildThreadLocalFory();
+    Map<Fory, Object> children = TestUtils.getFieldValue(facade, "allFory");
+    AtomicInteger callbackCalls = new AtomicInteger();
+    CountDownLatch replayEntered = new CountDownLatch(1);
+    CountDownLatch releaseReplay = new CountDownLatch(1);
+    facade.registerCallback(
+        child -> {
+          int call = callbackCalls.incrementAndGet();
+          if (call == 2) {
+            replayEntered.countDown();
+            awaitUnchecked(releaseReplay);
+            throw new IllegalStateException("failed replay");
+          }
+          child.register(BeanA.class);
+        });
+    facade.serialize("freeze");
+
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    AtomicReference<Thread> waitingThread = new AtomicReference<>();
+    CountDownLatch waitingStarted = new CountDownLatch(1);
+    try {
+      Future<?> failing = executor.submit(() -> facade.execute(child -> child));
+      assertTrue(replayEntered.await(10, TimeUnit.SECONDS));
+      Future<?> waiting =
+          executor.submit(
+              () -> {
+                waitingThread.set(Thread.currentThread());
+                waitingStarted.countDown();
+                return facade.execute(child -> child);
+              });
+      assertTrue(waitingStarted.await(10, TimeUnit.SECONDS));
+      awaitBlocked(waitingThread.get());
+
+      releaseReplay.countDown();
+      ExecutionException replayFailure =
+          Assert.expectThrows(ExecutionException.class, () -> failing.get(10, TimeUnit.SECONDS));
+      assertTrue(replayFailure.getCause() instanceof IllegalStateException);
+      ExecutionException waitingFailure =
+          Assert.expectThrows(ExecutionException.class, () -> waiting.get(10, TimeUnit.SECONDS));
+      assertTrue(waitingFailure.getCause() instanceof ForyException);
+      assertEquals(callbackCalls.get(), 2);
+      assertEquals(children.size(), 1);
+    } finally {
+      releaseReplay.countDown();
+      executor.shutdownNow();
+      executor.awaitTermination(10, TimeUnit.SECONDS);
     }
   }
 

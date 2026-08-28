@@ -82,10 +82,6 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
 
   private PooledEntry acquire() {
     registrationGate.freeze();
-    return acquireEntry();
-  }
-
-  private PooledEntry acquireEntry() {
     int slotIndex = slotIndexForCurrentThread();
     PooledEntry entry = tryBorrowPreferredSlots(slotIndex);
     if (entry != null) {
@@ -174,8 +170,7 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
 
   @Override
   public <R> R execute(Function<Fory, R> action) {
-    registrationGate.freeze();
-    PooledEntry entry = acquireEntry();
+    PooledEntry entry = acquire();
     try {
       return action.apply(entry.fory);
     } finally {

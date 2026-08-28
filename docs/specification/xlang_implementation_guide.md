@@ -109,10 +109,13 @@ C# `ThreadSafeFory` validates registration on its staging runtime and publishes 
 replay action. The resolver prepares serializer bindings and encoded names before one map commit;
 a failed callback does not require rebuilding or replacing the staging runtime.
 
-Python `ThreadSafeFory` likewise validates callbacks before retaining them. Retained callbacks may
-capture a serializer class or factory so every child constructs a serializer against its own
-resolver; they must not replay one resolver-bound serializer instance. Use the existing
-`fory_factory` when each child needs a separately configured serializer instance.
+Python `ThreadSafeFory` validates registrations before retaining semantic replay descriptors. A
+later child applies the accepted descriptor prefix in order. A nested replay request is a no-op
+only when it exactly matches an accepted descriptor already applied to that child; an unknown or
+different request fails before that request mutates the child. Retained descriptors may contain a
+serializer class or factory, but every result must belong to the current child resolver and
+normalized declared type; they must not reuse one resolver-bound serializer instance. Use the
+existing `fory_factory` when each child needs a separately configured serializer instance.
 
 Java `TypeResolver` owns one construction-local graph for serializer constructors, including self
 and mutual recursion. The graph separates final `TypeInfo` owners from unpublished serializer
@@ -132,12 +135,14 @@ install modules only through `ForyBuilder.withModule` during construction.
 JavaScript generated registration seals the complete `TypeInfo` schema graph before code
 generation, including nested schemas and field occurrence modifiers. The package-internal seal
 locks each schema-owned pointer before reading or traversing it. The writer-owned `dynamicTypeId`
-remains mutable because it is reset per root. Code generation seeds every complete Struct
-definition by registry identity before resolving identity-only occurrences, so recursive schema
-resolution does not depend on field order. Each resolver identity has one complete schema owner in
-the graph. Repeated references and clones may share that owner's immutable definition containers
-and settings, while a second conflicting complete definition fails before code generation without
-a deep structural comparison. Code generation then constructs and initializes the complete
+remains mutable because it is reset per root. Code generation seeds every complete Struct, enum,
+and union definition by registry identity before resolving identity-only occurrences, so recursive
+schema resolution does not depend on field order. One numeric ID or name cannot identify different
+user-defined type families. Each resolver identity has one complete schema owner in the graph.
+Repeated references and clones may share that owner's immutable definition containers and settings,
+while a second conflicting complete definition fails before code generation without a deep
+structural comparison. Anonymous user-defined values without a name or user ID remain distinct.
+Code generation then constructs and initializes the complete
 serializer graph against generation-local owners. The same authoritative owner supplies
 generator-time schema and progress facts and fixed factory captures; field occurrence modifiers
 remain owned by the containing schema. Runtime and dynamic dispatch retain the real

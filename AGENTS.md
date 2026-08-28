@@ -166,10 +166,16 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - JavaScript generated registration must build and initialize the complete recursive serializer
   graph against generation-local owners before one `TypeResolver` batch publication. Factory-init
   serializer lookup may see those local owners, but runtime and dynamic lookup must retain the real
-  resolver. A nested identity-only Struct must already have a fully initialized registered owner or
-  resolve to an owner in the current complete recursive schema graph; otherwise registration fails
-  before resolver publication. Do not publish placeholders, nested serializers, descriptors, or
-  cache state before every generated factory and application code hook succeeds.
+  resolver. Seal schema definitions before traversal and preseed complete definitions by identity,
+  so field order cannot affect recursive resolution. One numeric ID or name cannot identify
+  different user-defined type families. Each identity has one complete schema owner; repeated clones
+  are valid only when they share that owner's definition containers and settings. A nested
+  identity-only user-defined type must already have a fully initialized registered owner or resolve
+  to an owner in the current complete recursive schema graph; otherwise registration fails before
+  resolver publication. Anonymous user-defined values without a registry key remain distinct. Once
+  initialized, the published nested owner is authoritative. Do not publish placeholders, nested
+  serializers, descriptors, or cache state before every generated factory and application code hook
+  succeeds.
 - Root failure exceptions must not copy or retain the operation reference table or materialized
   object graph for diagnostics. Root cleanup owns releasing that graph, and failure reporting must
   remain bounded independently of graph size.
@@ -198,9 +204,11 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   prepares, then recheck the authoritative per-instance freeze owner immediately
   before publication. Kotlin and Scala combined generated-struct registration are
   the sole type-first exception: publish the canonical type needed by generated
-  serializer construction, then recheck after construction and before replacing
-  its serializer. Do not add rollback, staging, or a parallel registration path
-  for this exception. A module installation may perform complete nested
+  serializer construction, then enter the existing resolver construction graph.
+  Keep the candidate unpublished until the authoritative lifecycle recheck and
+  install it through the normal Class/Xtype commit sink. Do not add direct
+  replacement, rollback, staging, or a parallel registration path for this exception.
+  A module installation may perform complete nested
   registrations. Java `Fory.register(ForyModule)` owns cycle breaking and
   idempotence in one identity set: add the identity before installation, remove
   it on failure, and retain it on success; do not add parallel installing and
@@ -223,10 +231,13 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   but the `Fory` facade must not mirror that state; Cython roots call the resolver owner directly.
   Allocate automatic type IDs only after callback preparation and the final freeze recheck, at the
   common registry publication point; do not reserve IDs early or maintain counter rollback state.
-  `ThreadSafeFory` validates registrations before publishing replay callbacks and never invokes an
-  application factory or callback under its non-reentrant pool lock. Reject root reentry from the
-  active instance-build thread before looking in the pool, including when another thread returned
-  an instance during the build.
+  `ThreadSafeFory` validates registrations before retaining semantic replay descriptors and never
+  invokes an application factory or callback under its non-reentrant pool lock. During child replay,
+  a nested request is a no-op only when it exactly matches the accepted prefix already applied to
+  that child; reject unknown or different requests before that request mutates the child. Serializer
+  factories must return carriers bound to the current child resolver and normalized declared type.
+  Reject root reentry from the active instance-build thread before looking in the pool, including
+  when another thread returned an instance during the build.
 - Use semantic naming only. Name things after protocol or domain concepts, not history, runtime origin, or workaround style; avoid vague names such as `Internal`, `java_style_*`, `Runtime`, `Session`, `Plan`, `Payload`, or `Binding` when they do not name the real concept. Keep class, method, function, and variable names concise; do not encode the whole scenario or implementation history into one identifier. Never name a class or method with a `Plan` suffix; use the real domain concept instead. For Fory codec/read APIs, do not use generic `payload` naming; name the exact owner and data shape, such as bytes, body, frame, field, string, list, map, compressed bytes, or primitive-array encoding.
 - Keep one implementation path. Do not keep parallel helpers, serializers, harnesses, wrappers, or registration flows for the same concept; extend the existing owner path instead of inventing another one.
 - Follow current scope exactly. The latest explicit user instruction overrides earlier plans, and when scope narrows, remove leaked out-of-scope edits immediately.

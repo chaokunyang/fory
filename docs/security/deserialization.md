@@ -622,7 +622,7 @@ operation or registry finalization fails. Registration that invokes application 
 the authoritative lifecycle before publishing application-derived state. Thread-safe facades
 retain only registrations that completed before the freeze. During child construction, a semantic
 replay log may reuse only an identical accepted registration that the child has already applied;
-unknown or different requests fail before mutating the child. A facade that replays opaque
+unknown or different requests fail before that request mutates the child. A facade that replays opaque
 registration callbacks and cannot roll them back must become permanently unusable when a callback
 fails rather than expose partially registered children. These rules prevent a failed or reentrant
 registration from changing the accepted type surface after deserialization has begun.

@@ -152,6 +152,28 @@ class BuiltinClassSerializerTests {
   }
 
   @Test
+  fun testFrozenUnionSkipsConstruction() {
+    val fory =
+      ForyKotlin.builder()
+        .withXlang(true)
+        .requireClassRegistration(true)
+        .withRefTracking(false)
+        .build()
+    fory.serialize("freeze")
+    ReentrantRegistration.reset()
+
+    assertThrows(ForyException::class.java) {
+      KotlinSerializers.registerUnion(
+        fory,
+        ReentrantStruct::class.java,
+        "kotlin.ReentrantStruct",
+      )
+    }
+    Assert.assertEquals(ReentrantRegistration.constructions, 0)
+    Assert.assertFalse(fory.typeResolver.isRegistered(ReentrantStruct::class.java))
+  }
+
+  @Test
   fun testSharedDefaultValueSupport() {
     ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
     val support = checkNotNull(DefaultValueUtils.getKotlinDefaultValueSupport())

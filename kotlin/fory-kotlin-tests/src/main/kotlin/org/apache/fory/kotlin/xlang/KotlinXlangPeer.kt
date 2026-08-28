@@ -781,10 +781,6 @@ private fun serializerRegistrationFreezes() {
   check(runCatching { failedRootFory.deserialize(byteArrayOf()) }.isFailure)
   for (frozenFory in listOf(unregisteredFory, failedRootFory)) {
     val resolver = frozenFory.typeResolver
-    val cacheField = resolver.sharedRegistry.javaClass.getDeclaredField("objectInstantiatorCache")
-    cacheField.isAccessible = true
-    val cache = cacheField.get(resolver.sharedRegistry) as Map<*, *>
-    check(KotlinPet::class.java !in cache)
     check(
       runCatching {
           KotlinSerializers.registerUnion(
@@ -795,7 +791,6 @@ private fun serializerRegistrationFreezes() {
         }
         .isFailure
     )
-    check(KotlinPet::class.java !in cache)
     check(!resolver.isRegistered(KotlinPet::class.java))
   }
 

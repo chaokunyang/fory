@@ -158,7 +158,7 @@ test("reuses root write metastring owners", () => {
   expect(name.dynamicWriteStringId).toBe(0);
 });
 
-test("reuses root write type metadata owners", () => {
+test("reuses write metadata owners", () => {
   const fory = new Fory({ compatible: true });
   const registered = fory.register(Type.struct(7610, {}));
   const writeContext = (fory as any).writeContext;
@@ -179,7 +179,7 @@ test("reuses root write type metadata owners", () => {
   expect(typeMeta.dynamicTypeId).toBe(0);
 });
 
-test.each([8192, 8193])("bounds %s root write metastring owners", (ownerCount) => {
+test.each([8192, 8193])("bounds %s metastring owners", (ownerCount) => {
   const fory = new Fory({ compatible: true });
   const writeContext = (fory as any).writeContext;
   const metaStringWriter = writeContext.metaStringWriter;
@@ -202,7 +202,7 @@ test.each([8192, 8193])("bounds %s root write metastring owners", (ownerCount) =
   expect(nextOwner.dynamicWriteStringId).toBe(0);
 });
 
-test.each([8192, 8193])("bounds %s root write type metadata owners", (ownerCount) => {
+test.each([8192, 8193])("bounds %s type metadata owners", (ownerCount) => {
   const fory = new Fory({ compatible: true });
   const writeContext = (fory as any).writeContext;
   const typeMetaOwners = Array.from({ length: ownerCount }, () => ({ dynamicTypeId: -1 }));
@@ -226,7 +226,7 @@ test.each([8192, 8193])("bounds %s root write type metadata owners", (ownerCount
   expect(nextOwner.dynamicTypeId).toBe(0);
 });
 
-test("releases a failed root write buffer before reuse", () => {
+test("releases failed write buffer", () => {
   const fory = new Fory({ compatible: true });
   const registered = fory.register(Type.struct(7608, {}));
   const writer = (fory as any).writeContext.writer;
@@ -241,7 +241,7 @@ test("releases a failed root write buffer before reuse", () => {
   expect(writer.getPlatformBuffer().byteLength).toBeLessThan(4 * 1024 * 1024);
 });
 
-test("clears failed root references before reuse", () => {
+test("clears failed write refs", () => {
   const fory = new Fory({ compatible: false, ref: true });
   const registered = fory.register(Type.struct(7612, {}));
   const refReader = (fory as any).readContext.refReader;

@@ -298,7 +298,7 @@ describe("depth-limit", () => {
       expect(readerFory.readContext.depth).toBe(0);
     });
 
-    test("should reset depth before each deserialization", () => {
+    test("resets depth between roots", () => {
       const fory = new Fory({ compatible: false, maxDepth: 50 });
       const typeInfo = Type.struct(
         {

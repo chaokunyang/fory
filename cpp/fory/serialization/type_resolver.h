@@ -1509,7 +1509,6 @@ private:
 
   static std::string make_name_key(const std::string &ns,
                                    const std::string &name);
-  static uint64_t make_user_type_key(uint32_t type_id, uint32_t user_type_id);
 
   /// Register a TypeInfo, taking ownership and storing in primary storage.
   /// Returns pointer to the stored TypeInfo (owned by TypeResolver).
@@ -2351,12 +2350,6 @@ inline std::string TypeResolver::make_name_key(const std::string &ns,
   return key;
 }
 
-inline uint64_t TypeResolver::make_user_type_key(uint32_t type_id,
-                                                 uint32_t user_type_id) {
-  return (static_cast<uint64_t>(type_id) << 32) |
-         static_cast<uint64_t>(user_type_id);
-}
-
 inline Result<TypeInfo *, Error>
 TypeResolver::register_type_internal(uint64_t ctid,
                                      std::unique_ptr<TypeInfo> info) {
@@ -2365,13 +2358,16 @@ TypeResolver::register_type_internal(uint64_t ctid,
         Error::invalid("TypeInfo or harness is invalid during registration"));
   }
 
-  // Validate all uniqueness constraints before mutating resolver state so
-  // failed registration leaves no partial entries behind.
+  // Validate both directions of the C++ type-to-wire identity before mutating
+  // resolver state so failed registration leaves every owner index unchanged.
   TypeInfo *raw_ptr = info.get();
+  TypeInfo *existing_type = type_info_by_ctid_.get_or_default(ctid, nullptr);
+  if (existing_type != nullptr) {
+    return Unexpected(Error::invalid("C++ type already registered"));
+  }
   const bool is_internal = ::fory::is_internal_type(raw_ptr->type_id);
-  const bool has_user_type_key =
+  const bool has_user_type_id =
       !raw_ptr->register_by_name && raw_ptr->user_type_id != kInvalidUserTypeId;
-  uint64_t user_type_key = 0;
   std::string name_key;
 
   if (is_internal) {
@@ -2381,14 +2377,14 @@ TypeResolver::register_type_internal(uint64_t ctid,
       return Unexpected(Error::invalid("Type id already registered: " +
                                        std::to_string(raw_ptr->type_id)));
     }
-  } else if (has_user_type_key) {
-    user_type_key = make_user_type_key(raw_ptr->type_id, raw_ptr->user_type_id);
+  } else if (has_user_type_id) {
+    // Numeric user IDs share one registry namespace across all user type
+    // families. TypeInfo retains the family for validation during lookup.
     TypeInfo *existing =
-        user_type_info_by_id_.get_or_default(user_type_key, nullptr);
+        user_type_info_by_id_.get_or_default(raw_ptr->user_type_id, nullptr);
     if (existing != nullptr) {
-      return Unexpected(Error::invalid(
-          "Type id already registered: " + std::to_string(raw_ptr->type_id) +
-          "/" + std::to_string(raw_ptr->user_type_id)));
+      return Unexpected(Error::invalid("User type id already registered: " +
+                                       std::to_string(raw_ptr->user_type_id)));
     }
   }
 
@@ -2409,8 +2405,8 @@ TypeResolver::register_type_internal(uint64_t ctid,
 
   if (is_internal) {
     type_info_by_id_.put(stored_ptr->type_id, stored_ptr);
-  } else if (has_user_type_key) {
-    user_type_info_by_id_.put(user_type_key, stored_ptr);
+  } else if (has_user_type_id) {
+    user_type_info_by_id_.put(stored_ptr->user_type_id, stored_ptr);
   }
 
   if (stored_ptr->register_by_name) {
@@ -2440,9 +2436,8 @@ TypeResolver::get_type_info_by_id(uint32_t type_id) const {
 inline Result<const TypeInfo *, Error>
 TypeResolver::get_user_type_info_by_id(uint32_t type_id,
                                        uint32_t user_type_id) const {
-  uint64_t key = make_user_type_key(type_id, user_type_id);
-  TypeInfo *info = user_type_info_by_id_.get_or_default(key, nullptr);
-  if (info != nullptr) {
+  TypeInfo *info = user_type_info_by_id_.get_or_default(user_type_id, nullptr);
+  if (info != nullptr && info->type_id == type_id) {
     return info;
   }
   return Unexpected(Error::type_error(

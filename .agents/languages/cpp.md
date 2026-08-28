@@ -27,6 +27,11 @@ Load this file when changing `cpp/`, Cython build plumbing, or C++ xlang behavio
   registration-thread checks. Do not add a layout-preserving helper, padding, or call-shape
   workaround. Resolver finalization prepares metadata completely and publishes it only after the
   completed resolver clone succeeds; failed finalization must not expose partial metadata.
+- `TypeResolver::register_type_internal` owns the bidirectional C++ type-to-wire identity preflight
+  for struct, enum, extension, and union registration. Reject an existing compile-time type owner
+  or wire ID/name before publication; numeric user type IDs are unique across all four families,
+  and exact repeated registration remains rejected. Do not add rollback, rebuild, or parallel
+  identity state.
 - Put private methods last in class definitions, immediately before private fields.
 - Do not redesign alias-based or low-level public type shapes to add convenience methods unless the user explicitly asks for that API change.
 - For cross-language feature ports, match protocol behavior but use idiomatic C++ ownership and layering instead of mirroring Java structure literally.

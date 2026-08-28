@@ -66,8 +66,9 @@ int main() {
 
 Type IDs must be:
 
-1. **Unique**: Each type must have a unique ID within a Fory instance
-2. **Consistent**: Same ID must be used across all languages and versions
+1. **Unique**: Each numeric ID identifies one C++ type across structs, enums, extension types, and unions within a Fory instance. Each registered name also identifies one C++ type
+2. **Single binding**: Register each C++ type once. It cannot be rebound to another ID or name, and repeating the same registration also returns an error
+3. **Consistent**: Use the same ID across all languages and versions
 
 User-registered type IDs are in a separate namespace from built-in type IDs, so you can start from 0:
 

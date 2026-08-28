@@ -35,6 +35,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <typeinfo>
 #include <unordered_map>
 #include <variant>
@@ -190,6 +191,22 @@ inline void register_test_types(Fory &fory) {
 inline std::vector<uint8_t> buffer_bytes(Buffer &buffer) {
   return std::vector<uint8_t>(buffer.data(),
                               buffer.data() + buffer.writer_index());
+}
+
+template <typename T>
+void expect_numeric_owner(TypeResolver &resolver, uint32_t user_type_id,
+                          const TypeInfo *owner) {
+  auto by_type = resolver.get_type_info<T>();
+  ASSERT_TRUE(by_type.ok());
+  EXPECT_EQ(by_type.value(), owner);
+
+  auto by_id = resolver.get_user_type_info_by_id(owner->type_id, user_type_id);
+  ASSERT_TRUE(by_id.ok());
+  EXPECT_EQ(by_id.value(), owner);
+
+  auto by_runtime = resolver.get_type_info(std::type_index(typeid(T)));
+  ASSERT_TRUE(by_runtime.ok());
+  EXPECT_EQ(by_runtime.value(), owner);
 }
 
 class RegistryProbeInputStream final : public InputStream {
@@ -1425,6 +1442,107 @@ TEST(SerializationTest, RegistrationByNameFailureDoesNotLeakTypeInfo) {
       fory.register_struct<::NestedStruct>("demo", "Nested.Type");
   EXPECT_FALSE(dotted_type_name.ok());
   EXPECT_EQ(dotted_type_name.error().code(), ErrorCode::Invalid);
+}
+
+TEST(SerializationTest, TypeIdentityConflictsAreAtomic) {
+  using IdentityUnion = std::variant<int32_t, std::string>;
+  using IdentityRoot = std::tuple<::SimpleStruct, ::SignedScopedStatus,
+                                  ::IdLimitExt, IdentityUnion>;
+
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  TypeResolver &resolver = fory.type_resolver();
+
+  ASSERT_TRUE(fory.register_struct<::SimpleStruct>(1).ok());
+  ASSERT_TRUE(fory.register_enum<::SignedScopedStatus>(2).ok());
+  ASSERT_TRUE(fory.register_extension_type<::IdLimitExt>(3).ok());
+  ASSERT_TRUE(fory.register_union<IdentityUnion>(4).ok());
+
+  auto struct_info = resolver.get_type_info<::SimpleStruct>();
+  auto enum_info = resolver.get_type_info<::SignedScopedStatus>();
+  auto ext_info = resolver.get_type_info<::IdLimitExt>();
+  auto union_info = resolver.get_type_info<IdentityUnion>();
+  ASSERT_TRUE(struct_info.ok());
+  ASSERT_TRUE(enum_info.ok());
+  ASSERT_TRUE(ext_info.ok());
+  ASSERT_TRUE(union_info.ok());
+
+  const TypeInfo *struct_owner = struct_info.value();
+  const TypeInfo *enum_owner = enum_info.value();
+  const TypeInfo *ext_owner = ext_info.value();
+  const TypeInfo *union_owner = union_info.value();
+
+  EXPECT_FALSE(fory.register_struct<::SimpleStruct>(1).ok());
+  EXPECT_FALSE(fory.register_struct<::SimpleStruct>("conflict", "Struct").ok());
+  EXPECT_FALSE(
+      fory.register_enum<::SignedScopedStatus>("conflict", "Enum").ok());
+  EXPECT_FALSE(
+      fory.register_extension_type<::IdLimitExt>("conflict", "Ext").ok());
+  EXPECT_FALSE(fory.register_union<IdentityUnion>("conflict", "Union").ok());
+
+  expect_numeric_owner<::SimpleStruct>(resolver, 1, struct_owner);
+  expect_numeric_owner<::SignedScopedStatus>(resolver, 2, enum_owner);
+  expect_numeric_owner<::IdLimitExt>(resolver, 3, ext_owner);
+  expect_numeric_owner<IdentityUnion>(resolver, 4, union_owner);
+
+  EXPECT_FALSE(resolver.get_type_info_by_name("conflict", "Struct").ok());
+  EXPECT_FALSE(resolver.get_type_info_by_name("conflict", "Enum").ok());
+  EXPECT_FALSE(resolver.get_type_info_by_name("conflict", "Ext").ok());
+  EXPECT_FALSE(resolver.get_type_info_by_name("conflict", "Union").ok());
+
+  IdentityRoot original{::SimpleStruct{7, 9}, ::SignedScopedStatus::LARGE,
+                        ::IdLimitExt{42}, IdentityUnion{std::string("value")}};
+  auto bytes = fory.serialize(original);
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  auto decoded = fory.deserialize<IdentityRoot>(bytes.value());
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value(), original);
+}
+
+TEST(SerializationTest, NumericIdentityConflictsAreAtomic) {
+  using IdentityUnion = std::variant<int32_t, std::string>;
+
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  TypeResolver &resolver = fory.type_resolver();
+
+  ASSERT_TRUE(fory.register_struct<::SimpleStruct>(1).ok());
+  auto struct_info = resolver.get_type_info<::SimpleStruct>();
+  ASSERT_TRUE(struct_info.ok());
+  const TypeInfo *struct_owner = struct_info.value();
+
+  EXPECT_FALSE(fory.register_enum<::SignedScopedStatus>(1).ok());
+  EXPECT_FALSE(fory.register_extension_type<::IdLimitExt>(1).ok());
+  EXPECT_FALSE(fory.register_union<IdentityUnion>(1).ok());
+
+  expect_numeric_owner<::SimpleStruct>(resolver, 1, struct_owner);
+  EXPECT_FALSE(resolver.get_type_info<::SignedScopedStatus>().ok());
+  EXPECT_FALSE(resolver.get_type_info<::IdLimitExt>().ok());
+  EXPECT_FALSE(resolver.get_type_info<IdentityUnion>().ok());
+  EXPECT_FALSE(
+      resolver.get_user_type_info_by_id(static_cast<uint32_t>(TypeId::ENUM), 1)
+          .ok());
+  EXPECT_FALSE(
+      resolver.get_user_type_info_by_id(static_cast<uint32_t>(TypeId::EXT), 1)
+          .ok());
+  EXPECT_FALSE(resolver
+                   .get_user_type_info_by_id(
+                       static_cast<uint32_t>(TypeId::TYPED_UNION), 1)
+                   .ok());
+  EXPECT_FALSE(
+      resolver.get_type_info(std::type_index(typeid(::SignedScopedStatus)))
+          .ok());
+  EXPECT_FALSE(
+      resolver.get_type_info(std::type_index(typeid(::IdLimitExt))).ok());
+  EXPECT_FALSE(
+      resolver.get_type_info(std::type_index(typeid(IdentityUnion))).ok());
+
+  ::SimpleStruct original{7, 9};
+  auto bytes = fory.serialize(original);
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  auto decoded = fory.deserialize<::SimpleStruct>(bytes.value());
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value(), original);
 }
 
 static std::vector<uint8_t> make_remote_type_meta(const std::string &type_name,

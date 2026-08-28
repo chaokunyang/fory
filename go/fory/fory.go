@@ -327,15 +327,7 @@ func (f *Fory) RegisterStruct(type_ any, typeID uint32) error {
 	if err := validateUserTypeID(typeID); err != nil {
 		return err
 	}
-	var t reflect.Type
-	if rt, ok := type_.(reflect.Type); ok {
-		t = rt
-	} else {
-		t = reflect.TypeOf(type_)
-		if t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
-	}
+	t := valueRegistrationType(type_)
 
 	// Only struct types are supported via RegisterStruct
 	// For enums, use RegisterEnum
@@ -366,15 +358,7 @@ func (f *Fory) RegisterUnion(type_ any, typeID uint32, serializer Serializer) er
 	if err := validateUserTypeID(typeID); err != nil {
 		return err
 	}
-	var t reflect.Type
-	if rt, ok := type_.(reflect.Type); ok {
-		t = rt
-	} else {
-		t = reflect.TypeOf(type_)
-		if t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
-	}
+	t := valueRegistrationType(type_)
 	if t.Kind() != reflect.Struct {
 		return fmt.Errorf("RegisterUnion only supports struct types; got: %v", t.Kind())
 	}
@@ -394,15 +378,7 @@ func (f *Fory) RegisterUnionByName(type_ any, name string, serializer Serializer
 	if serializer == nil {
 		return fmt.Errorf("RegisterUnionByName requires a non-nil serializer")
 	}
-	var t reflect.Type
-	if rt, ok := type_.(reflect.Type); ok {
-		t = rt
-	} else {
-		t = reflect.TypeOf(type_)
-		if t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
-	}
+	t := valueRegistrationType(type_)
 	if t.Kind() != reflect.Struct {
 		return fmt.Errorf("RegisterUnionByName only supports struct types; got: %v", t.Kind())
 	}
@@ -423,15 +399,7 @@ func (f *Fory) RegisterStructByName(type_ any, name string) error {
 	if err := f.checkRegistrationOpen(); err != nil {
 		return err
 	}
-	var t reflect.Type
-	if rt, ok := type_.(reflect.Type); ok {
-		t = rt
-	} else {
-		t = reflect.TypeOf(type_)
-		if t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
-	}
+	t := valueRegistrationType(type_)
 	if t.Kind() != reflect.Struct {
 		return fmt.Errorf("RegisterStructByName only supports struct types; for enum types use RegisterEnumByName. Got: %v", t.Kind())
 	}
@@ -456,15 +424,7 @@ func (f *Fory) RegisterEnum(type_ any, typeID uint32) error {
 	if err := validateUserTypeID(typeID); err != nil {
 		return err
 	}
-	var t reflect.Type
-	if rt, ok := type_.(reflect.Type); ok {
-		t = rt
-	} else {
-		t = reflect.TypeOf(type_)
-		if t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
-	}
+	t := valueRegistrationType(type_)
 
 	// Verify it's a numeric type (Go enums are int-based)
 	switch t.Kind() {
@@ -488,15 +448,7 @@ func (f *Fory) RegisterEnumByName(type_ any, name string) error {
 	if err := f.checkRegistrationOpen(); err != nil {
 		return err
 	}
-	var t reflect.Type
-	if rt, ok := type_.(reflect.Type); ok {
-		t = rt
-	} else {
-		t = reflect.TypeOf(type_)
-		if t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
-	}
+	t := valueRegistrationType(type_)
 
 	// Verify it's a numeric type (Go enums are int-based)
 	switch t.Kind() {
@@ -526,15 +478,7 @@ func (f *Fory) RegisterExtension(type_ any, typeID uint32, serializer ExtensionS
 	if err := validateUserTypeID(typeID); err != nil {
 		return err
 	}
-	var t reflect.Type
-	if rt, ok := type_.(reflect.Type); ok {
-		t = rt
-	} else {
-		t = reflect.TypeOf(type_)
-		if t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
-	}
+	t := valueRegistrationType(type_)
 	return f.typeResolver.RegisterExtension(t, typeID, serializer)
 }
 
@@ -565,15 +509,7 @@ func (f *Fory) RegisterExtensionByName(type_ any, name string, serializer Extens
 	if err := f.checkRegistrationOpen(); err != nil {
 		return err
 	}
-	var t reflect.Type
-	if rt, ok := type_.(reflect.Type); ok {
-		t = rt
-	} else {
-		t = reflect.TypeOf(type_)
-		if t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
-	}
+	t := valueRegistrationType(type_)
 	namespace, typeName, err := splitRegisteredName(name)
 	if err != nil {
 		return err

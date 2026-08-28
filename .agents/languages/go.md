@@ -16,10 +16,13 @@ Load this file when changing `go/fory/` or Go xlang behavior.
   registration mutex because application code may reenter a root; after the factory returns,
   registration rechecks the frozen state before publishing prepared or replay state. Numeric IDs
   and registered names are bidirectional identities: each identity owns one registered Go value
-  type, and passing that type's pointer form refers to the same registration. Resolver registration
-  must validate both directions before changing serializers or identity indexes. Resolver duplicate
-  diagnostics identify application serializers by concrete type only; they must not invoke
-  application string or format methods while registration holds the lifecycle mutex.
+  type, and passing that type's pointer form refers to the same registration. Facade and exported
+  resolver registration entries normalize values and `reflect.Type` inputs to that non-pointer
+  value owner before type validation or resolver mutation; only resolver publication creates its
+  single pointer companion. Resolver registration must validate both directions before changing
+  serializers or identity indexes. Resolver duplicate diagnostics identify application serializers
+  by concrete type only; they must not invoke application string or format methods while
+  registration holds the lifecycle mutex.
 - Go `ReadContext` intentionally defers codec errors to existing `HasError` or `CheckError`
   boundaries. After an error, work may continue only while it remains panic- and bounds-safe and
   cannot cause disproportionate work or allocation, publish state that survives root cleanup, or

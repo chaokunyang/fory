@@ -36,6 +36,48 @@ type registryFreezeEnum int32
 
 type registryIdentityEnum int32
 
+type pointerRegistrationStruct struct {
+	Value int32
+}
+
+type pointerRegistrationEnum int32
+
+type pointerRegistrationUnion struct {
+	caseID uint32
+	value  any
+}
+
+func (pointerRegistrationUnion) ForyUnionMarker() {}
+
+func (u pointerRegistrationUnion) ForyUnionGet() (uint32, any) {
+	return u.caseID, u.value
+}
+
+func (u *pointerRegistrationUnion) ForyUnionSet(caseID uint32, value any) {
+	u.caseID = caseID
+	u.value = value
+}
+
+type pointerRegistrationExtension struct {
+	Value int32
+}
+
+type pointerExtensionSerializer struct{}
+
+func (pointerExtensionSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	if value.Kind() == reflect.Ptr {
+		value = value.Elem()
+	}
+	ctx.Buffer().WriteInt32(int32(value.FieldByName("Value").Int()))
+}
+
+func (pointerExtensionSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	if value.Kind() == reflect.Ptr {
+		value = value.Elem()
+	}
+	value.FieldByName("Value").SetInt(int64(ctx.Buffer().ReadInt32(ctx.Err())))
+}
+
 type registryFreezeExtension struct {
 	Value int32
 }
@@ -244,6 +286,171 @@ func TestNumericRegistryIdentity(t *testing.T) {
 	var got registryFreezeEnum
 	require.NoError(t, f.Deserialize(data, &got))
 	require.Equal(t, want, got)
+}
+
+func requireRegisteredRoundTrip[T any](t *testing.T, f *Fory, want T) {
+	t.Helper()
+	data, err := f.Serialize(&want)
+	require.NoError(t, err)
+	var got T
+	require.NoError(t, f.Deserialize(data, &got))
+	require.Equal(t, want, got)
+}
+
+func requireValueRegistrationOwner(
+	t *testing.T,
+	f *Fory,
+	valueType reflect.Type,
+	owner *TypeInfo,
+) {
+	t.Helper()
+	pointerType := reflect.PointerTo(valueType)
+	doublePointerType := reflect.PointerTo(pointerType)
+	require.NotNil(t, owner)
+	require.Equal(t, valueType, owner.Type)
+	valueInfo := f.typeResolver.typesInfo[valueType]
+	pointerInfo := f.typeResolver.typesInfo[pointerType]
+	require.NotNil(t, valueInfo)
+	require.NotNil(t, pointerInfo)
+	require.Equal(t, valueInfo.TypeID, pointerInfo.TypeID)
+	require.Equal(t, valueInfo.UserTypeID, pointerInfo.UserTypeID)
+	require.Contains(t, f.typeResolver.typeToSerializers, valueType)
+	require.NotContains(t, f.typeResolver.typeToSerializers, doublePointerType)
+	require.NotContains(t, f.typeResolver.typeToTypeInfo, doublePointerType)
+	require.NotContains(t, f.typeResolver.typesInfo, doublePointerType)
+	require.NotContains(t, f.typeResolver.typeToTypeDef, doublePointerType)
+	require.NotContains(t, f.typeResolver.unionTypeCache, doublePointerType)
+	require.NotContains(t, f.typeResolver.typePointerCache, typePointer(doublePointerType))
+}
+
+func TestPointerReflectTypeRegistration(t *testing.T) {
+	type registrationFamily struct {
+		name             string
+		valueType        reflect.Type
+		pointerType      reflect.Type
+		userTypeID       uint32
+		wireName         string
+		registerID       func(*Fory, reflect.Type) error
+		registerName     func(*Fory, reflect.Type) error
+		registerResolver func(*Fory, reflect.Type) error
+		roundTrip        func(*testing.T, *Fory)
+	}
+	unionSerializer := func() *UnionSerializer {
+		return NewUnionSerializer(
+			UnionCase{ID: 0, Type: reflect.TypeOf(int32(0)), TypeID: INT32})
+	}
+	families := []registrationFamily{
+		{
+			name:        "struct",
+			valueType:   reflect.TypeOf(pointerRegistrationStruct{}),
+			pointerType: reflect.TypeOf((*pointerRegistrationStruct)(nil)),
+			userTypeID:  7120,
+			wireName:    "test.PointerRegistrationStruct",
+			registerID: func(f *Fory, type_ reflect.Type) error {
+				return f.RegisterStruct(type_, 7120)
+			},
+			registerName: func(f *Fory, type_ reflect.Type) error {
+				return f.RegisterStructByName(type_, "test.PointerRegistrationStruct")
+			},
+			registerResolver: func(f *Fory, type_ reflect.Type) error {
+				return f.GetTypeResolver().RegisterStruct(type_, STRUCT, 7120)
+			},
+			roundTrip: func(t *testing.T, f *Fory) {
+				requireRegisteredRoundTrip(t, f, pointerRegistrationStruct{Value: 7})
+			},
+		},
+		{
+			name:        "enum",
+			valueType:   reflect.TypeOf(pointerRegistrationEnum(0)),
+			pointerType: reflect.TypeOf((*pointerRegistrationEnum)(nil)),
+			userTypeID:  7121,
+			wireName:    "test.PointerRegistrationEnum",
+			registerID: func(f *Fory, type_ reflect.Type) error {
+				return f.RegisterEnum(type_, 7121)
+			},
+			registerName: func(f *Fory, type_ reflect.Type) error {
+				return f.RegisterEnumByName(type_, "test.PointerRegistrationEnum")
+			},
+			registerResolver: func(f *Fory, type_ reflect.Type) error {
+				return f.GetTypeResolver().RegisterEnum(type_, 7121)
+			},
+			roundTrip: func(t *testing.T, f *Fory) {
+				requireRegisteredRoundTrip(t, f, pointerRegistrationEnum(7))
+			},
+		},
+		{
+			name:        "union",
+			valueType:   reflect.TypeOf(pointerRegistrationUnion{}),
+			pointerType: reflect.TypeOf((*pointerRegistrationUnion)(nil)),
+			userTypeID:  7122,
+			wireName:    "test.PointerRegistrationUnion",
+			registerID: func(f *Fory, type_ reflect.Type) error {
+				return f.RegisterUnion(type_, 7122, unionSerializer())
+			},
+			registerName: func(f *Fory, type_ reflect.Type) error {
+				return f.RegisterUnionByName(
+					type_, "test.PointerRegistrationUnion", unionSerializer())
+			},
+			registerResolver: func(f *Fory, type_ reflect.Type) error {
+				return f.GetTypeResolver().RegisterUnion(type_, 7122, unionSerializer())
+			},
+			roundTrip: func(t *testing.T, f *Fory) {
+				requireRegisteredRoundTrip(t, f, pointerRegistrationUnion{
+					caseID: 0,
+					value:  int32(7),
+				})
+			},
+		},
+		{
+			name:        "extension",
+			valueType:   reflect.TypeOf(pointerRegistrationExtension{}),
+			pointerType: reflect.TypeOf((*pointerRegistrationExtension)(nil)),
+			userTypeID:  7123,
+			wireName:    "test.PointerRegistrationExtension",
+			registerID: func(f *Fory, type_ reflect.Type) error {
+				return f.RegisterExtension(type_, 7123, pointerExtensionSerializer{})
+			},
+			registerName: func(f *Fory, type_ reflect.Type) error {
+				return f.RegisterExtensionByName(
+					type_, "test.PointerRegistrationExtension", pointerExtensionSerializer{})
+			},
+			registerResolver: func(f *Fory, type_ reflect.Type) error {
+				return f.GetTypeResolver().RegisterExtension(
+					type_, 7123, pointerExtensionSerializer{})
+			},
+			roundTrip: func(t *testing.T, f *Fory) {
+				requireRegisteredRoundTrip(t, f, pointerRegistrationExtension{Value: 7})
+			},
+		},
+	}
+
+	for _, family := range families {
+		pointerType := family.pointerType
+		require.Equal(t, family.valueType, pointerType.Elem())
+		t.Run(family.name+" facade ID", func(t *testing.T) {
+			f := New(WithXlang(true), WithCompatible(false))
+			require.NoError(t, family.registerID(f, pointerType))
+			family.roundTrip(t, f)
+			requireValueRegistrationOwner(
+				t, f, family.valueType, f.typeResolver.userTypeIdToTypeInfo[family.userTypeID])
+		})
+		t.Run(family.name+" facade name", func(t *testing.T) {
+			f := New(WithXlang(true), WithCompatible(false))
+			require.NoError(t, family.registerName(f, pointerType))
+			family.roundTrip(t, f)
+			namespace, typeName, err := splitRegisteredName(family.wireName)
+			require.NoError(t, err)
+			requireValueRegistrationOwner(t, f, family.valueType,
+				f.typeResolver.namedTypeToTypeInfo[namedTypeKey{namespace, typeName}])
+		})
+		t.Run(family.name+" resolver", func(t *testing.T) {
+			f := New(WithXlang(true), WithCompatible(false))
+			require.NoError(t, family.registerResolver(f, pointerType))
+			family.roundTrip(t, f)
+			requireValueRegistrationOwner(
+				t, f, family.valueType, f.typeResolver.userTypeIdToTypeInfo[family.userTypeID])
+		})
+	}
 }
 
 func TestRegistryFreezeRoots(t *testing.T) {

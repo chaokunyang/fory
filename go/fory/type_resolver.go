@@ -516,12 +516,23 @@ func (r *TypeResolver) registerSerializer(type_ reflect.Type, typeId TypeId, s S
 	return nil
 }
 
+// valueRegistrationType returns the canonical value owner represented by an
+// instance or reflect.Type. Registration publishes that value type and creates
+// at most one pointer companion from it.
+func valueRegistrationType(type_ any) reflect.Type {
+	registeredType, ok := type_.(reflect.Type)
+	if !ok {
+		registeredType = reflect.TypeOf(type_)
+	}
+	for registeredType != nil && registeredType.Kind() == reflect.Ptr {
+		registeredType = registeredType.Elem()
+	}
+	return registeredType
+}
+
 func validateOptionalFields(type_ reflect.Type) error {
 	if type_ == nil {
 		return nil
-	}
-	if type_.Kind() == reflect.Ptr {
-		type_ = type_.Elem()
 	}
 	if type_.Kind() != reflect.Struct {
 		return nil
@@ -556,6 +567,7 @@ func (r *TypeResolver) RegisterStruct(type_ reflect.Type, typeID TypeId, userTyp
 	if err := r.fory.checkRegistrationOpen(); err != nil {
 		return err
 	}
+	type_ = valueRegistrationType(type_)
 	if type_.Kind() != reflect.Struct {
 		return fmt.Errorf("unsupported type for ID registration: %v (use RegisterEnum for enum types)", type_.Kind())
 	}
@@ -607,6 +619,7 @@ func (r *TypeResolver) RegisterUnion(type_ reflect.Type, userTypeID uint32, seri
 	if err := r.fory.checkRegistrationOpen(); err != nil {
 		return err
 	}
+	type_ = valueRegistrationType(type_)
 	if serializer == nil {
 		return fmt.Errorf("RegisterUnion requires a non-nil serializer")
 	}
@@ -648,6 +661,7 @@ func (r *TypeResolver) RegisterEnum(type_ reflect.Type, userTypeID uint32) error
 	if err := r.fory.checkRegistrationOpen(); err != nil {
 		return err
 	}
+	type_ = valueRegistrationType(type_)
 	switch type_.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
@@ -689,6 +703,7 @@ func (r *TypeResolver) RegisterEnum(type_ reflect.Type, userTypeID uint32) error
 }
 
 func (r *TypeResolver) registerEnumByName(type_ reflect.Type, namespace, typeName string) error {
+	type_ = valueRegistrationType(type_)
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
 	}
@@ -730,6 +745,7 @@ func (r *TypeResolver) registerEnumByName(type_ reflect.Type, namespace, typeNam
 }
 
 func (r *TypeResolver) registerStructByName(type_ reflect.Type, namespace, typeName string) error {
+	type_ = valueRegistrationType(type_)
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
 	}
@@ -777,6 +793,7 @@ func (r *TypeResolver) registerUnionByName(
 	typeName string,
 	serializer Serializer,
 ) error {
+	type_ = valueRegistrationType(type_)
 	if serializer == nil {
 		return fmt.Errorf("RegisterUnionByName requires a non-nil serializer")
 	}
@@ -822,6 +839,7 @@ func (r *TypeResolver) registerExtensionByName(
 	typeName string,
 	userSerializer ExtensionSerializer,
 ) error {
+	type_ = valueRegistrationType(type_)
 	if userSerializer == nil {
 		return fmt.Errorf("serializer cannot be nil for extension type %s", type_)
 	}
@@ -873,6 +891,7 @@ func (r *TypeResolver) RegisterExtension(
 	if err := r.fory.checkRegistrationOpen(); err != nil {
 		return err
 	}
+	type_ = valueRegistrationType(type_)
 	if userTypeID > maxUserTypeID {
 		return fmt.Errorf("typeID must be in range [0, 0xfffffffe], got %d", userTypeID)
 	}

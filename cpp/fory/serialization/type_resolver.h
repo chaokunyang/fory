@@ -1541,7 +1541,7 @@ private:
   // FlatIntMap is optimized for integer keys with minimal overhead
   util::U64PtrMap<TypeInfo> type_info_by_ctid_{256};
   util::U32PtrMap<TypeInfo> type_info_by_id_{256};
-  util::U64PtrMap<TypeInfo> user_type_info_by_id_{256};
+  util::U32PtrMap<TypeInfo> user_type_info_by_id_{256};
   fory::flat_hash_map<std::string, TypeInfo *> type_info_by_name_;
   util::U64PtrMap<TypeInfo> partial_type_infos_{256};
 

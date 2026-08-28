@@ -620,29 +620,6 @@ describe("typemeta", () => {
     );
   });
 
-  test("direct TypeMeta generation keeps its public adapters", () => {
-    const writerFory = new Fory({ compatible: true });
-    const readerFory = new Fory({ compatible: true });
-    const remoteTypeMeta = TypeMeta.fromTypeInfo(
-      Type.struct(7020, { value: Type.string().setId(1) }),
-      (writerFory as any).typeResolver,
-    );
-    const localTypeInfo = Type.struct(7020, { value: Type.int32().setId(1) });
-    const context = (readerFory as any).readContext as ReadContext;
-
-    expect(
-      context.genSerializerByTypeMetaRuntime(remoteTypeMeta, localTypeInfo, 123),
-    ).toBeDefined();
-    expect(context.genSerializerByTypeMetaRuntime(remoteTypeMeta)).toBeDefined();
-    expect((context as any).compatibleReadSerializers.size).toBe(0);
-
-    const localTypeMeta = TypeMeta.fromTypeInfo(localTypeInfo, (readerFory as any).typeResolver);
-    context.reset(typeMetaRecord(remoteTypeMeta));
-    expect(
-      context.readCompatibleStructSerializer(localTypeMeta.getHash(), localTypeInfo),
-    ).toBeDefined();
-  });
-
   test("generated named enum validates TypeMeta owner", () => {
     const colorInfo = Type.enum({ namespace: "example", typeName: "Color" }, { Red: 0 });
     const otherInfo = Type.enum({ namespace: "example", typeName: "Other" }, { Blue: 0 });

@@ -1605,40 +1605,6 @@ export class ReadContext {
     );
   }
 
-  genSerializerByTypeMetaRuntime(
-    typeMeta: TypeMeta,
-    original?: Serializer | TypeInfo,
-    expectedLocalHash?: number,
-  ) {
-    void expectedLocalHash;
-    const typeId = typeMeta.getTypeId();
-    if (!TypeId.structType(typeId)) {
-      throw new Error("only support reconstructor struct type");
-    }
-    let originalSerializer = original instanceof TypeInfo ? undefined : original;
-    let originalTypeInfo = original instanceof TypeInfo ? original : original?.getTypeInfo();
-    if (originalSerializer === undefined && originalTypeInfo === undefined) {
-      originalSerializer = this.serializerByTypeMeta(typeMeta);
-      originalTypeInfo = originalSerializer?.getTypeInfo();
-    }
-    if (originalSerializer === undefined) {
-      originalTypeInfo ??= TypeId.isNamedType(typeId)
-        ? Type.struct(
-            {
-              typeName: typeMeta.getTypeName(),
-              namespace: typeMeta.getNs(),
-            },
-            {},
-          )
-        : Type.struct(typeMeta.getUserTypeId(), {});
-      originalSerializer = this.typeResolver.generateReadSerializer(originalTypeInfo);
-    }
-    // This legacy direct-generation API accepts caller-owned metadata. It must
-    // not publish into the checked wire cache; only the validated read path can
-    // do that after binding a concrete local TypeMeta owner.
-    return this.generateTypeMetaSerializer(typeMeta, originalSerializer);
-  }
-
   private generateTypeMetaSerializer(typeMeta: TypeMeta, original: Serializer) {
     const typeId = typeMeta.getTypeId();
     if (!TypeId.structType(typeId)) {

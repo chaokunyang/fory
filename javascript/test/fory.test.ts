@@ -85,23 +85,20 @@ describe("fory", () => {
     testTypeInfo(typeinfo8, "123");
   });
 
-  test.each(["serialize", "deserialize"] as const)(
-    "freezes registration when %s starts and fails",
-    (operation) => {
-      const fory = new Fory({ compatible: false });
-      fory.register(Type.struct(8101, {}));
+  test.each(["serialize", "deserialize"] as const)("freezes on failed %s", (operation) => {
+    const fory = new Fory({ compatible: false });
+    fory.register(Type.struct(8101, {}));
 
-      if (operation === "serialize") {
-        expect(() => fory.serialize(Symbol("unsupported"))).toThrow();
-      } else {
-        expect(() => fory.deserialize(new Uint8Array([0]))).toThrow();
-      }
+    if (operation === "serialize") {
+      expect(() => fory.serialize(Symbol("unsupported"))).toThrow();
+    } else {
+      expect(() => fory.deserialize(new Uint8Array([0]))).toThrow();
+    }
 
-      expect(() => fory.register(Type.struct(8102, {}))).toThrow();
-    },
-  );
+    expect(() => fory.register(Type.struct(8102, {}))).toThrow();
+  });
 
-  test("keeps rejected descriptor mutable", () => {
+  test("keeps rejected schema mutable", () => {
     const fory = new Fory({ compatible: false });
     const typeInfo = Type.struct(8106, {});
     fory.serialize(1);
@@ -111,7 +108,7 @@ describe("fory", () => {
     expect(typeInfo.nullable).toBe(true);
   });
 
-  test("keeps codegen callbacks from publishing registration", () => {
+  test("keeps callback failure local", () => {
     let reenterRoot = false;
     let fory: Fory;
     fory = new Fory({
@@ -146,7 +143,7 @@ describe("fory", () => {
     expect(() => rootType.setNullable(true)).toThrow();
   });
 
-  test("keeps failed generated factories local", () => {
+  test("keeps factory failure local", () => {
     let failFactory = false;
     const fory = new Fory({
       compatible: false,
@@ -182,7 +179,7 @@ describe("fory", () => {
     expect(() => rootType.setNullable(true)).toThrow();
   });
 
-  test("rejects an unresolved nested schema", () => {
+  test("rejects unresolved schema", () => {
     const fory = new Fory({ compatible: false });
     const typeResolver = fory.typeResolver as any;
     const internalBefore = Array.from(typeResolver.internalSerializer);
@@ -211,13 +208,13 @@ describe("fory", () => {
     expect(parent.deserialize(parent.serialize(value))).toEqual(value);
   });
 
-  test("registers an empty root schema", () => {
+  test("registers empty roots", () => {
     const registered = new Fory({ compatible: false }).register(Type.struct(8122, {}));
 
     expect(registered.deserialize(registered.serialize({}))).toEqual({});
   });
 
-  test("registers a self-recursive schema", () => {
+  test("registers self recursion", () => {
     const nodeType = Type.struct(8123, {
       value: Type.int32(),
       next: Type.struct(8123).setNullable(true).setTrackingRef(true),
@@ -231,7 +228,7 @@ describe("fory", () => {
     expect(result.next).toBe(result);
   });
 
-  test("registers a mutually recursive schema", () => {
+  test("registers mutual recursion", () => {
     const rightType = Type.struct(8125, {
       value: Type.string(),
       left: Type.struct(8124).setNullable(true),
@@ -246,56 +243,53 @@ describe("fory", () => {
     expect(registered.deserialize(registered.serialize(value))).toEqual(value);
   });
 
-  test.each(["userTypeId", "name", "options"] as const)(
-    "rejects root %s changes during codegen",
-    (change) => {
-      let mutateDescriptor: (() => void) | undefined;
-      const fory = new Fory({
-        compatible: false,
-        hooks: {
-          afterCodeGenerated(code) {
-            const mutate = mutateDescriptor;
-            mutateDescriptor = undefined;
-            mutate?.();
-            return code;
-          },
+  test.each(["userTypeId", "name", "options"] as const)("rejects root %s mutation", (change) => {
+    let mutateDescriptor: (() => void) | undefined;
+    const fory = new Fory({
+      compatible: false,
+      hooks: {
+        afterCodeGenerated(code) {
+          const mutate = mutateDescriptor;
+          mutateDescriptor = undefined;
+          mutate?.();
+          return code;
         },
-      });
-      const typeInfo =
-        change === "name"
-          ? Type.struct("stable.Root", { value: Type.int32() })
-          : Type.struct(8115, { value: Type.int32() });
-      const typeResolver = fory.typeResolver as any;
-      const internalBefore = Array.from(typeResolver.internalSerializer);
-      const customBefore = Array.from(typeResolver.customSerializer.entries());
-      if (change === "userTypeId") {
-        mutateDescriptor = () => {
-          typeInfo.userTypeId = 9115;
-        };
-      } else if (change === "name") {
-        mutateDescriptor = () => {
-          typeInfo.named = "changed$Root";
-        };
-      } else {
-        mutateDescriptor = () => {
-          typeInfo.options!.props!.extra = Type.string();
-        };
-      }
+      },
+    });
+    const typeInfo =
+      change === "name"
+        ? Type.struct("stable.Root", { value: Type.int32() })
+        : Type.struct(8115, { value: Type.int32() });
+    const typeResolver = fory.typeResolver as any;
+    const internalBefore = Array.from(typeResolver.internalSerializer);
+    const customBefore = Array.from(typeResolver.customSerializer.entries());
+    if (change === "userTypeId") {
+      mutateDescriptor = () => {
+        typeInfo.userTypeId = 9115;
+      };
+    } else if (change === "name") {
+      mutateDescriptor = () => {
+        typeInfo.named = "changed$Root";
+      };
+    } else {
+      mutateDescriptor = () => {
+        typeInfo.options!.props!.extra = Type.string();
+      };
+    }
 
-      expect(() => fory.register(typeInfo)).toThrow();
+    expect(() => fory.register(typeInfo)).toThrow();
 
-      expect(Array.from(typeResolver.internalSerializer)).toEqual(internalBefore);
-      expect(Array.from(typeResolver.customSerializer.entries())).toEqual(customBefore);
-      expect(() => typeInfo.setNullable(true)).toThrow();
-      if (change === "options") {
-        expect(() => {
-          typeInfo.options!.props!.afterFailure = Type.bool();
-        }).toThrow();
-      }
-    },
-  );
+    expect(Array.from(typeResolver.internalSerializer)).toEqual(internalBefore);
+    expect(Array.from(typeResolver.customSerializer.entries())).toEqual(customBefore);
+    expect(() => typeInfo.setNullable(true)).toThrow();
+    if (change === "options") {
+      expect(() => {
+        typeInfo.options!.props!.afterFailure = Type.bool();
+      }).toThrow();
+    }
+  });
 
-  test("rejects nested schema changes during codegen", () => {
+  test("rejects nested mutation", () => {
     let mutateDescriptor: (() => void) | undefined;
     const fory = new Fory({
       compatible: false,
@@ -327,70 +321,102 @@ describe("fory", () => {
     expect(() => childType.setNullable(true)).toThrow();
   });
 
-  test("captures a reentrant same-key owner", () => {
-    let registerSameKey = false;
-    let reentrant: ReturnType<Fory["register"]>;
-    let fory: Fory;
-    fory = new Fory({
-      compatible: false,
-      hooks: {
-        afterCodeGenerated(code) {
-          if (registerSameKey) {
-            registerSameKey = false;
-            reentrant = fory.register(Type.struct(8118, { innerValue: Type.string() }));
-          }
-          return code;
-        },
-      },
-    });
-    const childType = Type.struct(8118, { outerValue: Type.int32() });
-    const parentType = Type.struct(8119, { child: childType });
-
-    registerSameKey = true;
-    const parent = fory.register(parentType);
-    const owner = fory.typeResolver.getSerializerById(TypeId.STRUCT, childType.userTypeId);
-    expect(reentrant!.serializer).toBe(owner);
-    expect(owner.getTypeInfo()).toBe(reentrant!.serializer.getTypeInfo());
-    const write = owner.write;
-    let childWrites = 0;
-    owner.write = (value) => {
-      childWrites++;
-      write(value);
+  test("resolves later definitions", () => {
+    const itemType = Type.struct(8118, { value: Type.int32() });
+    const registered = new Fory({ compatible: false }).register(
+      Type.struct(8119, {
+        first: Type.struct(8118),
+        definition: itemType,
+      }),
+    );
+    const value = {
+      first: { value: 1 },
+      definition: { value: 2 },
     };
 
-    const value = { child: { innerValue: "kept" } };
-    expect(parent.deserialize(parent.serialize(value as any))).toEqual(value);
-    expect(childWrites).toBeGreaterThan(0);
+    expect(registered.deserialize(registered.serialize(value as any))).toEqual(value);
   });
 
-  test("freezes a recursive schema graph", () => {
+  test("rejects conflicting definitions", () => {
+    for (const reversed of [false, true]) {
+      let generated = 0;
+      const fory = new Fory({
+        compatible: false,
+        hooks: {
+          afterCodeGenerated(code) {
+            generated++;
+            return code;
+          },
+        },
+      });
+      generated = 0;
+      const first = Type.struct(8127, { firstValue: Type.int32() });
+      const second = Type.struct(8127, { secondValue: Type.string() });
+      const props = reversed ? { second, first } : { first, second };
+      const root = Type.struct(8128, props);
+
+      expect(() => fory.register(root)).toThrow();
+      expect(generated).toBe(0);
+      expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8127)).toBeUndefined();
+      expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8128)).toBeUndefined();
+    }
+  });
+
+  test("seals replaced schema options", () => {
+    const original = Type.struct(8126, { oldValue: Type.int32() });
+    const replacement: {
+      props: Record<string, TypeInfo>;
+      withConstructor: boolean;
+    } = {
+      props: { value: Type.string() },
+      withConstructor: false,
+    };
+    let replaceOptions = true;
+    const typeInfo = new Proxy(original, {
+      defineProperty(target, property, descriptor) {
+        if (property === "options" && replaceOptions) {
+          replaceOptions = false;
+          target.options = replacement;
+        }
+        return Reflect.defineProperty(target, property, descriptor);
+      },
+    });
+    const registered = new Fory({ compatible: false }).register(typeInfo);
+    const value = { value: "sealed" };
+
+    expect(registered.deserialize(registered.serialize(value as any))).toEqual(value);
+    expect(() => {
+      replacement.props.extra = Type.bool();
+    }).toThrow();
+  });
+
+  test("seals recursive schemas", () => {
     const left = Type.struct(8120, {});
     const right = Type.struct(8121, { left });
     left.options!.props!.right = right;
 
-    left.freeze();
+    new Fory({ compatible: false }).register(left);
 
     expect(() => left.setNullable(true)).toThrow();
     expect(() => right.setTrackingRef(true)).toThrow();
+    left.dynamicTypeId = 7;
+    expect(left.dynamicTypeId).toBe(7);
   });
 
-  test.each(["serialize", "deserialize"] as const)(
-    "freezes registration after registered %s succeeds",
-    (operation) => {
-      const typeInfo = Type.struct(8103, {});
-      const source = new Fory({ compatible: false }).register(typeInfo.clone());
-      const fory = new Fory({ compatible: false });
-      const registered = fory.register(typeInfo);
+  test.each(["serialize", "deserialize"] as const)("freezes after successful %s", (operation) => {
+    const typeInfo = Type.struct(8103, {});
+    const source = new Fory({ compatible: false }).register(typeInfo.clone());
+    const fory = new Fory({ compatible: false });
+    const registered = fory.register(typeInfo);
 
-      if (operation === "serialize") {
-        registered.serialize({});
-      } else {
-        registered.deserialize(source.serialize({}));
-      }
+    if (operation === "serialize") {
+      registered.serialize({});
+    } else {
+      registered.deserialize(source.serialize({}));
+    }
 
-      expect(() => fory.register(Type.struct(8104, {}))).toThrow();
-    },
-  );
+    expect(() => fory.register(Type.struct(8104, {}))).toThrow();
+  });
 
   function testTypeInfo(typeinfo: TypeInfo, input: any, expected?: any) {
     const fory = new Fory({ compatible: false });

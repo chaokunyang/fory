@@ -1623,11 +1623,14 @@ export class ReadContext {
     }
     if (originalSerializer === undefined) {
       originalTypeInfo ??= TypeId.isNamedType(typeId)
-        ? Type.struct({
-            typeName: typeMeta.getTypeName(),
-            namespace: typeMeta.getNs(),
-          })
-        : Type.struct(typeMeta.getUserTypeId());
+        ? Type.struct(
+            {
+              typeName: typeMeta.getTypeName(),
+              namespace: typeMeta.getNs(),
+            },
+            {},
+          )
+        : Type.struct(typeMeta.getUserTypeId(), {});
       originalSerializer = this.typeResolver.generateReadSerializer(originalTypeInfo);
     }
     // This legacy direct-generation API accepts caller-owned metadata. It must

@@ -796,11 +796,11 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           continue;
         }
       }
-      const InnerGeneratorClass = CodegenRegistry.get(current.typeInfo.typeId);
-      if (!InnerGeneratorClass) {
-        throw new Error(`${current.typeInfo.typeId} generator not exists`);
-      }
-      const innerGenerator = new InnerGeneratorClass(current.typeInfo, this.builder, this.scope);
+      const innerGenerator = CodegenRegistry.newGeneratorByTypeInfo(
+        current.typeInfo,
+        this.builder,
+        this.scope,
+      );
       const fieldAccessor = `${accessor}${CodecBuilder.safePropAccessor(current.key)}`;
       fieldWrites.push(
         this.writeField(current.key, current.typeInfo, fieldAccessor, innerGenerator.writeEmbed()),
@@ -952,11 +952,11 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
       ${this.maybeReference(result, refState)}
       ${this.sortedProps
         .map(({ key, typeInfo }) => {
-          const InnerGeneratorClass = CodegenRegistry.get(typeInfo.typeId);
-          if (!InnerGeneratorClass) {
-            throw new Error(`${typeInfo.typeId} generator not exists`);
-          }
-          const innerGenerator = new InnerGeneratorClass(typeInfo, this.builder, this.scope);
+          const innerGenerator = CodegenRegistry.newGeneratorByTypeInfo(
+            typeInfo,
+            this.builder,
+            this.scope,
+          );
           return `
           ${this.readField(key, typeInfo, (expr) => this.readFieldAssign(result, key, expr), innerGenerator.readEmbed())}
         `;
@@ -1448,8 +1448,13 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     let fixedSize = 8;
     if (options!.props) {
       Object.values(options!.props).forEach((x) => {
-        const propGenerator = new (CodegenRegistry.get(x.typeId)!)(x, this.builder, this.scope);
-        fixedSize += propGenerator.getFixedSize();
+        const serializer = this.builder.serializerLookup.getSerializerByTypeInfo(x);
+        if (TypeId.userDefinedType(x.typeId) && serializer !== undefined) {
+          fixedSize += serializer.fixedSize;
+        } else {
+          const propGenerator = CodegenRegistry.newGeneratorByTypeInfo(x, this.builder, this.scope);
+          fixedSize += propGenerator.getFixedSize();
+        }
       });
     } else {
       fixedSize += this.builder.serializerLookup.getSerializerByTypeInfo(typeInfo)!.fixedSize;

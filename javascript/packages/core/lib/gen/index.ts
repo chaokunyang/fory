@@ -18,7 +18,7 @@
  */
 
 import { TypeId, Serializer } from "../type";
-import { TypeInfo } from "../typeInfo";
+import { sealTypeInfo, TypeInfo } from "../typeInfo";
 import { CodegenRegistry } from "./router";
 import { CodecBuilder, SerializerLookup } from "./builder";
 import { Scope } from "./scope";
@@ -127,21 +127,10 @@ interface GeneratedRegistration {
 export class Gen {
   static external = CodegenRegistry.getExternal();
 
-  private generatedRegistrations: GeneratedRegistration[] = [];
-  private readonly serializerLookup: SerializerLookup;
-
   constructor(
     private typeResolver: TypeResolver,
     private regOptions: { [key: string]: any } = {},
-  ) {
-    // Generator-time TypeInfo queries see initialized local serializers for codegen decisions.
-    // Factory-init ID/name queries instead return the stable owner captured by runtime closures.
-    this.serializerLookup = {
-      getSerializerByTypeInfo: (typeInfo) => this.getGeneratedSerializer(typeInfo),
-      getSerializerById: (id, userTypeId) => this.getCapturedSerializerById(id, userTypeId),
-      getSerializerByName: (name) => this.getCapturedSerializerByName(name),
-    };
-  }
+  ) {}
 
   private prepare(typeInfo: TypeInfo, serializerLookup: SerializerLookup): Serializer {
     const InnerGeneratorClass = CodegenRegistry.get(typeInfo.typeId);
@@ -186,77 +175,105 @@ export class Gen {
     return !!this.typeResolver.getSerializerByTypeInfo(typeInfo);
   }
 
-  private isFullyGenerated(typeInfo: TypeInfo) {
-    const ser = this.getGeneratedSerializer(typeInfo);
+  private isFullyGenerated(typeInfo: TypeInfo, registrations: GeneratedRegistration[]) {
+    const ser = this.getGeneratedSerializer(typeInfo, registrations);
     return ser && ser._initialized;
   }
 
   private sameRegistration(left: TypeInfo, right: TypeInfo) {
     const leftTypeId = this.typeResolver.computeTypeId(left);
     const rightTypeId = this.typeResolver.computeTypeId(right);
-    if (leftTypeId !== rightTypeId) {
-      return false;
-    }
-    if (TypeId.isNamedType(leftTypeId)) {
+    if (TypeId.isNamedType(leftTypeId) && TypeId.isNamedType(rightTypeId)) {
       return left.named === right.named;
     }
-    if (TypeId.needsUserTypeId(leftTypeId)) {
+    if (
+      TypeId.needsUserTypeId(leftTypeId) &&
+      TypeId.needsUserTypeId(rightTypeId) &&
+      left.userTypeId !== -1 &&
+      right.userTypeId !== -1
+    ) {
       return left.userTypeId === right.userTypeId;
     }
-    return true;
+    return leftTypeId === rightTypeId;
   }
 
-  private findRegistration(typeInfo: TypeInfo) {
-    return this.generatedRegistrations.find((entry) =>
-      this.sameRegistration(entry.typeInfo, typeInfo),
+  private sameStructDefinition(left: TypeInfo, right: TypeInfo) {
+    if (left === right) {
+      return true;
+    }
+    const leftOptions = left.options!;
+    const rightOptions = right.options!;
+    return (
+      left.typeId === right.typeId &&
+      left.named === right.named &&
+      left.namespace === right.namespace &&
+      left.typeName === right.typeName &&
+      left.userTypeId === right.userTypeId &&
+      left.evolving === right.evolving &&
+      leftOptions.props === rightOptions.props &&
+      leftOptions.fieldEntries === rightOptions.fieldEntries &&
+      leftOptions.preserveFieldOrder === rightOptions.preserveFieldOrder &&
+      leftOptions.withConstructor === rightOptions.withConstructor &&
+      leftOptions.creator === rightOptions.creator
     );
   }
 
-  private addRegistration(typeInfo: TypeInfo) {
+  private findRegistration(typeInfo: TypeInfo, registrations: GeneratedRegistration[]) {
+    return registrations.find((entry) => this.sameRegistration(entry.typeInfo, typeInfo));
+  }
+
+  private addRegistration(typeInfo: TypeInfo, registrations: GeneratedRegistration[]) {
     const owner = { ...uninitializedSerializer };
     const entry: GeneratedRegistration = {
       typeInfo,
       serializer: owner,
       preparing: false,
     };
-    this.generatedRegistrations.push(entry);
+    owner.getTypeInfo = () => entry.typeInfo;
+    registrations.push(entry);
     return entry;
   }
 
-  private getGeneratedSerializer(typeInfo: TypeInfo) {
+  private getGeneratedSerializer(typeInfo: TypeInfo, registrations: GeneratedRegistration[]) {
     return (
-      this.findRegistration(typeInfo)?.serializer ??
-      this.typeResolver.getSerializerByTypeInfo(typeInfo)
+      this.typeResolver.getSerializerByTypeInfo(typeInfo) ??
+      this.findRegistration(typeInfo, registrations)?.serializer
     );
   }
 
-  private getCapturedSerializerById(id: number, userTypeId?: number) {
+  private getCapturedSerializerById(
+    registrations: GeneratedRegistration[],
+    id: number,
+    userTypeId?: number,
+  ) {
     const published = this.typeResolver.getSerializerById(id, userTypeId);
     if (published !== undefined) {
       return published;
     }
-    const entry = this.generatedRegistrations.find((candidate) => {
+    const entry = registrations.find((candidate) => {
       const typeId = this.typeResolver.computeTypeId(candidate.typeInfo);
-      if (typeId !== id || TypeId.isNamedType(typeId)) {
-        return false;
+      if (
+        TypeId.needsUserTypeId(id) &&
+        TypeId.needsUserTypeId(typeId) &&
+        userTypeId !== undefined &&
+        userTypeId !== -1
+      ) {
+        return candidate.typeInfo.userTypeId === userTypeId;
       }
-      if (TypeId.needsUserTypeId(typeId)) {
-        if (userTypeId !== undefined && userTypeId !== -1) {
-          return candidate.typeInfo.userTypeId === userTypeId;
-        }
-        return candidate.typeInfo.userTypeId === -1;
-      }
-      return true;
+      return typeId === id;
     });
     return entry?.serializer as Serializer;
   }
 
-  private getCapturedSerializerByName(name: number | string) {
+  private getCapturedSerializerByName(
+    registrations: GeneratedRegistration[],
+    name: number | string,
+  ) {
     const published = this.typeResolver.getSerializerByName(name);
     if (published !== undefined) {
       return published;
     }
-    const entry = this.generatedRegistrations.find(
+    const entry = registrations.find(
       (candidate) =>
         typeof name === "string" &&
         TypeId.isNamedType(this.typeResolver.computeTypeId(candidate.typeInfo)) &&
@@ -265,31 +282,88 @@ export class Gen {
     return entry?.serializer;
   }
 
-  private prepareRegistration(typeInfo: TypeInfo, children: TypeInfo[]) {
-    let entry = this.findRegistration(typeInfo);
+  private prepareRegistration(
+    typeInfo: TypeInfo,
+    children: TypeInfo[],
+    registrations: GeneratedRegistration[],
+    serializerLookup: SerializerLookup,
+  ) {
+    let entry = this.findRegistration(typeInfo, registrations);
     if (entry?.serializer._initialized || entry?.preparing) {
       return;
     }
     if (entry === undefined) {
-      entry = this.addRegistration(typeInfo);
+      entry = this.addRegistration(typeInfo, registrations);
     } else {
       entry.typeInfo = typeInfo;
     }
     entry.preparing = true;
     try {
       for (const child of children) {
-        this.traversalContainer(child);
+        this.traversalContainer(child, registrations, serializerLookup);
       }
-      const serializer = this.prepare(typeInfo, this.serializerLookup);
+      const serializer = this.prepare(typeInfo, serializerLookup);
       Object.assign(entry.serializer, serializer);
     } finally {
       entry.preparing = false;
     }
   }
 
-  private traversalContainer(typeInfo: TypeInfo) {
+  private seedDefinitions(root: TypeInfo, registrations: GeneratedRegistration[]) {
+    const pending = [root];
+    const seen = new Set<TypeInfo>();
+    while (pending.length > 0) {
+      const typeInfo = pending.pop()!;
+      if (seen.has(typeInfo)) {
+        continue;
+      }
+      seen.add(typeInfo);
+      const options = typeInfo.options;
+      if (
+        TypeId.structType(typeInfo.typeId) &&
+        options?.props !== undefined &&
+        !this.typeResolver.getSerializerByTypeInfo(typeInfo)?._initialized
+      ) {
+        const registration = this.findRegistration(typeInfo, registrations);
+        if (registration === undefined) {
+          this.addRegistration(typeInfo, registrations);
+        } else if (!this.sameStructDefinition(registration.typeInfo, typeInfo)) {
+          throw new Error("conflicting complete struct definitions for the same registry identity");
+        }
+      }
+      if (options === undefined) {
+        continue;
+      }
+      if (options.props !== undefined) {
+        pending.push(...Object.values(options.props));
+      }
+      if (options.cases !== undefined) {
+        pending.push(...Object.values(options.cases));
+      }
+      if (options.fieldEntries !== undefined) {
+        for (const entry of options.fieldEntries) {
+          pending.push(entry.typeInfo);
+        }
+      }
+      if (options.inner !== undefined) {
+        pending.push(options.inner);
+      }
+      if (options.key !== undefined) {
+        pending.push(options.key);
+      }
+      if (options.value !== undefined) {
+        pending.push(options.value);
+      }
+    }
+  }
+
+  private traversalContainer(
+    typeInfo: TypeInfo,
+    registrations: GeneratedRegistration[],
+    serializerLookup: SerializerLookup,
+  ) {
     if (TypeId.userDefinedType(typeInfo.typeId)) {
-      if (this.isFullyGenerated(typeInfo)) {
+      if (this.isFullyGenerated(typeInfo, registrations)) {
         return;
       }
       const options = typeInfo.options;
@@ -298,34 +372,44 @@ export class Gen {
         typeInfo.typeId === TypeId.TYPED_UNION ||
         typeInfo.typeId === TypeId.NAMED_UNION;
       if (unionType && options?.cases && Object.keys(options.cases).length > 0) {
-        this.prepareRegistration(typeInfo, Object.values(options.cases));
+        this.prepareRegistration(
+          typeInfo,
+          Object.values(options.cases),
+          registrations,
+          serializerLookup,
+        );
         return;
-      } else if (options?.props && Object.keys(options.props).length > 0) {
-        this.prepareRegistration(typeInfo, Object.values(options.props));
+      } else if (options?.props !== undefined) {
+        this.prepareRegistration(
+          typeInfo,
+          Object.values(options.props),
+          registrations,
+          serializerLookup,
+        );
       } else if (!this.isRegistered(typeInfo) && TypeId.structType(typeInfo.typeId)) {
-        if (this.findRegistration(typeInfo) === undefined) {
+        if (this.findRegistration(typeInfo, registrations) === undefined) {
           throw new Error("nested struct schema must be registered or defined before use");
         }
       } else if (TypeId.enumType(typeInfo.typeId) && !this.isRegistered(typeInfo)) {
-        this.prepareRegistration(typeInfo, []);
+        this.prepareRegistration(typeInfo, [], registrations, serializerLookup);
       }
     }
     if (typeInfo.typeId === TypeId.LIST) {
-      this.traversalContainer(typeInfo.options!.inner!);
+      this.traversalContainer(typeInfo.options!.inner!, registrations, serializerLookup);
     }
     if (typeInfo.typeId === TypeId.SET) {
-      this.traversalContainer(typeInfo.options!.key!);
+      this.traversalContainer(typeInfo.options!.key!, registrations, serializerLookup);
     }
     if (typeInfo.typeId === TypeId.MAP) {
       if (!typeInfo.options?.key || !typeInfo.options?.value) {
         throw new Error("map type must have key and value");
       }
-      this.traversalContainer(typeInfo.options!.key!);
-      this.traversalContainer(typeInfo.options!.value!);
+      this.traversalContainer(typeInfo.options!.key!, registrations, serializerLookup);
+      this.traversalContainer(typeInfo.options!.value!, registrations, serializerLookup);
     }
     if (typeInfo.options?.cases) {
       Object.values(typeInfo.options.cases).forEach((caseTypeInfo) => {
-        this.traversalContainer(caseTypeInfo);
+        this.traversalContainer(caseTypeInfo, registrations, serializerLookup);
       });
     }
   }
@@ -336,30 +420,42 @@ export class Gen {
 
   generateSerializer(typeInfo: TypeInfo) {
     this.typeResolver.ensureRegistrationOpen();
-    typeInfo.freeze();
+    sealTypeInfo(typeInfo);
     // TypeInfo freezing may invoke application-owned proxy traps. A root entered there closes the
     // resolver before code generation or publication can continue.
     this.typeResolver.ensureRegistrationOpen();
-    if (!this.typeResolver.getSerializerByTypeInfo(typeInfo)?._initialized) {
-      // Seed the root owner before traversal so empty roots and self-recursive fields share the
-      // same transaction-local serializer without publishing an incomplete resolver entry.
-      this.addRegistration(typeInfo);
+    const registrations: GeneratedRegistration[] = [];
+    // Generator-time TypeInfo queries see initialized local serializers for codegen decisions.
+    // Factory-init ID/name queries instead return the stable owner captured by runtime closures.
+    const serializerLookup: SerializerLookup = {
+      getSerializerByTypeInfo: (fieldType) => this.getGeneratedSerializer(fieldType, registrations),
+      getSerializerById: (id, userTypeId) =>
+        this.getCapturedSerializerById(registrations, id, userTypeId),
+      getSerializerByName: (name) => this.getCapturedSerializerByName(registrations, name),
+    };
+    this.seedDefinitions(typeInfo, registrations);
+    if (
+      !TypeId.structType(typeInfo.typeId) &&
+      !this.typeResolver.getSerializerByTypeInfo(typeInfo)?._initialized &&
+      this.findRegistration(typeInfo, registrations) === undefined
+    ) {
+      this.addRegistration(typeInfo, registrations);
     }
-    this.traversalContainer(typeInfo);
+    this.traversalContainer(typeInfo, registrations, serializerLookup);
     const serializer = this.typeResolver.getSerializerByTypeInfo(typeInfo);
     if (!serializer?._initialized) {
-      let registration = this.findRegistration(typeInfo);
+      let registration = this.findRegistration(typeInfo, registrations);
       if (registration === undefined) {
-        registration = this.addRegistration(typeInfo);
+        registration = this.addRegistration(typeInfo, registrations);
       }
       if (!registration.serializer._initialized) {
-        this.prepareRegistration(typeInfo, []);
+        this.prepareRegistration(typeInfo, [], registrations, serializerLookup);
       }
     }
 
     // Generated factories may execute application-transformed code, so every factory completes
     // against local owners before the resolver performs the only global publication step.
-    this.typeResolver.commitGeneratedSerializers(this.generatedRegistrations);
+    this.typeResolver.commitGeneratedSerializers(registrations);
     return this.typeResolver.getSerializerByTypeInfo(typeInfo)!;
   }
 }

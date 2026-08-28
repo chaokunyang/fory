@@ -118,7 +118,7 @@ describe("map", () => {
   test.each([
     ["fixed", false, 320],
     ["evolving", true, 321],
-  ])("round-trips %s map sides beside null", (_, evolving, itemId) => {
+  ])("round-trips nullable %s maps", (_, evolving, itemId) => {
     const fory = new Fory({ compatible: true, ref: true });
     const itemType = Type.struct(
       { typeId: itemId, evolving },
@@ -149,7 +149,7 @@ describe("map", () => {
     ]);
   });
 
-  test("preserves compatible struct map framing", () => {
+  test("keeps compatible map framing", () => {
     const serializeMap = (
       compatible: boolean,
       evolving: boolean,
@@ -186,7 +186,47 @@ describe("map", () => {
     expect((native.header >> 3) & 0b100).toBe(0b100);
   });
 
-  test("rejects invalid runtime chunks before type detection", () => {
+  test("uses reentrant map owner", () => {
+    let registerSameKey = false;
+    let reentrant: ReturnType<Fory["register"]>;
+    let fory: Fory;
+    fory = new Fory({
+      compatible: true,
+      ref: true,
+      hooks: {
+        afterCodeGenerated(code) {
+          if (registerSameKey) {
+            registerSameKey = false;
+            reentrant = fory.register(
+              Type.struct({ typeId: 350, evolving: true }, { innerValue: Type.string() }),
+            );
+          }
+          return code;
+        },
+      },
+    });
+    const outerType = Type.struct({ typeId: 350, evolving: false }, { outerValue: Type.int32() });
+    registerSameKey = true;
+    const registered = fory.register(
+      Type.struct(351, {
+        outer: outerType.setId(2),
+        values: Type.map(Type.struct(350), Type.struct(350)).setId(1),
+      }),
+    );
+    const value = {
+      outer: { innerValue: "outer" },
+      values: new Map([[{ innerValue: "key" }, { innerValue: "value" }]]),
+    };
+    const bytes = registered.serialize(value as any);
+    const { header } = structMapHeader(fory, bytes, true, 351);
+
+    expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 350)).toBe(reentrant!.serializer);
+    expect(header & 0b100).toBe(0);
+    expect((header >> 3) & 0b100).toBe(0);
+    expect(registered.deserialize(bytes)).toEqual(value);
+  });
+
+  test("rejects invalid runtime chunks", () => {
     const fory = new Fory({ compatible: false, ref: true });
     const MapAnySerializer = CodegenRegistry.getExternal().MapAnySerializer;
     const serializer = new MapAnySerializer(fory.writeContext, fory.readContext, null, null);
@@ -197,7 +237,7 @@ describe("map", () => {
     }
   });
 
-  test("rejects invalid generated chunks and reuses the root", () => {
+  test("rejects invalid generated chunks", () => {
     const fory = new Fory({ compatible: false, ref: true });
     const serializer = fory.register(Type.map(Type.string(), Type.int32()));
     const value = new Map([["key", 1]]);

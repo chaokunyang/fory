@@ -338,28 +338,132 @@ describe("fory", () => {
   });
 
   test("rejects conflicting definitions", () => {
-    for (const reversed of [false, true]) {
-      let generated = 0;
-      const fory = new Fory({
-        compatible: false,
-        hooks: {
-          afterCodeGenerated(code) {
-            generated++;
-            return code;
-          },
-        },
-      });
-      generated = 0;
-      const first = Type.struct(8127, { firstValue: Type.int32() });
-      const second = Type.struct(8127, { secondValue: Type.string() });
-      const props = reversed ? { second, first } : { first, second };
-      const root = Type.struct(8128, props);
+    const identities: (number | { namespace: string; typeName: string })[] = [
+      8127,
+      { namespace: "test", typeName: "Conflict" },
+    ];
+    for (const identity of identities) {
+      const definitionPairs = [
+        [
+          Type.struct(identity, { firstValue: Type.int32() }),
+          Type.struct(identity, { secondValue: Type.string() }),
+        ],
+        [Type.enum(identity, { FIRST: 1 }), Type.enum(identity, { FIRST: 1 })],
+        [Type.union(identity, { 1: Type.int32() }), Type.union(identity, { 1: Type.int32() })],
+      ];
+      for (const [first, second] of definitionPairs) {
+        for (const reversed of [false, true]) {
+          let generated = 0;
+          const fory = new Fory({
+            compatible: false,
+            hooks: {
+              afterCodeGenerated(code) {
+                generated++;
+                return code;
+              },
+            },
+          });
+          generated = 0;
+          const props = reversed ? { second, first } : { first, second };
 
-      expect(() => fory.register(root)).toThrow();
-      expect(generated).toBe(0);
-      expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8127)).toBeUndefined();
-      expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8128)).toBeUndefined();
+          expect(() => fory.register(Type.struct(8128, props))).toThrow();
+          expect(generated).toBe(0);
+          expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8128)).toBeUndefined();
+        }
+      }
     }
+  });
+
+  test("rejects mixed type families", () => {
+    const identities: (number | { namespace: string; typeName: string })[] = [
+      8129,
+      { namespace: "test", typeName: "Mixed" },
+    ];
+    for (const identity of identities) {
+      const types = [
+        Type.struct(identity, { value: Type.int32() }),
+        Type.enum(identity, { VALUE: 1 }),
+        Type.ext(identity),
+        Type.union(identity, { 1: Type.string() }),
+      ];
+      for (let left = 0; left < types.length; left++) {
+        for (let right = left + 1; right < types.length; right++) {
+          for (const reversed of [false, true]) {
+            let generated = 0;
+            const fory = new Fory({
+              compatible: false,
+              hooks: {
+                afterCodeGenerated(code) {
+                  generated++;
+                  return code;
+                },
+              },
+            });
+            generated = 0;
+            const first = types[reversed ? right : left];
+            const second = types[reversed ? left : right];
+
+            expect(() => fory.register(Type.struct(8130, { first, second }))).toThrow();
+            expect(generated).toBe(0);
+            expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8130)).toBeUndefined();
+          }
+        }
+      }
+    }
+  });
+
+  test("reuses shared definitions", () => {
+    const struct = Type.struct(8131, { value: Type.int32() });
+    const enumType = Type.enum(8132, { VALUE: 1 });
+    const union = Type.union(8133, { 1: Type.string() });
+    const registered = new Fory({ compatible: false }).register(
+      Type.struct(8134, {
+        firstStruct: struct,
+        secondStruct: struct.clone(),
+        firstEnum: enumType,
+        secondEnum: enumType.clone(),
+        firstUnion: union,
+        secondUnion: union.clone(),
+      }),
+    );
+    const value = {
+      firstStruct: { value: 1 },
+      secondStruct: { value: 2 },
+      firstEnum: 1,
+      secondEnum: 1,
+      firstUnion: { case: 1, value: "first" },
+      secondUnion: { case: 1, value: "second" },
+    };
+
+    expect(registered.deserialize(registered.serialize(value as any))).toEqual(value);
+  });
+
+  test("rejects reentrant family conflict", () => {
+    let publishConflict = false;
+    let fory: Fory;
+    fory = new Fory({
+      compatible: false,
+      hooks: {
+        afterCodeGenerated(code) {
+          if (publishConflict) {
+            publishConflict = false;
+            fory.register(Type.enum(8135, { VALUE: 1 }));
+          }
+          return code;
+        },
+      },
+    });
+    publishConflict = true;
+
+    expect(() =>
+      fory.register(
+        Type.struct(8136, {
+          value: Type.struct(8135, { value: Type.int32() }),
+        }),
+      ),
+    ).toThrow("conflicting type families");
+    expect(fory.typeResolver.getSerializerById(TypeId.ENUM, 8135)).toBeDefined();
+    expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8136)).toBeUndefined();
   });
 
   test("seals replaced schema options", () => {

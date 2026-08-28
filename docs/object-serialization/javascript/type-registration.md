@@ -156,7 +156,8 @@ A nested Struct that supplies only an ID or name must already be registered. Alt
 a complete definition with the same identity anywhere in the recursive `TypeInfo` graph; the
 definition may appear before or after the identity-only use. Registration rejects an unresolved
 nested identity. Each identity can have only one complete definition in that graph. Repeated uses
-may share that definition, but separate conflicting definitions are rejected.
+may share that definition, but separate conflicting definitions are rejected. One numeric ID or
+name also cannot identify different Struct, enum, extension, or union families.
 
 ## Field Metadata
 

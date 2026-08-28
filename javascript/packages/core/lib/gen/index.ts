@@ -194,23 +194,70 @@ export class Gen {
     ) {
       return left.userTypeId === right.userTypeId;
     }
+    if (TypeId.userDefinedType(leftTypeId) || TypeId.userDefinedType(rightTypeId)) {
+      return left === right;
+    }
     return leftTypeId === rightTypeId;
   }
 
-  private sameStructDefinition(left: TypeInfo, right: TypeInfo) {
+  private sameTypeFamily(left: TypeInfo, right: TypeInfo) {
+    const leftTypeId = left.typeId;
+    const rightTypeId = right.typeId;
+    if (TypeId.structType(leftTypeId) && TypeId.structType(rightTypeId)) {
+      return true;
+    }
+    if (TypeId.enumType(leftTypeId) && TypeId.enumType(rightTypeId)) {
+      return true;
+    }
+    if (TypeId.extType(leftTypeId) && TypeId.extType(rightTypeId)) {
+      return true;
+    }
+    const leftUnion =
+      leftTypeId === TypeId.UNION ||
+      leftTypeId === TypeId.TYPED_UNION ||
+      leftTypeId === TypeId.NAMED_UNION;
+    const rightUnion =
+      rightTypeId === TypeId.UNION ||
+      rightTypeId === TypeId.TYPED_UNION ||
+      rightTypeId === TypeId.NAMED_UNION;
+    return leftUnion && rightUnion;
+  }
+
+  private hasCompleteDefinition(typeInfo: TypeInfo) {
+    const options = typeInfo.options;
+    if (TypeId.structType(typeInfo.typeId)) {
+      return options?.props !== undefined;
+    }
+    if (TypeId.enumType(typeInfo.typeId)) {
+      return options?.enumProps !== undefined;
+    }
+    if (TypeId.extType(typeInfo.typeId)) {
+      return options !== undefined;
+    }
+    return (
+      (typeInfo.typeId === TypeId.UNION ||
+        typeInfo.typeId === TypeId.TYPED_UNION ||
+        typeInfo.typeId === TypeId.NAMED_UNION) &&
+      options?.cases !== undefined
+    );
+  }
+
+  private sameDefinition(left: TypeInfo, right: TypeInfo) {
     if (left === right) {
       return true;
     }
     const leftOptions = left.options!;
     const rightOptions = right.options!;
     return (
-      left.typeId === right.typeId &&
+      this.sameTypeFamily(left, right) &&
       left.named === right.named &&
       left.namespace === right.namespace &&
       left.typeName === right.typeName &&
       left.userTypeId === right.userTypeId &&
       left.evolving === right.evolving &&
       leftOptions.props === rightOptions.props &&
+      leftOptions.enumProps === rightOptions.enumProps &&
+      leftOptions.cases === rightOptions.cases &&
       leftOptions.fieldEntries === rightOptions.fieldEntries &&
       leftOptions.preserveFieldOrder === rightOptions.preserveFieldOrder &&
       leftOptions.withConstructor === rightOptions.withConstructor &&
@@ -218,8 +265,37 @@ export class Gen {
     );
   }
 
+  private checkTypeFamily(owner: TypeInfo, typeInfo: TypeInfo) {
+    if (
+      TypeId.userDefinedType(typeInfo.typeId) &&
+      (!TypeId.userDefinedType(owner.typeId) || !this.sameTypeFamily(owner, typeInfo))
+    ) {
+      throw new Error("conflicting type families for the same registry identity");
+    }
+  }
+
+  private checkDefinitionOwner(owner: TypeInfo, typeInfo: TypeInfo) {
+    if (!TypeId.userDefinedType(typeInfo.typeId)) {
+      return;
+    }
+    this.checkTypeFamily(owner, typeInfo);
+    if (
+      this.hasCompleteDefinition(owner) &&
+      this.hasCompleteDefinition(typeInfo) &&
+      !this.sameDefinition(owner, typeInfo)
+    ) {
+      throw new Error("conflicting complete definitions for the same registry identity");
+    }
+  }
+
   private findRegistration(typeInfo: TypeInfo, registrations: GeneratedRegistration[]) {
-    return registrations.find((entry) => this.sameRegistration(entry.typeInfo, typeInfo));
+    const registration = registrations.find((entry) =>
+      this.sameRegistration(entry.typeInfo, typeInfo),
+    );
+    if (registration !== undefined) {
+      this.checkDefinitionOwner(registration.typeInfo, typeInfo);
+    }
+    return registration;
   }
 
   private addRegistration(typeInfo: TypeInfo, registrations: GeneratedRegistration[]) {
@@ -235,10 +311,12 @@ export class Gen {
   }
 
   private getGeneratedSerializer(typeInfo: TypeInfo, registrations: GeneratedRegistration[]) {
-    return (
-      this.typeResolver.getSerializerByTypeInfo(typeInfo) ??
-      this.findRegistration(typeInfo, registrations)?.serializer
-    );
+    const published = this.typeResolver.getSerializerByTypeInfo(typeInfo);
+    if (published !== undefined) {
+      this.checkTypeFamily(published.getTypeInfo(), typeInfo);
+      return published;
+    }
+    return this.findRegistration(typeInfo, registrations)?.serializer;
   }
 
   private getCapturedSerializerById(
@@ -320,15 +398,13 @@ export class Gen {
       seen.add(typeInfo);
       const options = typeInfo.options;
       if (
-        TypeId.structType(typeInfo.typeId) &&
-        options?.props !== undefined &&
-        !this.typeResolver.getSerializerByTypeInfo(typeInfo)?._initialized
+        !TypeId.extType(typeInfo.typeId) &&
+        this.hasCompleteDefinition(typeInfo) &&
+        !this.getGeneratedSerializer(typeInfo, registrations)?._initialized
       ) {
         const registration = this.findRegistration(typeInfo, registrations);
         if (registration === undefined) {
           this.addRegistration(typeInfo, registrations);
-        } else if (!this.sameStructDefinition(registration.typeInfo, typeInfo)) {
-          throw new Error("conflicting complete struct definitions for the same registry identity");
         }
       }
       if (options === undefined) {
@@ -353,6 +429,11 @@ export class Gen {
       }
       if (options.value !== undefined) {
         pending.push(options.value);
+      }
+    }
+    for (const typeInfo of seen) {
+      if (TypeId.userDefinedType(typeInfo.typeId)) {
+        this.findRegistration(typeInfo, registrations);
       }
     }
   }
@@ -455,6 +536,12 @@ export class Gen {
 
     // Generated factories may execute application-transformed code, so every factory completes
     // against local owners before the resolver performs the only global publication step.
+    for (const registration of registrations) {
+      const published = this.typeResolver.getSerializerByTypeInfo(registration.typeInfo);
+      if (published !== undefined) {
+        this.checkTypeFamily(published.getTypeInfo(), registration.typeInfo);
+      }
+    }
     this.typeResolver.commitGeneratedSerializers(registrations);
     return this.typeResolver.getSerializerByTypeInfo(typeInfo)!;
   }

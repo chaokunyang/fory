@@ -21,11 +21,14 @@ Load this file when changing `javascript/`.
   generation-local owners before one `TypeResolver` batch publication. The package-internal schema
   seal must lock each `TypeInfo` schema pointer before reading or traversing it; schema fields and
   occurrence modifiers are immutable afterward, while `dynamicTypeId` remains operation-local
-  writer state. Seed every complete Struct definition in the sealed graph before resolving
-  identity-only occurrences, so definition order cannot affect recursive resolution. Each resolver
+  writer state. Seed every complete Struct, enum, and union definition in the sealed graph before
+  resolving identity-only occurrences, so definition order cannot affect recursive resolution.
+  One numeric ID or name cannot identify different user-defined type families. Each resolver
   identity has one complete schema owner in that graph. Repeated references and clones may share
   the same immutable definition containers and settings; reject a second conflicting definition
-  before code generation without deep schema comparison. One authoritative serializer owner
+  before code generation without deep schema comparison. Anonymous user-defined values without a
+  name or user ID do not share registry identity merely because their raw type IDs match. One
+  authoritative serializer owner
   supplies both generator-time schema/progress facts and fixed factory captures; an initialized
   owner published by a nested registration wins over an outer generation-local owner, while field
   occurrence modifiers remain field-owned. Reject any unresolved nested identity before resolver

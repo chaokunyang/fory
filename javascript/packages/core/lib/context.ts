@@ -278,7 +278,6 @@ export class MetaStringWriter {
   private static readonly MAX_RETAINED_META_STRING_OWNERS = 8192;
 
   private disposeMetaStringBytes: MetaStringBytes[] = [];
-  private disposeMetaStringBytesSize = 0;
   private dynamicNameId = 0;
   private namespaceEncoder = new MetaStringEncoder(".", "_");
   private typenameEncoder = new MetaStringEncoder("$", "_");
@@ -287,9 +286,10 @@ export class MetaStringWriter {
     if (bytes.dynamicWriteStringId !== -1) {
       writer.writeVarUInt32(((bytes.dynamicWriteStringId + 1) << 1) | 1);
     } else {
-      bytes.dynamicWriteStringId = this.dynamicNameId;
+      const index = this.dynamicNameId;
+      bytes.dynamicWriteStringId = index;
       this.dynamicNameId += 1;
-      this.disposeMetaStringBytes[this.disposeMetaStringBytesSize++] = bytes;
+      this.disposeMetaStringBytes[index] = bytes;
       const len = bytes.bytes.getBytes().byteLength;
       writer.writeVarUInt32(len << 1);
       if (len !== 0) {
@@ -309,7 +309,7 @@ export class MetaStringWriter {
 
   reset() {
     const owners = this.disposeMetaStringBytes;
-    const size = this.disposeMetaStringBytesSize;
+    const size = this.dynamicNameId;
     for (let i = 0; i < size; i++) {
       owners[i].dynamicWriteStringId = -1;
     }
@@ -318,7 +318,6 @@ export class MetaStringWriter {
     if (size > MetaStringWriter.MAX_RETAINED_META_STRING_OWNERS) {
       this.disposeMetaStringBytes = [];
     }
-    this.disposeMetaStringBytesSize = 0;
     this.dynamicNameId = 0;
   }
 }
@@ -373,7 +372,6 @@ export class WriteContext {
   readonly metaStringWriter: MetaStringWriter;
 
   private disposeTypeMetaOwners: Array<{ dynamicTypeId: number }> = [];
-  private disposeTypeMetaOwnersSize = 0;
   private dynamicTypeId = 0;
 
   constructor(
@@ -390,7 +388,7 @@ export class WriteContext {
     this.refWriter.reset();
     this.metaStringWriter.reset();
     const owners = this.disposeTypeMetaOwners;
-    const size = this.disposeTypeMetaOwnersSize;
+    const size = this.dynamicTypeId;
     for (let i = 0; i < size; i++) {
       owners[i].dynamicTypeId = -1;
     }
@@ -399,7 +397,6 @@ export class WriteContext {
     if (size > WriteContext.MAX_RETAINED_TYPE_META_OWNERS) {
       this.disposeTypeMetaOwners = [];
     }
-    this.disposeTypeMetaOwnersSize = 0;
     this.dynamicTypeId = 0;
   }
 
@@ -443,7 +440,7 @@ export class WriteContext {
     const index = this.dynamicTypeId;
     owner.dynamicTypeId = index;
     this.dynamicTypeId += 1;
-    this.disposeTypeMetaOwners[this.disposeTypeMetaOwnersSize++] = owner;
+    this.disposeTypeMetaOwners[index] = owner;
     this.writer.writeVarUInt32(index << 1);
     this.writer.buffer(bytes);
   }

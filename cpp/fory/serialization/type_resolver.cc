@@ -1775,7 +1775,7 @@ Result<void, Error> TypeResolver::check_registration() {
 
 Result<std::unique_ptr<TypeResolver>, Error>
 TypeResolver::build_final_type_resolver() {
-  std::lock_guard<std::mutex> lock(registration_mutex_);
+  std::lock_guard<std::mutex> lock(*registration_mutex_);
   // Freeze the source before building so even failed finalization permanently
   // rejects later registration. Holding the registration mutex makes first use
   // linearizable with direct registration helpers. ThreadSafeFory retains this

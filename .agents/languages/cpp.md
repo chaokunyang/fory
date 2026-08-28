@@ -27,6 +27,10 @@ Load this file when changing `cpp/`, Cython build plumbing, or C++ xlang behavio
   registration-thread checks. Do not add a layout-preserving helper, padding, or call-shape
   workaround. Resolver finalization prepares metadata completely and publishes it only after the
   completed resolver clone succeeds; failed finalization must not expose partial metadata.
+- `TypeResolver` owns its registration mutex indirectly because runtime serializers retain and
+  query the same resolver object after registration closes. Keep this cold synchronization object
+  off the resolver's hot lookup footprint; do not replace it with padding, alignment fields,
+  platform locks, or benchmark-shape logic.
 - `TypeResolver::register_type_internal` owns the bidirectional C++ type-to-wire identity preflight
   for struct, enum, extension, and union registration. Reject an existing compile-time type owner
   or wire ID/name before publication; numeric user type IDs are unique across all four families,

@@ -485,6 +485,10 @@ describe("fory", () => {
       ],
       [Type.enum(8139, { FIRST: 1 }), Type.enum(8139, { SECOND: 2 })],
       [Type.union(8140, { 1: Type.int32() }), Type.union(8140, { 2: Type.string() })],
+      [
+        Type.struct("test.PublishedOwner", { first: Type.int32() }),
+        Type.struct("test.PublishedOwner", { second: Type.string() }),
+      ],
     ];
 
     for (const [first, second] of definitionPairs) {

@@ -655,10 +655,11 @@ Metadata readers should:
 - Reset or release metadata state at the correct root-operation boundary.
 
 Operation-local metadata occurrences and writer IDs must be reset before the context is reused,
-including after a failed root. The reset must make prior-root entries unreachable and release
-unusual high-water backing without adding allocation or slot-clearing work to normal roots.
-Runtime-specific retention thresholds and reset ownership belong in the implementation guide and
-language guidance.
+including after a failed root. The reset must make prior-root entries invisible through the current
+logical size and release unusual high-water backing without adding allocation or slot-clearing work
+to normal roots. Bounded backing may retain inactive slot references when the runtime-specific
+retention rule permits it. Runtime-specific thresholds and reset ownership belong in the
+implementation guide and language guidance.
 
 A class-resolution cache reachable from untrusted deserialization may publish
 an entry only from explicit trusted configuration or after the active class

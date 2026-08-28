@@ -244,7 +244,7 @@ public class ScalaSerializers {
   }
 
   private static void checkRegistrationOpen(TypeResolver resolver) {
-    if (resolver.isRegistrationFinished()) {
+    if (resolver.isRegistrationFrozen()) {
       throw new ForyException(
           "Cannot register class/serializer after registration has been frozen. Please register "
               + "all classes before invoking top-level `serialize/deserialize/copy` methods of "

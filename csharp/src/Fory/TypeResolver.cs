@@ -501,13 +501,49 @@ public sealed class TypeResolver
         return TypeInfo.Create(typeof(T), new TSerializer());
     }
 
+    internal bool CheckRegistration(Type type, uint id, Type? serializerType = null)
+    {
+        if (_byUserTypeId.TryGetValue(id, out TypeInfo? wireOwner) && wireOwner.Type != type)
+        {
+            throw new InvalidDataException($"type ID {id} is already registered for {wireOwner.Type}");
+        }
+
+        if (!_typeInfos.TryGetValue(TypeMapKey.Get(type), out TypeInfo? typeInfo) || !typeInfo.IsRegistered)
+        {
+            return false;
+        }
+
+        if (!typeInfo.RegisterByName && typeInfo.UserTypeId == id)
+        {
+            if (serializerType is not null && typeInfo.SerializerType != serializerType)
+            {
+                throw new InvalidDataException(
+                    $"type {type} is already registered with serializer {typeInfo.SerializerType}");
+            }
+
+            return true;
+        }
+
+        throw new InvalidDataException($"type {type} is already registered with a different wire identity");
+    }
+
     internal void Register(Type type, uint id)
     {
+        if (CheckRegistration(type, id))
+        {
+            return;
+        }
+
         Register(type, id, PrepareRegistration(type));
     }
 
     internal void Register(Type type, uint id, TypeInfo typeInfo)
     {
+        if (CheckRegistration(type, id, typeInfo.SerializerType))
+        {
+            return;
+        }
+
         typeInfo = PrepareRegistration(type, typeInfo).WithTypeIdRegistration(id);
         _typeInfos.Set(TypeMapKey.Get(type), typeInfo);
         _byUserTypeId[id] = typeInfo;
@@ -548,15 +584,58 @@ public sealed class TypeResolver
         }
     }
 
+    internal bool CheckRegistration(
+        Type type,
+        string namespaceName,
+        string typeName,
+        Type? serializerType = null)
+    {
+        if (_byTypeName.TryGetValue((namespaceName, typeName), out TypeInfo? wireOwner) && wireOwner.Type != type)
+        {
+            throw new InvalidDataException(
+                $"type name {namespaceName}.{typeName} is already registered for {wireOwner.Type}");
+        }
+
+        if (!_typeInfos.TryGetValue(TypeMapKey.Get(type), out TypeInfo? typeInfo) || !typeInfo.IsRegistered)
+        {
+            return false;
+        }
+
+        if (typeInfo.RegisterByName &&
+            typeInfo.NamespaceName?.Value == namespaceName &&
+            typeInfo.TypeName?.Value == typeName)
+        {
+            if (serializerType is not null && typeInfo.SerializerType != serializerType)
+            {
+                throw new InvalidDataException(
+                    $"type {type} is already registered with serializer {typeInfo.SerializerType}");
+            }
+
+            return true;
+        }
+
+        throw new InvalidDataException($"type {type} is already registered with a different wire identity");
+    }
+
     internal void Register(Type type, string namespaceName, string typeName)
     {
         ValidateSplitTypeName(namespaceName, typeName);
+        if (CheckRegistration(type, namespaceName, typeName))
+        {
+            return;
+        }
+
         Register(type, namespaceName, typeName, PrepareRegistration(type));
     }
 
     internal void Register(Type type, string namespaceName, string typeName, TypeInfo typeInfo)
     {
         ValidateSplitTypeName(namespaceName, typeName);
+        if (CheckRegistration(type, namespaceName, typeName, typeInfo.SerializerType))
+        {
+            return;
+        }
+
         MetaString namespaceMeta = MetaStringEncoder.Namespace.Encode(namespaceName, TypeMetaEncodings.NamespaceMetaStringEncodings);
         MetaString typeNameMeta = MetaStringEncoder.TypeName.Encode(typeName, TypeMetaEncodings.TypeNameMetaStringEncodings);
         typeInfo = PrepareRegistration(type, typeInfo).WithTypeNameRegistration(namespaceMeta, typeNameMeta);

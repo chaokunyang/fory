@@ -109,6 +109,29 @@ public sealed class FrozenPayloadSerializer : Serializer<FrozenPayload>
     }
 }
 
+public sealed class AlternateFrozenSerializer : Serializer<FrozenPayload>
+{
+    public static int Constructions;
+
+    public AlternateFrozenSerializer()
+    {
+        Interlocked.Increment(ref Constructions);
+    }
+
+    public override FrozenPayload DefaultValue => null!;
+
+    public override void WriteData(WriteContext context, in FrozenPayload value, bool hasGenerics)
+    {
+        _ = hasGenerics;
+        context.Writer.WriteVarInt32(value.Value);
+    }
+
+    public override FrozenPayload ReadData(ReadContext context)
+    {
+        return new FrozenPayload { Value = context.Reader.ReadVarInt32() };
+    }
+}
+
 public enum GeneratedFrozenValue
 {
     Zero,
@@ -926,6 +949,224 @@ public sealed class RuntimeEdgeCaseTests
         }
 
         Assert.Equal(0, FrozenPayloadSerializer.Constructions);
+    }
+
+    [Fact]
+    public void DirectIdIdentityOwners()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+        FrozenPayloadSerializer.Constructions = 0;
+        AlternateFrozenSerializer.Constructions = 0;
+        int atomicConstructions = 0;
+        AtomicRegistrationSerializer.ConstructionAction = () => atomicConstructions++;
+
+        try
+        {
+            fory.Register<FrozenPayload, FrozenPayloadSerializer>(740);
+            fory.Register<FrozenPayload, FrozenPayloadSerializer>(740);
+            Assert.Equal(1, FrozenPayloadSerializer.Constructions);
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<FrozenPayload, AlternateFrozenSerializer>(740));
+            Assert.Equal(0, AlternateFrozenSerializer.Constructions);
+
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<AtomicRegistrationValue, AtomicRegistrationSerializer>(740));
+            Assert.Equal(0, atomicConstructions);
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(741));
+            Assert.Equal(1, FrozenPayloadSerializer.Constructions);
+
+            fory.Register<AtomicRegistrationValue, AtomicRegistrationSerializer>(742);
+            Assert.Equal(1, atomicConstructions);
+            FrozenPayload value = new() { Value = 11 };
+            Assert.Equal(value.Value, fory.Deserialize<FrozenPayload>(fory.Serialize(value)).Value);
+            Assert.Equal(
+                AtomicRegistrationValue.One,
+                fory.Deserialize<AtomicRegistrationValue>(fory.Serialize(AtomicRegistrationValue.One)));
+        }
+        finally
+        {
+            AtomicRegistrationSerializer.ConstructionAction = null;
+        }
+    }
+
+    [Fact]
+    public void DirectNameIdentityOwners()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+        FrozenPayloadSerializer.Constructions = 0;
+        AlternateFrozenSerializer.Constructions = 0;
+        int atomicConstructions = 0;
+        AtomicRegistrationSerializer.ConstructionAction = () => atomicConstructions++;
+
+        try
+        {
+            fory.Register<FrozenPayload, FrozenPayloadSerializer>("identity.direct");
+            fory.Register<FrozenPayload, FrozenPayloadSerializer>("identity", "direct");
+            Assert.Equal(1, FrozenPayloadSerializer.Constructions);
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<FrozenPayload, AlternateFrozenSerializer>("identity.direct"));
+            Assert.Equal(0, AlternateFrozenSerializer.Constructions);
+
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<AtomicRegistrationValue, AtomicRegistrationSerializer>("identity.direct"));
+            Assert.Equal(0, atomicConstructions);
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<FrozenPayload, FrozenPayloadSerializer>("identity.changed"));
+            Assert.Equal(1, FrozenPayloadSerializer.Constructions);
+
+            fory.Register<AtomicRegistrationValue, AtomicRegistrationSerializer>("identity.atomic");
+            Assert.Equal(1, atomicConstructions);
+            FrozenPayload value = new() { Value = 12 };
+            Assert.Equal(value.Value, fory.Deserialize<FrozenPayload>(fory.Serialize(value)).Value);
+            Assert.Equal(
+                AtomicRegistrationValue.One,
+                fory.Deserialize<AtomicRegistrationValue>(fory.Serialize(AtomicRegistrationValue.One)));
+        }
+        finally
+        {
+            AtomicRegistrationSerializer.ConstructionAction = null;
+        }
+    }
+
+    [Fact]
+    public void ThreadSafeIdIdentityOwners()
+    {
+        using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
+        FrozenPayloadSerializer.Constructions = 0;
+        AlternateFrozenSerializer.Constructions = 0;
+        int atomicConstructions = 0;
+        AtomicRegistrationSerializer.ConstructionAction = () => atomicConstructions++;
+
+        try
+        {
+            fory.Register<FrozenPayload, FrozenPayloadSerializer>(743);
+            fory.Register<FrozenPayload, FrozenPayloadSerializer>(743);
+            Assert.Equal(1, FrozenPayloadSerializer.Constructions);
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<FrozenPayload, AlternateFrozenSerializer>(743));
+            Assert.Equal(0, AlternateFrozenSerializer.Constructions);
+
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<AtomicRegistrationValue, AtomicRegistrationSerializer>(743));
+            Assert.Equal(0, atomicConstructions);
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(744));
+            Assert.Equal(1, FrozenPayloadSerializer.Constructions);
+
+            fory.Register<AtomicRegistrationValue, AtomicRegistrationSerializer>(745);
+            Assert.Equal(1, atomicConstructions);
+            FrozenPayload value = new() { Value = 13 };
+            Assert.Equal(value.Value, fory.Deserialize<FrozenPayload>(fory.Serialize(value)).Value);
+            Assert.Equal(
+                AtomicRegistrationValue.One,
+                fory.Deserialize<AtomicRegistrationValue>(fory.Serialize(AtomicRegistrationValue.One)));
+            Assert.Equal(2, FrozenPayloadSerializer.Constructions);
+            Assert.Equal(2, atomicConstructions);
+        }
+        finally
+        {
+            AtomicRegistrationSerializer.ConstructionAction = null;
+        }
+    }
+
+    [Fact]
+    public void ThreadSafeNameIdentityOwners()
+    {
+        using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
+        FrozenPayloadSerializer.Constructions = 0;
+        AlternateFrozenSerializer.Constructions = 0;
+        int atomicConstructions = 0;
+        AtomicRegistrationSerializer.ConstructionAction = () => atomicConstructions++;
+
+        try
+        {
+            fory.Register<FrozenPayload, FrozenPayloadSerializer>("identity.thread_safe");
+            fory.Register<FrozenPayload, FrozenPayloadSerializer>("identity", "thread_safe");
+            Assert.Equal(1, FrozenPayloadSerializer.Constructions);
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<FrozenPayload, AlternateFrozenSerializer>("identity.thread_safe"));
+            Assert.Equal(0, AlternateFrozenSerializer.Constructions);
+
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<AtomicRegistrationValue, AtomicRegistrationSerializer>("identity.thread_safe"));
+            Assert.Equal(0, atomicConstructions);
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<FrozenPayload, FrozenPayloadSerializer>("identity.changed"));
+            Assert.Equal(1, FrozenPayloadSerializer.Constructions);
+
+            fory.Register<AtomicRegistrationValue, AtomicRegistrationSerializer>("identity.atomic");
+            Assert.Equal(1, atomicConstructions);
+            FrozenPayload value = new() { Value = 14 };
+            Assert.Equal(value.Value, fory.Deserialize<FrozenPayload>(fory.Serialize(value)).Value);
+            Assert.Equal(
+                AtomicRegistrationValue.One,
+                fory.Deserialize<AtomicRegistrationValue>(fory.Serialize(AtomicRegistrationValue.One)));
+            Assert.Equal(2, FrozenPayloadSerializer.Constructions);
+            Assert.Equal(2, atomicConstructions);
+        }
+        finally
+        {
+            AtomicRegistrationSerializer.ConstructionAction = null;
+        }
+    }
+
+    [Fact]
+    public void DirectReentryKeepsOwner()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+        bool callbackStarted = false;
+        FrozenPayloadSerializer.ConstructionAction = () =>
+        {
+            callbackStarted = true;
+            fory.Register<TimeEnvelope>(746);
+        };
+
+        try
+        {
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(746));
+        }
+        finally
+        {
+            FrozenPayloadSerializer.ConstructionAction = null;
+        }
+
+        Assert.True(callbackStarted);
+        fory.Register<FrozenPayload, FrozenPayloadSerializer>(747);
+        TimeEnvelope first = new() { Date = new DateOnly(2026, 8, 29) };
+        Assert.Equal(first.Date, fory.Deserialize<TimeEnvelope>(fory.Serialize(first)).Date);
+        FrozenPayload second = new() { Value = 15 };
+        Assert.Equal(second.Value, fory.Deserialize<FrozenPayload>(fory.Serialize(second)).Value);
+    }
+
+    [Fact]
+    public void ThreadSafeReentryKeepsOwner()
+    {
+        using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
+        bool callbackStarted = false;
+        FrozenPayloadSerializer.ConstructionAction = () =>
+        {
+            callbackStarted = true;
+            fory.Register<TimeEnvelope>(748);
+        };
+
+        try
+        {
+            Assert.ThrowsAny<Exception>(
+                () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(748));
+        }
+        finally
+        {
+            FrozenPayloadSerializer.ConstructionAction = null;
+        }
+
+        Assert.True(callbackStarted);
+        fory.Register<FrozenPayload, FrozenPayloadSerializer>(749);
+        TimeEnvelope first = new() { Date = new DateOnly(2026, 8, 29) };
+        Assert.Equal(first.Date, fory.Deserialize<TimeEnvelope>(fory.Serialize(first)).Date);
+        FrozenPayload second = new() { Value = 16 };
+        Assert.Equal(second.Value, fory.Deserialize<FrozenPayload>(fory.Serialize(second)).Value);
     }
 
     [Fact]

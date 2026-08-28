@@ -18,17 +18,23 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
   registration conflicts and its frozen state after construction and before publishing type,
   serializer, name, or ID state. Allocate automatic type IDs only after those checks at the common
   publication point; do not reserve IDs before callbacks or maintain rollback state.
-  `ThreadSafeFory` validates registrations before retaining their replay callbacks, and it must not
-  execute application factories or callbacks while holding its pool lock. Its registration
-  linearization is reentrant so nested facade registrations share the same publication order. A
-  root started during registration must not reuse the staging instance, and root reentry from a
-  running user `fory_factory` or retained registration callback fails without recursively building
+  `ThreadSafeFory` validates registrations before retaining their semantic replay descriptors, and
+  it must not execute application factories or registrations while holding its pool lock. Its
+  registration linearization is reentrant so nested facade registrations share the same
+  publication order. A root started during registration must not reuse the staging instance, and
+  root reentry from a running user `fory_factory` or retained registration replay fails without
+  recursively building
   another instance. The build thread must be rejected before pool acquisition even when another
   instance becomes available during that build. The non-reentrant pool lock owns pool publication,
   root-started state, registration depth, and the staging instance; the separate instance-build
-  boundary covers the factory and complete callback replay. Retained callbacks may capture a
-  serializer class or factory, but never a resolver-bound serializer instance. Instance-specific
-  serializer configuration belongs in `fory_factory`, which creates and configures each child.
+  boundary covers the factory and complete registration replay. During child replay, a nested
+  facade registration is a no-op only when it exactly matches an accepted descriptor in the prefix
+  already applied to that child; reject every unknown or different request before child mutation.
+  Retained descriptors may contain a serializer class or factory, but never a resolver-bound
+  serializer instance. A serializer factory must return a supported serializer carrier bound to
+  the provided child resolver and normalized declared type; singleton serializers cannot be shared
+  across children. Instance-specific serializer configuration belongs in `fory_factory`, which
+  creates and configures each child.
 - Registry freeze prohibits type and serializer publication after the first root; it does not
   prohibit policy-authorized resolution of module-global classes or callables during a non-strict
   native read when that resolution does not mutate registry state. Do not describe these two

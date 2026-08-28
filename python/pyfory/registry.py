@@ -223,7 +223,14 @@ def _construct_serializer(serializer_factory, type_resolver, cls):
         (0, ()),
     ):
         if _accepts_n_positional_args(serializer_factory, nargs):
-            return serializer_factory(*args)
+            serializer = serializer_factory(*args)
+            if not isinstance(serializer, (Serializer, CythonSerializer)):
+                raise TypeError("Serializer factory must return a supported Serializer carrier")
+            if serializer.type_resolver is not type_resolver:
+                raise TypeError("Serializer factory returned a serializer bound to a different resolver")
+            if normalize_fory_type(serializer.type_) != normalize_fory_type(cls):
+                raise TypeError("Serializer factory returned a serializer bound to a different type")
+            return serializer
     raise TypeError(f"Unsupported serializer constructor for {serializer_factory!r}; expected `(type_resolver, cls)`, `(type_resolver)`, or `()`.")
 
 

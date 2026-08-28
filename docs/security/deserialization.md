@@ -619,11 +619,13 @@ that case, classify the behavior by concrete impact:
 
 The first root operation permanently closes type and serializer registration, including when that
 operation or registry finalization fails. Registration that invokes application code must recheck
-the authoritative lifecycle before publishing callback-derived state. Thread-safe facades retain
-only registrations that completed before the freeze. A thread-safe facade that cannot roll back an
-opaque registration callback must become permanently unusable when that callback fails, rather
-than expose children with partially applied registration. These rules prevent a failed or
-reentrant registration from changing the accepted type surface after deserialization has begun.
+the authoritative lifecycle before publishing application-derived state. Thread-safe facades
+retain only registrations that completed before the freeze. During child construction, a semantic
+replay log may reuse only an identical accepted registration that the child has already applied;
+unknown or different requests fail before mutating the child. A facade that replays opaque
+registration callbacks and cannot roll them back must become permanently unusable when a callback
+fails rather than expose partially registered children. These rules prevent a failed or reentrant
+registration from changing the accepted type surface after deserialization has begun.
 Runtime-specific publication ownership belongs in the implementation guide and language guidance.
 
 ## Metadata And Type Resolution

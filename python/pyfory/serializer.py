@@ -382,7 +382,7 @@ from pyfory.utils import is_little_endian
 
 class NoneSerializer(Serializer):
     def __init__(self, type_resolver):
-        super().__init__(type_resolver, None)
+        super().__init__(type_resolver, type(None))
         self.need_to_write_ref = False
 
     def write(self, buffer, value):

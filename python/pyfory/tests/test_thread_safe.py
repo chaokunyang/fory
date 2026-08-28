@@ -253,7 +253,7 @@ def test_serializer_instance_rejected(method):
     with pytest.raises(TypeError):
         getattr(fory, method)(Address, serializer=serializer)
 
-    assert fory._callbacks == []
+    assert fory._registrations == []
     assert fory._registration_fory is None
     assert not fory._root_started
     assert builds == 0
@@ -287,6 +287,67 @@ def test_serializer_factory_per_child():
     address = Address(city="Oslo", country="Norway")
     assert second.deserialize(second.serialize(address)) == address
     assert fory.deserialize(fory.serialize(address)) == address
+
+
+@pytest.mark.parametrize("result", ["value", "resolver", "type"])
+def test_serializer_factory_result(result):
+    class AddressSerializer(pyfory.Serializer):
+        def write(self, write_context, value):
+            write_context.write_string(value.city)
+            write_context.write_string(value.country)
+
+        def read(self, read_context):
+            return Address(read_context.read_string(), read_context.read_string())
+
+    foreign = pyfory.Fory(xlang=False, compatible=False)
+
+    def serializer_factory(type_resolver, cls):
+        if result == "value":
+            return object()
+        if result == "resolver":
+            return AddressSerializer(foreign.type_resolver, cls)
+        return AddressSerializer(type_resolver, Person)
+
+    fory = ThreadSafeFory(xlang=False, compatible=False)
+    with pytest.raises(TypeError):
+        fory.register_type(Address, serializer=serializer_factory)
+
+    assert not fory._registrations
+    assert fory._registration_fory is None
+
+
+def test_singleton_serializer_factory():
+    class AddressSerializer(pyfory.Serializer):
+        def write(self, write_context, value):
+            write_context.write_string(value.city)
+            write_context.write_string(value.country)
+
+        def read(self, read_context):
+            return Address(read_context.read_string(), read_context.read_string())
+
+    children = []
+    singleton = None
+
+    def child_factory():
+        child = pyfory.Fory(xlang=False, compatible=False)
+        children.append(child)
+        return child
+
+    def serializer_factory(type_resolver, cls):
+        nonlocal singleton
+        if singleton is None:
+            singleton = AddressSerializer(type_resolver, cls)
+        return singleton
+
+    fory = ThreadSafeFory(fory_factory=child_factory)
+    fory.register_type(Address, serializer=serializer_factory)
+    assert singleton.type_resolver is children[0].type_resolver
+
+    with pytest.raises(TypeError):
+        fory._build_fory()
+
+    assert len(children) == 2
+    assert children[1].type_resolver.get_type_info(Address, create=False) is None
 
 
 def test_factory_serializer_owner():
@@ -353,7 +414,7 @@ def test_reentrant_registration():
     assert constructions == 1
     assert len(errors) == 1
     assert isinstance(errors[0], RuntimeError)
-    assert not fory._callbacks
+    assert not fory._registrations
     assert fory._registration_fory is None
     assert fory.deserialize(fory.serialize(None)) is None
     with pytest.raises(RuntimeError):
@@ -376,8 +437,7 @@ def test_nested_registration():
     def serializer_factory(type_resolver, cls):
         nonlocal constructions
         constructions += 1
-        if constructions == 1:
-            fory.register_type(Person)
+        fory.register_type(Person)
         return AddressSerializer(type_resolver, cls)
 
     def register():
@@ -392,13 +452,64 @@ def test_nested_registration():
 
     assert not thread.is_alive()
     assert not errors
-    resolver = fory._registration_fory.type_resolver
-    person_info = resolver.get_type_info(Person, create=False)
-    address_info = resolver.get_type_info(Address, create=False)
-    assert person_info.user_type_id + 1 == address_info.user_type_id
+    first = fory._registration_fory
+    second = fory._build_fory()
+    for child in (first, second):
+        resolver = child.type_resolver
+        person_info = resolver.get_type_info(Person, create=False)
+        address_info = resolver.get_type_info(Address, create=False)
+        assert person_info.user_type_id + 1 == address_info.user_type_id
     address = Address(city="Oslo", country="Norway")
+    assert second.deserialize(second.serialize(address)) == address
     assert fory.deserialize(fory.serialize(address)) == address
-    assert constructions == 1
+    assert constructions == 2
+
+
+@pytest.mark.parametrize("scenario", ["unknown", "different"])
+def test_nested_replay_rejected(scenario):
+    class AddressSerializer(pyfory.Serializer):
+        def write(self, write_context, value):
+            write_context.write_string(value.city)
+            write_context.write_string(value.country)
+
+        def read(self, read_context):
+            return Address(read_context.read_string(), read_context.read_string())
+
+    class Unknown:
+        pass
+
+    children = []
+    replay = False
+
+    def child_factory():
+        child = pyfory.Fory(xlang=True, compatible=False)
+        children.append(child)
+        return child
+
+    def serializer_factory(type_resolver, cls):
+        if not replay:
+            fory.register_type(Person)
+        elif scenario == "unknown":
+            fory.register_type(Unknown)
+        else:
+            fory.register_type(Person, type_id=101)
+        return AddressSerializer(type_resolver, cls)
+
+    fory = ThreadSafeFory(fory_factory=child_factory)
+    fory.register_type(Address, serializer=serializer_factory)
+    replay = True
+
+    with pytest.raises(RuntimeError):
+        fory._build_fory()
+
+    child = children[1]
+    person_info = child.type_resolver.get_type_info(Person, create=False)
+    assert person_info is not None
+    assert person_info.user_type_id != 101
+    assert child.type_resolver.get_type_info(Address, create=False) is None
+    assert child.type_resolver.get_type_info(Unknown, create=False) is None
+    assert fory._replay_limit == 0
+    assert fory._building_thread is None
 
 
 def test_factory_root_reentry():
@@ -417,7 +528,7 @@ def test_factory_root_reentry():
 
     assert constructions == 1
     assert fory._root_started
-    assert not fory._callbacks
+    assert not fory._registrations
     assert fory._registration_fory is None
     with pytest.raises(RuntimeError):
         fory.register_type(Address)

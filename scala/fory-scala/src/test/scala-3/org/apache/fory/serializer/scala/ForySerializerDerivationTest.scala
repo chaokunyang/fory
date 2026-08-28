@@ -35,10 +35,11 @@ import org.apache.fory.exception.{ForyException, InsecureException}
 import org.apache.fory.memory.MemoryBuffer
 import org.apache.fory.meta.TypeDef
 import org.apache.fory.reflect.{FieldAccessor, ObjectInstantiators}
+import org.apache.fory.resolver.TypeInfo
 import org.apache.fory.scala.ForySerializer
 import org.apache.fory.scala.ForyScala
 import org.apache.fory.scala.register
-import org.apache.fory.serializer.{GraphMemoryEstimates, StaticGeneratedStructSerializer}
+import org.apache.fory.serializer.{GraphMemoryEstimates, Serializer, StaticGeneratedStructSerializer}
 import org.apache.fory.`type`.{Types, TypeUtils}
 import org.apache.fory.`type`.union.UnknownCase
 import org.scalatest.matchers.should.Matchers
@@ -394,34 +395,50 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
 
     "reject serializer replacement frozen during creation" in {
       val runtime = xlangFory()
+      val resolver = runtime.getTypeResolver
       val originalSerializer = runtime.getSerializer(classOf[Person])
-      val replacementSerializer =
-        summon[ForySerializer[Person]].createSerializer(runtime.getTypeResolver)
+      val factory = summon[ForySerializer[Person]]
+      var canonical: TypeInfo = null
+      var canonicalSerializer: Serializer[Person] = null
+      var candidate: Serializer[Person] = null
       val reentrantSerializer = new ForySerializer[Person] {
         override def createSerializer(
             typeResolver: org.apache.fory.resolver.TypeResolver,
             typeDef: TypeDef): org.apache.fory.serializer.Serializer[Person] = {
+          canonical = typeResolver.getTypeInfo(classOf[Person], false)
+          canonicalSerializer = canonical.getSerializer
+          candidate = factory.createSerializer(typeResolver, typeDef)
           runtime.serialize(Person("Ada", 36, None))
-          replacementSerializer
+          candidate
         }
       }
 
       intercept[ForyException] {
         ForySerializer.registerSerializer(runtime, classOf[Person])(using reentrantSerializer)
       }
+      candidate.isInstanceOf[StaticGeneratedStructSerializer[?]] shouldBe true
+      resolver.getTypeInfo(classOf[Person], false) shouldBe theSameInstanceAs(canonical)
+      canonical.getSerializer shouldBe theSameInstanceAs(canonicalSerializer)
+      canonical.getSerializer should not be theSameInstanceAs(candidate)
       runtime.getSerializer(classOf[Person]) shouldBe theSameInstanceAs(originalSerializer)
     }
 
     "reject combined registration frozen during creation" in {
       val runtime = xlangFory()
+      val resolver = runtime.getTypeResolver
       val factory = summon[ForySerializer[StoredState]]
+      var canonical: TypeInfo = null
+      var canonicalSerializer: Serializer[StoredState] = null
+      var candidate: Serializer[StoredState] = null
       val reentrantFactory = new ForySerializer[StoredState] {
         override def createSerializer(
             typeResolver: org.apache.fory.resolver.TypeResolver,
             typeDef: TypeDef): org.apache.fory.serializer.Serializer[StoredState] = {
-          val generatedSerializer = factory.createSerializer(typeResolver, typeDef)
+          canonical = typeResolver.getTypeInfo(classOf[StoredState], false)
+          canonicalSerializer = canonical.getSerializer
+          candidate = factory.createSerializer(typeResolver, typeDef)
           runtime.serialize("freeze")
-          generatedSerializer
+          candidate
         }
       }
 
@@ -429,7 +446,11 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
         ForySerializer.register(runtime, classOf[StoredState], "scala_test.ReentrantStoredState")(
           using reentrantFactory)
       }
-      runtime.getTypeResolver.isRegistered(classOf[StoredState]) shouldBe true
+      candidate.isInstanceOf[StaticGeneratedStructSerializer[?]] shouldBe true
+      resolver.isRegistered(classOf[StoredState]) shouldBe true
+      resolver.getTypeInfo(classOf[StoredState], false) shouldBe theSameInstanceAs(canonical)
+      canonical.getSerializer shouldBe theSameInstanceAs(canonicalSerializer)
+      canonical.getSerializer should not be theSameInstanceAs(candidate)
     }
 
     "serialize derived case classes with Scala collection fields" in {

@@ -20,12 +20,17 @@
 package org.apache.fory.serializer.kotlin;
 
 import java.util.Objects;
-import kotlin.*;
+import kotlin.Result;
 import kotlin.UByteArray;
 import kotlin.UIntArray;
 import kotlin.ULongArray;
 import kotlin.UShortArray;
-import kotlin.text.*;
+import kotlin.text.CharCategory;
+import kotlin.text.CharDirectionality;
+import kotlin.text.HexFormat;
+import kotlin.text.MatchGroup;
+import kotlin.text.Regex;
+import kotlin.text.RegexOption;
 import kotlin.time.Duration;
 import kotlin.time.DurationUnit;
 import kotlin.time.TimedValue;
@@ -156,7 +161,7 @@ public class KotlinSerializers {
       resolver.registerSerializer(Uuid.class, new UuidSerializer(config));
     }
     checkRegistrationOpen(resolver);
-    DefaultValueUtils.setKotlinDefaultValueSupport(new KotlinDefaultValueSupport());
+    DefaultValueUtils.setKotlinDefaultValueSupport(KotlinDefaultValueSupport.INSTANCE);
   }
 
   private static void registerIfAbsent(TypeResolver resolver, Class<?> cls) {
@@ -223,19 +228,15 @@ public class KotlinSerializers {
   public static void registerSerializer(Fory fory, Class<?> cls) {
     TypeResolver resolver = fory.getTypeResolver();
     checkRegistrationOpen(resolver);
-    Serializer serializer = newGeneratedSerializer(resolver, cls);
-    checkRegistrationOpen(resolver);
-    if (resolver.isRegistered(cls)) {
-      resolver.setSerializer(cls, serializer);
-    } else {
-      resolver.registerSerializer(cls, serializer);
+    if (!resolver.isRegistered(cls) || resolver.getTypeInfo(cls, false) == null) {
+      throw new IllegalArgumentException(
+          "Generated Kotlin serializer requires registering the type first: " + cls.getName());
     }
+    resolver.registerSerializer(cls, owner -> newGeneratedSerializer(owner, cls));
   }
 
   private static void checkRegistrationOpen(TypeResolver resolver) {
-    // Resolver setSerializer remains available for lazy internal resolution, so this facade owns
-    // the public freeze checks around construction and before the final replacement.
-    if (resolver.isRegistrationFinished()) {
+    if (resolver.isRegistrationFrozen()) {
       throw new ForyException(
           "Cannot register class/serializer after registration has been frozen. Please register "
               + "all classes before invoking top-level `serialize/deserialize/copy` methods of "

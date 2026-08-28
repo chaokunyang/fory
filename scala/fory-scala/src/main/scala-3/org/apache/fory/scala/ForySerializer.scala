@@ -63,9 +63,7 @@ object ForySerializer {
   }
 
   private def checkRegistrationOpen(resolver: TypeResolver): Unit = {
-    // Public generated registration must freeze with the root facade. Resolver serializer
-    // mutation stays available for lazy internal resolution after registration has finished.
-    if resolver.isRegistrationFinished then {
+    if resolver.isRegistrationFrozen then {
       throw new ForyException(
         "Cannot register class/serializer after registration has been frozen. Please register " +
           "all classes before invoking top-level `serialize/deserialize/copy` methods of Fory.")
@@ -124,9 +122,13 @@ object ForySerializer {
     if union then {
       throw new IllegalArgumentException("Use ForySerializer.register for Scala union serializers")
     }
-    val generatedSerializer = serializer.createSerializer(resolver)
-    checkRegistrationOpen(resolver)
-    resolver.setSerializer(cls, generatedSerializer)
+    if !resolver.isRegistered(cls) || resolver.getTypeInfo(cls, false) == null then {
+      throw new IllegalArgumentException(
+        "Generated Scala serializer requires registering the type first: " + cls.getName)
+    }
+    resolver.registerSerializer(
+      cls,
+      (owner: TypeResolver) => serializer.createSerializer(owner))
   }
 
   private def register[T](
@@ -165,9 +167,9 @@ object ForySerializer {
       }
     } else {
       registerType(fory, cls, typeId, namespace, typeName)
-      val generatedSerializer = serializer.createSerializer(resolver)
-      checkRegistrationOpen(resolver)
-      resolver.setSerializer(cls, generatedSerializer)
+      resolver.registerSerializer(
+        cls,
+        (owner: TypeResolver) => serializer.createSerializer(owner))
     }
   }
 

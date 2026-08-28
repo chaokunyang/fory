@@ -1803,8 +1803,12 @@ public abstract class TypeResolver {
       }
       TypeInfo currentInfo = classInfoMap.get(type);
       if (currentInfo != null
-          && currentInfo.typeId == preparedInfo.typeId
-          && currentInfo.userTypeId == preparedInfo.userTypeId) {
+          && (serializer instanceof StaticGeneratedStructSerializer
+              || (currentInfo.typeId == preparedInfo.typeId
+                  && currentInfo.userTypeId == preparedInfo.userTypeId))) {
+        // Static-generated construction starts after canonical type registration. Its base
+        // constructor binds early for recursion, but that candidate must retain the registered
+        // Struct identity instead of being reclassified as an explicit EXT serializer.
         typeInfo = currentInfo;
       } else {
         typeInfo = preparedInfo;
@@ -2127,10 +2131,9 @@ public abstract class TypeResolver {
   }
 
   private List<Descriptor> buildFieldDescriptors(Class<?> clz, boolean searchParent) {
-    List<Descriptor> registeredStaticDescriptors =
-        getRegisteredStaticGeneratedStructDescriptors(clz);
-    if (registeredStaticDescriptors != null) {
-      return normalizeFieldDescriptors(clz, searchParent, registeredStaticDescriptors);
+    List<Descriptor> ownedStaticDescriptors = getOwnedStaticGeneratedDescriptors(clz);
+    if (ownedStaticDescriptors != null) {
+      return normalizeFieldDescriptors(clz, searchParent, ownedStaticDescriptors);
     }
     if (shouldPreferStaticGeneratedSerializer(clz)) {
       List<Descriptor> staticDescriptors = getStaticGeneratedStructDescriptors(clz);
@@ -2266,14 +2269,14 @@ public abstract class TypeResolver {
         cls, isCrossLanguage());
   }
 
-  private List<Descriptor> getRegisteredStaticGeneratedStructDescriptors(Class<?> cls) {
-    TypeInfo typeInfo = getTypeInfo(cls, false);
-    if (typeInfo == null
-        || !(typeInfo.getSerializer() instanceof StaticGeneratedStructSerializer)) {
+  private List<Descriptor> getOwnedStaticGeneratedDescriptors(Class<?> cls) {
+    Serializer<?> serializer = getConstructionSerializer(cls);
+    if (!(serializer instanceof StaticGeneratedStructSerializer)) {
       return null;
     }
-    return ((StaticGeneratedStructSerializer<?>) typeInfo.getSerializer())
-        .getGeneratedDescriptors();
+    // Generated descriptors are immutable constructor input. Let TypeDef construction see them
+    // without publishing the serializer candidate that owns the active construction.
+    return ((StaticGeneratedStructSerializer<?>) serializer).getGeneratedDescriptors();
   }
 
   private StaticGeneratedStructSerializer<?> copyRegisteredStaticGeneratedStructSerializer(

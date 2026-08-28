@@ -156,6 +156,8 @@ export const TypeId = {
       TypeId.NAMED_COMPATIBLE_STRUCT,
       TypeId.EXT,
       TypeId.NAMED_EXT,
+      TypeId.TYPED_UNION,
+      TypeId.NAMED_UNION,
     ].includes(id as any);
   },
   structType(id: number) {

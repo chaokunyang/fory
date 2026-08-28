@@ -170,10 +170,12 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   so field order cannot affect recursive resolution. One numeric ID or name cannot identify
   different user-defined type families. Each identity has one complete schema owner; repeated clones
   are valid only when they share that owner's definition containers and settings. A nested
-  identity-only user-defined type must already have a fully initialized registered owner or resolve
-  to an owner in the current complete recursive schema graph; otherwise registration fails before
-  resolver publication. Anonymous user-defined values without a registry key remain distinct. Once
-  initialized, the published nested owner is authoritative. Do not publish placeholders, nested
+  identity-only Struct must already have a fully initialized registered owner or resolve to an owner
+  in the current complete recursive schema graph; otherwise registration fails before resolver
+  publication. Enum without a mapping and union without cases retain the canonical generic owner
+  for their raw wire type. Complete anonymous definitions without a registry key remain
+  generation-local and distinct. Once initialized, the published nested owner is authoritative. Do
+  not publish placeholders, nested
   serializers, descriptors, or cache state before every generated factory and application code hook
   succeeds.
 - Root failure exceptions must not copy or retain the operation reference table or materialized

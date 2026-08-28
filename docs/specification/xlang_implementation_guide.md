@@ -141,15 +141,20 @@ schema resolution does not depend on field order. One numeric ID or name cannot 
 user-defined type families. Each resolver identity has one complete schema owner in the graph.
 Repeated references and clones may share that owner's immutable definition containers and settings,
 while a second conflicting complete definition fails before code generation without a deep
-structural comparison. Anonymous user-defined values without a name or user ID remain distinct.
+structural comparison. Complete anonymous definitions without a name or user ID remain distinct.
+They stay in the current generation graph rather than publishing under their raw wire type ID. An
+enum without a mapping and a union without cases use the canonical generic serializer for their raw
+wire type; they are definitions, not unresolved schema references. An extension occurrence without
+class metadata resolves through its registered custom serializer owner.
 Code generation then constructs and initializes the complete
 serializer graph against generation-local owners. The same authoritative owner supplies
 generator-time schema and progress facts and fixed factory captures; field occurrence modifiers
 remain owned by the containing schema. Runtime and dynamic dispatch retain the real
 `TypeResolver`. After every factory and application code hook succeeds, the resolver performs one
 guarded batch publication. An unresolved nested identity fails registration before resolver
-publication. An initialized owner published by a nested registration is authoritative and must not
-be overwritten or contradicted by the outer registration's generated decisions.
+publication when its type family requires a separate definition, such as Struct. An initialized
+owner published by a nested registration is authoritative and must not be overwritten or
+contradicted by the outer registration's generated decisions.
 
 Nested serializers must not call back into root `serialize(...)` or
 `deserialize(...)` entry points.

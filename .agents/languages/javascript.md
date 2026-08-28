@@ -26,14 +26,17 @@ Load this file when changing `javascript/`.
   One numeric ID or name cannot identify different user-defined type families. Each resolver
   identity has one complete schema owner in that graph. Repeated references and clones may share
   the same immutable definition containers and settings; reject a second conflicting definition
-  before code generation without deep schema comparison. Anonymous user-defined values without a
-  name or user ID do not share registry identity merely because their raw type IDs match. One
+  before code generation without deep schema comparison. Complete anonymous definitions without a
+  name or user ID do not share registry identity merely because their raw type IDs match. The
+  definition-free generic enum or union serializer remains the canonical raw-type owner. One
   authoritative serializer owner
   supplies both generator-time schema/progress facts and fixed factory captures; an initialized
   owner published by a nested registration wins over an outer generation-local owner, while field
-  occurrence modifiers remain field-owned. Reject any unresolved nested identity before resolver
-  publication. Never publish generated serializers, descriptors, or cache state before every
-  generated factory and application code hook succeeds.
+  occurrence modifiers remain field-owned. Reject an unresolved nested Struct identity before
+  resolver publication. An enum without a mapping and a union without cases keep their existing
+  generic definitions; an extension reference resolves through its registered custom serializer
+  owner. Never publish generated serializers, descriptors, or cache state before every generated
+  factory and application code hook succeeds.
 - Runtime value carriers such as decimal or reduced-precision numeric types belong under the core `types/` ownership boundary, with imports, exports, and codegen externals updated together.
 - Keep `TypeInfo` as schema metadata. Compatibility-sensitive decisions belong on `TypeResolver` or explicit operations, not as retained resolver state on metadata objects.
 - Normalize optional boolean config values at config construction; do not carry `null` through runtime paths when it means `false`.

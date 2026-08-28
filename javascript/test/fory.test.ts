@@ -208,6 +208,15 @@ describe("fory", () => {
     expect(parent.deserialize(parent.serialize(value))).toEqual(value);
   });
 
+  test("rejects unresolved extension", () => {
+    const fory = new Fory({ compatible: false });
+    const root = Type.struct(8151, { value: Type.ext(8152) });
+
+    expect(() => fory.register(root)).toThrow();
+    expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8151)).toBeUndefined();
+    expect(fory.typeResolver.getSerializerById(TypeId.EXT, 8152)).toBeUndefined();
+  });
+
   test("registers empty roots", () => {
     const registered = new Fory({ compatible: false }).register(Type.struct(8122, {}));
 
@@ -464,6 +473,124 @@ describe("fory", () => {
     ).toThrow("conflicting type families");
     expect(fory.typeResolver.getSerializerById(TypeId.ENUM, 8135)).toBeDefined();
     expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8136)).toBeUndefined();
+  });
+
+  test("rejects published schema conflicts", () => {
+    const sharedProps = { value: Type.int32() };
+    const definitionPairs: [TypeInfo, TypeInfo][] = [
+      [Type.struct(8137, { first: Type.int32() }), Type.struct(8137, { second: Type.string() })],
+      [
+        Type.struct({ typeId: 8138, evolving: false }, sharedProps),
+        Type.struct({ typeId: 8138, evolving: true }, sharedProps),
+      ],
+      [Type.enum(8139, { FIRST: 1 }), Type.enum(8139, { SECOND: 2 })],
+      [Type.union(8140, { 1: Type.int32() }), Type.union(8140, { 2: Type.string() })],
+    ];
+
+    for (const [first, second] of definitionPairs) {
+      let generated = 0;
+      const fory = new Fory({
+        compatible: false,
+        hooks: {
+          afterCodeGenerated(code) {
+            generated++;
+            return code;
+          },
+        },
+      });
+      const registered = fory.register(first);
+      generated = 0;
+
+      expect(() => fory.register(second)).toThrow("conflicting complete definitions");
+      expect(generated).toBe(0);
+      expect(fory.typeResolver.getSerializerByTypeInfo(first)).toBe(registered.serializer);
+    }
+  });
+
+  test("keeps extension owner", () => {
+    class FirstExtension {
+      value = 0;
+    }
+    class SecondExtension {
+      value = 0;
+    }
+    Type.ext(8144)(FirstExtension);
+    Type.ext(8144)(SecondExtension);
+    const customSerializer = {
+      write(writeContext: any, value: FirstExtension | SecondExtension) {
+        writeContext.writeVarInt32(value.value);
+      },
+      read(readContext: any, value: FirstExtension | SecondExtension) {
+        value.value = readContext.readVarInt32();
+      },
+    };
+    const fory = new Fory({ compatible: false });
+    const extension = fory.register(FirstExtension, customSerializer);
+    const wrapper = fory.register(Type.struct(8145, { value: Type.ext(8144) }));
+
+    expect(() => fory.register(SecondExtension, customSerializer)).toThrow(
+      "conflicting complete definitions",
+    );
+    expect(fory.typeResolver.getSerializerById(TypeId.EXT, 8144)).toBe(extension.serializer);
+    const value = new FirstExtension();
+    value.value = 7;
+    expect(wrapper.serializer).toBeDefined();
+    expect(extension.deserialize(extension.serialize(value))).toEqual(value);
+  });
+
+  test("uses published schema owners", () => {
+    const fory = new Fory({ compatible: false });
+    fory.register(Type.enum(8146, { VALUE: 7 }));
+    fory.register(Type.union(8147, { 1: Type.string() }));
+    const registered = fory.register(
+      Type.struct(8148, {
+        enumValue: Type.enum(8146),
+        unionValue: Type.union(8147),
+      }),
+    );
+    const value = { enumValue: 7, unionValue: { case: 1, value: "value" } };
+
+    expect(registered.deserialize(registered.serialize(value))).toEqual(value);
+  });
+
+  test("keeps open enum and union", () => {
+    const fory = new Fory({ compatible: false });
+    const enumType = fory.register(Type.enum(8149));
+    const unionType = fory.register(Type.union(8150));
+    const unionValue = { case: 1, value: "value" };
+
+    expect(enumType.deserialize(enumType.serialize(7))).toBe(7);
+    expect(unionType.deserialize(unionType.serialize(unionValue))).toEqual(unionValue);
+  });
+
+  test("rejects reentrant schema conflict", () => {
+    let publishConflict = false;
+    let reentrant: ReturnType<Fory["register"]>;
+    let fory: Fory;
+    fory = new Fory({
+      compatible: false,
+      hooks: {
+        afterCodeGenerated(code) {
+          if (publishConflict) {
+            publishConflict = false;
+            reentrant = fory.register(Type.struct(8141, { inner: Type.string() }));
+          }
+          return code;
+        },
+      },
+    });
+    publishConflict = true;
+
+    expect(() =>
+      fory.register(
+        Type.struct(8142, {
+          trigger: Type.struct(8143, { value: Type.int32() }),
+          value: Type.struct(8141, { outer: Type.int32() }),
+        }),
+      ),
+    ).toThrow("conflicting complete definitions");
+    expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8141)).toBe(reentrant!.serializer);
+    expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8142)).toBeUndefined();
   });
 
   test("seals replaced schema options", () => {

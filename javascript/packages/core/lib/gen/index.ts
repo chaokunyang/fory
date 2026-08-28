@@ -232,7 +232,7 @@ export class Gen {
       return options?.enumProps !== undefined;
     }
     if (TypeId.extType(typeInfo.typeId)) {
-      return options !== undefined;
+      return options?.props !== undefined || options?.creator !== undefined;
     }
     return (
       (typeInfo.typeId === TypeId.UNION ||
@@ -240,6 +240,19 @@ export class Gen {
         typeInfo.typeId === TypeId.NAMED_UNION) &&
       options?.cases !== undefined
     );
+  }
+
+  private hasRegistryIdentity(typeInfo: TypeInfo) {
+    const typeId = this.typeResolver.computeTypeId(typeInfo);
+    if (!TypeId.userDefinedType(typeId) || TypeId.isNamedType(typeId)) {
+      return true;
+    }
+    if (TypeId.needsUserTypeId(typeId) && typeInfo.userTypeId !== -1) {
+      return true;
+    }
+    // A complete anonymous schema belongs to this generation graph. Only the definition-free
+    // generic serializer can be the canonical owner of a raw user-defined wire type ID.
+    return !this.hasCompleteDefinition(typeInfo);
   }
 
   private sameDefinition(left: TypeInfo, right: TypeInfo) {
@@ -311,9 +324,11 @@ export class Gen {
   }
 
   private getGeneratedSerializer(typeInfo: TypeInfo, registrations: GeneratedRegistration[]) {
-    const published = this.typeResolver.getSerializerByTypeInfo(typeInfo);
+    const published = this.hasRegistryIdentity(typeInfo)
+      ? this.typeResolver.getSerializerByTypeInfo(typeInfo)
+      : undefined;
     if (published !== undefined) {
-      this.checkTypeFamily(published.getTypeInfo(), typeInfo);
+      this.checkDefinitionOwner(published.getTypeInfo(), typeInfo);
       return published;
     }
     return this.findRegistration(typeInfo, registrations)?.serializer;
@@ -327,6 +342,9 @@ export class Gen {
     const published = this.typeResolver.getSerializerById(id, userTypeId);
     if (published !== undefined) {
       return published;
+    }
+    if (id === TypeId.TYPED_UNION && (userTypeId === undefined || userTypeId === -1)) {
+      throw new Error("anonymous union serializer requires its TypeInfo owner");
     }
     const entry = registrations.find((candidate) => {
       const typeId = this.typeResolver.computeTypeId(candidate.typeInfo);
@@ -471,6 +489,10 @@ export class Gen {
         if (this.findRegistration(typeInfo, registrations) === undefined) {
           throw new Error("nested struct schema must be registered or defined before use");
         }
+      } else if (TypeId.extType(typeInfo.typeId)) {
+        if (this.findRegistration(typeInfo, registrations) === undefined) {
+          throw new Error("nested extension serializer must be registered before use");
+        }
       } else if (TypeId.enumType(typeInfo.typeId) && !this.isRegistered(typeInfo)) {
         this.prepareRegistration(typeInfo, [], registrations, serializerLookup);
       }
@@ -523,8 +545,8 @@ export class Gen {
       this.addRegistration(typeInfo, registrations);
     }
     this.traversalContainer(typeInfo, registrations, serializerLookup);
-    const serializer = this.typeResolver.getSerializerByTypeInfo(typeInfo);
-    if (!serializer?._initialized) {
+    const publishedRoot = this.typeResolver.getSerializerByTypeInfo(typeInfo);
+    if (!publishedRoot?._initialized) {
       let registration = this.findRegistration(typeInfo, registrations);
       if (registration === undefined) {
         registration = this.addRegistration(typeInfo, registrations);
@@ -539,10 +561,13 @@ export class Gen {
     for (const registration of registrations) {
       const published = this.typeResolver.getSerializerByTypeInfo(registration.typeInfo);
       if (published !== undefined) {
-        this.checkTypeFamily(published.getTypeInfo(), registration.typeInfo);
+        this.checkDefinitionOwner(published.getTypeInfo(), registration.typeInfo);
       }
     }
-    this.typeResolver.commitGeneratedSerializers(registrations);
-    return this.typeResolver.getSerializerByTypeInfo(typeInfo)!;
+    const serializer = this.getGeneratedSerializer(typeInfo, registrations)!;
+    this.typeResolver.commitGeneratedSerializers(
+      registrations.filter((registration) => this.hasRegistryIdentity(registration.typeInfo)),
+    );
+    return serializer;
   }
 }

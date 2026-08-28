@@ -205,15 +205,16 @@ describe("map", () => {
         },
       },
     });
-    const outerType = Type.struct({ typeId: 350, evolving: false }, { outerValue: Type.int32() });
     registerSameKey = true;
     const registered = fory.register(
       Type.struct(351, {
-        outer: outerType.setId(2),
+        trigger: Type.struct(352, { value: Type.int32() }).setId(3),
+        outer: Type.struct(350).setId(2),
         values: Type.map(Type.struct(350), Type.struct(350)).setId(1),
       }),
     );
     const value = {
+      trigger: { value: 1 },
       outer: { innerValue: "outer" },
       values: new Map([[{ innerValue: "key" }, { innerValue: "value" }]]),
     };

@@ -1349,17 +1349,10 @@ class ReduceSerializer(Serializer):
             elif len(reduce_result) == 4:
                 # Case 4: (callable, args, state, listitems)
                 callable_obj, args, state, listitems = reduce_result
-                # Reduce item iterators carry contents, not runtime iterator identity.
-                if listitems is not None:
-                    listitems = list(listitems)
                 reduce_data = (1, callable_obj, args, state, listitems)
             elif len(reduce_result) == 5:
                 # Case 5: (callable, args, state, listitems, dictitems)
                 callable_obj, args, state, listitems, dictitems = reduce_result
-                if listitems is not None:
-                    listitems = list(listitems)
-                if dictitems is not None:
-                    dictitems = list(dictitems)
                 reduce_data = (
                     1,
                     callable_obj,

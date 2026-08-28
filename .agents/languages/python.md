@@ -46,6 +46,9 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
 - Function serialization writes captured globals as a data-only exact `dict`. Keep the reader's
   exact-type check before sizing or merging the namespace; a dict subclass or other mapping must not
   introduce runtime behavior into function reconstruction.
+- Python reduction list-item and dict-item iterators remain native carrier values. Register their
+  concrete iterator types before the first root; do not materialize them into lists in the serializer,
+  which changes the established carrier path and allocates storage proportional to their contents.
 - Pandas `RangeIndex` owns its dtype wire slot. Encode `dtype.str` and reconstruct it with
   `numpy.dtype`; do not serialize the dtype object as a reference because concrete NumPy dtype
   classes vary across versions and would make the wire depend on version-specific registration.

@@ -27,7 +27,13 @@ from pyfory.serializer import ReduceSerializer
 
 
 def register_reduce_types(fory, *classes):
-    for cls in (type, types.BuiltinFunctionType, *classes):
+    for cls in (
+        type,
+        types.BuiltinFunctionType,
+        type(iter([])),
+        type(iter({}.items())),
+        *classes,
+    ):
         fory.register_type(cls)
 
 

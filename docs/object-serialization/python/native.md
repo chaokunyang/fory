@@ -58,6 +58,10 @@ permanently freezes the instance's registry even when it fails. With `strict=Fal
 policy may still authorize module-global classes and callables resolved while reading a native
 payload; that lookup does not add a type or serializer to the frozen registry.
 
+For an application type whose `__reduce__` or `__reduce_ex__` result contains list-item or
+dict-item iterators, register the concrete iterator carrier types before the first root operation.
+Fory preserves those carriers without copying their contents into temporary lists.
+
 ## Common Usage
 
 ```python

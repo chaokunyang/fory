@@ -1315,7 +1315,7 @@ cdef class Fory:
                 unsupported_objects=unsupported_objects,
             )
         finally:
-            self.read_context.reset()
+            self.reset_read()
 
     cdef object _deserialize(self, buffer, buffers=None, unsupported_objects=None):
         cdef ReadContext read_context = self.read_context

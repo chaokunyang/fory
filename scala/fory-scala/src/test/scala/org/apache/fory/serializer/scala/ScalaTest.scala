@@ -74,6 +74,7 @@ class ScalaTest extends AnyWordSpec with Matchers {
   }
 }
 
+
 package object PkgObject {
   case class Id(value: Int)
   case class IdAnyVal(value: Int) extends AnyVal

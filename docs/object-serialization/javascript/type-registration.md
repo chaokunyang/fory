@@ -152,9 +152,11 @@ const wrapperType = Type.struct("example.wrapper", {
 });
 ```
 
-A nested Struct that supplies only an ID or name must already be registered. Alternatively, define
-the complete nested schema in the same recursive `TypeInfo` graph. Registration rejects an
-unresolved nested identity without publishing either the parent or a placeholder.
+A nested Struct that supplies only an ID or name must already be registered. Alternatively, include
+a complete definition with the same identity anywhere in the recursive `TypeInfo` graph; the
+definition may appear before or after the identity-only use. Registration rejects an unresolved
+nested identity. Each identity can have only one complete definition in that graph. Repeated uses
+may share that definition, but separate conflicting definitions are rejected.
 
 ## Field Metadata
 

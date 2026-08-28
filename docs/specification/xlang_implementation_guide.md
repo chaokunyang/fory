@@ -87,8 +87,11 @@ callbacks. Complete the callback before publishing the registry entry it prepare
 starts a root operation, registration must recheck the authoritative per-instance freeze owner
 when the callback returns and reject that publication. Kotlin and Scala combined generated-struct
 registration are the type-first exception: publish the canonical type required by generated
-serializer construction, then recheck after construction and before replacing its serializer.
-Do not add rollback, staging, or a parallel registration path for that exception. Module
+serializer construction, then construct the serializer in the resolver's existing construction
+graph. The candidate is visible only to that construction and reaches the normal resolver commit
+only after the authoritative freeze recheck succeeds. A serializer-only helper rejects a missing
+canonical type instead of auto-registering it. Do not use direct serializer replacement or add
+rollback, staging, or a parallel registration path for that exception. Module
 installation may consist of complete nested registrations. `Fory.register(ForyModule)` alone owns
 module identity, cycle breaking, and idempotence; language bootstrap helpers must not add markers,
 monitors, or separate reentry policies. Keep a retryable install body replay-safe until its final
@@ -118,23 +121,30 @@ resolve recursive fields or candidate state use the construction-local serialize
 resolver lookups retain their runtime semantics. When wire and user IDs match, the final owner is
 the existing canonical `TypeInfo`, so generated serializers and field metadata never retain
 temporary metadata. After construction and the registry lifecycle recheck succeed, the normal
-Class/Xtype resolver commit path installs the candidate. There is no constructor-specific publication path or
-nonpublishing serializer factory. Static-generated serializer classes require an already
+Class/Xtype resolver commit path installs the candidate. Static-generated construction retains the
+already registered canonical type identity and exposes its immutable generated descriptors only to
+the same construction graph; its early-bound serializer candidate is never published. There is no
+constructor-specific publication path. Static-generated serializer classes require an already
 registered canonical type and are therefore rejected by the combined class overload. Direct Java
 `Fory` instances may install a module before their first root operation; thread-safe facades
 install modules only through `ForyBuilder.withModule` during construction.
 
-JavaScript generated registration freezes the complete `TypeInfo` schema graph before code
-generation, including nested schemas and field occurrence modifiers. The writer-owned
-`dynamicTypeId` remains mutable because it is reset per root. Code generation then constructs and
-initializes the complete recursive serializer graph against generation-local owners. Generated
-factories may use a construction-only lookup for fixed serializer captures, while runtime and
-dynamic dispatch retain the real `TypeResolver`. After every factory and application code hook
-succeeds, the resolver performs one guarded batch publication. A nested identity-only Struct must
-already have a fully initialized registered owner or belong to the current complete recursive
-schema graph. An unresolved nested identity fails registration before resolver publication. An
-initialized owner published by a nested registration is authoritative and must not be overwritten
-by the outer registration.
+JavaScript generated registration seals the complete `TypeInfo` schema graph before code
+generation, including nested schemas and field occurrence modifiers. The package-internal seal
+locks each schema-owned pointer before reading or traversing it. The writer-owned `dynamicTypeId`
+remains mutable because it is reset per root. Code generation seeds every complete Struct
+definition by registry identity before resolving identity-only occurrences, so recursive schema
+resolution does not depend on field order. Each resolver identity has one complete schema owner in
+the graph. Repeated references and clones may share that owner's immutable definition containers
+and settings, while a second conflicting complete definition fails before code generation without
+a deep structural comparison. Code generation then constructs and initializes the complete
+serializer graph against generation-local owners. The same authoritative owner supplies
+generator-time schema and progress facts and fixed factory captures; field occurrence modifiers
+remain owned by the containing schema. Runtime and dynamic dispatch retain the real
+`TypeResolver`. After every factory and application code hook succeeds, the resolver performs one
+guarded batch publication. An unresolved nested identity fails registration before resolver
+publication. An initialized owner published by a nested registration is authoritative and must not
+be overwritten or contradicted by the outer registration's generated decisions.
 
 Nested serializers must not call back into root `serialize(...)` or
 `deserialize(...)` entry points.

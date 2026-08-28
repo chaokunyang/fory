@@ -18,14 +18,19 @@ Load this file when changing `javascript/`.
   their own logical size: reset active owner IDs and that table's logical size without clearing
   bounded backing, and replace either backing only after its root has more than 8192 owners.
 - Generated registration must initialize the complete recursive serializer graph against
-  generation-local owners before one `TypeResolver` batch publication. Freeze the complete
-  `TypeInfo` schema graph before code generation; schema fields and occurrence modifiers are
-  immutable afterward, while `dynamicTypeId` remains operation-local writer state. Factory-init
-  serializer lookup may resolve local owners for fixed captures; runtime and dynamic lookup must
-  keep the real resolver. A nested identity-only Struct must already be registered or resolve to an
-  owner in the current complete recursive schema graph. Reject any unresolved nested identity
-  before resolver publication. Never publish placeholders, nested serializers, descriptors, or
-  cache state before every generated factory and application code hook succeeds.
+  generation-local owners before one `TypeResolver` batch publication. The package-internal schema
+  seal must lock each `TypeInfo` schema pointer before reading or traversing it; schema fields and
+  occurrence modifiers are immutable afterward, while `dynamicTypeId` remains operation-local
+  writer state. Seed every complete Struct definition in the sealed graph before resolving
+  identity-only occurrences, so definition order cannot affect recursive resolution. Each resolver
+  identity has one complete schema owner in that graph. Repeated references and clones may share
+  the same immutable definition containers and settings; reject a second conflicting definition
+  before code generation without deep schema comparison. One authoritative serializer owner
+  supplies both generator-time schema/progress facts and fixed factory captures; an initialized
+  owner published by a nested registration wins over an outer generation-local owner, while field
+  occurrence modifiers remain field-owned. Reject any unresolved nested identity before resolver
+  publication. Never publish generated serializers, descriptors, or cache state before every
+  generated factory and application code hook succeeds.
 - Runtime value carriers such as decimal or reduced-precision numeric types belong under the core `types/` ownership boundary, with imports, exports, and codegen externals updated together.
 - Keep `TypeInfo` as schema metadata. Compatibility-sensitive decisions belong on `TypeResolver` or explicit operations, not as retained resolver state on metadata objects.
 - Normalize optional boolean config values at config construction; do not carry `null` through runtime paths when it means `false`.

@@ -204,7 +204,7 @@ public sealed class TypeResolver
 
     public TypeInfo GetTypeInfo(Type type)
     {
-        return GetOrCreateTypeInfo(type, null);
+        return GetOrCreateTypeInfo(type);
     }
 
     public TypeInfo GetTypeInfo<T>()
@@ -453,23 +453,15 @@ public sealed class TypeResolver
         return typeInfo.TypeMetaFields(trackRef);
     }
 
-    private TypeInfo GetOrCreateTypeInfo(Type type, TypeInfo? explicitTypeInfo)
+    private TypeInfo GetOrCreateTypeInfo(Type type)
     {
         ulong typeKey = TypeMapKey.Get(type);
         if (_typeInfos.TryGetValue(typeKey, out TypeInfo? existing))
         {
-            if (explicitTypeInfo is null || ReferenceEquals(existing, explicitTypeInfo))
-            {
-                return existing;
-            }
-
-            if (existing.IsRegistered)
-            {
-                throw new InvalidDataException($"cannot override serializer for registered type {type}");
-            }
+            return existing;
         }
 
-        TypeInfo typeInfo = explicitTypeInfo ?? CreateBindingCore(type);
+        TypeInfo typeInfo = CreateBindingCore(type);
         if (typeInfo.Type != type)
         {
             throw new InvalidDataException($"serializer type mismatch for {type}, got {typeInfo.Type}");

@@ -36,7 +36,7 @@ public sealed class ThreadSafeFory : IDisposable
     internal ThreadSafeFory(Config config)
     {
         _config = config;
-        _threadLocalFory = new ThreadLocal<Fory>(CreatePerThreadFory, trackAllValues: true);
+        _threadLocalFory = new ThreadLocal<Fory>(CreatePerThreadFory);
     }
 
     /// <summary>

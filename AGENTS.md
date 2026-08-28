@@ -205,10 +205,14 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   idempotence in one identity set: add the identity before installation, remove
   it on failure, and retain it on success; do not add parallel installing and
   completed states. Java serializer construction uses one resolver-owned local
-  `TypeInfo` graph for recursive captures, then the normal Class/Xtype commit
-  sink publishes it after callback and lifecycle checks. Preserve an existing
-  canonical `TypeInfo` owner when its wire and user IDs match, and do not add a
-  constructor-specific publication path. Java thread-safe callback registration is one facade-owned
+  graph that separates final `TypeInfo` owners from unpublished serializer
+  candidates. Recursive fields capture the final owner during construction; when
+  wire and user IDs match, that owner is the existing canonical `TypeInfo`.
+  Construction owners that resolve recursive fields or candidate state use the
+  construction-local serializer; ordinary resolver lookups keep their existing
+  runtime semantics. The normal Class/Xtype commit sink installs the candidate
+  only after callback and lifecycle checks.
+  Do not add a constructor-specific publication path. Java thread-safe callback registration is one facade-owned
   transaction across every child. Reject a root or facade registration reentered
   by that callback and permanently fail the facade after callback failure rather
   than exposing partial child state, divergent replay order, or resolver

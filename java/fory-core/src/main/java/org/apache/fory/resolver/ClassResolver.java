@@ -1333,6 +1333,7 @@ public class ClassResolver extends TypeResolver {
     Class<?> type = typeInfo.type;
     TypeInfo currentInfo = classInfoMap.get(type);
     TypeInfo publishedInfo = typeInfo;
+    boolean retainedLocalOwner = false;
     boolean localOverride = currentInfo != null && currentInfo.serializer != null;
     boolean shareable = explicitRegistration && typeInfo.serializer instanceof Shareable;
     if (shareable && !localOverride) {
@@ -1346,10 +1347,13 @@ public class ClassResolver extends TypeResolver {
       currentInfo.setSerializer(this, typeInfo.serializer);
       typeInfo = currentInfo;
       publishedInfo = typeInfo;
+      retainedLocalOwner = true;
     }
     if (shareable && !localOverride) {
       TypeInfo sharedInfo = sharedRegistry.cacheRegisteredTypeInfo(type, typeInfo);
-      if (sharedInfo.typeId == typeInfo.typeId && sharedInfo.userTypeId == typeInfo.userTypeId) {
+      if (!retainedLocalOwner
+          && sharedInfo.typeId == typeInfo.typeId
+          && sharedInfo.userTypeId == typeInfo.userTypeId) {
         publishedInfo = sharedInfo;
       }
     }
@@ -1410,8 +1414,7 @@ public class ClassResolver extends TypeResolver {
   @Override
   public <T> void setSerializerIfAbsent(Class<T> cls, Serializer<T> serializer) {
     if (isConstructingSerializer()) {
-      TypeInfo typeInfo = getConstructedTypeInfo(cls);
-      if (typeInfo == null || typeInfo.serializer == null) {
+      if (!hasConstructedSerializer(cls)) {
         bindConstructedSerializer(cls, serializer);
       }
       return;

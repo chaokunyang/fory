@@ -141,12 +141,14 @@ public abstract class TypeResolver {
   }
 
   private static final class SerializerConstruction {
-    // Self and mutually recursive constructors must capture these exact TypeInfo owners. Publishing
-    // them before the callback and lifecycle recheck succeeds would leave stale recursive captures
-    // and partially registered types after failure.
+    // Recursive fields must capture their final TypeInfo owner during construction, while the
+    // candidate serializers remain unpublished until the whole construction succeeds. Mixing the
+    // two makes fields retain temporary metadata or lets a failed constructor mutate a canonical
+    // owner.
     final Class<?> registrationType;
     final boolean registerType;
     final IdentityHashMap<Class<?>, TypeInfo> typeInfos = new IdentityHashMap<>();
+    final IdentityHashMap<Class<?>, Serializer<?>> serializers = new IdentityHashMap<>();
     boolean rejected;
 
     SerializerConstruction(Class<?> registrationType, boolean registerType) {
@@ -516,11 +518,18 @@ public abstract class TypeResolver {
   private void publishConstruction(SerializerConstruction construction) {
     TypeInfo registrationInfo = construction.typeInfos.get(construction.registrationType);
     Preconditions.checkNotNull(registrationInfo);
+    Serializer<?> constructedSerializer =
+        Preconditions.checkNotNull(construction.serializers.get(construction.registrationType));
+    TypeInfo preparedInfo =
+        prepareConstructionTypeInfo(
+            construction.registrationType,
+            registrationInfo,
+            constructedSerializer,
+            construction.registerType);
     // The target may still fail shareable-serializer conflict validation. Publish it first so a
     // rejected target cannot leave otherwise complete recursive dependencies in canonical maps.
-    Serializer<?> constructedSerializer = registrationInfo.serializer;
     TypeInfo publishedInfo =
-        publishSerializerTypeInfo(registrationInfo, construction.registerType, true);
+        publishSerializerTypeInfo(preparedInfo, construction.registerType, true);
     // Reusing a shared serializer discards the candidate constructor and every dependency it
     // discovered. Only dependencies retained by the published serializer belong in this resolver.
     if (publishedInfo.serializer != constructedSerializer) {
@@ -529,9 +538,24 @@ public abstract class TypeResolver {
     construction.typeInfos.forEach(
         (type, typeInfo) -> {
           if (type != construction.registrationType) {
-            publishSerializerTypeInfo(typeInfo, false, false);
+            publishSerializerTypeInfo(
+                prepareConstructionTypeInfo(
+                    type, typeInfo, construction.serializers.get(type), false),
+                false,
+                false);
           }
         });
+  }
+
+  private TypeInfo prepareConstructionTypeInfo(
+      Class<?> type, TypeInfo typeInfo, Serializer<?> serializer, boolean registerType) {
+    if (classInfoMap.get(type) == typeInfo) {
+      return registerType
+          ? newSerializerTypeInfo(type, serializer, true)
+          : newAutomaticTypeInfo(type, serializer);
+    }
+    typeInfo.setSerializer(this, serializer);
+    return typeInfo;
   }
 
   private void checkRegistrationOpen() {
@@ -1726,7 +1750,7 @@ public abstract class TypeResolver {
 
   public abstract <T> void setSerializerIfAbsent(Class<T> cls, Serializer<T> serializer);
 
-  /** Returns construction-local metadata for a declared field when one exists. */
+  /** Returns the final metadata owner for a declared field during serializer construction. */
   @Internal
   public final TypeInfo getFieldTypeInfo(Class<?> type) {
     if (serializerConstruction != null) {
@@ -1745,6 +1769,16 @@ public abstract class TypeResolver {
     return typeInfo == null ? getTypeInfo(type, false) : typeInfo;
   }
 
+  /** Returns the serializer visible to the active construction without creating type metadata. */
+  @Internal
+  public final Serializer<?> getConstructionSerializer(Class<?> type) {
+    if (serializerConstruction != null && serializerConstruction.serializers.containsKey(type)) {
+      return serializerConstruction.serializers.get(type);
+    }
+    TypeInfo typeInfo = getTypeInfo(type, false);
+    return typeInfo == null ? null : typeInfo.serializer;
+  }
+
   protected final TypeInfo getConstructedTypeInfo(Class<?> type) {
     return serializerConstruction == null ? null : serializerConstruction.typeInfos.get(type);
   }
@@ -1753,17 +1787,32 @@ public abstract class TypeResolver {
     return serializerConstruction != null;
   }
 
+  protected final boolean hasConstructedSerializer(Class<?> type) {
+    return serializerConstruction != null && serializerConstruction.serializers.containsKey(type);
+  }
+
   protected final TypeInfo bindConstructedSerializer(Class<?> type, Serializer<?> serializer) {
     SerializerConstruction construction = Preconditions.checkNotNull(serializerConstruction);
     TypeInfo typeInfo = construction.typeInfos.get(type);
     if (typeInfo == null) {
+      TypeInfo preparedInfo;
       if (type == construction.registrationType) {
-        typeInfo = newSerializerTypeInfo(type, serializer, construction.registerType);
+        preparedInfo = newSerializerTypeInfo(type, serializer, construction.registerType);
       } else {
-        typeInfo = newAutomaticTypeInfo(type, serializer);
+        preparedInfo = newAutomaticTypeInfo(type, serializer);
+      }
+      TypeInfo currentInfo = classInfoMap.get(type);
+      if (currentInfo != null
+          && currentInfo.typeId == preparedInfo.typeId
+          && currentInfo.userTypeId == preparedInfo.userTypeId) {
+        typeInfo = currentInfo;
+      } else {
+        typeInfo = preparedInfo;
       }
       construction.typeInfos.put(type, typeInfo);
-    } else {
+    }
+    construction.serializers.put(type, serializer);
+    if (classInfoMap.get(type) != typeInfo) {
       typeInfo.setSerializer(this, serializer);
     }
     return typeInfo;
@@ -1771,7 +1820,9 @@ public abstract class TypeResolver {
 
   protected final TypeInfo stageConstructedTypeInfo(Class<?> type, TypeInfo typeInfo) {
     Preconditions.checkArgument(typeInfo.type == type);
-    Preconditions.checkNotNull(serializerConstruction).typeInfos.put(type, typeInfo);
+    SerializerConstruction construction = Preconditions.checkNotNull(serializerConstruction);
+    construction.typeInfos.put(type, typeInfo);
+    construction.serializers.put(type, typeInfo.serializer);
     return typeInfo;
   }
 
@@ -1781,7 +1832,13 @@ public abstract class TypeResolver {
   public <T> void resetSerializer(Class<T> cls, Serializer<T> serializer) {
     TypeInfo constructedTypeInfo = getConstructedTypeInfo(cls);
     if (constructedTypeInfo != null) {
-      constructedTypeInfo.setSerializer(this, serializer);
+      serializerConstruction.serializers.put(cls, serializer);
+      if (classInfoMap.get(cls) != constructedTypeInfo) {
+        constructedTypeInfo.setSerializer(this, serializer);
+      }
+      return;
+    }
+    if (serializerConstruction != null) {
       return;
     }
     if (serializer == null) {

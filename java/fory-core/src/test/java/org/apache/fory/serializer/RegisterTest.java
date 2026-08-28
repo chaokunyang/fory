@@ -19,7 +19,11 @@
 
 package org.apache.fory.serializer;
 
+import java.io.Externalizable;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -188,7 +192,7 @@ public class RegisterTest extends ForyTestBase {
     public int child;
   }
 
-  public static class RecursiveValue {
+  public static final class RecursiveValue {
     public int value;
     public RecursiveValue next;
   }
@@ -284,14 +288,68 @@ public class RegisterTest extends ForyTestBase {
             .requireClassRegistration(true)
             .withCompatible(false)
             .build();
-    fory.register(MyExt.class);
-    TypeInfo typeInfo = fory.getTypeResolver().getTypeInfo(MyExt.class, false);
+    fory.register(RecursiveValue.class);
+    TypeInfo typeInfo = fory.getTypeResolver().getTypeInfo(RecursiveValue.class, false);
 
-    fory.registerSerializer(MyExt.class, ObjectSerializer.class);
+    fory.registerSerializer(RecursiveValue.class, ObjectSerializer.class);
 
-    Assert.assertSame(fory.getTypeResolver().getTypeInfo(MyExt.class, false), typeInfo);
-    Assert.assertTrue(
-        fory.getTypeResolver().getRawSerializer(MyExt.class) instanceof ObjectSerializer);
+    Assert.assertSame(fory.getTypeResolver().getTypeInfo(RecursiveValue.class, false), typeInfo);
+    ObjectSerializer<?> serializer =
+        (ObjectSerializer<?>) fory.getTypeResolver().getRawSerializer(RecursiveValue.class);
+    FieldGroups.SerializationFieldInfo[] fields = TestUtils.getFieldValue(serializer, "allFields");
+    FieldGroups.SerializationFieldInfo nextField =
+        Arrays.stream(fields)
+            .filter(field -> field.descriptor.getName().equals("next"))
+            .findFirst()
+            .orElseThrow(AssertionError::new);
+    Assert.assertSame(nextField.typeInfo, typeInfo);
+    Assert.assertSame(nextField.serializer, serializer);
+  }
+
+  @Test
+  public void testSharedSerializerKeepsLocalOwner() {
+    ForyBuilder builder =
+        Fory.builder()
+            .withSharedRegistry(new SharedRegistry())
+            .withXlang(false)
+            .withCodegen(false)
+            .requireClassRegistration(true)
+            .withCompatible(false);
+    Fory first = builder.build();
+    Fory second = builder.build();
+    first.register(ExternalValue.class, 201);
+    second.register(ExternalValue.class, 201);
+    TypeInfo firstInfo = first.getTypeResolver().getTypeInfo(ExternalValue.class, false);
+    TypeInfo secondInfo = second.getTypeResolver().getTypeInfo(ExternalValue.class, false);
+
+    first.registerSerializer(ExternalValue.class, ShareableExternalSerializer.class);
+    second.registerSerializer(ExternalValue.class, ShareableExternalSerializer.class);
+
+    Assert.assertSame(first.getTypeResolver().getTypeInfo(ExternalValue.class, false), firstInfo);
+    Assert.assertSame(second.getTypeResolver().getTypeInfo(ExternalValue.class, false), secondInfo);
+    Assert.assertNotSame(firstInfo, secondInfo);
+    Assert.assertSame(firstInfo.getSerializer(), secondInfo.getSerializer());
+  }
+
+  @Test
+  public void testFailedConstructorKeepsOwner() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withCodegen(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .build();
+    fory.register(ExternalValue.class, 203);
+    TypeInfo typeInfo = fory.getTypeResolver().getTypeInfo(ExternalValue.class, false);
+    Assert.assertNull(typeInfo.getSerializer());
+
+    Assert.assertThrows(
+        IllegalStateException.class,
+        () -> fory.registerSerializer(ExternalValue.class, FailingExternalSerializer.class));
+
+    Assert.assertSame(fory.getTypeResolver().getTypeInfo(ExternalValue.class, false), typeInfo);
+    Assert.assertNull(typeInfo.getSerializer());
   }
 
   @Test(dataProvider = "xlang")
@@ -666,6 +724,45 @@ public class RegisterTest extends ForyTestBase {
     public SecondShareableSerializer(TypeResolver typeResolver) {
       super(typeResolver);
       typeResolver.getTypeInfo(ObjectField.class);
+    }
+  }
+
+  public static final class ExternalValue implements Externalizable {
+    @Override
+    public void writeExternal(ObjectOutput out) {}
+
+    @Override
+    public void readExternal(ObjectInput in) {}
+  }
+
+  public static final class ShareableExternalSerializer extends Serializer<ExternalValue>
+      implements Shareable {
+    public ShareableExternalSerializer(TypeResolver typeResolver) {
+      super(typeResolver.getConfig(), ExternalValue.class);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, ExternalValue value) {}
+
+    @Override
+    public ExternalValue read(ReadContext readContext) {
+      return new ExternalValue();
+    }
+  }
+
+  public static final class FailingExternalSerializer extends Serializer<ExternalValue> {
+    public FailingExternalSerializer(TypeResolver typeResolver) {
+      super(typeResolver.getConfig(), ExternalValue.class);
+      typeResolver.setSerializer(ExternalValue.class, this);
+      throw new IllegalStateException("failed");
+    }
+
+    @Override
+    public void write(WriteContext writeContext, ExternalValue value) {}
+
+    @Override
+    public ExternalValue read(ReadContext readContext) {
+      return new ExternalValue();
     }
   }
 

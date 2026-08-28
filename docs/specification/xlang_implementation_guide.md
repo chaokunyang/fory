@@ -111,11 +111,14 @@ capture a serializer class or factory so every child constructs a serializer aga
 resolver; they must not replay one resolver-bound serializer instance. Use the existing
 `fory_factory` when each child needs a separately configured serializer instance.
 
-Java `TypeResolver` owns one construction-local `TypeInfo` graph for serializer constructors,
-including self and mutual recursion. After construction and the registry lifecycle recheck
-succeed, the normal Class/Xtype resolver commit path publishes the graph. It retains an existing
-canonical `TypeInfo` owner when its wire and user IDs match because generated serializers and field
-metadata may already capture that owner. There is no constructor-specific publication path or
+Java `TypeResolver` owns one construction-local graph for serializer constructors, including self
+and mutual recursion. The graph separates final `TypeInfo` owners from unpublished serializer
+candidates. Recursive fields capture the final owner during construction. Construction owners that
+resolve recursive fields or candidate state use the construction-local serializer; ordinary
+resolver lookups retain their runtime semantics. When wire and user IDs match, the final owner is
+the existing canonical `TypeInfo`, so generated serializers and field metadata never retain
+temporary metadata. After construction and the registry lifecycle recheck succeed, the normal
+Class/Xtype resolver commit path installs the candidate. There is no constructor-specific publication path or
 nonpublishing serializer factory. Static-generated serializer classes require an already
 registered canonical type and are therefore rejected by the combined class overload. Direct Java
 `Fory` instances may install a module before their first root operation; thread-safe facades

@@ -208,26 +208,24 @@ public class FieldGroups {
       boolean primitiveListCollection =
           TypeUtils.isPrimitiveListClass(typeRef.getRawType())
               && resolver.isCollectionDescriptor(d);
-      // invoke `copy` to avoid ObjectSerializer construct clear serializer by `clearSerializer`.
+      Serializer fieldSerializer;
       if (resolver.isMonomorphic(descriptor)) {
         typeInfo = resolver.getFieldTypeInfo(typeRef.getRawType());
+        fieldSerializer = resolver.getConstructionSerializer(typeInfo.getType());
         if (!resolver.isShareMeta()
             && !resolver.isCompatible()
-            && typeInfo.getSerializer() instanceof ReplaceResolveSerializer) {
+            && fieldSerializer instanceof ReplaceResolveSerializer) {
           // overwrite replace resolve serializer for final field
-          typeInfo.setSerializer(
-              new FinalFieldReplaceResolveSerializer(resolver, typeInfo.getType()));
+          fieldSerializer = new FinalFieldReplaceResolveSerializer(resolver, typeInfo.getType());
+          resolver.setSerializer(typeInfo.getType(), fieldSerializer);
         }
       } else {
         typeInfo = null;
+        fieldSerializer = null;
       }
       useDeclaredTypeInfo =
           typeInfo != null && resolver.isMonomorphic(descriptor) && !primitiveListCollection;
-      if (typeInfo != null) {
-        serializer = typeInfo.getSerializer();
-      } else {
-        serializer = null;
-      }
+      serializer = fieldSerializer;
 
       this.qualifiedFieldName = d.getDeclaringClass() + "." + d.getName();
       if (d.getField() != null) {

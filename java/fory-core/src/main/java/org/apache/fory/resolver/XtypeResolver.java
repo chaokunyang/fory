@@ -615,6 +615,7 @@ public class XtypeResolver extends TypeResolver {
     Class<?> type = typeInfo.type;
     TypeInfo currentInfo = classInfoMap.get(type);
     TypeInfo publishedInfo = typeInfo;
+    boolean retainedLocalOwner = false;
     boolean localOverride = currentInfo != null && currentInfo.serializer != null;
     boolean shareable = explicitRegistration && typeInfo.serializer instanceof Shareable;
     if (shareable && !localOverride) {
@@ -628,10 +629,13 @@ public class XtypeResolver extends TypeResolver {
       currentInfo.setSerializer(this, typeInfo.serializer);
       typeInfo = currentInfo;
       publishedInfo = typeInfo;
+      retainedLocalOwner = true;
     }
     if (shareable && !localOverride) {
       TypeInfo sharedInfo = sharedRegistry.cacheRegisteredTypeInfo(type, typeInfo);
-      if (sharedInfo.typeId == typeInfo.typeId && sharedInfo.userTypeId == typeInfo.userTypeId) {
+      if (!retainedLocalOwner
+          && sharedInfo.typeId == typeInfo.typeId
+          && sharedInfo.userTypeId == typeInfo.userTypeId) {
         publishedInfo = sharedInfo;
       }
     }
@@ -834,12 +838,16 @@ public class XtypeResolver extends TypeResolver {
     if (clz == UnknownStruct.class) {
       return false;
     }
-    TypeInfo typeInfo = getTypeInfo(clz, false);
+    TypeInfo typeInfo = getConstructedTypeInfo(clz);
+    if (typeInfo == null) {
+      typeInfo = getTypeInfo(clz, false);
+    }
     if (typeInfo != null) {
       if (Types.isEnumType(typeInfo.typeId) || Types.isUnionType(typeInfo.typeId)) {
         return true;
       }
-      Serializer<?> s = typeInfo.serializer;
+      Serializer<?> s =
+          isConstructingSerializer() ? getConstructionSerializer(clz) : typeInfo.serializer;
       if (s instanceof TimeSerializers.TimeSerializer
           || s instanceof MapLikeSerializer
           || s instanceof CollectionLikeSerializer
@@ -924,7 +932,7 @@ public class XtypeResolver extends TypeResolver {
 
   private TypeInfo buildTypeInfo(Class<?> cls) {
     TypeInfo constructedTypeInfo = getConstructedTypeInfo(cls);
-    if (constructedTypeInfo != null && constructedTypeInfo.serializer != null) {
+    if (constructedTypeInfo != null && hasConstructedSerializer(cls)) {
       return constructedTypeInfo;
     }
     TypeInfo typeInfo = classInfoMap.get(cls);
@@ -1350,8 +1358,7 @@ public class XtypeResolver extends TypeResolver {
   @Override
   public <T> void setSerializerIfAbsent(Class<T> cls, Serializer<T> serializer) {
     if (isConstructingSerializer()) {
-      TypeInfo typeInfo = getConstructedTypeInfo(cls);
-      if (typeInfo == null || typeInfo.serializer == null) {
+      if (!hasConstructedSerializer(cls)) {
         bindConstructedSerializer(cls, serializer);
       }
       return;

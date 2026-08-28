@@ -15,16 +15,19 @@ Load this file when changing `kotlin/` or compiler code that generates Kotlin so
   wire format matches the previous serializer family and old-payload/new-runtime compatibility is
   tested.
 - Public registration helpers must check the registry freeze before constructing a serializer,
-  enum serializer, or union serializer. A registered-type serializer replacement must check again
-  after generated serializer construction and before the explicit replacement because
-  `TypeResolver.setSerializer` remains available for lazy internal resolution.
+  enum serializer, or union serializer. Generated serializer construction must enter the existing
+  `TypeResolver` construction graph so its candidate remains unpublished until the authoritative
+  lifecycle recheck and normal resolver commit.
 - Combined generated-struct registration must publish the canonical type before constructing its
-  serializer because generated construction resolves the canonical `TypeInfo`. Do not move that
-  construction before type registration or add rollback, staging, or a parallel registration path.
+  serializer because generated construction resolves the canonical `TypeInfo`. The serializer-only
+  helper must reject a missing canonical type rather than auto-register it. Do not move construction
+  before type registration or add direct replacement, rollback, staging, or a parallel registration
+  path.
 - `Fory.register(ForyModule)` is the only owner of bootstrap identity, cycle breaking, and
   idempotence. Kotlin bootstrap code must not add a marker, monitor, or separate reentry policy.
-  Keep the install body replay-safe until its final non-repeatable publication; publish global
-  Kotlin default-value support only after all per-runtime registrations succeed.
+  Keep the install body replay-safe until its final non-repeatable publication; publish the single
+  global Kotlin default-value support owner only after all per-runtime registrations succeed, and
+  never replace its class-value cache for each runtime.
 - Install modules for thread-safe facades through `ForyBuilder.withModule` before building them.
   Runtime registration extensions target concrete `Fory` instances and must not recreate a
   thread-safe module-registration wrapper.

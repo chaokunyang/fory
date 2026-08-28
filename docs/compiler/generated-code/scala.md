@@ -151,13 +151,19 @@ object AddressbookForyModule extends org.apache.fory.ForyModule {
   private[addressbook] def getFory: ThreadSafeFory = fory
 
   override def install(fory: Fory): Unit = {
+    ForySerializer.registerType(fory, classOf[Person.PhoneNumber], 102L)
+    ForySerializer.registerType(fory, classOf[Person], 100L)
+
     ScalaSerializers.registerEnum(fory, classOf[Person.PhoneType], 101L)
-    ForySerializer.register(fory, classOf[Person.PhoneNumber], 102L)
-    ForySerializer.register(fory, classOf[Person], 100L)
+    ForySerializer.registerSerializer(fory, classOf[Person.PhoneNumber])
+    ForySerializer.registerSerializer(fory, classOf[Person])
     ForySerializer.register(fory, classOf[Animal], 106L)
   }
 }
 ```
+
+Generated modules register all message types before resolving their generated serializers. This
+lets circular message schemas use the same module without application-managed registration order.
 
 ## gRPC Service Companions
 

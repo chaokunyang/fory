@@ -10,12 +10,15 @@ Load this file when changing `scala/`.
   sources, tests, resources, R8 metadata, compiler plugins, macros, dependencies, or compatibility
   design.
 - Public registration helpers must check the registry freeze before invoking generated serializer
-  construction or enum discovery. Registered-type replacement must check again after
-  `ForySerializer` callbacks and before mutation; Scala enum registration must likewise recheck
-  after companion-driven value discovery and reuse the values already owned by the serializer.
+  construction or enum discovery. Generated serializer construction must enter the existing
+  `TypeResolver` construction graph so its candidate remains unpublished until the authoritative
+  lifecycle recheck and normal resolver commit. Scala enum registration must recheck after
+  companion-driven value discovery and reuse the values already owned by the serializer.
 - Combined generated-struct registration must publish the canonical type before constructing its
-  serializer because generated construction resolves the canonical `TypeInfo`. Do not move that
-  construction before type registration or add rollback, staging, or a parallel registration path.
+  serializer because generated construction resolves the canonical `TypeInfo`. The serializer-only
+  helper must reject a missing canonical type rather than auto-register it. Do not move construction
+  before type registration or add direct replacement, rollback, staging, or a parallel registration
+  path.
   Union construction is the exception because it does not require canonical registration: finish
   its serializer-owned callbacks and recheck the freeze before publishing the union type.
 - `Fory.register(ForyModule)` is the only owner of bootstrap identity, cycle breaking, and

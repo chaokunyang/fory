@@ -87,8 +87,8 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - `FacadeRegistrationGate` owns registration linearization for Java thread-local and pooled
   facades. Starting a root closes registration before child or pool access, then finishes every
   already-created child before exposing that root. A child created after closure must replay every
-  accepted registration, finish registration, and only then become visible; discard a provisional
-  child when replay or finalization fails. A callback registration is one facade transaction across
+  accepted registration, finish registration, and only then become visible; a child whose replay
+  or finalization fails must never be published. A callback registration is one facade transaction across
   all children: reject root or registration reentry while it is active and permanently fail the
   facade after any callback failure, rather than expose partial child mutation, divergent replay
   order, or rollback state. Keep the lock order gate before pool or child storage.
@@ -99,10 +99,13 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   owner immediately, while construction owners resolving recursive fields or candidate state use
   the construction-local serializer. Ordinary resolver lookups retain their runtime semantics.
   When wire and user IDs match, the final owner is the existing canonical `TypeInfo`. After
-  construction and the lifecycle recheck succeed, the Class/Xtype resolver's normal commit sink installs the candidate.
-  No constructor-specific publication path or nonpublishing serializer factory is allowed. Reject
-  static-generated serializer classes from the combined class overload because their construction
-  requires prior canonical type registration. `Fory.register(ForyModule)` owns module identity,
+  construction and the lifecycle recheck succeed, the Class/Xtype resolver's normal commit sink
+  installs the candidate. Static-generated construction starts from an already registered canonical
+  type, retains that type's identity, and exposes immutable generated descriptors only through the
+  same construction graph; it must not publish its early-bound serializer candidate. Do not add a
+  constructor-specific publication path. Reject static-generated serializer classes from the
+  combined class overload because their construction requires prior canonical type registration.
+  `Fory.register(ForyModule)` owns module identity,
   cycle breaking, and idempotence in one identity set: add the identity before the callback, remove
   it on failure, and retain it on success. Do not add separate installing/completed module states.
   Direct `Fory` accepts modules before its first root; thread-safe facades accept modules only

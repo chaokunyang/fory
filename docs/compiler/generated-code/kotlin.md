@@ -153,6 +153,9 @@ public object AddressbookForyModule : ForyModule {
 }
 ```
 
+Generated modules register all message types before resolving their generated serializers. This
+lets circular message schemas use the same module without application-managed registration order.
+
 `registerUnion` discovers the generated `<Target>_ForySerializer`; callers do
 not pass a serializer instance.
 

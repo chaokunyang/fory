@@ -822,11 +822,9 @@ def test_register_py_serializer():
             write_context.write_int32(value.f1)
 
         def read(self, read_context):
-            a = A()
-            a.f1 = read_context.read_int32()
-            return a
+            return RegisterClass(read_context.read_int32())
 
-    fory.register_type(A, serializer=Serializer(fory.type_resolver, RegisterClass))
+    fory.register_type(RegisterClass, serializer=Serializer(fory.type_resolver, RegisterClass))
     assert fory.deserialize(fory.serialize(RegisterClass(100))).f1 == 100
 
 

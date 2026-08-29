@@ -115,6 +115,11 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   no-op return, callback invocation, or publication. Serializer completion methods used by lazy,
   JIT, and generated serializers are internal resolver-owned operations, remain valid after
   registration freezes, and must not be treated or repurposed as registration APIs.
+- Registration freeze does not disable native runtime type resolution. When class registration is
+  not required, native roots may discover an unregistered runtime class and materialize its
+  resolver-owned `TypeInfo`, descriptor, serializer, or JIT cache entry after freeze. This runtime
+  cache materialization must not create or change an explicit class, serializer, ID, name, or
+  policy registration.
 - For GraalVM, use `fory codegen` to generate serializers when building native images. Do not add reflection configuration except for JDK `proxy`.
 - In Java native mode (`xlang=false`), only `Types.BOOL` through `Types.STRING` share type IDs with xlang mode. Other native-mode type IDs differ.
 - Choose one serializer ownership location per logical Java type family. Add native/xlang serializer variants only when the wire format or constructor contract truly differs.

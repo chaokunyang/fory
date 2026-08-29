@@ -40,10 +40,11 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
   the provided child resolver and normalized declared type; singleton serializers cannot be shared
   across children. Instance-specific serializer configuration belongs in `fory_factory`, which
   creates and configures each child.
-- Registry freeze prohibits type and serializer publication after the first root; it does not
-  prohibit policy-authorized resolution of module-global classes or callables during a non-strict
-  native read when that resolution does not mutate registry state. Do not describe these two
-  operations as one kind of late discovery.
+- Registry freeze prohibits explicit type and serializer registration after the first root; it
+  does not prohibit policy-authorized native runtime type resolution. Non-strict native roots may
+  resolve module-global classes or callables and materialize resolver-owned type information or
+  serializer cache entries without creating or changing an explicit type, serializer, ID, name, or
+  policy registration. Do not describe these operations as late registration.
 - In non-strict native mode, public unqualified `register_type` for a built-in native carrier uses
   the same reserved type identity as pre-root discovery. Ordinary application classes and
   dataclasses retain their struct registration identity. Configure both through public registration;

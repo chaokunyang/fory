@@ -208,6 +208,13 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   serializer rebinding, metadata rebuilding, or other late-registration
   machinery. Registration-order finalization before the first root operation
   remains registration-owned and must not create a runtime invalidation path.
+  Registry freeze does not make native runtime type resolution immutable. When
+  registration is not required, Java and Python native modes may still discover
+  an unregistered runtime type and materialize resolver-owned type information,
+  descriptors, serializers, or JIT code while processing a root. Lazy, JIT, and
+  generated serializer completion for an existing binding is likewise allowed
+  after freeze. These runtime cache operations must not create or change an
+  explicit type, serializer, ID, name, or policy registration.
   If serializer construction, factory execution, or another application callback
   can reenter a root, complete that callback before publishing the entry it
   prepares, then recheck the authoritative per-instance freeze owner immediately

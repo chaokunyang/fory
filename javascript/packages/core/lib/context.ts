@@ -1631,6 +1631,9 @@ export class ReadContext {
         : Type.struct(typeMeta.getUserTypeId());
       originalSerializer = this.typeResolver.generateReadSerializer(originalTypeInfo);
     }
+    // This legacy direct-generation API accepts caller-owned metadata. It must
+    // not publish into the checked wire cache; only the validated read path can
+    // do that after binding a concrete local TypeMeta owner.
     return this.generateTypeMetaSerializer(typeMeta, originalSerializer);
   }
 

@@ -4682,8 +4682,9 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         ctx.write_struct_type_id_direct(tid, type_info->user_type_id);
       } else {
         // Complex type (NAMED_STRUCT, COMPATIBLE_STRUCT, etc.) - use TypeInfo*
-        ctx.write_struct_type_info(type_info);
-        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        auto result = ctx.write_struct_type_info(type_info);
+        if (FORY_PREDICT_FALSE(!result.ok())) {
+          ctx.set_error(std::move(result).error());
           return;
         }
       }
@@ -4701,10 +4702,12 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         return;
       }
       const TypeInfo *type_info = type_info_res.value();
-      if (!type_info->type_meta) {
-        ctx.set_error(
-            Error::type_error("Type metadata not initialized for struct"));
-        return;
+      if (FORY_PREDICT_FALSE(!type_info->type_meta)) {
+        auto meta_result = ctx.type_resolver().ensure_type_meta(type_info);
+        if (FORY_PREDICT_FALSE(!meta_result.ok())) {
+          ctx.set_error(std::move(meta_result).error());
+          return;
+        }
       }
       int32_t local_version =
           TypeMeta::compute_struct_version(*type_info->type_meta);
@@ -4733,10 +4736,12 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         return;
       }
       const TypeInfo *type_info = type_info_res.value();
-      if (!type_info->type_meta) {
-        ctx.set_error(
-            Error::type_error("Type metadata not initialized for struct"));
-        return;
+      if (FORY_PREDICT_FALSE(!type_info->type_meta)) {
+        auto meta_result = ctx.type_resolver().ensure_type_meta(type_info);
+        if (FORY_PREDICT_FALSE(!meta_result.ok())) {
+          ctx.set_error(std::move(meta_result).error());
+          return;
+        }
       }
       int32_t local_version =
           TypeMeta::compute_struct_version(*type_info->type_meta);
@@ -4952,10 +4957,13 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         return T{};
       }
       local_type_info = local_type_info_res.value();
-      if (!local_type_info->type_meta) {
-        ctx.set_error(Error::type_error(
-            "Type metadata not initialized for requested struct"));
-        return T{};
+      if (FORY_PREDICT_FALSE(!local_type_info->type_meta)) {
+        auto meta_result =
+            ctx.type_resolver().ensure_type_meta(local_type_info);
+        if (FORY_PREDICT_FALSE(!meta_result.ok())) {
+          ctx.set_error(std::move(meta_result).error());
+          return T{};
+        }
       }
       int32_t local_version =
           TypeMeta::compute_struct_version(*local_type_info->type_meta);
@@ -4973,10 +4981,13 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         return T{};
       }
       local_type_info = local_type_info_res.value();
-      if (!local_type_info->type_meta) {
-        ctx.set_error(Error::type_error(
-            "Type metadata not initialized for requested struct"));
-        return T{};
+      if (FORY_PREDICT_FALSE(!local_type_info->type_meta)) {
+        auto meta_result =
+            ctx.type_resolver().ensure_type_meta(local_type_info);
+        if (FORY_PREDICT_FALSE(!meta_result.ok())) {
+          ctx.set_error(std::move(meta_result).error());
+          return T{};
+        }
       }
     }
 
@@ -5043,10 +5054,13 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         return T{};
       }
       const TypeInfo *local_type_info = local_type_info_res.value();
-      if (!local_type_info->type_meta) {
-        ctx.set_error(Error::type_error(
-            "Type metadata not initialized for requested struct"));
-        return T{};
+      if (FORY_PREDICT_FALSE(!local_type_info->type_meta)) {
+        auto meta_result =
+            ctx.type_resolver().ensure_type_meta(local_type_info);
+        if (FORY_PREDICT_FALSE(!meta_result.ok())) {
+          ctx.set_error(std::move(meta_result).error());
+          return T{};
+        }
       }
       int32_t local_version =
           TypeMeta::compute_struct_version(*local_type_info->type_meta);
@@ -5086,8 +5100,15 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       return T{};
     }
 
-    // In compatible mode with type info provided, use schema evolution path
-    if (ctx.is_compatible() && type_info.type_meta) {
+    // In compatible mode with type info provided, use schema evolution path.
+    if (ctx.is_compatible()) {
+      if (FORY_PREDICT_FALSE(!type_info.type_meta)) {
+        auto meta_result = ctx.type_resolver().ensure_type_meta(&type_info);
+        if (FORY_PREDICT_FALSE(!meta_result.ok())) {
+          ctx.set_error(std::move(meta_result).error());
+          return T{};
+        }
+      }
       return read_compatible(ctx, &type_info);
     }
 

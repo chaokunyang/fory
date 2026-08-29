@@ -98,8 +98,11 @@ void skip_fields(ReadContext &ctx, const std::vector<FieldInfo> &field_infos) {
 
 void skip_struct_data(ReadContext &ctx, const TypeInfo &type_info) {
   if (!type_info.type_meta) {
-    ctx.set_error(Error::type_error("TypeMeta not found for struct skip"));
-    return;
+    auto result = ctx.type_resolver().ensure_type_meta(&type_info);
+    if (FORY_PREDICT_FALSE(!result.ok())) {
+      ctx.set_error(std::move(result).error());
+      return;
+    }
   }
   if (ctx.check_struct_version()) {
     (void)ctx.read_int32(ctx.error());
@@ -537,10 +540,16 @@ void skip_struct(ReadContext &ctx, const FieldType &) {
     }
   }
 
-  if (!type_info || !type_info->type_meta) {
-    ctx.set_error(
-        Error::type_error("TypeInfo or TypeMeta not found for struct skip"));
+  if (!type_info) {
+    ctx.set_error(Error::type_error("TypeInfo not found for struct skip"));
     return;
+  }
+  if (!type_info->type_meta) {
+    auto result = ctx.type_resolver().ensure_type_meta(type_info);
+    if (FORY_PREDICT_FALSE(!result.ok())) {
+      ctx.set_error(std::move(result).error());
+      return;
+    }
   }
 
   skip_fields(ctx, type_info->type_meta->get_field_infos());
@@ -673,9 +682,11 @@ void skip_unknown(ReadContext &ctx) {
   case TypeId::NAMED_COMPATIBLE_STRUCT: {
     // For struct types, we already have the type_info with field_infos
     if (!type_info->type_meta) {
-      ctx.set_error(
-          Error::type_error("TypeMeta not found for UNKNOWN struct skip"));
-      return;
+      auto result = ctx.type_resolver().ensure_type_meta(type_info);
+      if (FORY_PREDICT_FALSE(!result.ok())) {
+        ctx.set_error(std::move(result).error());
+        return;
+      }
     }
     skip_fields(ctx, type_info->type_meta->get_field_infos());
     return;

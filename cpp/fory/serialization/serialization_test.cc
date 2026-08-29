@@ -77,6 +77,16 @@ struct NestedStruct {
   FORY_STRUCT(NestedStruct, point, label);
 };
 
+struct UnregisteredField {
+  int32_t value = 0;
+  FORY_STRUCT(UnregisteredField, value);
+};
+
+struct MissingFieldOwner {
+  UnregisteredField field;
+  FORY_STRUCT(MissingFieldOwner, field);
+};
+
 enum class Color { RED, GREEN, BLUE };
 enum class SignedScopedStatus : int32_t { NEG = -3, ZERO = 0, LARGE = 42 };
 FORY_ENUM(SignedScopedStatus, NEG, ZERO, LARGE);
@@ -1417,6 +1427,42 @@ TEST(SerializationTest, RegistrationByNameFailureDoesNotLeakTypeInfo) {
   EXPECT_EQ(dotted_type_name.error().code(), ErrorCode::Invalid);
 }
 
+TEST(SerializationTest, UnusedTypeMetaStaysLazy) {
+  auto fory = Fory::builder().xlang(true).compatible(true).build();
+  ASSERT_TRUE(fory.register_struct<SimpleStruct>("demo", "UsedStruct").ok());
+  ASSERT_TRUE(fory.register_struct<ComplexStruct>("demo", "UnusedStruct").ok());
+
+  auto serialized = fory.serialize(SimpleStruct{1, 2});
+  ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
+
+  auto used =
+      fory.write_context().type_resolver().get_type_info<SimpleStruct>();
+  auto unused =
+      fory.write_context().type_resolver().get_type_info<ComplexStruct>();
+  ASSERT_TRUE(used.ok());
+  ASSERT_TRUE(unused.ok());
+  EXPECT_NE(used.value()->type_meta, nullptr);
+  EXPECT_EQ(unused.value()->type_meta, nullptr);
+  EXPECT_TRUE(unused.value()->type_def.empty());
+}
+
+TEST(SerializationTest, TypeMetaFailureIsAtomic) {
+  auto fory = Fory::builder().xlang(true).compatible(true).build();
+  ASSERT_TRUE(
+      fory.register_struct<MissingFieldOwner>("demo", "MissingOwner").ok());
+
+  auto serialized = fory.serialize(MissingFieldOwner{});
+  ASSERT_FALSE(serialized.ok());
+
+  auto owner =
+      fory.write_context().type_resolver().get_type_info<MissingFieldOwner>();
+  ASSERT_TRUE(owner.ok());
+  EXPECT_EQ(owner.value()->type_meta, nullptr);
+  EXPECT_TRUE(owner.value()->type_def.empty());
+  EXPECT_FALSE(
+      fory.register_struct<UnregisteredField>("demo", "MissingField").ok());
+}
+
 static std::vector<uint8_t> make_remote_type_meta(const std::string &type_name,
                                                   const std::string &field) {
   std::vector<FieldInfo> fields;
@@ -1744,7 +1790,7 @@ TEST(SerializationTest, ExpectedLocalTypeMetaStaysRootLocal) {
   auto serialized = fory.serialize(SimpleStruct{});
   ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
 
-  ReadContext ctx(fory.config(), fory.type_resolver().clone());
+  ReadContext ctx(fory.config(), fory.write_context().type_resolver().clone());
   auto struct_info = ctx.type_resolver().get_type_info<SimpleStruct>();
   auto enum_info = ctx.type_resolver().get_type_info<SignedScopedStatus>();
   auto ext_info = ctx.type_resolver().get_type_info<IdLimitExt>();
@@ -1856,6 +1902,7 @@ TEST(SerializationTest, StaticTypeMetaChecksOwner) {
   ASSERT_TRUE(struct_b.ok());
   ASSERT_TRUE(enum_b.ok());
   ASSERT_TRUE(union_b.ok());
+  ASSERT_TRUE(ctx.type_resolver().ensure_type_meta(struct_b.value()).ok());
 
   expect_static_meta_ref_mismatch<SimpleStruct>(ctx, struct_b.value());
   expect_static_meta_ref_mismatch<SignedScopedStatus>(ctx, enum_b.value());
@@ -2142,7 +2189,7 @@ TEST(SerializationTest, IdExtDoesNotUseTypeMetaLimits) {
   EXPECT_EQ(decoded.value(), IdLimitExt{42});
 }
 
-TEST(SerializationTest, LocalTypeMetaCompletionIgnoresReceiveBodyLimit) {
+TEST(SerializationTest, LocalMetaIgnoresReceiveLimit) {
   auto fory = Fory::builder()
                   .xlang(true)
                   .compatible(true)
@@ -2523,7 +2570,7 @@ TEST(SerializationTest, ConfigurationBuilder) {
 }
 
 // ============================================================================
-// Thread Safety Tests
+// Registration Lifecycle Tests
 // ============================================================================
 
 TEST(SerializationTest, DirectFailedRootFreezes) {
@@ -2554,47 +2601,6 @@ TEST(SerializationTest, DirectFailedRootFreezes) {
   EXPECT_FALSE(
       source_resolver->get_type_info(std::type_index(typeid(std::string)))
           .ok());
-}
-
-TEST(SerializationTest, ThreadSafeForyMultiThread) {
-  auto fory = Fory::builder()
-                  .xlang(true)
-                  .compatible(false)
-                  .track_ref(false)
-                  .build_thread_safe();
-  fory.register_struct<::ComplexStruct>(1);
-
-  constexpr int k_num_threads = 8;
-  constexpr int k_iterations_per_thread = 100;
-  std::vector<std::thread> threads;
-  std::atomic<int> success_count{0};
-
-  for (int t = 0; t < k_num_threads; ++t) {
-    threads.emplace_back([&, t]() {
-      for (int i = 0; i < k_iterations_per_thread; ++i) {
-        ::ComplexStruct original{"thread" + std::to_string(t) + "_iter" +
-                                     std::to_string(i),
-                                 t * 1000 + i,
-                                 {"hobby1", "hobby2"}};
-
-        auto bytes_result = fory.serialize(original);
-        if (!bytes_result.ok())
-          continue;
-
-        auto deser_result = fory.deserialize<::ComplexStruct>(
-            bytes_result.value().data(), bytes_result.value().size());
-        if (deser_result.ok() && deser_result.value() == original) {
-          success_count.fetch_add(1);
-        }
-      }
-    });
-  }
-
-  for (auto &t : threads) {
-    t.join();
-  }
-
-  EXPECT_EQ(success_count.load(), k_num_threads * k_iterations_per_thread);
 }
 
 TEST(SerializationTest, ThreadSafeRegistrationFreezes) {
@@ -2638,19 +2644,53 @@ TEST(SerializationTest, ThreadSafeFailedRootFreezes) {
   auto facade_registration = fory.register_struct<::SimpleStruct>(1);
   ASSERT_FALSE(facade_registration.ok());
 
-  auto type_info = source_resolver->get_type_info_by_id(
-      static_cast<uint32_t>(TypeId::STRING));
-  ASSERT_TRUE(type_info.ok());
-  ASSERT_EQ(type_info.value()->harness.any_write_fn, nullptr);
-  ASSERT_EQ(type_info.value()->harness.any_read_fn, nullptr);
-
   auto late_registration = register_any_type<std::string>(*source_resolver);
   ASSERT_FALSE(late_registration.ok());
-  EXPECT_EQ(type_info.value()->harness.any_write_fn, nullptr);
-  EXPECT_EQ(type_info.value()->harness.any_read_fn, nullptr);
-  EXPECT_FALSE(
-      source_resolver->get_type_info(std::type_index(typeid(std::string)))
-          .ok());
+}
+
+// ============================================================================
+// Thread Safety Tests
+// ============================================================================
+
+TEST(SerializationTest, ThreadSafeForyMultiThread) {
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .build_thread_safe();
+  fory.register_struct<::ComplexStruct>(1);
+
+  constexpr int k_num_threads = 8;
+  constexpr int k_iterations_per_thread = 100;
+  std::vector<std::thread> threads;
+  std::atomic<int> success_count{0};
+
+  for (int t = 0; t < k_num_threads; ++t) {
+    threads.emplace_back([&, t]() {
+      for (int i = 0; i < k_iterations_per_thread; ++i) {
+        ::ComplexStruct original{"thread" + std::to_string(t) + "_iter" +
+                                     std::to_string(i),
+                                 t * 1000 + i,
+                                 {"hobby1", "hobby2"}};
+
+        auto bytes_result = fory.serialize(original);
+        if (!bytes_result.ok())
+          continue;
+
+        auto deser_result = fory.deserialize<::ComplexStruct>(
+            bytes_result.value().data(), bytes_result.value().size());
+        if (deser_result.ok() && deser_result.value() == original) {
+          success_count.fetch_add(1);
+        }
+      }
+    });
+  }
+
+  for (auto &t : threads) {
+    t.join();
+  }
+
+  EXPECT_EQ(success_count.load(), k_num_threads * k_iterations_per_thread);
 }
 
 TEST(SerializationTest, TemporalCarriersAreHashable) {

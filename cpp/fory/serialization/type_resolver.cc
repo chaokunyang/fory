@@ -1773,94 +1773,49 @@ Result<void, Error> TypeResolver::check_registration() {
   return Result<void, Error>();
 }
 
-Result<std::unique_ptr<TypeResolver>, Error>
-TypeResolver::build_context_type_resolver() {
+std::unique_ptr<TypeResolver> TypeResolver::build_context_type_resolver() {
   std::lock_guard<std::mutex> lock(registration_mutex_);
   registry_frozen_ = true;
-  auto context_resolver = std::make_unique<TypeResolver>();
+  return clone();
+}
 
-  // copy configuration
-  context_resolver->compatible_ = compatible_;
-  context_resolver->xlang_ = xlang_;
-  context_resolver->check_struct_version_ = check_struct_version_;
-  context_resolver->track_ref_ = track_ref_;
-  context_resolver->registry_frozen_ = true;
-
-  // Build mapping from old pointers to new pointers for rebuilding lookup maps
-  fory::flat_hash_map<const TypeInfo *, TypeInfo *> ptr_map;
-
-  // Deep clone all existing TypeInfo objects
-  for (const auto &info : type_infos_) {
-    auto cloned = info->deep_clone();
-    TypeInfo *new_ptr = cloned.get();
-    ptr_map[info.get()] = new_ptr;
-    context_resolver->type_infos_.push_back(std::move(cloned));
+Result<void, Error> TypeResolver::ensure_type_meta(const TypeInfo *type_info) {
+  if (FORY_PREDICT_TRUE(type_info != nullptr && type_info->type_meta)) {
+    return Result<void, Error>();
   }
-  auto remap_type_info = [&ptr_map](const TypeInfo *old_ptr) {
-    auto *entry = ptr_map.find(old_ptr);
-    FORY_CHECK(entry != nullptr);
-    return entry->second;
-  };
-
-  // Rebuild lookup maps with new pointers
-  for (const auto &[key, old_ptr] : type_info_by_ctid_) {
-    context_resolver->type_info_by_ctid_.put(key, remap_type_info(old_ptr));
+  if (FORY_PREDICT_FALSE(type_info == nullptr)) {
+    return Unexpected(Error::invalid("TypeInfo is null"));
   }
-  for (const auto &[key, old_ptr] : type_info_by_id_) {
-    context_resolver->type_info_by_id_.put(key, remap_type_info(old_ptr));
+  if (FORY_PREDICT_FALSE(!registry_frozen_)) {
+    return Unexpected(Error::invalid(
+        "Type metadata is available only after registration is frozen"));
   }
-  for (const auto &[key, old_ptr] : user_type_info_by_id_) {
-    context_resolver->user_type_info_by_id_.put(key, remap_type_info(old_ptr));
-  }
-  for (const auto &[key, old_ptr] : type_info_by_name_) {
-    context_resolver->type_info_by_name_[key] = remap_type_info(old_ptr);
-  }
-  for (const auto &[key, old_ptr] : type_info_by_runtime_type_) {
-    context_resolver->type_info_by_runtime_type_[key] =
-        remap_type_info(old_ptr);
+  if (FORY_PREDICT_FALSE(type_info->harness.sorted_field_infos_fn == nullptr)) {
+    return Unexpected(
+        Error::type_error("Type metadata builder is not available"));
   }
 
-  for (const auto &[key, old_ptr] : partial_type_infos_) {
-    context_resolver->partial_type_infos_.put(key, remap_type_info(old_ptr));
-  }
+  FORY_TRY(sorted_fields, type_info->harness.sorted_field_infos_fn(*this));
+  TypeMeta meta =
+      TypeMeta::from_fields(type_info->type_id, type_info->namespace_name,
+                            type_info->type_name, type_info->register_by_name,
+                            type_info->user_type_id, std::move(sorted_fields));
+  FORY_TRY(type_def, meta.to_bytes());
 
-  // Process all partial type infos to build complete type metadata
-  for (const auto &[rust_type_id, partial_ptr] :
-       context_resolver->partial_type_infos_) {
-    // Call the harness's sorted_field_infos function to get complete field info
-    FORY_TRY(sorted_fields,
-             partial_ptr->harness.sorted_field_infos_fn(*context_resolver));
+  Buffer buffer(type_def.data(), static_cast<uint32_t>(type_def.size()), false);
+  buffer.writer_index(static_cast<uint32_t>(type_def.size()));
+  // Local registration metadata is trusted. Remote receive limits apply only
+  // to remote cache misses, not to this context-local completion path.
+  FORY_TRY(parsed_meta,
+           TypeMeta::from_bytes(buffer, nullptr,
+                                std::numeric_limits<uint32_t>::max(),
+                                std::numeric_limits<uint32_t>::max()));
 
-    // Build complete TypeMeta
-    TypeMeta meta = TypeMeta::from_fields(
-        partial_ptr->type_id, partial_ptr->namespace_name,
-        partial_ptr->type_name, partial_ptr->register_by_name,
-        partial_ptr->user_type_id, std::move(sorted_fields));
-
-    // Serialize TypeMeta to bytes
-    FORY_TRY(type_def, meta.to_bytes());
-
-    // Update the TypeInfo in place
-    partial_ptr->type_def = std::move(type_def);
-
-    // Parse the serialized TypeMeta back to create unique_ptr<TypeMeta>
-    Buffer buffer(partial_ptr->type_def.data(),
-                  static_cast<uint32_t>(partial_ptr->type_def.size()), false);
-    buffer.writer_index(static_cast<uint32_t>(partial_ptr->type_def.size()));
-    // This metadata was just generated from local registration state. Remote
-    // receive limits are enforced only on remote metadata parse/cache-miss
-    // paths, so large trusted local schemas do not fail metadata completion.
-    FORY_TRY(parsed_meta,
-             TypeMeta::from_bytes(buffer, nullptr,
-                                  std::numeric_limits<uint32_t>::max(),
-                                  std::numeric_limits<uint32_t>::max()));
-    partial_ptr->type_meta = std::move(parsed_meta);
-  }
-
-  // The context resolver retains only completed metadata.
-  context_resolver->partial_type_infos_.clear();
-
-  return context_resolver;
+  // Publish only after every fallible step succeeds. The TypeMeta pointer is
+  // the completion condition, so a failed attempt leaves no partial state.
+  type_info->type_def = std::move(type_def);
+  type_info->type_meta = std::move(parsed_meta);
+  return Result<void, Error>();
 }
 
 std::unique_ptr<TypeResolver> TypeResolver::clone() const {
@@ -1905,9 +1860,6 @@ std::unique_ptr<TypeResolver> TypeResolver::clone() const {
   for (const auto &[key, old_ptr] : type_info_by_runtime_type_) {
     cloned->type_info_by_runtime_type_[key] = remap_type_info(old_ptr);
   }
-  // Note: Don't copy partial_type_infos_ - clone is used only after metadata
-  // completion.
-
   return cloned;
 }
 

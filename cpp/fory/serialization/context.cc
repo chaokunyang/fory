@@ -80,11 +80,19 @@ WriteContext::write_type_meta(const std::type_index &type_id) {
   // either type_index or TypeInfo* path
   FORY_TRY(type_info, type_resolver_->get_type_info(type_id));
   write_type_meta(type_info);
+  if (FORY_PREDICT_FALSE(has_error())) {
+    return Unexpected(error());
+  }
   return Result<void, Error>();
 }
 
 void WriteContext::write_type_meta(const TypeInfo *type_info) {
   if (first_type_info_ == nullptr) {
+    auto result = type_resolver_->ensure_type_meta(type_info);
+    if (FORY_PREDICT_FALSE(!result.ok())) {
+      set_error(std::move(result).error());
+      return;
+    }
     first_type_info_ = type_info;
     buffer_.write_uint8(0); // (index << 1), index=0
     buffer_.write_bytes(type_info->type_def.data(), type_info->type_def.size());
@@ -109,6 +117,11 @@ void WriteContext::write_type_meta(const TypeInfo *type_info) {
   }
 
   // New type: index << 1, LSB=0, followed by TypeDef bytes inline
+  auto result = type_resolver_->ensure_type_meta(type_info);
+  if (FORY_PREDICT_FALSE(!result.ok())) {
+    set_error(std::move(result).error());
+    return;
+  }
   uint32_t index = static_cast<uint32_t>(write_type_info_index_map_.size() + 1);
   uint32_t marker = static_cast<uint32_t>(index << 1);
   if (marker < 0x80) {
@@ -190,6 +203,9 @@ WriteContext::write_enum_type_info(const TypeInfo *type_info) {
     if (config_->compatible) {
       // write type meta inline using streaming protocol
       write_type_meta(type_info);
+      if (FORY_PREDICT_FALSE(has_error())) {
+        return Unexpected(error());
+      }
     } else {
       // write pre-encoded namespace and type_name
       if (type_info->encoded_namespace && type_info->encoded_type_name) {
@@ -282,6 +298,9 @@ WriteContext::write_any_type_info(const TypeInfo *type_info) {
   case TypeId::NAMED_COMPATIBLE_STRUCT:
     // write type meta inline using streaming protocol
     write_type_meta(type_info);
+    if (FORY_PREDICT_FALSE(has_error())) {
+      return Unexpected(error());
+    }
     break;
   case TypeId::NAMED_ENUM:
   case TypeId::NAMED_EXT:
@@ -290,6 +309,9 @@ WriteContext::write_any_type_info(const TypeInfo *type_info) {
     if (config_->compatible) {
       // write type meta inline using streaming protocol
       write_type_meta(type_info);
+      if (FORY_PREDICT_FALSE(has_error())) {
+        return Unexpected(error());
+      }
     } else {
       // write pre-encoded namespace and type_name
       if (type_info->encoded_namespace && type_info->encoded_type_name) {
@@ -369,11 +391,17 @@ WriteContext::write_struct_type_info(const TypeInfo *type_info) {
   case TypeId::NAMED_COMPATIBLE_STRUCT:
     // write type meta inline using streaming protocol
     write_type_meta(type_info);
+    if (FORY_PREDICT_FALSE(has_error())) {
+      return Unexpected(error());
+    }
     break;
   case TypeId::NAMED_STRUCT:
     if (config_->compatible) {
       // write type meta inline using streaming protocol
       write_type_meta(type_info);
+      if (FORY_PREDICT_FALSE(has_error())) {
+        return Unexpected(error());
+      }
     } else {
       // write pre-encoded namespace and type_name
       if (type_info->encoded_namespace && type_info->encoded_type_name) {
@@ -698,6 +726,16 @@ ReadContext::read_type_meta_owner(const TypeInfo *expected_type_info) {
           ReadTypeInfo{local_type_info, local_type_info});
       return local_type_info;
     }
+    if (FORY_PREDICT_FALSE(
+            !local_type_info->type_meta &&
+            is_struct_type(static_cast<TypeId>(local_type_info->type_id)))) {
+      FORY_RETURN_NOT_OK(type_resolver_->ensure_type_meta(local_type_info));
+      if (has_local_meta_hash(local_type_info, meta_hash)) {
+        reading_type_infos_.push_back(
+            ReadTypeInfo{local_type_info, local_type_info});
+        return local_type_info;
+      }
+    }
   }
 
   FORY_TRY(remote_schema_key, check_remote_type_meta_limit(*parsed_meta));
@@ -708,7 +746,6 @@ ReadContext::read_type_meta_owner(const TypeInfo *expected_type_info) {
   cached->concrete_owner = local_type_info;
   if (local_type_info) {
     // Have local type - assign dispatch IDs by comparing schemas.
-    // Note: Extension types don't have type_meta (only structs do)
     if (local_type_info->type_meta) {
       FORY_RETURN_NOT_OK(TypeMeta::assign_local_dispatch_ids(
           local_type_info->type_meta.get(), parsed_meta->field_infos));

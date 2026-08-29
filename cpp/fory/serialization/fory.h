@@ -705,29 +705,25 @@ private:
       : BaseFory(config, std::move(resolver)),
         precomputed_header_(compute_header(config.xlang)) {}
 
-  /// Constructor for ThreadSafeFory pool - resolver metadata is ready.
-  struct PreparedResolver {};
+  /// Constructor for ThreadSafeFory pool - registration is already frozen.
+  struct FrozenResolver {};
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver,
-                PreparedResolver)
+                FrozenResolver)
       : BaseFory(config, std::move(resolver)),
         precomputed_header_(compute_header(config.xlang)) {
     write_ctx_.emplace(config_, type_resolver_->clone());
     read_ctx_.emplace(config_, type_resolver_->clone());
   }
 
-  /// Initialize operation contexts from the registered type metadata.
+  /// Freeze registration and initialize operation contexts.
   void ensure_contexts_initialized() {
     if (!write_ctx_.has_value()) {
       FORY_CHECK(!read_ctx_.has_value());
-      auto context_result = type_resolver_->build_context_type_resolver();
-      FORY_CHECK(context_result.ok())
-          << "Failed to build context TypeResolver: "
-          << context_result.error().to_string();
-      auto prepared_resolver = std::move(context_result).value();
+      auto context_resolver = type_resolver_->build_context_type_resolver();
       // Create contexts with cloned resolvers
-      write_ctx_.emplace(config_, prepared_resolver->clone());
-      read_ctx_.emplace(config_, prepared_resolver->clone());
-      type_resolver_ = std::move(prepared_resolver);
+      write_ctx_.emplace(config_, context_resolver->clone());
+      read_ctx_.emplace(config_, context_resolver->clone());
+      type_resolver_ = std::move(context_resolver);
     }
   }
 
@@ -1017,19 +1013,15 @@ private:
                           std::shared_ptr<TypeResolver> resolver)
       : BaseFory(config, std::move(resolver)), shared_resolver_(),
         resolver_once_flag_(), fory_pool_([this]() {
-          // Every public root prepares the resolver before pool acquisition.
+          // Every public root freezes the resolver before pool acquisition.
           // The pooled Fory constructor owns its context clones.
           return std::unique_ptr<Fory>(
-              new Fory(config_, shared_resolver_, Fory::PreparedResolver{}));
+              new Fory(config_, shared_resolver_, Fory::FrozenResolver{}));
         }) {}
 
   void ensure_resolver_initialized() const {
     std::call_once(resolver_once_flag_, [this]() {
-      auto context_result = type_resolver_->build_context_type_resolver();
-      FORY_CHECK(context_result.ok())
-          << "Failed to build context TypeResolver: "
-          << context_result.error().to_string();
-      shared_resolver_ = std::move(context_result).value();
+      shared_resolver_ = type_resolver_->build_context_type_resolver();
     });
   }
 
@@ -1059,7 +1051,7 @@ inline ThreadSafeFory ForyBuilder::build_thread_safe() {
     type_resolver_ = std::make_shared<TypeResolver>();
   }
   type_resolver_->apply_config(normalized_config());
-  // ThreadSafeFory prepares shared resolver metadata on its first root.
+  // ThreadSafeFory freezes and clones its shared resolver on the first root.
   return ThreadSafeFory(config_, type_resolver_);
 }
 

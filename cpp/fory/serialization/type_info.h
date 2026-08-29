@@ -136,14 +136,14 @@ struct TypeInfo {
   std::string type_name;
   bool register_by_name = false;
   bool is_external = false;
-  std::unique_ptr<TypeMeta> type_meta;
+  mutable std::unique_ptr<TypeMeta> type_meta;
   std::vector<size_t> sorted_indices;
   fory::flat_hash_map<std::string, size_t> name_to_index;
-  std::vector<uint8_t> type_def;
+  mutable std::vector<uint8_t> type_def;
   Harness harness;
-  // TypeInfo and its harness are immutable after registration. Cache the last
-  // read target so repeated root operations avoid walking the declared base
-  // graph; ThreadSafeFory uses distinct cloned TypeInfo owners per pooled Fory.
+  // Registration data and the harness are immutable after registration.
+  // Operation-context clones complete TypeMeta lazily and cache the last read
+  // target; ThreadSafeFory never shares these mutable caches between workers.
   mutable const std::type_info *cached_read_target = nullptr;
   mutable Harness::ReadAsFn cached_read_as_fn = nullptr;
   // Pre-encoded meta strings for efficient writing (avoids re-encoding on each

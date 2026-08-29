@@ -18,26 +18,14 @@ Load this file when changing `cpp/`, Cython build plumbing, or C++ xlang behavio
   resource amplification, publish reference or cache state that survives root cleanup, or return
   success past the required safepoint. Do not add per-field checks, cursor rollback, or tests that
   pin the first detection point solely to make an error earlier or more precise.
-- Every public `Fory` and `ThreadSafeFory` root overload must enter a root owner whose first action
-  freezes facade registration, before constructing stream wrappers, accessing stream buffers,
-  validating arguments, or acquiring pooled instances. Overloads for the same byte input shape
-  share that one owner instead of duplicating the hot-path gate. `BaseFory` and the source
-  `TypeResolver` keep separate owner-local
-  freeze gates so direct resolver registration cannot bypass the facade gate. Both reject before
-  mutation; do not collapse these gates or describe permanent registry freeze as finalization.
-- Keep `TypeResolver::check_registration()` as the single out-of-line owner of the frozen and
-  registration-thread checks. Do not add a layout-preserving helper, padding, or call-shape
-  workaround. Resolver finalization prepares metadata completely and publishes it only after the
-  completed resolver clone succeeds; failed finalization must not expose partial metadata.
-- `TypeResolver` owns its registration mutex indirectly because runtime serializers retain and
-  query the same resolver object after registration closes. Keep this cold synchronization object
-  off the resolver's hot lookup footprint; do not replace it with padding, alignment fields,
-  platform locks, or benchmark-shape logic.
-- `TypeResolver::register_type_internal` owns the bidirectional C++ type-to-wire identity preflight
-  for struct, enum, extension, and union registration. Reject an existing compile-time type owner
-  or wire ID/name before publication; numeric user type IDs are unique across all four families,
-  and exact repeated registration remains rejected. Do not add rollback, rebuild, or parallel
-  identity state.
+- Every public `Fory` and `ThreadSafeFory` root serialization or deserialization overload freezes
+  explicit registration before codec work. Route facade and resolver registration through one
+  authoritative frozen flag for that registry. Do not add another lifecycle flag or a multi-state
+  machine around the existing read/write-context resolver construction.
+- Freezing clones the registered resolver tables but must not eagerly complete every registered
+  `TypeInfo`. Complete metadata only when a read/write context clone first uses that type for
+  metadata, struct-version, or skip behavior; keep ordinary type lookup free of completion work.
+- Keep the registration check out of normal runtime lookup hot paths.
 - Put private methods last in class definitions, immediately before private fields.
 - Do not redesign alias-based or low-level public type shapes to add convenience methods unless the user explicitly asks for that API change.
 - For cross-language feature ports, match protocol behavior but use idiomatic C++ ownership and layering instead of mirroring Java structure literally.

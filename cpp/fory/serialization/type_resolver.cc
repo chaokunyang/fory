@@ -1775,11 +1775,7 @@ Result<void, Error> TypeResolver::check_registration() {
 
 Result<std::unique_ptr<TypeResolver>, Error>
 TypeResolver::build_final_type_resolver() {
-  std::lock_guard<std::mutex> lock(*registration_mutex_);
-  // Freeze the source before building so even failed finalization permanently
-  // rejects later registration. Holding the registration mutex makes first use
-  // linearizable with direct registration helpers. ThreadSafeFory retains this
-  // source resolver after publishing finalized pool owners.
+  std::lock_guard<std::mutex> lock(registration_mutex_);
   registry_frozen_ = true;
   auto final_resolver = std::make_unique<TypeResolver>();
 
@@ -1862,29 +1858,6 @@ TypeResolver::build_final_type_resolver() {
 
   // Clear partial_type_infos in the final resolver since they're all completed
   final_resolver->partial_type_infos_.clear();
-
-  // ThreadSafeFory retains the source resolver after publishing the finalized
-  // clone. Prepare every metadata update before mutating the source so failed
-  // finalization cannot leave it partially completed.
-  struct FinalizedPartial {
-    TypeInfo *source;
-    std::vector<uint8_t> type_def;
-    std::unique_ptr<TypeMeta> type_meta;
-  };
-  std::vector<FinalizedPartial> finalized_partials;
-  for (const auto &[key, source_ptr] : partial_type_infos_) {
-    (void)key;
-    TypeInfo *completed_ptr = remap_type_info(source_ptr);
-    FORY_CHECK(completed_ptr->type_meta != nullptr);
-    finalized_partials.push_back(
-        {source_ptr, completed_ptr->type_def,
-         std::make_unique<TypeMeta>(*completed_ptr->type_meta)});
-  }
-  for (auto &partial : finalized_partials) {
-    partial.source->type_def = std::move(partial.type_def);
-    partial.source->type_meta = std::move(partial.type_meta);
-  }
-  partial_type_infos_.clear();
 
   return final_resolver;
 }

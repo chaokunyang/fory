@@ -35,7 +35,6 @@
 #include <memory>
 #include <string>
 #include <thread>
-#include <tuple>
 #include <typeinfo>
 #include <unordered_map>
 #include <variant>
@@ -76,16 +75,6 @@ struct NestedStruct {
     return point == other.point && label == other.label;
   }
   FORY_STRUCT(NestedStruct, point, label);
-};
-
-struct UnregisteredNested {
-  int32_t value;
-  FORY_STRUCT(UnregisteredNested, value);
-};
-
-struct MissingNestedHolder {
-  UnregisteredNested nested;
-  FORY_STRUCT(MissingNestedHolder, nested);
 };
 
 enum class Color { RED, GREEN, BLUE };
@@ -191,22 +180,6 @@ inline void register_test_types(Fory &fory) {
 inline std::vector<uint8_t> buffer_bytes(Buffer &buffer) {
   return std::vector<uint8_t>(buffer.data(),
                               buffer.data() + buffer.writer_index());
-}
-
-template <typename T>
-void expect_numeric_owner(TypeResolver &resolver, uint32_t user_type_id,
-                          const TypeInfo *owner) {
-  auto by_type = resolver.get_type_info<T>();
-  ASSERT_TRUE(by_type.ok());
-  EXPECT_EQ(by_type.value(), owner);
-
-  auto by_id = resolver.get_user_type_info_by_id(owner->type_id, user_type_id);
-  ASSERT_TRUE(by_id.ok());
-  EXPECT_EQ(by_id.value(), owner);
-
-  auto by_runtime = resolver.get_type_info(std::type_index(typeid(T)));
-  ASSERT_TRUE(by_runtime.ok());
-  EXPECT_EQ(by_runtime.value(), owner);
 }
 
 class RegistryProbeInputStream final : public InputStream {
@@ -1444,107 +1417,6 @@ TEST(SerializationTest, RegistrationByNameFailureDoesNotLeakTypeInfo) {
   EXPECT_EQ(dotted_type_name.error().code(), ErrorCode::Invalid);
 }
 
-TEST(SerializationTest, TypeIdentityConflictsAreAtomic) {
-  using IdentityUnion = std::variant<int32_t, std::string>;
-  using IdentityRoot = std::tuple<::SimpleStruct, ::SignedScopedStatus,
-                                  ::IdLimitExt, IdentityUnion>;
-
-  auto fory =
-      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
-  TypeResolver &resolver = fory.type_resolver();
-
-  ASSERT_TRUE(fory.register_struct<::SimpleStruct>(1).ok());
-  ASSERT_TRUE(fory.register_enum<::SignedScopedStatus>(2).ok());
-  ASSERT_TRUE(fory.register_extension_type<::IdLimitExt>(3).ok());
-  ASSERT_TRUE(fory.register_union<IdentityUnion>(4).ok());
-
-  auto struct_info = resolver.get_type_info<::SimpleStruct>();
-  auto enum_info = resolver.get_type_info<::SignedScopedStatus>();
-  auto ext_info = resolver.get_type_info<::IdLimitExt>();
-  auto union_info = resolver.get_type_info<IdentityUnion>();
-  ASSERT_TRUE(struct_info.ok());
-  ASSERT_TRUE(enum_info.ok());
-  ASSERT_TRUE(ext_info.ok());
-  ASSERT_TRUE(union_info.ok());
-
-  const TypeInfo *struct_owner = struct_info.value();
-  const TypeInfo *enum_owner = enum_info.value();
-  const TypeInfo *ext_owner = ext_info.value();
-  const TypeInfo *union_owner = union_info.value();
-
-  EXPECT_FALSE(fory.register_struct<::SimpleStruct>(1).ok());
-  EXPECT_FALSE(fory.register_struct<::SimpleStruct>("conflict", "Struct").ok());
-  EXPECT_FALSE(
-      fory.register_enum<::SignedScopedStatus>("conflict", "Enum").ok());
-  EXPECT_FALSE(
-      fory.register_extension_type<::IdLimitExt>("conflict", "Ext").ok());
-  EXPECT_FALSE(fory.register_union<IdentityUnion>("conflict", "Union").ok());
-
-  expect_numeric_owner<::SimpleStruct>(resolver, 1, struct_owner);
-  expect_numeric_owner<::SignedScopedStatus>(resolver, 2, enum_owner);
-  expect_numeric_owner<::IdLimitExt>(resolver, 3, ext_owner);
-  expect_numeric_owner<IdentityUnion>(resolver, 4, union_owner);
-
-  EXPECT_FALSE(resolver.get_type_info_by_name("conflict", "Struct").ok());
-  EXPECT_FALSE(resolver.get_type_info_by_name("conflict", "Enum").ok());
-  EXPECT_FALSE(resolver.get_type_info_by_name("conflict", "Ext").ok());
-  EXPECT_FALSE(resolver.get_type_info_by_name("conflict", "Union").ok());
-
-  IdentityRoot original{::SimpleStruct{7, 9}, ::SignedScopedStatus::LARGE,
-                        ::IdLimitExt{42}, IdentityUnion{std::string("value")}};
-  auto bytes = fory.serialize(original);
-  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
-  auto decoded = fory.deserialize<IdentityRoot>(bytes.value());
-  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
-  EXPECT_EQ(decoded.value(), original);
-}
-
-TEST(SerializationTest, NumericIdentityConflictsAreAtomic) {
-  using IdentityUnion = std::variant<int32_t, std::string>;
-
-  auto fory =
-      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
-  TypeResolver &resolver = fory.type_resolver();
-
-  ASSERT_TRUE(fory.register_struct<::SimpleStruct>(1).ok());
-  auto struct_info = resolver.get_type_info<::SimpleStruct>();
-  ASSERT_TRUE(struct_info.ok());
-  const TypeInfo *struct_owner = struct_info.value();
-
-  EXPECT_FALSE(fory.register_enum<::SignedScopedStatus>(1).ok());
-  EXPECT_FALSE(fory.register_extension_type<::IdLimitExt>(1).ok());
-  EXPECT_FALSE(fory.register_union<IdentityUnion>(1).ok());
-
-  expect_numeric_owner<::SimpleStruct>(resolver, 1, struct_owner);
-  EXPECT_FALSE(resolver.get_type_info<::SignedScopedStatus>().ok());
-  EXPECT_FALSE(resolver.get_type_info<::IdLimitExt>().ok());
-  EXPECT_FALSE(resolver.get_type_info<IdentityUnion>().ok());
-  EXPECT_FALSE(
-      resolver.get_user_type_info_by_id(static_cast<uint32_t>(TypeId::ENUM), 1)
-          .ok());
-  EXPECT_FALSE(
-      resolver.get_user_type_info_by_id(static_cast<uint32_t>(TypeId::EXT), 1)
-          .ok());
-  EXPECT_FALSE(resolver
-                   .get_user_type_info_by_id(
-                       static_cast<uint32_t>(TypeId::TYPED_UNION), 1)
-                   .ok());
-  EXPECT_FALSE(
-      resolver.get_type_info(std::type_index(typeid(::SignedScopedStatus)))
-          .ok());
-  EXPECT_FALSE(
-      resolver.get_type_info(std::type_index(typeid(::IdLimitExt))).ok());
-  EXPECT_FALSE(
-      resolver.get_type_info(std::type_index(typeid(IdentityUnion))).ok());
-
-  ::SimpleStruct original{7, 9};
-  auto bytes = fory.serialize(original);
-  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
-  auto decoded = fory.deserialize<::SimpleStruct>(bytes.value());
-  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
-  EXPECT_EQ(decoded.value(), original);
-}
-
 static std::vector<uint8_t> make_remote_type_meta(const std::string &type_name,
                                                   const std::string &field) {
   std::vector<FieldInfo> fields;
@@ -2654,83 +2526,6 @@ TEST(SerializationTest, ConfigurationBuilder) {
 // Thread Safety Tests
 // ============================================================================
 
-static void expect_finalized_source(TypeResolver &resolver) {
-  auto source_info = resolver.get_type_info<::SimpleStruct>();
-  ASSERT_TRUE(source_info.ok()) << source_info.error().to_string();
-  ASSERT_NE(source_info.value()->type_meta, nullptr);
-  ASSERT_FALSE(source_info.value()->type_def.empty());
-
-  std::vector<uint8_t> source_type_def = source_info.value()->type_def;
-  Buffer source_bytes(source_type_def);
-  auto parsed_source = TypeMeta::from_bytes(source_bytes, nullptr);
-  ASSERT_TRUE(parsed_source.ok()) << parsed_source.error().to_string();
-  EXPECT_EQ(source_bytes.remaining_size(), 0u);
-  EXPECT_EQ(parsed_source.value()->field_infos.size(), 2u);
-
-  auto cloned = resolver.clone();
-  auto cloned_info = cloned->get_type_info<::SimpleStruct>();
-  ASSERT_TRUE(cloned_info.ok()) << cloned_info.error().to_string();
-  ASSERT_NE(cloned_info.value()->type_meta, nullptr);
-  EXPECT_EQ(cloned_info.value()->type_def, source_info.value()->type_def);
-  EXPECT_EQ(cloned_info.value()->type_meta->field_infos.size(), 2u);
-
-  auto rebuilt = resolver.build_final_type_resolver();
-  ASSERT_TRUE(rebuilt.ok()) << rebuilt.error().to_string();
-  auto rebuilt_info = rebuilt.value()->get_type_info<::SimpleStruct>();
-  ASSERT_TRUE(rebuilt_info.ok()) << rebuilt_info.error().to_string();
-  ASSERT_NE(rebuilt_info.value()->type_meta, nullptr);
-  EXPECT_EQ(rebuilt_info.value()->type_def, source_info.value()->type_def);
-}
-
-TEST(SerializationTest, SourceResolverFinalizes) {
-  auto source_resolver = std::make_shared<TypeResolver>();
-  auto fory = Fory::builder()
-                  .xlang(true)
-                  .compatible(false)
-                  .track_ref(false)
-                  .type_resolver(source_resolver)
-                  .build();
-  ASSERT_TRUE(fory.register_struct<::SimpleStruct>(1).ok());
-  auto pending = source_resolver->get_type_info<::SimpleStruct>();
-  ASSERT_TRUE(pending.ok()) << pending.error().to_string();
-  EXPECT_EQ(pending.value()->type_meta, nullptr);
-
-  auto bytes = fory.serialize(::SimpleStruct{1, 2});
-  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
-  expect_finalized_source(*source_resolver);
-}
-
-TEST(SerializationTest, FinalizationFailureIsAtomic) {
-  auto source_resolver = std::make_shared<TypeResolver>();
-  auto fory = Fory::builder()
-                  .xlang(true)
-                  .compatible(false)
-                  .track_ref(false)
-                  .type_resolver(source_resolver)
-                  .build();
-  ASSERT_TRUE(fory.register_struct<::SimpleStruct>(1).ok());
-  ASSERT_TRUE(fory.register_struct<::MissingNestedHolder>(2).ok());
-
-  auto simple_info = source_resolver->get_type_info<::SimpleStruct>();
-  auto holder_info = source_resolver->get_type_info<::MissingNestedHolder>();
-  ASSERT_TRUE(simple_info.ok());
-  ASSERT_TRUE(holder_info.ok());
-  ASSERT_EQ(simple_info.value()->type_meta, nullptr);
-  ASSERT_TRUE(simple_info.value()->type_def.empty());
-  ASSERT_EQ(holder_info.value()->type_meta, nullptr);
-  ASSERT_TRUE(holder_info.value()->type_def.empty());
-
-  auto final_resolver = source_resolver->build_final_type_resolver();
-  ASSERT_FALSE(final_resolver.ok());
-
-  EXPECT_EQ(simple_info.value()->type_meta, nullptr);
-  EXPECT_TRUE(simple_info.value()->type_def.empty());
-  EXPECT_EQ(holder_info.value()->type_meta, nullptr);
-  EXPECT_TRUE(holder_info.value()->type_def.empty());
-  EXPECT_FALSE(fory.register_struct<::UnregisteredNested>(3).ok());
-  EXPECT_FALSE(source_resolver->get_type_info<::UnregisteredNested>().ok());
-}
-
 TEST(SerializationTest, DirectFailedRootFreezes) {
   auto source_resolver = std::make_shared<TypeResolver>();
   auto fory = Fory::builder()
@@ -2759,21 +2554,6 @@ TEST(SerializationTest, DirectFailedRootFreezes) {
   EXPECT_FALSE(
       source_resolver->get_type_info(std::type_index(typeid(std::string)))
           .ok());
-}
-
-TEST(SerializationTest, ThreadSafeSourceFinalizes) {
-  auto source_resolver = std::make_shared<TypeResolver>();
-  auto fory = Fory::builder()
-                  .xlang(true)
-                  .compatible(false)
-                  .track_ref(false)
-                  .type_resolver(source_resolver)
-                  .build_thread_safe();
-  ASSERT_TRUE(fory.register_struct<::SimpleStruct>(1).ok());
-
-  auto bytes = fory.serialize(::SimpleStruct{1, 2});
-  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
-  expect_finalized_source(*source_resolver);
 }
 
 TEST(SerializationTest, ThreadSafeForyMultiThread) {

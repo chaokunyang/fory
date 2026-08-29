@@ -192,9 +192,6 @@ private:
   bool compatible_set_ = false;
   std::shared_ptr<TypeResolver> type_resolver_;
 
-  /// Helper to get or create type resolver and finalize it
-  std::shared_ptr<TypeResolver> get_finalized_resolver();
-
   friend class Fory;
   friend class ThreadSafeFory;
 };
@@ -297,9 +294,7 @@ public:
   /// fory.register_struct<MyStruct>(1);
   /// ```
   template <typename T> Result<void, Error> register_struct(uint32_t type_id) {
-    return register_type([this, type_id]() {
-      return type_resolver_->template register_by_id<T>(type_id);
-    });
+    return type_resolver_->template register_by_id<T>(type_id);
   }
 
   /// Register a struct type with namespace and type name.
@@ -320,9 +315,7 @@ public:
   template <typename T>
   Result<void, Error> register_struct(const std::string &ns,
                                       const std::string &type_name) {
-    return register_type([this, &ns, &type_name]() {
-      return type_resolver_->template register_by_name<T>(ns, type_name);
-    });
+    return type_resolver_->template register_by_name<T>(ns, type_name);
   }
 
   /// Register a struct type with a name.
@@ -362,9 +355,7 @@ public:
   /// fory.register_enum<Color>(1);
   /// ```
   template <typename T> Result<void, Error> register_enum(uint32_t type_id) {
-    return register_type([this, type_id]() {
-      return type_resolver_->template register_by_id<T>(type_id);
-    });
+    return type_resolver_->template register_by_id<T>(type_id);
   }
 
   /// Register an enum type with namespace and type name.
@@ -385,9 +376,7 @@ public:
   template <typename T>
   Result<void, Error> register_enum(const std::string &ns,
                                     const std::string &type_name) {
-    return register_type([this, &ns, &type_name]() {
-      return type_resolver_->template register_by_name<T>(ns, type_name);
-    });
+    return type_resolver_->template register_by_name<T>(ns, type_name);
   }
 
   /// Register an enum type with a name.
@@ -417,9 +406,7 @@ public:
   /// @param type_id Unique numeric identifier for this union type.
   /// @return Success or error if registration fails.
   template <typename T> Result<void, Error> register_union(uint32_t type_id) {
-    return register_type([this, type_id]() {
-      return type_resolver_->template register_union_by_id<T>(type_id);
-    });
+    return type_resolver_->template register_union_by_id<T>(type_id);
   }
 
   /// Register a union type with namespace and type name.
@@ -432,9 +419,7 @@ public:
   template <typename T>
   Result<void, Error> register_union(const std::string &ns,
                                      const std::string &type_name) {
-    return register_type([this, &ns, &type_name]() {
-      return type_resolver_->template register_union_by_name<T>(ns, type_name);
-    });
+    return type_resolver_->template register_union_by_name<T>(ns, type_name);
   }
 
   /// Register a union type with a name.
@@ -458,9 +443,7 @@ public:
   /// @return Success or error if registration fails.
   template <typename T>
   Result<void, Error> register_extension_type(uint32_t type_id) {
-    return register_type([this, type_id]() {
-      return type_resolver_->template register_ext_type_by_id<T>(type_id);
-    });
+    return type_resolver_->template register_ext_type_by_id<T>(type_id);
   }
 
   /// Register an extension type with namespace and type name.
@@ -473,10 +456,7 @@ public:
   template <typename T>
   Result<void, Error> register_extension_type(const std::string &ns,
                                               const std::string &type_name) {
-    return register_type([this, &ns, &type_name]() {
-      return type_resolver_->template register_ext_type_by_name<T>(ns,
-                                                                   type_name);
-    });
+    return type_resolver_->template register_ext_type_by_name<T>(ns, type_name);
   }
 
   /// Register an extension type with a name.
@@ -507,23 +487,7 @@ private:
     return std::make_pair(std::move(ns), std::move(type_name));
   }
 
-  template <typename RegisterFn>
-  Result<void, Error> register_type(RegisterFn &&fn) {
-    std::lock_guard<std::mutex> lock(registration_mutex_);
-    if (FORY_PREDICT_FALSE(registration_frozen_)) {
-      return Unexpected(Error::invalid(
-          "Cannot register types after first serialize/deserialize call"));
-    }
-    return std::forward<RegisterFn>(fn)();
-  }
-
 protected:
-  Result<std::unique_ptr<TypeResolver>, Error> finalize_type_resolver() const {
-    std::lock_guard<std::mutex> lock(registration_mutex_);
-    registration_frozen_ = true;
-    return type_resolver_->build_final_type_resolver();
-  }
-
   /// Protected constructor - only derived classes can instantiate.
   explicit BaseFory(const Config &config,
                     std::shared_ptr<TypeResolver> resolver)
@@ -539,8 +503,6 @@ protected:
 
   Config config_;
   std::shared_ptr<TypeResolver> type_resolver_;
-  mutable std::mutex registration_mutex_;
-  mutable bool registration_frozen_{false};
 };
 
 // ============================================================================
@@ -572,8 +534,8 @@ public:
   /// @return Vector containing serialized bytes, or error.
   template <typename T>
   Result<std::vector<uint8_t>, Error> serialize(const T &obj) {
-    if (FORY_PREDICT_FALSE(!finalized_)) {
-      ensure_finalized();
+    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+      ensure_contexts_initialized();
     }
     WriteContextGuard guard(*write_ctx_);
     Buffer &buffer = write_ctx_->buffer();
@@ -593,8 +555,8 @@ public:
   /// @return Number of bytes written, or error.
   template <typename T>
   Result<size_t, Error> serialize(OutputStream &output_stream, const T &obj) {
-    if (FORY_PREDICT_FALSE(!finalized_)) {
-      ensure_finalized();
+    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+      ensure_contexts_initialized();
     }
     return serialize_stream(output_stream, obj);
   }
@@ -607,8 +569,8 @@ public:
   /// @return Number of bytes written, or error.
   template <typename T>
   Result<size_t, Error> serialize(std::ostream &ostream, const T &obj) {
-    if (FORY_PREDICT_FALSE(!finalized_)) {
-      ensure_finalized();
+    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+      ensure_contexts_initialized();
     }
     StdOutputStream output_stream(ostream);
     return serialize_stream(output_stream, obj);
@@ -623,8 +585,8 @@ public:
   template <typename T>
   FORY_ALWAYS_INLINE Result<size_t, Error> serialize_to(Buffer &buffer,
                                                         const T &obj) {
-    if (FORY_PREDICT_FALSE(!finalized_)) {
-      ensure_finalized();
+    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+      ensure_contexts_initialized();
     }
     return serialize_buffer(buffer, obj);
   }
@@ -642,8 +604,8 @@ public:
   template <typename T>
   Result<size_t, Error> serialize_to(std::vector<uint8_t> &output,
                                      const T &obj) {
-    if (FORY_PREDICT_FALSE(!finalized_)) {
-      ensure_finalized();
+    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+      ensure_contexts_initialized();
     }
     // Wrap the output vector in a Buffer for zero-copy serialization
     // writer_index starts at output.size() for appending
@@ -687,8 +649,8 @@ public:
   /// @param buffer Buffer to read from. Its reader_index will be updated.
   /// @return Deserialized object, or error.
   template <typename T> Result<T, Error> deserialize(Buffer &buffer) {
-    if (FORY_PREDICT_FALSE(!finalized_)) {
-      ensure_finalized();
+    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+      ensure_contexts_initialized();
     }
     return deserialize_buffer<T>(buffer);
   }
@@ -703,8 +665,8 @@ public:
   /// @return Deserialized object, or error.
   template <typename T>
   Result<T, Error> deserialize(InputStream &input_stream) {
-    if (FORY_PREDICT_FALSE(!finalized_)) {
-      ensure_finalized();
+    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+      ensure_contexts_initialized();
     }
     return deserialize_stream<T>(input_stream);
   }
@@ -715,8 +677,8 @@ public:
   /// @param stream Input stream wrapper to read from.
   /// @return Deserialized object, or error.
   template <typename T> Result<T, Error> deserialize(StdInputStream &stream) {
-    if (FORY_PREDICT_FALSE(!finalized_)) {
-      ensure_finalized();
+    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+      ensure_contexts_initialized();
     }
     return deserialize_stream<T>(stream);
   }
@@ -738,41 +700,34 @@ public:
   ReadContext &read_context() { return *read_ctx_; }
 
 private:
-  /// Constructor for ForyBuilder - resolver will be finalized lazily.
+  /// Constructor for ForyBuilder - operation contexts are initialized lazily.
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver)
-      : BaseFory(config, std::move(resolver)), finalized_(false),
+      : BaseFory(config, std::move(resolver)), contexts_initialized_(false),
         precomputed_header_(compute_header(config.xlang)) {}
 
-  /// Constructor for ThreadSafeFory pool - resolver is already finalized.
-  struct PreFinalized {};
+  /// Constructor for ThreadSafeFory pool - resolver metadata is ready.
+  struct PreparedResolver {};
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver,
-                PreFinalized)
-      : BaseFory(config, std::move(resolver)), finalized_(true),
+                PreparedResolver)
+      : BaseFory(config, std::move(resolver)), contexts_initialized_(true),
         precomputed_header_(compute_header(config.xlang)) {
-    // The facade only retains finalized registration metadata. Runtime caches
-    // belong to the context clones, which stay distinct per pooled Fory.
-    // Sharing the published facade resolver avoids a third deep clone on every
-    // pool miss and must not be replaced with another finalization pass.
-    registration_frozen_ = true;
     write_ctx_.emplace(config_, type_resolver_->clone());
     read_ctx_.emplace(config_, type_resolver_->clone());
   }
 
-  /// Finalize the type resolver on first use.
-  void ensure_finalized() {
-    if (!finalized_) {
-      auto final_result = finalize_type_resolver();
+  /// Initialize operation contexts from the registered type metadata.
+  void ensure_contexts_initialized() {
+    if (!contexts_initialized_) {
+      auto final_result = type_resolver_->build_final_type_resolver();
       FORY_CHECK(final_result.ok())
           << "Failed to build finalized TypeResolver: "
           << final_result.error().to_string();
-      // Replace with finalized resolver
-      auto finalized_resolver = std::move(final_result).value();
+      auto prepared_resolver = std::move(final_result).value();
       // Create contexts with cloned resolvers
-      write_ctx_.emplace(config_, finalized_resolver->clone());
-      read_ctx_.emplace(config_, finalized_resolver->clone());
-      // Store finalized resolver
-      type_resolver_ = std::move(finalized_resolver);
-      finalized_ = true;
+      write_ctx_.emplace(config_, prepared_resolver->clone());
+      read_ctx_.emplace(config_, prepared_resolver->clone());
+      type_resolver_ = std::move(prepared_resolver);
+      contexts_initialized_ = true;
     }
   }
 
@@ -842,8 +797,8 @@ private:
 
   template <typename T>
   Result<T, Error> deserialize_bytes(const uint8_t *data, size_t size) {
-    if (FORY_PREDICT_FALSE(!finalized_)) {
-      ensure_finalized();
+    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+      ensure_contexts_initialized();
     }
     if (data == nullptr) {
       return Unexpected(Error::invalid("Data pointer is null"));
@@ -956,7 +911,7 @@ private:
     return type_info;
   }
 
-  bool finalized_;
+  bool contexts_initialized_;
   uint8_t precomputed_header_;
   std::optional<WriteContext> write_ctx_;
   std::optional<ReadContext> read_ctx_;
@@ -997,28 +952,28 @@ class ThreadSafeFory : public BaseFory {
 public:
   template <typename T>
   Result<std::vector<uint8_t>, Error> serialize(const T &obj) {
-    ensure_finalized();
+    ensure_resolver_initialized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize(obj);
   }
 
   template <typename T>
   Result<size_t, Error> serialize(OutputStream &output_stream, const T &obj) {
-    ensure_finalized();
+    ensure_resolver_initialized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize(output_stream, obj);
   }
 
   template <typename T>
   Result<size_t, Error> serialize(std::ostream &ostream, const T &obj) {
-    ensure_finalized();
+    ensure_resolver_initialized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize(ostream, obj);
   }
 
   template <typename T>
   Result<size_t, Error> serialize_to(Buffer &buffer, const T &obj) {
-    ensure_finalized();
+    ensure_resolver_initialized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize_to(buffer, obj);
   }
@@ -1026,34 +981,34 @@ public:
   template <typename T>
   Result<size_t, Error> serialize_to(std::vector<uint8_t> &output,
                                      const T &obj) {
-    ensure_finalized();
+    ensure_resolver_initialized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize_to(output, obj);
   }
 
   template <typename T>
   Result<T, Error> deserialize(const uint8_t *data, size_t size) {
-    ensure_finalized();
+    ensure_resolver_initialized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->template deserialize<T>(data, size);
   }
 
   template <typename T>
   Result<T, Error> deserialize(const std::vector<uint8_t> &data) {
-    ensure_finalized();
+    ensure_resolver_initialized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->template deserialize<T>(data.data(), data.size());
   }
 
   template <typename T>
   Result<T, Error> deserialize(InputStream &input_stream) {
-    ensure_finalized();
+    ensure_resolver_initialized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->template deserialize<T>(input_stream);
   }
 
   template <typename T> Result<T, Error> deserialize(StdInputStream &stream) {
-    ensure_finalized();
+    ensure_resolver_initialized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->template deserialize<T>(stream);
   }
@@ -1061,27 +1016,26 @@ public:
 private:
   explicit ThreadSafeFory(const Config &config,
                           std::shared_ptr<TypeResolver> resolver)
-      : BaseFory(config, std::move(resolver)), finalized_resolver_(),
-        finalized_once_flag_(), fory_pool_([this]() {
-          // Every public root finalizes before pool acquisition, so a pool miss
-          // can share the facade resolver published by that root. The pooled
-          // Fory constructor owns its context clones.
+      : BaseFory(config, std::move(resolver)), shared_resolver_(),
+        resolver_once_flag_(), fory_pool_([this]() {
+          // Every public root prepares the resolver before pool acquisition.
+          // The pooled Fory constructor owns its context clones.
           return std::unique_ptr<Fory>(
-              new Fory(config_, finalized_resolver_, Fory::PreFinalized{}));
+              new Fory(config_, shared_resolver_, Fory::PreparedResolver{}));
         }) {}
 
-  void ensure_finalized() const {
-    std::call_once(finalized_once_flag_, [this]() {
-      auto final_result = finalize_type_resolver();
+  void ensure_resolver_initialized() const {
+    std::call_once(resolver_once_flag_, [this]() {
+      auto final_result = type_resolver_->build_final_type_resolver();
       FORY_CHECK(final_result.ok())
           << "Failed to build finalized TypeResolver: "
           << final_result.error().to_string();
-      finalized_resolver_ = std::move(final_result).value();
+      shared_resolver_ = std::move(final_result).value();
     });
   }
 
-  mutable std::shared_ptr<TypeResolver> finalized_resolver_;
-  mutable std::once_flag finalized_once_flag_;
+  mutable std::shared_ptr<TypeResolver> shared_resolver_;
+  mutable std::once_flag resolver_once_flag_;
   util::Pool<Fory> fory_pool_;
 
   friend class ForyBuilder;
@@ -1091,23 +1045,13 @@ private:
 // ForyBuilder Implementation
 // ============================================================================
 
-inline std::shared_ptr<TypeResolver> ForyBuilder::get_finalized_resolver() {
-  if (!type_resolver_) {
-    type_resolver_ = std::make_shared<TypeResolver>();
-  }
-  type_resolver_->apply_config(normalized_config());
-  auto final_result = type_resolver_->build_final_type_resolver();
-  FORY_CHECK(final_result.ok()) << "Failed to build finalized TypeResolver: "
-                                << final_result.error().to_string();
-  return std::move(final_result).value();
-}
-
 inline Fory ForyBuilder::build() {
   if (!type_resolver_) {
     type_resolver_ = std::make_shared<TypeResolver>();
   }
   type_resolver_->apply_config(normalized_config());
-  // Don't finalize yet - allow type registration, finalize on first use
+  // Allow type registration until the first root operation initializes its
+  // contexts.
   return Fory(config_, type_resolver_);
 }
 
@@ -1116,7 +1060,7 @@ inline ThreadSafeFory ForyBuilder::build_thread_safe() {
     type_resolver_ = std::make_shared<TypeResolver>();
   }
   type_resolver_->apply_config(normalized_config());
-  // ThreadSafeFory builds finalized resolver lazily
+  // ThreadSafeFory prepares shared resolver metadata on its first root.
   return ThreadSafeFory(config_, type_resolver_);
 }
 

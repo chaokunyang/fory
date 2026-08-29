@@ -310,7 +310,8 @@ cdef class TypeResolver:
             self._populate_type_info(typeinfo)
 
     cdef inline void _freeze_registry(self):
-        self.resolver._freeze_registry()
+        if not self.resolver._registry_frozen:
+            self.resolver._registry_frozen = True
 
     def register_type(
         self,

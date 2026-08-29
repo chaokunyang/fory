@@ -672,18 +672,25 @@ func (f *Fory) resetWriteState() {
 	}
 }
 
+func (f *Fory) restoreWriteBuffer(buffer *ByteBuffer) {
+	f.writeCtx.buffer = buffer
+	f.resetWriteState()
+}
+
+func (f *Fory) restoreReadBuffer(buffer *ByteBuffer) {
+	f.readCtx.buffer = buffer
+	f.resetReadState()
+}
+
 // SerializeTo serializes a value and appends the bytes to the provided buffer.
 // This is useful when you need to write multiple serialized values to the same buffer.
 // Returns error if serialization fails.
 func (f *Fory) SerializeTo(buf *ByteBuffer, value any) error {
 	f.registryFrozen = true
 	origBuffer := f.writeCtx.buffer
-	defer func() {
-		// Restore the owned buffer before reset so a serializer panic cannot reset or retain the
-		// caller-owned buffer.
-		f.writeCtx.buffer = origBuffer
-		f.resetWriteState()
-	}()
+	// Restore the owned buffer before reset so a serializer panic cannot reset or retain the
+	// caller-owned buffer.
+	defer f.restoreWriteBuffer(origBuffer)
 	if !validateRootDecimal(f.writeCtx.Err(), value) {
 		return f.writeCtx.TakeError()
 	}
@@ -735,12 +742,9 @@ func (f *Fory) DeserializeFrom(buf *ByteBuffer, v any) error {
 	// Temporarily swap buffer
 	origBuffer := f.readCtx.buffer
 	f.readCtx.buffer = buf
-	defer func() {
-		// Restore the owned buffer before root cleanup so an escaping panic cannot
-		// leave a caller-owned buffer installed for the next operation.
-		f.readCtx.buffer = origBuffer
-		f.resetReadState()
-	}()
+	// Restore the owned buffer before root cleanup so an escaping panic cannot leave a
+	// caller-owned buffer installed for the next operation.
+	defer f.restoreReadBuffer(origBuffer)
 	target := reflect.ValueOf(v).Elem()
 	f.readCtx.remainingGraphMemoryBytes = f.config.MaxGraphMemoryBytes
 	f.readCtx.remainingUnbackedContainerItems = f.config.MaxUnbackedContainerItems

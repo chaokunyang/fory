@@ -88,10 +88,12 @@ WriteContext::write_type_meta(const std::type_index &type_id) {
 
 void WriteContext::write_type_meta(const TypeInfo *type_info) {
   if (first_type_info_ == nullptr) {
-    auto result = type_resolver_->ensure_type_meta(type_info);
-    if (FORY_PREDICT_FALSE(!result.ok())) {
-      set_error(std::move(result).error());
-      return;
+    if (FORY_PREDICT_FALSE(!type_info->type_meta)) {
+      auto result = type_resolver_->ensure_type_meta(type_info);
+      if (FORY_PREDICT_FALSE(!result.ok())) {
+        set_error(std::move(result).error());
+        return;
+      }
     }
     first_type_info_ = type_info;
     buffer_.write_uint8(0); // (index << 1), index=0
@@ -117,10 +119,12 @@ void WriteContext::write_type_meta(const TypeInfo *type_info) {
   }
 
   // New type: index << 1, LSB=0, followed by TypeDef bytes inline
-  auto result = type_resolver_->ensure_type_meta(type_info);
-  if (FORY_PREDICT_FALSE(!result.ok())) {
-    set_error(std::move(result).error());
-    return;
+  if (FORY_PREDICT_FALSE(!type_info->type_meta)) {
+    auto result = type_resolver_->ensure_type_meta(type_info);
+    if (FORY_PREDICT_FALSE(!result.ok())) {
+      set_error(std::move(result).error());
+      return;
+    }
   }
   uint32_t index = static_cast<uint32_t>(write_type_info_index_map_.size() + 1);
   uint32_t marker = static_cast<uint32_t>(index << 1);

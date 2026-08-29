@@ -27,6 +27,9 @@ Load this file when changing `cpp/`, Cython build plumbing, or C++ xlang behavio
   `TypeInfo`; complete metadata only when a context first uses that type for metadata,
   struct-version, or skip behavior. Keep ordinary type lookup free of completion work.
 - Keep the registration check out of normal runtime lookup hot paths.
+- Direct `Fory` and its resolver are creator-thread-owned. Configure `ThreadSafeFory` before
+  concurrent use and let that facade own first-root synchronization; do not add a resolver mutex to
+  support concurrent registration that neither facade permits.
 - Put private methods last in class definitions, immediately before private fields.
 - Do not redesign alias-based or low-level public type shapes to add convenience methods unless the user explicitly asks for that API change.
 - For cross-language feature ports, match protocol behavior but use idiomatic C++ ownership and layering instead of mirroring Java structure literally.

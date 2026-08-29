@@ -4614,9 +4614,9 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       return;
     }
     const TypeInfo *type_info = type_info_res.value();
-    auto write_result = ctx.write_struct_type_info(type_info);
-    if (FORY_PREDICT_FALSE(!write_result.ok())) {
-      ctx.set_error(std::move(write_result).error());
+    ctx.write_struct_type_info(type_info);
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return;
     }
   }
 
@@ -4682,14 +4682,21 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         ctx.write_struct_type_id_direct(tid, type_info->user_type_id);
       } else {
         // Complex type (NAMED_STRUCT, COMPATIBLE_STRUCT, etc.) - use TypeInfo*
-        auto result = ctx.write_struct_type_info(type_info);
-        if (FORY_PREDICT_FALSE(!result.ok())) {
-          ctx.set_error(std::move(result).error());
+        ctx.write_struct_type_info(type_info);
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return;
         }
       }
     }
     write_data_generic(obj, ctx, has_generics);
+  }
+
+  static FORY_NOINLINE void ensure_type_meta(WriteContext &ctx,
+                                             const TypeInfo *type_info) {
+    auto result = ctx.type_resolver().ensure_type_meta(type_info);
+    if (FORY_PREDICT_FALSE(!result.ok())) {
+      ctx.set_error(std::move(result).error());
+    }
   }
 
   static void write_data(const T &obj, WriteContext &ctx) {
@@ -4703,9 +4710,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       }
       const TypeInfo *type_info = type_info_res.value();
       if (FORY_PREDICT_FALSE(!type_info->type_meta)) {
-        auto meta_result = ctx.type_resolver().ensure_type_meta(type_info);
-        if (FORY_PREDICT_FALSE(!meta_result.ok())) {
-          ctx.set_error(std::move(meta_result).error());
+        ensure_type_meta(ctx, type_info);
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return;
         }
       }
@@ -4737,9 +4743,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       }
       const TypeInfo *type_info = type_info_res.value();
       if (FORY_PREDICT_FALSE(!type_info->type_meta)) {
-        auto meta_result = ctx.type_resolver().ensure_type_meta(type_info);
-        if (FORY_PREDICT_FALSE(!meta_result.ok())) {
-          ctx.set_error(std::move(meta_result).error());
+        ensure_type_meta(ctx, type_info);
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return;
         }
       }

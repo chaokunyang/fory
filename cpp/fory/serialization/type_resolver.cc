@@ -1774,7 +1774,6 @@ Result<void, Error> TypeResolver::check_registration() {
 }
 
 std::unique_ptr<TypeResolver> TypeResolver::build_context_type_resolver() {
-  std::lock_guard<std::mutex> lock(registration_mutex_);
   registry_frozen_ = true;
   return clone();
 }

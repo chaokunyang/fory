@@ -262,7 +262,8 @@ public:
   /// Subsequent occurrences: writes (index << 1) | 1 as reference.
   Result<void, Error> write_type_meta(const std::type_index &type_id);
 
-  /// write TypeMeta inline using TypeInfo pointer (fast path).
+  /// write TypeMeta inline using a TypeInfo whose metadata is ready (fast
+  /// path).
   /// First occurrence: writes (index << 1) | 0 followed by TypeDef bytes.
   /// Subsequent occurrences: writes (index << 1) | 1 as reference.
   void write_type_meta(const TypeInfo *type_info);
@@ -298,9 +299,9 @@ public:
   /// Fastest path for writing struct type info when TypeInfo is already known.
   /// Avoids type_index creation and lookup overhead.
   ///
-  /// @param type_info Pointer to the TypeInfo (must be valid)
-  /// @return Success or error
-  Result<void, Error> write_struct_type_info(const TypeInfo *type_info);
+  /// @param type_info Pointer to a valid TypeInfo whose metadata is ready when
+  /// the configured wire mode needs it
+  void write_struct_type_info(const TypeInfo *type_info);
 
   /// Fastest path - write struct type_id directly without any lookups.
   /// Use this when the type_id is already known (e.g., from a cache).

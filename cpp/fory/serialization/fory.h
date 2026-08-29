@@ -900,6 +900,12 @@ private:
     if (write_root_type_info_ != nullptr && write_root_type_info_key_ == ctid) {
       return write_root_type_info_;
     }
+    return cache_write_root_type_info<T>(ctid);
+  }
+
+  template <typename T>
+  FORY_NOINLINE Result<const TypeInfo *, Error>
+  cache_write_root_type_info(uint64_t ctid) {
     FORY_TRY(type_info,
              write_ctx_->type_resolver().template get_type_info<T>());
     write_root_type_info_key_ = ctid;

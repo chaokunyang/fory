@@ -1446,6 +1446,24 @@ TEST(SerializationTest, UnusedTypeMetaStaysLazy) {
   EXPECT_TRUE(unused.value()->type_def.empty());
 }
 
+TEST(SerializationTest, UnneededTypeMetaStaysLazy) {
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .check_struct_version(false)
+                  .build();
+  ASSERT_TRUE(fory.register_struct<SimpleStruct>(1).ok());
+
+  auto serialized = fory.serialize(SimpleStruct{1, 2});
+  ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
+
+  auto type_info =
+      fory.write_context().type_resolver().get_type_info<SimpleStruct>();
+  ASSERT_TRUE(type_info.ok());
+  EXPECT_EQ(type_info.value()->type_meta, nullptr);
+  EXPECT_TRUE(type_info.value()->type_def.empty());
+}
+
 TEST(SerializationTest, TypeMetaFailureIsAtomic) {
   auto fory = Fory::builder().xlang(true).compatible(true).build();
   ASSERT_TRUE(

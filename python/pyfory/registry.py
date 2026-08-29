@@ -891,10 +891,11 @@ class TypeResolver:
             return type_info
         elif not create:
             return None
-        if self.require_registration and not issubclass(cls, Enum):
-            raise TypeUnregisteredError(f"{cls} not registered")
+        # Unknown remote enums use this internal placeholder; it is not an explicit registration.
         if cls is NonExistEnum:
             return self._get_nonexist_enum_type_info()
+        if self.require_registration and not issubclass(cls, Enum):
+            raise TypeUnregisteredError(f"{cls} not registered")
         logger.info("Type %s not registered", cls)
         return self._register_inferred_type(cls)
 

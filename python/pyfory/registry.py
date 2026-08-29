@@ -431,7 +431,14 @@ class TypeResolver:
         self._registry_frozen = False
 
     def _check_registry_mutable(self):
-        if self._registry_frozen:
+        registry_owner = self._actual_type_resolver
+        if registry_owner is self:
+            registry_frozen = self._registry_frozen
+        else:
+            # The compiled resolver is the active registry owner. Read its one
+            # lifecycle flag instead of mirroring that state in both resolvers.
+            registry_frozen = registry_owner._registry_frozen
+        if registry_frozen:
             raise RuntimeError("Cannot register types or serializers after the first root operation has started")
 
     def _freeze_registry(self):

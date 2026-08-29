@@ -11,8 +11,10 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
 - Python mode is the pure-Python xlang implementation and is mainly for debugging and testing.
 - Cython mode is the default high-performance implementation.
 - Cython mode owns the hot runtime path. Do not duplicate core runtime types between Python and Cython, tunnel Python facade methods into hidden Cython internals, or keep dead shims unless the user explicitly needs a compatibility module path.
-- A direct Python `TypeResolver` owns one authoritative `_registry_frozen` flag. Pure Python and
-  Cython roots set that owner before codec work and never clear it, including after failure.
+- A direct Python `TypeResolver` owns one authoritative `_registry_frozen` flag. In Cython mode the
+  compiled `TypeResolver` is the active owner instead, and the Python resolver delegates explicit
+  registration checks to that compiled flag; do not mirror the flag between the two resolvers.
+  Roots set their active owner before codec work and never clear it, including after failure.
   `ThreadSafeFory` owns its own `_registry_frozen` flag for the public registration boundary over
   pooled children. Its existing callback list configures newly created children; it is not another
   lifecycle state.

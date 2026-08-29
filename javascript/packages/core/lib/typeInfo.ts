@@ -26,20 +26,6 @@ import { Decimal } from "./types/decimal";
 const targetFields = new WeakMap<new () => any, { [key: string]: TypeInfo }>();
 export const MAX_FIELD_ID = (1 << 29) - 1;
 
-const sealedSchemaFields = {
-  options: { writable: false, configurable: false },
-  named: { writable: false, configurable: false },
-  namespace: { writable: false, configurable: false },
-  typeName: { writable: false, configurable: false },
-  userTypeId: { writable: false, configurable: false },
-  evolving: { writable: false, configurable: false },
-  _typeId: { writable: false, configurable: false },
-  nullable: { writable: false, configurable: false },
-  trackingRef: { writable: false, configurable: false },
-  id: { writable: false, configurable: false },
-  dynamic: { writable: false, configurable: false },
-};
-
 export function checkFieldId(fieldId: number) {
   if (Number.isFinite(fieldId) && fieldId < 0) {
     throw new Error("field id must be non-negative");
@@ -161,6 +147,26 @@ export class TypeInfo<T = unknown> extends ExtensibleFunction {
         },
       },
     });
+  }
+
+  public freeze() {
+    Object.defineProperties(this, {
+      named: { writable: false, configurable: false },
+      namespace: { writable: false, configurable: false },
+      typeName: { writable: false, configurable: false },
+      userTypeId: { writable: false, configurable: false },
+      evolving: { writable: false, configurable: false },
+      options: { writable: false, configurable: false },
+      _typeId: { writable: false, configurable: false },
+      nullable: { writable: false, configurable: false },
+    });
+    Object.freeze(this.options);
+    if (this.options?.props) {
+      Object.freeze(this.options!.props);
+    }
+    if (this.options?.enumProps) {
+      Object.freeze(this.options!.enumProps);
+    }
   }
 
   public constructor(typeId: number, userTypeId = -1) {
@@ -327,7 +333,7 @@ export class TypeInfo<T = unknown> extends ExtensibleFunction {
     }
     const typeInfo = new TypeInfo<T>(finalTypeId, userTypeId);
     typeInfo.options = {
-      props,
+      props: props || {},
       withConstructor,
     };
     typeInfo.evolving = evolving;
@@ -393,60 +399,6 @@ export class TypeInfo<T = unknown> extends ExtensibleFunction {
     typeInfo.named = `${typeInfo.namespace}$${typeInfo.typeName}`;
     return typeInfo;
   }
-}
-
-/** @internal */
-export function sealTypeInfo(root: TypeInfo) {
-  const pending = [root];
-  const seen = new Set<TypeInfo>();
-  while (pending.length > 0) {
-    const typeInfo = pending.pop()!;
-    if (seen.has(typeInfo)) {
-      continue;
-    }
-    seen.add(typeInfo);
-
-    // Lock the options pointer before any schema read. A proxy trap may replace the pointer while
-    // it is being locked, but later traps cannot replace the final value code generation observes.
-    Object.defineProperties(typeInfo, sealedSchemaFields);
-    const options = typeInfo.options;
-    if (options === undefined) {
-      continue;
-    }
-    Object.freeze(options);
-
-    const props = options.props;
-    if (props !== undefined) {
-      Object.freeze(props);
-      pending.push(...Object.values(props));
-    }
-    const cases = options.cases;
-    if (cases !== undefined) {
-      Object.freeze(cases);
-      pending.push(...Object.values(cases));
-    }
-    const fieldEntries = options.fieldEntries;
-    if (fieldEntries !== undefined) {
-      Object.freeze(fieldEntries);
-      for (const entry of fieldEntries) {
-        Object.freeze(entry);
-        pending.push(entry.typeInfo);
-      }
-    }
-    if (options.inner !== undefined) {
-      pending.push(options.inner);
-    }
-    if (options.key !== undefined) {
-      pending.push(options.key);
-    }
-    if (options.value !== undefined) {
-      pending.push(options.value);
-    }
-    if (options.enumProps !== undefined) {
-      Object.freeze(options.enumProps);
-    }
-  }
-  // dynamicTypeId is operation-local writer state and remains mutable across roots.
 }
 
 export enum Dynamic {

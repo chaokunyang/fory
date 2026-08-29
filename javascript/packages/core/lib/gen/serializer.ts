@@ -40,12 +40,7 @@ export interface SerializerGenerator {
   write(accessor: string): string;
   writeEmbed(): any;
 
-  toSerializer(): {
-    source: string;
-    localTypeMeta: TypeMeta | undefined;
-    fixedSize: number;
-    readDataAlwaysAdvances: boolean;
-  };
+  toSerializer(): string;
   getFixedSize(): number;
   needToWriteRef(): boolean;
 
@@ -308,7 +303,6 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
     this.scope.assertNameNotDuplicate("write");
     this.scope.assertNameNotDuplicate("writeInner");
     this.scope.assertNameNotDuplicate("typeResolver");
-    this.scope.assertNameNotDuplicate("serializerLookup");
     this.scope.assertNameNotDuplicate("external");
     this.scope.assertNameNotDuplicate("options");
     this.scope.assertNameNotDuplicate("typeInfo");
@@ -337,14 +331,12 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
         ? ""
         : `[localTypeMetaSymbol]: localTypeMeta,
            [checkedTypeMetaWireTypeIdSymbol]: localTypeMeta.getTypeId(),`;
-    const hash = this.getHash();
-    const typeMetaBytes = this.getTypeMetaBytes();
     const declare = `
       const getHash = () => {
-        return ${hash};
+        return ${this.getHash()};
       }
       const getTypeMetaBytes = () => {
-        return ${typeMetaBytes};
+        return ${this.getTypeMetaBytes()};
       }
       const write = (v) => {
         ${this.write("v")}
@@ -377,26 +369,19 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
         ${this.readTypeInfo()}
       };
     `;
-    const scope = this.scope.generate();
-    const fixedSize = this.getFixedSize();
-    const needToWriteRef = this.needToWriteRef();
-    const typeId = this.getTypeId();
-    const userTypeId = this.getUserTypeId();
-    const readDataAlwaysAdvances = this.readDataAlwaysAdvances();
     // Append read-only capability metadata so existing writer properties keep
     // their object-layout order on serialization hot paths.
-    return {
-      source: `
-        return function (typeResolver, serializerLookup, external, typeInfo, options${localTypeMetaParams}) {
-            ${scope}
+    return `
+        return function (typeResolver, external, typeInfo, options${localTypeMetaParams}) {
+            ${this.scope.generate()}
             ${serializerDeclaration}
             ${declare}
             ${serializerAssignment} {
               _initialized: true,
-              fixedSize: ${fixedSize},
-              needToWriteRef: () => ${needToWriteRef},
-              getTypeId: () => ${typeId},
-              getUserTypeId: () => ${userTypeId},
+              fixedSize: ${this.getFixedSize()},
+              needToWriteRef: () => ${this.needToWriteRef()},
+              getTypeId: () => ${this.getTypeId()},
+              getUserTypeId: () => ${this.getUserTypeId()},
               getTypeInfo: () => typeInfo,
               getHash,
               getTypeMetaBytes,
@@ -412,15 +397,11 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
               readRefWithoutTypeInfo,
               readNoRef,
               readTypeInfo,
-              readDataAlwaysAdvances: ${readDataAlwaysAdvances},
+              readDataAlwaysAdvances: ${this.readDataAlwaysAdvances()},
               ${localTypeMetaProperty}
             };
             ${serializerReturn}
         }
-        `,
-      localTypeMeta,
-      fixedSize,
-      readDataAlwaysAdvances,
-    };
+        `;
   }
 }

@@ -17,7 +17,6 @@
  * under the License.
  */
 
-import { TypeId } from "../type";
 import { TypeInfo } from "../typeInfo";
 import { SerializerGenerator } from "./serializer";
 import { CodecBuilder } from "./builder";
@@ -49,26 +48,11 @@ export class CodegenRegistry {
   }
 
   static newGeneratorByTypeInfo(typeInfo: TypeInfo, builder: CodecBuilder, scope: Scope) {
-    let generatorTypeInfo = typeInfo;
-    if (TypeId.userDefinedType(typeInfo.typeId)) {
-      const ownerTypeInfo = builder.serializerLookup
-        .getSerializerByTypeInfo(typeInfo)
-        ?.getTypeInfo();
-      if (ownerTypeInfo !== undefined && ownerTypeInfo !== typeInfo) {
-        // Schema comes from the authoritative serializer owner. Field occurrence modifiers remain
-        // local to the containing schema and must not be replaced with the owner's modifiers.
-        generatorTypeInfo = ownerTypeInfo.clone();
-        generatorTypeInfo.nullable = typeInfo.nullable;
-        generatorTypeInfo.trackingRef = typeInfo.trackingRef;
-        generatorTypeInfo.id = typeInfo.id;
-        generatorTypeInfo.dynamic = typeInfo.dynamic;
-      }
-    }
-    const constructor = CodegenRegistry.get(generatorTypeInfo.typeId);
+    const constructor = CodegenRegistry.get(typeInfo.typeId);
     if (!constructor) {
       throw new Error("type not registered");
     }
-    return new constructor(generatorTypeInfo, builder, scope);
+    return new constructor(typeInfo, builder, scope);
   }
 
   static get(typeId: number) {

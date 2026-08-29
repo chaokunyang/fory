@@ -20,11 +20,6 @@
 import { Scope } from "./scope";
 import TypeResolver from "../typeResolver";
 
-export type SerializerLookup = Pick<
-  TypeResolver,
-  "getSerializerByTypeInfo" | "getSerializerById" | "getSerializerByName"
->;
-
 export class BinaryReaderBuilder {
   constructor(private holder: string) {}
 
@@ -431,19 +426,19 @@ export class CodecBuilder {
   constructor(
     scope: Scope,
     readonly resolver: TypeResolver,
-    readonly serializerLookup: SerializerLookup = resolver,
   ) {
     const writeContext = scope.declareByName("writeContext", "typeResolver.writeContext");
     const readContext = scope.declareByName("readContext", "typeResolver.readContext");
     const br = scope.declareByName("br", "readContext.reader");
     const bw = scope.declareByName("bw", "writeContext.writer");
+    const cr = scope.declareByName("cr", "typeResolver");
     const rw = scope.declareByName("rw", "writeContext.refWriter");
     const rr = scope.declareByName("rr", "readContext.refReader");
     const mw = scope.declareByName("mw", "writeContext.metaStringWriter");
     scope.declareByName("mr", "readContext.metaStringReader");
     this.reader = new BinaryReaderBuilder(br);
     this.writer = new BinaryWriterBuilder(bw);
-    this.typeResolver = new TypeResolverBuilder("serializerLookup");
+    this.typeResolver = new TypeResolverBuilder(cr);
     this.referenceResolver = new ReferenceResolverBuilder(rr, rw);
     this.typeMetaResolver = new TypeMetaContextBuilder(writeContext, readContext);
     this.metaStringResolver = new MetaStringContextBuilder(writeContext, readContext, mw);

@@ -587,12 +587,6 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     return JS_STRUCT_OWNER_BYTES + this.sortedProps.length * REFERENCE_BYTES;
   }
 
-  private serializerCaptureExpr(): string {
-    return TypeId.isNamedType(this.typeInfo.typeId)
-      ? this.builder.typeResolver.getSerializerByName(this.typeInfo.named!)
-      : this.builder.typeResolver.getSerializerById(this.typeInfo.typeId, this.typeInfo.userTypeId);
-  }
-
   readDataAlwaysAdvances(): boolean {
     if (!this.builder.resolver.isCompatible()) {
       return true;
@@ -609,8 +603,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
       // recursive placeholder remains unknown and selects the guarded loop;
       // do not recursively walk the schema graph here.
       if (
-        this.builder.serializerLookup.getSerializerByTypeInfo(typeInfo)?.readDataAlwaysAdvances ===
-        true
+        this.builder.resolver.getSerializerByTypeInfo(typeInfo)?.readDataAlwaysAdvances === true
       ) {
         return true;
       }
@@ -796,11 +789,11 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           continue;
         }
       }
-      const innerGenerator = CodegenRegistry.newGeneratorByTypeInfo(
-        current.typeInfo,
-        this.builder,
-        this.scope,
-      );
+      const InnerGeneratorClass = CodegenRegistry.get(current.typeInfo.typeId);
+      if (!InnerGeneratorClass) {
+        throw new Error(`${current.typeInfo.typeId} generator not exists`);
+      }
+      const innerGenerator = new InnerGeneratorClass(current.typeInfo, this.builder, this.scope);
       const fieldAccessor = `${accessor}${CodecBuilder.safePropAccessor(current.key)}`;
       fieldWrites.push(
         this.writeField(current.key, current.typeInfo, fieldAccessor, innerGenerator.writeEmbed()),
@@ -952,11 +945,11 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
       ${this.maybeReference(result, refState)}
       ${this.sortedProps
         .map(({ key, typeInfo }) => {
-          const innerGenerator = CodegenRegistry.newGeneratorByTypeInfo(
-            typeInfo,
-            this.builder,
-            this.scope,
-          );
+          const InnerGeneratorClass = CodegenRegistry.get(typeInfo.typeId);
+          if (!InnerGeneratorClass) {
+            throw new Error(`${typeInfo.typeId} generator not exists`);
+          }
+          const innerGenerator = new InnerGeneratorClass(typeInfo, this.builder, this.scope);
           return `
           ${this.readField(key, typeInfo, (expr) => this.readFieldAssign(result, key, expr), innerGenerator.readEmbed())}
         `;
@@ -1237,11 +1230,11 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     // Hoist the serializer lookup into a scope-level const, evaluated once during
     // factory init. Self-recursive structs may still point at a placeholder, so
     // only the fully generated serializer path can hoist derived values below.
-    const hoisted = this.scope.declare("ser", this.serializerCaptureExpr());
+    const hoisted = this.scope.declare("ser", this.serializerExpr);
     const scope = this.scope;
     const builder = this.builder;
     const internalTypeId = this.getInternalTypeId();
-    const serializer = builder.serializerLookup.getSerializerByTypeInfo(this.typeInfo);
+    const serializer = builder.resolver.getSerializerByTypeInfo(this.typeInfo);
     const canInlineCompatibleTypeInfo =
       internalTypeId === TypeId.COMPATIBLE_STRUCT ||
       internalTypeId === TypeId.NAMED_COMPATIBLE_STRUCT ||
@@ -1355,7 +1348,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
   writeEmbed() {
     // Hoist the serializer lookup — safe because writeEmbed() is used by
     // the parent struct whose factory runs after child serializers exist.
-    const hoisted = this.scope.declare("ser", this.serializerCaptureExpr());
+    const hoisted = this.scope.declare("ser", this.serializerExpr);
     const scope = this.scope;
     return new Proxy(
       {},
@@ -1448,16 +1441,11 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     let fixedSize = 8;
     if (options!.props) {
       Object.values(options!.props).forEach((x) => {
-        const serializer = this.builder.serializerLookup.getSerializerByTypeInfo(x);
-        if (TypeId.userDefinedType(x.typeId) && serializer !== undefined) {
-          fixedSize += serializer.fixedSize;
-        } else {
-          const propGenerator = CodegenRegistry.newGeneratorByTypeInfo(x, this.builder, this.scope);
-          fixedSize += propGenerator.getFixedSize();
-        }
+        const propGenerator = new (CodegenRegistry.get(x.typeId)!)(x, this.builder, this.scope);
+        fixedSize += propGenerator.getFixedSize();
       });
     } else {
-      fixedSize += this.builder.serializerLookup.getSerializerByTypeInfo(typeInfo)!.fixedSize;
+      fixedSize += this.builder.resolver.getSerializerByName(typeInfo.named!)!.fixedSize;
     }
     return fixedSize;
   }

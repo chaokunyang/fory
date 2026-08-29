@@ -18,7 +18,6 @@
  */
 
 import Fory, { Type } from "../packages/core/index";
-import { TypeId } from "../packages/core/lib/type";
 import { describe, expect, test } from "@jest/globals";
 
 describe("union", () => {
@@ -219,30 +218,5 @@ describe("union", () => {
 
     expect(result.value).toBe(result);
     expect(readContext.getReadRef(0)).toBe(result);
-  });
-
-  test("keeps anonymous union owners", () => {
-    const fory = new Fory({ compatible: false, ref: true });
-    const first = fory.register(Type.union({ 1: Type.string() }));
-    const second = fory.register(Type.union({ 2: Type.int32() }));
-    expect((fory as any).typeResolver.getSerializerById(TypeId.TYPED_UNION)).toBeUndefined();
-    const open = fory.register(Type.union());
-    const combined = fory.register(
-      Type.struct(702, {
-        first: Type.union({ 1: Type.string() }),
-        second: Type.union({ 2: Type.int32() }),
-      }),
-    );
-    const firstValue = { case: 1, value: "first" };
-    const secondValue = { case: 2, value: 42 };
-    const openValue = { case: 3, value: "open" };
-    const combinedValue = { first: firstValue, second: secondValue };
-
-    expect(first.serializer).not.toBe(second.serializer);
-    expect((fory as any).typeResolver.getSerializerById(TypeId.TYPED_UNION)).toBe(open.serializer);
-    expect(first.deserialize(first.serialize(firstValue))).toEqual(firstValue);
-    expect(second.deserialize(second.serialize(secondValue))).toEqual(secondValue);
-    expect(open.deserialize(open.serialize(openValue))).toEqual(openValue);
-    expect(combined.deserialize(combined.serialize(combinedValue))).toEqual(combinedValue);
   });
 });

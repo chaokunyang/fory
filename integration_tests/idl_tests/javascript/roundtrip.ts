@@ -91,8 +91,13 @@ import {
 import { Monster, Color, registerMonsterTypes } from "./generated/monster";
 import { TreeNode, registerTreeTypes } from "./generated/tree";
 
-type RegisterFn = (fory: Fory) => unknown;
+type RegisterFn = (fory: Fory) => Record<string, { serializer: Serializer }>;
 type AssertFn<T> = (expected: T, actual: unknown) => void;
+
+interface RegisteredFory {
+  fory: Fory;
+  serializers: Map<number, Serializer>;
+}
 
 function resolveCompatibleModes(): boolean[] {
   const value = process.env.IDL_COMPATIBLE;
@@ -113,18 +118,25 @@ function buildFory(
   compatible: boolean,
   ref: boolean,
   registerFns: ReadonlyArray<RegisterFn>,
-): Fory {
+): RegisteredFory {
   const fory = new Fory({
     compatible,
     ref,
   });
+  const serializers = new Map<number, Serializer>();
   for (const registerFn of registerFns) {
-    registerFn(fory);
+    for (const { serializer } of Object.values(registerFn(fory))) {
+      serializers.set(serializer.getTypeInfo().userTypeId, serializer);
+    }
   }
-  return fory;
+  return { fory, serializers };
 }
 
-function resolveRootSerializer(fory: Fory, bytes: Uint8Array): Serializer {
+function resolveRootSerializer(
+  registeredFory: RegisteredFory,
+  bytes: Uint8Array,
+): Serializer {
+  const { fory, serializers } = registeredFory;
   fory.readContext.reset(bytes);
   const reader = fory.readContext.reader;
   const bitmap = reader.readUint8();
@@ -155,15 +167,14 @@ function resolveRootSerializer(fory: Fory, bytes: Uint8Array): Serializer {
   // registered serializer when available.
   const detectedSerializer = AnyHelper.detectSerializer(fory.readContext);
   const resolvedSerializer =
-    fory.typeResolver.getSerializerByTypeInfo(
-      detectedSerializer.getTypeInfo(),
-    ) ?? detectedSerializer;
+    serializers.get(detectedSerializer.getTypeInfo().userTypeId) ??
+    detectedSerializer;
   return resolvedSerializer;
 }
 
 function runFileRoundTrip<T>(
   envVar: string,
-  fory: Fory,
+  registeredFory: RegisteredFory,
   expected: T,
   assertFn: AssertFn<T>,
 ): void {
@@ -173,7 +184,8 @@ function runFileRoundTrip<T>(
   }
   console.log(`Processing ${envVar}: ${filePath}`);
   const payload = new Uint8Array(fs.readFileSync(filePath));
-  const serializer = resolveRootSerializer(fory, payload);
+  const serializer = resolveRootSerializer(registeredFory, payload);
+  const { fory } = registeredFory;
   const decoded = fory.deserialize(payload, serializer);
   assertFn(expected, decoded);
   const roundTripBytes = fory.serialize(decoded, serializer);

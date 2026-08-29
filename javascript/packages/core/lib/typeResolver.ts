@@ -311,20 +311,6 @@ export default class TypeResolver {
     return new Gen(this, { creator: typeInfo.options?.creator }).reGenerateSerializer(typeInfo);
   }
 
-  regenerateReadSerializer(typeInfo: TypeInfo) {
-    const serializer = this.generateReadSerializer(typeInfo);
-    return this.registerSerializer(typeInfo, {
-      readDataAlwaysAdvances: serializer.readDataAlwaysAdvances,
-      getHash: serializer.getHash,
-      getTypeInfo: serializer.getTypeInfo,
-      read: serializer.read,
-      readNoRef: serializer.readNoRef,
-      readRef: serializer.readRef,
-      readTypeInfo: serializer.readTypeInfo,
-      readRefWithoutTypeInfo: serializer.readRefWithoutTypeInfo,
-    } as any)!;
-  }
-
   getSerializerByTypeInfo(typeInfo: TypeInfo) {
     const typeId = this.computeTypeId(typeInfo);
     if (TypeId.isNamedType(typeId)) {

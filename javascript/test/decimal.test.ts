@@ -176,14 +176,8 @@ describe("decimal", () => {
         const roundTrip = fory.deserialize(fory.serialize(value)) as Decimal;
         expect(roundTrip.equals(value)).toBe(true);
       } else {
-        const writer = (fory as any).writeContext.writer;
-        const bodyBefore = Array.from(
-          writer.getPlatformBuffer().subarray(bodyOffset, bodyOffset + 5),
-        );
         expect(() => fory.serialize(value)).toThrow(/Decimal scale/);
-        expect(Array.from(writer.getPlatformBuffer().subarray(bodyOffset, bodyOffset + 5))).toEqual(
-          bodyBefore,
-        );
+        expect((fory as any).writeContext.writer.writeGetCursor()).toBe(bodyOffset);
       }
 
       const payload = decimalPayload(scale);
@@ -216,6 +210,7 @@ describe("decimal", () => {
           writer.getPlatformBuffer().subarray(bodyOffset, bodyOffset + 5),
         );
         expect(() => fory.serialize(value)).toThrow(/Decimal magnitude/);
+        expect(writer.writeGetCursor()).toBe(bodyOffset);
         expect(Array.from(writer.getPlatformBuffer().subarray(bodyOffset, bodyOffset + 5))).toEqual(
           bodyBefore,
         );

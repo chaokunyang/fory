@@ -985,7 +985,7 @@ describe("typemeta", () => {
     const writerChild = writerFory.register(remoteChild);
     const writerRoot = writerFory.register(
       Type.struct(rootId, {
-        child: remoteChild.clone().setId(1),
+        child: remoteChild.setId(1),
       }),
     );
     const remoteTypeMeta = TypeMeta.fromTypeInfo(remoteChild, (writerFory as any).typeResolver);
@@ -1000,7 +1000,7 @@ describe("typemeta", () => {
       const child = fory.register(localChild);
       const root = fory.register(
         Type.struct(rootId, {
-          child: localChild.clone().setId(1),
+          child: localChild.setId(1),
         }),
       );
       return { fory, child, root };

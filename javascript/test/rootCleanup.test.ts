@@ -241,7 +241,7 @@ test("releases failed write buffer", () => {
   expect(writer.getPlatformBuffer().byteLength).toBeLessThan(4 * 1024 * 1024);
 });
 
-test("clears failed write refs", () => {
+test("clears failed read refs", () => {
   const fory = new Fory({ compatible: false, ref: true });
   const registered = fory.register(Type.struct(7612, {}));
   const refReader = (fory as any).readContext.refReader;

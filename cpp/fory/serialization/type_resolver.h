@@ -1360,8 +1360,8 @@ public:
 
   template <typename T> Result<void, Error> register_any_type();
 
-  /// Builds the final TypeResolver by completing all partial type infos
-  /// created during registration.
+  /// Builds the TypeResolver used by operation contexts by completing all
+  /// partial type infos created during registration.
   ///
   /// This method processes all types that were registered. During registration,
   /// types are stored in `partial_type_infos` without their complete
@@ -1371,13 +1371,12 @@ public:
   /// 2. Calls their `sorted_field_infos` function to get complete field
   /// information
   /// 3. Builds complete TypeMeta and serializes it to bytes
-  /// 4. Returns a new TypeResolver with all type infos fully initialized
+  /// 4. Returns a new TypeResolver with complete metadata
   ///
   /// Registration is permanently frozen before metadata construction starts.
   ///
-  /// @return A new TypeResolver with all type infos fully initialized and ready
-  /// for use.
-  Result<std::unique_ptr<TypeResolver>, Error> build_final_type_resolver();
+  /// @return A TypeResolver ready to create operation contexts.
+  Result<std::unique_ptr<TypeResolver>, Error> build_context_type_resolver();
 
   /// Deep clones the TypeResolver for use in a new context.
   ///

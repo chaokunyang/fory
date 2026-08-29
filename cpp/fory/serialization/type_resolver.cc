@@ -1774,17 +1774,17 @@ Result<void, Error> TypeResolver::check_registration() {
 }
 
 Result<std::unique_ptr<TypeResolver>, Error>
-TypeResolver::build_final_type_resolver() {
+TypeResolver::build_context_type_resolver() {
   std::lock_guard<std::mutex> lock(registration_mutex_);
   registry_frozen_ = true;
-  auto final_resolver = std::make_unique<TypeResolver>();
+  auto context_resolver = std::make_unique<TypeResolver>();
 
   // copy configuration
-  final_resolver->compatible_ = compatible_;
-  final_resolver->xlang_ = xlang_;
-  final_resolver->check_struct_version_ = check_struct_version_;
-  final_resolver->track_ref_ = track_ref_;
-  final_resolver->registry_frozen_ = true;
+  context_resolver->compatible_ = compatible_;
+  context_resolver->xlang_ = xlang_;
+  context_resolver->check_struct_version_ = check_struct_version_;
+  context_resolver->track_ref_ = track_ref_;
+  context_resolver->registry_frozen_ = true;
 
   // Build mapping from old pointers to new pointers for rebuilding lookup maps
   fory::flat_hash_map<const TypeInfo *, TypeInfo *> ptr_map;
@@ -1794,7 +1794,7 @@ TypeResolver::build_final_type_resolver() {
     auto cloned = info->deep_clone();
     TypeInfo *new_ptr = cloned.get();
     ptr_map[info.get()] = new_ptr;
-    final_resolver->type_infos_.push_back(std::move(cloned));
+    context_resolver->type_infos_.push_back(std::move(cloned));
   }
   auto remap_type_info = [&ptr_map](const TypeInfo *old_ptr) {
     auto *entry = ptr_map.find(old_ptr);
@@ -1804,31 +1804,32 @@ TypeResolver::build_final_type_resolver() {
 
   // Rebuild lookup maps with new pointers
   for (const auto &[key, old_ptr] : type_info_by_ctid_) {
-    final_resolver->type_info_by_ctid_.put(key, remap_type_info(old_ptr));
+    context_resolver->type_info_by_ctid_.put(key, remap_type_info(old_ptr));
   }
   for (const auto &[key, old_ptr] : type_info_by_id_) {
-    final_resolver->type_info_by_id_.put(key, remap_type_info(old_ptr));
+    context_resolver->type_info_by_id_.put(key, remap_type_info(old_ptr));
   }
   for (const auto &[key, old_ptr] : user_type_info_by_id_) {
-    final_resolver->user_type_info_by_id_.put(key, remap_type_info(old_ptr));
+    context_resolver->user_type_info_by_id_.put(key, remap_type_info(old_ptr));
   }
   for (const auto &[key, old_ptr] : type_info_by_name_) {
-    final_resolver->type_info_by_name_[key] = remap_type_info(old_ptr);
+    context_resolver->type_info_by_name_[key] = remap_type_info(old_ptr);
   }
   for (const auto &[key, old_ptr] : type_info_by_runtime_type_) {
-    final_resolver->type_info_by_runtime_type_[key] = remap_type_info(old_ptr);
+    context_resolver->type_info_by_runtime_type_[key] =
+        remap_type_info(old_ptr);
   }
 
   for (const auto &[key, old_ptr] : partial_type_infos_) {
-    final_resolver->partial_type_infos_.put(key, remap_type_info(old_ptr));
+    context_resolver->partial_type_infos_.put(key, remap_type_info(old_ptr));
   }
 
   // Process all partial type infos to build complete type metadata
   for (const auto &[rust_type_id, partial_ptr] :
-       final_resolver->partial_type_infos_) {
+       context_resolver->partial_type_infos_) {
     // Call the harness's sorted_field_infos function to get complete field info
     FORY_TRY(sorted_fields,
-             partial_ptr->harness.sorted_field_infos_fn(*final_resolver));
+             partial_ptr->harness.sorted_field_infos_fn(*context_resolver));
 
     // Build complete TypeMeta
     TypeMeta meta = TypeMeta::from_fields(
@@ -1848,7 +1849,7 @@ TypeResolver::build_final_type_resolver() {
     buffer.writer_index(static_cast<uint32_t>(partial_ptr->type_def.size()));
     // This metadata was just generated from local registration state. Remote
     // receive limits are enforced only on remote metadata parse/cache-miss
-    // paths, so large trusted local schemas do not fail during finalization.
+    // paths, so large trusted local schemas do not fail metadata completion.
     FORY_TRY(parsed_meta,
              TypeMeta::from_bytes(buffer, nullptr,
                                   std::numeric_limits<uint32_t>::max(),
@@ -1856,10 +1857,10 @@ TypeResolver::build_final_type_resolver() {
     partial_ptr->type_meta = std::move(parsed_meta);
   }
 
-  // Clear partial_type_infos in the final resolver since they're all completed
-  final_resolver->partial_type_infos_.clear();
+  // The context resolver retains only completed metadata.
+  context_resolver->partial_type_infos_.clear();
 
-  return final_resolver;
+  return context_resolver;
 }
 
 std::unique_ptr<TypeResolver> TypeResolver::clone() const {
@@ -1904,8 +1905,8 @@ std::unique_ptr<TypeResolver> TypeResolver::clone() const {
   for (const auto &[key, old_ptr] : type_info_by_runtime_type_) {
     cloned->type_info_by_runtime_type_[key] = remap_type_info(old_ptr);
   }
-  // Note: Don't copy partial_type_infos_ - clone should only be used on
-  // finalized resolvers
+  // Note: Don't copy partial_type_infos_ - clone is used only after metadata
+  // completion.
 
   return cloned;
 }

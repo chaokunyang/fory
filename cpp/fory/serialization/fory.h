@@ -719,11 +719,11 @@ private:
   void ensure_contexts_initialized() {
     if (!write_ctx_.has_value()) {
       FORY_CHECK(!read_ctx_.has_value());
-      auto final_result = type_resolver_->build_final_type_resolver();
-      FORY_CHECK(final_result.ok())
-          << "Failed to build finalized TypeResolver: "
-          << final_result.error().to_string();
-      auto prepared_resolver = std::move(final_result).value();
+      auto context_result = type_resolver_->build_context_type_resolver();
+      FORY_CHECK(context_result.ok())
+          << "Failed to build context TypeResolver: "
+          << context_result.error().to_string();
+      auto prepared_resolver = std::move(context_result).value();
       // Create contexts with cloned resolvers
       write_ctx_.emplace(config_, prepared_resolver->clone());
       read_ctx_.emplace(config_, prepared_resolver->clone());
@@ -1025,11 +1025,11 @@ private:
 
   void ensure_resolver_initialized() const {
     std::call_once(resolver_once_flag_, [this]() {
-      auto final_result = type_resolver_->build_final_type_resolver();
-      FORY_CHECK(final_result.ok())
-          << "Failed to build finalized TypeResolver: "
-          << final_result.error().to_string();
-      shared_resolver_ = std::move(final_result).value();
+      auto context_result = type_resolver_->build_context_type_resolver();
+      FORY_CHECK(context_result.ok())
+          << "Failed to build context TypeResolver: "
+          << context_result.error().to_string();
+      shared_resolver_ = std::move(context_result).value();
     });
   }
 

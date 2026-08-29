@@ -1741,8 +1741,8 @@ TEST(SerializationTest, ExpectedLocalTypeMetaStaysRootLocal) {
   ASSERT_TRUE(
       fory.register_extension_type<IdLimitExt>("example", "ExpectedExt").ok());
   ASSERT_TRUE(fory.register_union<UnionType>("example", "ExpectedUnion").ok());
-  auto finalized = fory.serialize(SimpleStruct{});
-  ASSERT_TRUE(finalized.ok()) << finalized.error().to_string();
+  auto serialized = fory.serialize(SimpleStruct{});
+  ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
 
   ReadContext ctx(fory.config(), fory.type_resolver().clone());
   auto struct_info = ctx.type_resolver().get_type_info<SimpleStruct>();
@@ -1801,8 +1801,8 @@ TEST(SerializationTest, LocalTypeMetaPrecedesRemoteCache) {
   auto fory = Fory::builder().xlang(true).compatible(true).build();
   ASSERT_TRUE(
       fory.register_enum<SignedScopedStatus>("example", "WarmLocal").ok());
-  auto finalized = fory.serialize(SignedScopedStatus::ZERO);
-  ASSERT_TRUE(finalized.ok()) << finalized.error().to_string();
+  auto serialized = fory.serialize(SignedScopedStatus::ZERO);
+  ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
   auto expected = fory.type_resolver().get_type_info<SignedScopedStatus>();
   ASSERT_TRUE(expected.ok()) << expected.error().to_string();
   const std::vector<uint8_t> &type_def = expected.value()->type_def;
@@ -1846,8 +1846,8 @@ TEST(SerializationTest, StaticTypeMetaChecksOwner) {
   ASSERT_TRUE(fory.register_enum<SparseStatus>("example", "EnumB").ok());
   ASSERT_TRUE(fory.register_union<UnionA>("example", "UnionA").ok());
   ASSERT_TRUE(fory.register_union<UnionB>("example", "UnionB").ok());
-  auto finalized = fory.serialize(SimpleStruct{});
-  ASSERT_TRUE(finalized.ok()) << finalized.error().to_string();
+  auto serialized = fory.serialize(SimpleStruct{});
+  ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
 
   ReadContext ctx(fory.config(), fory.type_resolver().clone());
   auto struct_b = ctx.type_resolver().get_type_info<ComplexStruct>();
@@ -1884,8 +1884,8 @@ TEST(SerializationTest, CachedTypeMetaChecksOwner) {
   ASSERT_TRUE(
       fory.register_enum<SignedScopedStatus>("example", "CacheEnumA").ok());
   ASSERT_TRUE(fory.register_union<UnionA>("example", "CacheUnionA").ok());
-  auto finalized = fory.serialize(SimpleStruct{});
-  ASSERT_TRUE(finalized.ok()) << finalized.error().to_string();
+  auto serialized = fory.serialize(SimpleStruct{});
+  ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
   ReadContext ctx(fory.config(), fory.type_resolver().clone());
 
   expect_cached_owner_mismatch<SimpleStruct>(
@@ -1910,8 +1910,8 @@ TEST(SerializationTest, StaticCollectionChecksOwner) {
       fory.register_struct<SimpleStruct>("example", "CollectionA").ok());
   ASSERT_TRUE(
       fory.register_struct<ComplexStruct>("example", "CollectionB").ok());
-  auto finalized = fory.serialize(SimpleStruct{});
-  ASSERT_TRUE(finalized.ok()) << finalized.error().to_string();
+  auto serialized = fory.serialize(SimpleStruct{});
+  ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
 
   auto first = make_remote_type_meta("CollectionB", "first_remote");
   auto second = make_remote_type_meta("CollectionB", "second_remote");
@@ -1950,8 +1950,8 @@ TEST(SerializationTest, StaticMapChecksOwner) {
                   .build();
   ASSERT_TRUE(fory.register_struct<SimpleStruct>("example", "MapA").ok());
   ASSERT_TRUE(fory.register_struct<ComplexStruct>("example", "MapB").ok());
-  auto finalized = fory.serialize(SimpleStruct{});
-  ASSERT_TRUE(finalized.ok()) << finalized.error().to_string();
+  auto serialized = fory.serialize(SimpleStruct{});
+  ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
 
   auto first = make_remote_type_meta("MapB", "first_remote");
   auto second = make_remote_type_meta("MapB", "second_remote");
@@ -2142,7 +2142,7 @@ TEST(SerializationTest, IdExtDoesNotUseTypeMetaLimits) {
   EXPECT_EQ(decoded.value(), IdLimitExt{42});
 }
 
-TEST(SerializationTest, LocalTypeMetaFinalizationIgnoresReceiveBodyLimit) {
+TEST(SerializationTest, LocalTypeMetaCompletionIgnoresReceiveBodyLimit) {
   auto fory = Fory::builder()
                   .xlang(true)
                   .compatible(true)

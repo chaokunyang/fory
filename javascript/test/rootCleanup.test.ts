@@ -142,6 +142,27 @@ test.each(["success", "failure"] as const)("restores root write state for %s", (
   expect(typeMeta.dynamicTypeId).toBe(-1);
 });
 
+test("clears write state before serializer lookup", () => {
+  const fory = new Fory({ compatible: true, ref: true });
+  const registered = fory.register(Type.struct(7613, {}));
+  const writeContext = (fory as any).writeContext;
+  const typeMeta = TypeMeta.fromTypeInfo(Type.struct(7614, {}));
+  const name = writeContext.metaStringWriter.encodeTypeName("PreviousRoot");
+  const value = {};
+
+  registered.serializer.writeRef = () => {
+    writeContext.refWriter.writeRef(value);
+    writeContext.metaStringWriter.writeBytes(writeContext.writer, name);
+    writeContext.writeTypeMeta(typeMeta, typeMeta.toBytes());
+  };
+  expect(registered.serialize(value)).toBeDefined();
+
+  expect(() => fory.serialize(1, null as any)).toThrow();
+  expect(writeContext.refWriter.writeObjects.size).toBe(0);
+  expect(name.dynamicWriteStringId).toBe(-1);
+  expect(typeMeta.dynamicTypeId).toBe(-1);
+});
+
 test("reuses root write metastring owners", () => {
   const fory = new Fory({ compatible: true });
   const registered = fory.register(Type.struct(7609, {}));

@@ -261,6 +261,14 @@ export default class Fory {
 
   serialize<T = any>(data: T, serializer: Serializer = this.anySerializer) {
     this.registrationFrozen = true;
-    return this.getRootSerializer(serializer)(data);
+    let rootSerializer;
+    try {
+      rootSerializer = this.getRootSerializer(serializer);
+    } catch (error) {
+      // Serializer lookup is part of the root attempt and can fail before the cached root owns it.
+      this.writeContext.reset();
+      throw error;
+    }
+    return rootSerializer(data);
   }
 }

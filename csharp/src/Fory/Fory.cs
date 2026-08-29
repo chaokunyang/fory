@@ -242,7 +242,15 @@ public sealed class Fory
     {
         _registryFrozen = true;
         ByteReader reader = _readContext.Reader;
-        reader.Reset(payload);
+        try
+        {
+            reader.Reset(payload);
+        }
+        catch
+        {
+            _readContext.Reset();
+            throw;
+        }
         T value = DeserializeFromReader<T>(reader);
         if (reader.Remaining != 0)
         {

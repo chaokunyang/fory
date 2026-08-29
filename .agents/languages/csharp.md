@@ -12,7 +12,7 @@ Load this file when changing `csharp/` or C# xlang behavior.
 - A direct C# `Fory` registry and the `ThreadSafeFory` public registration boundary each own one
   authoritative frozen flag. The first root sets the owning flag before codec work and leaves it
   set after failure. Explicit registration checks that flag before mutation. `ThreadSafeFory` keeps
-  its existing successful-registration list only to configure newly created child runtimes; do not
+  its existing registration callbacks only to configure newly created child runtimes; do not
   turn that list into another registry lifecycle state.
 - Generated C# gRPC service companions are compiler-owned files that depend on application-provided gRPC packages, not `csharp/src/Fory`. Keep gRPC package references out of the Fory runtime package.
 - C# generated schema modules are source-file owners. Service companions must use that module's `ThreadSafeFory` and must not introduce namespace-owned aliases or duplicate serializer registration paths.

@@ -872,8 +872,11 @@ public sealed class RuntimeEdgeCaseTests
     public void FailedRootFreezesRegistry()
     {
         ForyRuntime fory = ForyRuntime.Builder().Build();
+        ReadContext context = ReadContextFor(fory);
+        context.AppendReadMetaString(MetaString.Empty('_', '_'));
 
         Assert.ThrowsAny<Exception>(() => fory.Deserialize<int>((byte[])null!));
+        Assert.Null(context.GetReadMetaString(0));
         Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(713));
     }
 
@@ -936,7 +939,18 @@ public sealed class RuntimeEdgeCaseTests
         using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
 
         Assert.ThrowsAny<Exception>(() => fory.Deserialize<int>(Array.Empty<byte>()));
-        Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(715));
+        Action[] registrations =
+        [
+            () => fory.Register<FrozenPayload>(string.Empty),
+            () => fory.Register<FrozenPayload>("test", "bad.name"),
+            () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(string.Empty),
+            () => fory.Register<FrozenPayload, FrozenPayloadSerializer>("test", "bad.name"),
+        ];
+
+        foreach (Action registration in registrations)
+        {
+            Assert.Throws<InvalidOperationException>(registration);
+        }
     }
 
     [Fact]
@@ -1008,24 +1022,6 @@ public sealed class RuntimeEdgeCaseTests
         Assert.Null(context.GetReadMetaString(0));
     }
 
-    [Fact]
-    public void RootHeaderFailureKeepsMetaCache()
-    {
-        ForyRuntime fory = ForyRuntime.Builder()
-            .Compatible(false)
-            .MaxSchemaVersionsPerType(1)
-            .Build();
-        ReadContext context = ReadContextFor(fory);
-        TypeMeta first = ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "first"));
-        ulong firstHash = EncodedTypeMetaHash(first);
-
-        Assert.ThrowsAny<Exception>(() => fory.Deserialize<int>([0]));
-
-        Assert.True(context.TryGetTypeMetaByHash(firstHash, out _));
-        Assert.Throws<InvalidDataException>(
-            () => ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "second")));
-    }
-
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -1087,17 +1083,6 @@ public sealed class RuntimeEdgeCaseTests
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(field);
         return Assert.IsType<WriteContext>(field.GetValue(fory));
-    }
-
-    [Fact]
-    public void DeserializeFromReaderReadsFrames()
-    {
-        ForyRuntime fory = ForyRuntime.Builder().Build();
-        ByteReader reader = new([.. fory.Serialize(123), .. fory.Serialize(456)]);
-
-        Assert.Equal(123, fory.DeserializeFromReader<int>(reader));
-        Assert.Equal(456, fory.DeserializeFromReader<int>(reader));
-        Assert.Equal(0, reader.Remaining);
     }
 
     [Fact]

@@ -67,6 +67,7 @@ public sealed class ThreadSafeFory : IDisposable
     /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public ThreadSafeFory Register<T>(string name)
     {
+        EnsureRegistrationOpen();
         _ = TypeResolver.SplitTypeName(name);
         ApplyRegistration(fory => fory.Register<T>(name));
         return this;
@@ -83,6 +84,7 @@ public sealed class ThreadSafeFory : IDisposable
     /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public ThreadSafeFory Register<T>(string typeNamespace, string typeName)
     {
+        EnsureRegistrationOpen();
         TypeResolver.ValidateSplitTypeName(typeNamespace, typeName);
         ApplyRegistration(fory => fory.Register<T>(typeNamespace, typeName));
         return this;
@@ -116,6 +118,7 @@ public sealed class ThreadSafeFory : IDisposable
     public ThreadSafeFory Register<T, TSerializer>(string name)
         where TSerializer : Serializer<T>, new()
     {
+        EnsureRegistrationOpen();
         _ = TypeResolver.SplitTypeName(name);
         ApplyRegistration(fory => fory.Register<T, TSerializer>(name));
         return this;
@@ -134,6 +137,7 @@ public sealed class ThreadSafeFory : IDisposable
     public ThreadSafeFory Register<T, TSerializer>(string typeNamespace, string typeName)
         where TSerializer : Serializer<T>, new()
     {
+        EnsureRegistrationOpen();
         TypeResolver.ValidateSplitTypeName(typeNamespace, typeName);
         ApplyRegistration(fory => fory.Register<T, TSerializer>(typeNamespace, typeName));
         return this;
@@ -232,6 +236,18 @@ public sealed class ThreadSafeFory : IDisposable
             }
 
             _registrations.Add(registration);
+        }
+    }
+
+    private void EnsureRegistrationOpen()
+    {
+        lock (_registrationLock)
+        {
+            ThrowIfDisposed();
+            if (_registryFrozen != 0)
+            {
+                ThrowRegistryFrozen();
+            }
         }
     }
 

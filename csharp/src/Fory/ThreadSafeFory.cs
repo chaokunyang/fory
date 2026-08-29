@@ -243,7 +243,7 @@ public sealed class ThreadSafeFory : IDisposable
     private void BeginRoot()
     {
         // Freeze before Current can create a per-thread runtime so roots and registrations
-        // linearize against one boundary and every runtime replays the same immutable log.
+        // linearize against one boundary and every runtime gets the same configuration.
         if (Volatile.Read(ref _registryFrozen) == 0)
         {
             FreezeRegistry();

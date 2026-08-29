@@ -25,6 +25,11 @@ try:
 except ImportError:
     np = None
 
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
 
 def test_pickle_buffer_serialization():
     fory = Fory(xlang=False, ref=False, strict=False, compatible=False)
@@ -53,6 +58,28 @@ def test_numpy_out_of_band_serialization():
     deserialized = fory.deserialize(serialized, buffers=buffers)
 
     np.testing.assert_array_equal(arr, deserialized)
+
+
+@pytest.mark.skipif(pd is None, reason="Requires pandas")
+def test_pandas_out_of_band_serialization():
+    fory = Fory(xlang=False, ref=False, strict=False, compatible=False)
+
+    df = pd.DataFrame(
+        {
+            "a": np.arange(1000, dtype=np.float64),
+            "b": np.arange(1000, dtype=np.int64),
+            "c": ["text"] * 1000,
+        }
+    )
+
+    buffer_objects = []
+    serialized = fory.serialize(df, buffer_callback=buffer_objects.append)
+
+    buffers = [o.getbuffer() for o in buffer_objects]
+
+    deserialized = fory.deserialize(serialized, buffers=buffers)
+
+    pd.testing.assert_frame_equal(df, deserialized)
 
 
 @pytest.mark.skipif(np is None, reason="Requires numpy")
@@ -98,6 +125,26 @@ def test_numpy_with_mixed_types():
     assert deserialized["text"] == text
     assert deserialized["number"] == number
     np.testing.assert_array_equal(arr, deserialized["array"])
+
+
+@pytest.mark.skipif(pd is None or np is None, reason="Requires numpy and pandas")
+def test_mixed_numpy_pandas_out_of_band():
+    fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+
+    arr = np.arange(500, dtype=np.float64)
+    df = pd.DataFrame({"x": np.arange(500, dtype=np.int64), "y": np.arange(500, dtype=np.float32)})
+
+    data = {"array": arr, "dataframe": df}
+
+    buffer_objects = []
+    serialized = fory.serialize(data, buffer_callback=buffer_objects.append)
+
+    buffers = [o.getbuffer() for o in buffer_objects]
+
+    deserialized = fory.deserialize(serialized, buffers=buffers)
+
+    np.testing.assert_array_equal(arr, deserialized["array"])
+    pd.testing.assert_frame_equal(df, deserialized["dataframe"])
 
 
 @pytest.mark.skipif(np is None, reason="Requires numpy")

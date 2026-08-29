@@ -16,7 +16,6 @@
 # under the License.
 
 import os
-import threading
 from abc import ABC, abstractmethod
 from typing import Iterable, Optional, Union
 
@@ -27,7 +26,6 @@ _ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv("ENABLE_TYPE_REGISTRATION_FORCIBL
 
 from pyfory.policy import DEFAULT_POLICY, DeserializationPolicy
 from pyfory.resolver import NOT_NULL_VALUE_FLAG
-from pyfory.type_util import normalize_fory_type
 from pyfory.types import TypeId
 
 DYNAMIC_TYPE_ID = -1
@@ -90,10 +88,9 @@ class Fory:
     objects and cross-language reference metadata; Python native mode handles the
     broader Python object graph surface, including circular Python objects.
 
-    In Python native mode (xlang=False), Fory can serialize a configured Python
-    type surface including dataclasses, classes with custom serialization methods,
-    and local functions/classes. Register application types and native carriers
-    before the first root operation, which permanently freezes the registry.
+    In Python native mode (xlang=False), Fory can serialize Python objects including
+    dataclasses, classes with custom serialization methods, and local functions/classes.
+    With strict mode disabled, policy-authorized types are discovered lazily.
 
     In xlang mode, the default, Fory serializes objects in a format that can be
     deserialized by other Fory-supported languages (Java, Go, Rust, C++, etc.).
@@ -155,11 +152,11 @@ class Fory:
 
         Args:
             xlang: Enable xlang mode. When False, uses
-                Python native mode supporting configured Python objects (dataclasses,
-                __reduce__, local functions/classes). Register all application types and
-                native carriers before the first root operation. When True, uses the xlang wire format
-                compatible with other Fory languages (Java, Go, Rust, etc), but Python-
-                specific features like functions and __reduce__ methods are not supported.
+                Python native mode supporting Python objects such as dataclasses,
+                __reduce__, and local functions/classes. When True, uses the xlang wire
+                format compatible with other Fory languages (Java, Go, Rust, etc), but
+                Python-specific features like functions and __reduce__ methods are not
+                supported.
 
             ref: Enable reference tracking for shared references and Python native-mode
                 circular references. When enabled, duplicate objects are stored once.
@@ -169,11 +166,10 @@ class Fory:
                 classes (default: True). Compatible metadata for an unregistered remote
                 Struct uses the fixed data-only UnknownStruct carrier instead of loading
                 or generating the sender-named class. Disabling strict mode authorizes
-                configured native carriers. Policy-authorized module globals may be
-                resolved while reading trusted native payloads, but the first root still
-                freezes type and serializer registration. Dynamic application types can
-                be insecure if malicious code exists in __new__/__init__/__eq__/__hash__
-                methods.
+                lazy native type discovery. Policy-authorized module globals may be
+                resolved while reading trusted native payloads. Dynamic application types
+                can be insecure if malicious code exists in
+                __new__/__init__/__eq__/__hash__ methods.
                 **WARNING**: Only disable in trusted environments. When disabling strict
                 mode, you should provide a custom `policy` parameter to control which types
                 are allowed. We are not responsible for security risks when this option
@@ -431,8 +427,7 @@ class Fory:
             the passed object (or a view of it) is unsupported. If your sink
             needs retention, copy bytes inside ``write``.
         """
-        if not self.type_resolver._registry_finalization_complete:
-            self.type_resolver._freeze_registry()
+        self.type_resolver._freeze_registry()
         try:
             self.buffer.set_writer_index(0)
             output_stream = Buffer.wrap_output_stream(stream)
@@ -488,8 +483,7 @@ class Fory:
             >>> print(type(data))
             <class 'bytes'>
         """
-        if not self.type_resolver._registry_finalization_complete:
-            self.type_resolver._freeze_registry()
+        self.type_resolver._freeze_registry()
         try:
             write_buffer = self._serialize(
                 obj,
@@ -567,8 +561,7 @@ class Fory:
             >>> print(obj)
             {'key': 'value'}
         """
-        if not self.type_resolver._registry_finalization_complete:
-            self.type_resolver._freeze_registry()
+        self.type_resolver._freeze_registry()
         try:
             return self._deserialize(buffer, buffers, unsupported_objects)
         finally:
@@ -633,44 +626,6 @@ class Fory:
         self.reset_read()
 
 
-class _Registration:
-    __slots__ = (
-        "cls",
-        "declared_type",
-        "name",
-        "operation",
-        "serializer",
-        "type_id",
-    )
-
-    def __init__(self, operation, cls, type_id, name, serializer):
-        self.operation = operation
-        self.cls = cls
-        self.declared_type = normalize_fory_type(cls)
-        self.type_id = int(type_id) if isinstance(type_id, int) and not isinstance(type_id, bool) else type_id
-        self.name = str(name) if isinstance(name, str) else name
-        self.serializer = serializer
-
-    def same_request(self, other):
-        return (
-            self.operation == other.operation
-            and self.declared_type == other.declared_type
-            and type(self.type_id) is type(other.type_id)
-            and self.type_id == other.type_id
-            and type(self.name) is type(other.name)
-            and self.name == other.name
-            and self.serializer is other.serializer
-        )
-
-    def apply(self, fory):
-        getattr(fory, self.operation)(
-            self.cls,
-            type_id=self.type_id,
-            name=self.name,
-            serializer=self.serializer,
-        )
-
-
 class ThreadSafeFory:
     """
     Thread-safe wrapper for Fory using instance pooling.
@@ -682,14 +637,9 @@ class ThreadSafeFory:
 
     All type registrations must be performed before the first root serialization or
     deserialization attempt to ensure consistency across all pooled instances. Registration
-    remains closed even when that first operation fails. Custom serializer registrations accept
-    a serializer class or factory so every pooled instance owns a serializer bound to its own
-    resolver and declared type. A serializer factory cannot reuse one serializer across children;
-    use ``fory_factory`` for configured serializer instances.
+    remains closed even when that first operation fails.
 
     Args:
-        fory_factory (Callable): Optional factory that creates and configures each pooled Fory.
-            When omitted, remaining keyword arguments are forwarded to Fory.
         xlang (bool): Whether to enable xlang mode. Defaults to True.
         ref (bool): Whether to enable reference tracking. Defaults to False.
         strict (bool): Whether to require type registration. Defaults to True.
@@ -730,16 +680,12 @@ class ThreadSafeFory:
     """
 
     def __init__(self, fory_factory=None, **kwargs):
+        import threading
+
         self._config = kwargs
         self._fory_factory = fory_factory
-        self._registrations = []
+        self._callbacks = []
         self._lock = threading.Lock()
-        self._registration_lock = threading.RLock()
-        self._registration_depth = 0
-        self._registration_fory = None
-        self._building_thread = None
-        # Number of accepted registrations already applied to the child being built.
-        self._replay_limit = 0
         self._pool = []
         if fory_factory is not None:
             self._fory_class = None
@@ -749,106 +695,30 @@ class ThreadSafeFory:
             self._fory_class = CythonFory
         else:
             self._fory_class = Fory
-        self._root_started = False
-
-    def _build_fory(self):
-        thread_id = threading.get_ident()
-        with self._registration_lock:
-            if self._building_thread == thread_id:
-                raise RuntimeError("Cannot start a root serialization or deserialization operation while a Fory instance is being built.")
-            self._building_thread = thread_id
-            self._replay_limit = 0
-            try:
-                if self._fory_factory is not None:
-                    fory = self._fory_factory()
-                else:
-                    fory = self._fory_class(**self._config)
-                for registration in self._registrations:
-                    registration.apply(fory)
-                    self._replay_limit += 1
-                return fory
-            finally:
-                self._replay_limit = 0
-                self._building_thread = None
+        self._registry_frozen = False
 
     def _get_fory(self):
-        # Check the active builder before the pool: factory callbacks must not evade root-reentry
-        # rejection by returning an instance to the facade that is still building it.
-        building_thread = self._building_thread
-        if building_thread is not None and building_thread == threading.get_ident():
-            with self._lock:
-                self._root_started = True
-            raise RuntimeError("Cannot start a root serialization or deserialization operation while a Fory instance is being built.")
         with self._lock:
+            self._registry_frozen = True
             if self._pool:
                 return self._pool.pop()
-            self._root_started = True
-            # Nested registrations share the staging instance, but a root may reuse it only
-            # after the outermost registration has published its descriptor.
-            if self._registration_depth == 0:
-                fory = self._registration_fory
+            if self._fory_factory is not None:
+                fory = self._fory_factory()
             else:
-                fory = None
-            self._registration_fory = None
-        if fory is not None:
-            # The validation instance already contains every published registration.
+                fory = self._fory_class(**self._config)
+            for callback in self._callbacks:
+                callback(fory)
             return fory
-        # Factories and registrations are application code. Keep them outside the
-        # non-reentrant pool lock so a callback can enter the same facade root.
-        return self._build_fory()
 
     def _return_fory(self, fory):
         with self._lock:
             self._pool.append(fory)
 
-    def _register_registration(self, registration):
-        # The reentrant lock gives nested facade registrations one publication order while the
-        # pool lock keeps a concurrently starting root atomic with registration publication.
-        with self._registration_lock:
-            if self._building_thread == threading.get_ident():
-                index = 0
-                while index < self._replay_limit:
-                    accepted = self._registrations[index]
-                    if accepted.same_request(registration):
-                        return
-                    index += 1
-                raise RuntimeError("A child may replay only a registration already accepted by this ThreadSafeFory.")
-            with self._lock:
-                self._check_registration_open()
-                self._registration_depth += 1
-                registration_fory = self._registration_fory
-            try:
-                if registration_fory is None:
-                    registration_fory = self._build_fory()
-                    with self._lock:
-                        self._check_registration_open()
-                        self._registration_fory = registration_fory
-                registration.apply(registration_fory)
-                with self._lock:
-                    self._check_registration_open()
-                    self._registrations.append(registration)
-                    self._registration_fory = registration_fory
-            except BaseException:
-                with self._lock:
-                    if self._registration_depth == 1:
-                        self._registration_fory = None
-                raise
-            finally:
-                with self._lock:
-                    self._registration_depth -= 1
-
-    def _check_registration_open(self):
-        if self._root_started:
-            raise RuntimeError("Cannot register types after the first root serialization or deserialization operation has started.")
-
-    @staticmethod
-    def _check_serializer_factory(serializer):
-        if serializer is None:
-            return
-        from pyfory.serializer import Serializer
-
-        if isinstance(serializer, Serializer):
-            raise TypeError("ThreadSafeFory requires a serializer class or factory; use fory_factory to install serializer instances per Fory")
+    def _register_callback(self, callback):
+        with self._lock:
+            if self._registry_frozen:
+                raise RuntimeError("Cannot register types after the first root serialization or deserialization operation has started.")
+            self._callbacks.append(callback)
 
     def register(
         self,
@@ -858,8 +728,7 @@ class ThreadSafeFory:
         name: str = None,
         serializer=None,
     ):
-        self._check_serializer_factory(serializer)
-        self._register_registration(_Registration("register", cls, type_id, name, serializer))
+        self._register_callback(lambda f: f.register(cls, type_id=type_id, name=name, serializer=serializer))
 
     def register_type(
         self,
@@ -869,8 +738,7 @@ class ThreadSafeFory:
         name: str = None,
         serializer=None,
     ):
-        self._check_serializer_factory(serializer)
-        self._register_registration(_Registration("register_type", cls, type_id, name, serializer))
+        self._register_callback(lambda f: f.register_type(cls, type_id=type_id, name=name, serializer=serializer))
 
     def register_union(
         self,
@@ -880,8 +748,10 @@ class ThreadSafeFory:
         name: str = None,
         serializer=None,
     ):
-        self._check_serializer_factory(serializer)
-        self._register_registration(_Registration("register_union", cls, type_id, name, serializer))
+        self._register_callback(lambda f: f.register_union(cls, type_id=type_id, name=name, serializer=serializer))
+
+    def register_serializer(self, cls: type, serializer):
+        self._register_callback(lambda f: f.register_serializer(cls, serializer))
 
     def serialize(
         self,

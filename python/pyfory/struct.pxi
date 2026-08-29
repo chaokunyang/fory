@@ -632,8 +632,8 @@ cdef class DataClassSerializer(Serializer):
 
 @cython.final
 cdef class DataClassStubSerializer(Serializer):
-    # Keep a delegate stub so recursive dataclass construction can refer to the
-    # canonical serializer without re-entering construction.
+    # Keep a lazy stub so recursive dataclass registration can install the real
+    # serializer on first use without re-entering construction.
     cpdef write(self, WriteContext write_context, value):
         self._replace().write(write_context, value)
 
@@ -641,10 +641,6 @@ cdef class DataClassStubSerializer(Serializer):
         return self._replace().read(read_context)
 
     cpdef object _replace(self):
-        cdef TypeInfo typeinfo = self.type_resolver.get_type_info(self.type_, create=False)
-        cdef object serializer = None if typeinfo is None else typeinfo.serializer
-        # Root-entry finalization must commit the canonical serializer before
-        # use; this stub must never repair registry state after the freeze.
-        if serializer is None or isinstance(serializer, DataClassStubSerializer):
-            raise RuntimeError(f"Serializer finalization incomplete for {self.type_}")
-        return serializer
+        cdef TypeInfo typeinfo = self.type_resolver.get_type_info(self.type_)
+        typeinfo.serializer = DataClassSerializer(self.type_resolver, self.type_)
+        return typeinfo.serializer

@@ -15,22 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from dataclasses import dataclass
-import types
-
 from pyfory import Fory
-
-
-def register_class_types(fory, *classes):
-    for cls in (
-        type,
-        types.FunctionType,
-        types.MethodType,
-        staticmethod,
-        classmethod,
-        *classes,
-    ):
-        fory.register_type(cls)
+from dataclasses import dataclass
 
 
 def test_local_class_serialization():
@@ -56,7 +42,6 @@ def test_local_class_serialization():
 
     # Test basic serialization of the class type itself
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-    register_class_types(fory, LocalClass)
 
     # Serialize the class type
     serialized = fory.serialize(LocalClass)
@@ -94,7 +79,6 @@ def test_local_class_with_closure():
     LocalClassWithClosure = create_local_class_with_closure(3)
 
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-    register_class_types(fory, LocalClassWithClosure)
 
     # Serialize the class type
     serialized = fory.serialize(LocalClassWithClosure)
@@ -132,7 +116,6 @@ def test_local_class_with_inheritance():
 
     LocalClass = create_local_class_with_inheritance()
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-    register_class_types(fory, LocalClass)
 
     # Serialize and deserialize the class
     serialized = fory.serialize(LocalClass)
@@ -148,7 +131,7 @@ def test_local_class_with_inheritance():
     assert instance2.base_method() == "base"
 
 
-def test_local_class_variables():
+def test_local_class_with_class_variables():
     """Test local class with class variables"""
 
     def create_class_with_vars():
@@ -174,7 +157,6 @@ def test_local_class_variables():
 
     LocalClass = create_class_with_vars()
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-    register_class_types(fory, LocalClass)
 
     # Create some instances to modify class state
     LocalClass(1)  # This increments the counter
@@ -220,7 +202,6 @@ def test_nested_global_classes():
             return self.InnerGlobalClass(inner_val)
 
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-    register_class_types(fory, OuterGlobalClass, OuterGlobalClass.InnerGlobalClass)
 
     # Test serializing the outer class
     serialized_outer = fory.serialize(OuterGlobalClass)
@@ -278,10 +259,10 @@ def test_complex_local_class_scenarios():
 
         return OuterLocalClass
 
+    fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+
     # Create complex local class with nested closures
     ComplexLocalClass = create_complex_local_scenario(5)
-    fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-    register_class_types(fory, ComplexLocalClass)
 
     # Serialize and deserialize
     serialized = fory.serialize(ComplexLocalClass)
@@ -302,10 +283,10 @@ def test_complex_local_class_scenarios():
     assert inner2.inner_method() == 17  # 12 + 5
 
 
-def test_local_multiple_inheritance():
+def test_local_class_with_multiple_inheritance():
     """Test local class with multiple inheritance"""
 
-    def create_local_multiple_inheritance():
+    def create_local_class_with_multiple_inheritance():
         class MixinA:
             def method_a(self):
                 return "A"
@@ -323,9 +304,9 @@ def test_local_multiple_inheritance():
 
         return LocalMultipleInheritanceClass
 
-    LocalClass = create_local_multiple_inheritance()
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-    register_class_types(fory, LocalClass)
+
+    LocalClass = create_local_class_with_multiple_inheritance()
 
     # Serialize and deserialize
     serialized = fory.serialize(LocalClass)
@@ -360,9 +341,29 @@ class Person:
 
 def test_dataclass_serialize():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-    register_class_types(fory, Person)
 
-    assert str(fory.loads(fory.dumps(Person))("Bob", 25)) == str(Person("Bob", 25))
-    assert fory.loads(fory.dumps(Person("Bob", 20).f))(10) == 200
-    assert fory.loads(fory.dumps(Person.g))(10) == 100
-    assert fory.loads(fory.dumps(Person.h))(10) == 100
+    # serialize global class
+    @dataclass
+    class LocalPerson:
+        name: str
+        age: int
+
+        def f(self, x):
+            return self.age * x
+
+        @classmethod
+        def g(cls, x):
+            return 10 * x
+
+        @staticmethod
+        def h(x):
+            return 10 * x
+
+    for cls in [LocalPerson, LocalPerson]:
+        assert str(fory.loads(fory.dumps(cls))("Bob", 25)) == str(cls("Bob", 25))
+        # serialize global class instance method
+        assert fory.loads(fory.dumps(cls("Bob", 20).f))(10) == 200
+        # serialize global class class method
+        assert fory.loads(fory.dumps(cls.g))(10) == 100
+        # serialize global class static method
+        assert fory.loads(fory.dumps(cls.h))(10) == 100

@@ -98,17 +98,12 @@ def test_lambda_functions_serialization():
     fory = pyfory.Fory(
         xlang=False,
         strict=False,
+        compatible=False,
     )
     test_input = 5
 
-    # Register the necessary types
-    fory.register_type(tuple)
-    fory.register_type(list)
-    # dict is already registered by default with MapSerializer
-
     # Simple lambda
     simple_lambda = lambda x: x * 2  # noqa: E731
-    fory.register_type(type(simple_lambda))
     serialized = fory.serialize(simple_lambda)
     deserialized = fory.deserialize(serialized)
     assert simple_lambda(test_input) == deserialized(test_input)
@@ -138,10 +133,6 @@ def test_regular_function_roundtrip():
         return a * b + c
 
     # Test regular function
-    fory.register_type(type(add_one))
-    # Registry contents are finalized by the first root operation.
-    fory.register_type(tuple)
-    fory.register_type(list)
     serialized = fory.serialize(add_one)
     deserialized = fory.deserialize(serialized)
     assert add_one(test_input) == deserialized(test_input)
@@ -162,11 +153,6 @@ def test_nested_functions_serialization():
         compatible=False,
     )
 
-    # Register the necessary types
-    fory.register_type(tuple)
-    fory.register_type(list)
-    # dict is already registered by default with MapSerializer
-
     def outer_function(x):
         def inner_function(y):
             return x + y
@@ -175,7 +161,6 @@ def test_nested_functions_serialization():
 
     # Create a nested function
     nested_func = outer_function(10)
-    fory.register_type(type(nested_func))
 
     serialized = fory.serialize(nested_func)
     deserialized = fory.deserialize(serialized)
@@ -191,11 +176,6 @@ def test_local_class_serialization():
         compatible=False,
     )
 
-    # Register the necessary types
-    fory.register_type(tuple)
-    fory.register_type(list)
-    # dict is already registered by default with MapSerializer
-
     def create_local_class():
         from dataclasses import dataclass
 
@@ -207,7 +187,6 @@ def test_local_class_serialization():
         return LocalClass(42, "test")
 
     local_obj = create_local_class()
-    fory.register_type(type(local_obj))
 
     serialized = fory.serialize(local_obj)
     deserialized = fory.deserialize(serialized)

@@ -663,7 +663,6 @@ def test_inheritance():
     print(type_hints)
     assert type_hints.keys() == {"f1", "f2", "f3"}
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-    fory.register_type(ChildClass1)
     obj = ChildClass1(f1="a", f2=-10, f3={"a": -10.0, "b": 1 / 3})
     assert ser_de(fory, obj) == obj
     assert type(fory.type_resolver.get_serializer(ChildClass1)) is pyfory.DataClassSerializer
@@ -815,7 +814,6 @@ def test_duration_and_decimal_fields_use_declared_serializers():
 )
 def test_bool_field_coercion(value, expected):
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-    fory.register_type(BoolCoercionObject)
     result = ser_de(fory, BoolCoercionObject(value))
     assert result.b is expected
 
@@ -823,7 +821,6 @@ def test_bool_field_coercion(value, expected):
 def test_bool_field_coercion_numpy_bool():
     np = pytest.importorskip("numpy")
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-    fory.register_type(BoolCoercionObject)
 
     result_true = ser_de(fory, BoolCoercionObject(np.bool_(True)))
     assert result_true.b is True
@@ -918,9 +915,8 @@ def test_data_class_serializer_xlang():
 
 
 @pytest.mark.parametrize("track_ref", [False, True])
-def test_dataclass_typed_tuple(track_ref):
+def test_dataclass_with_typed_tuple_field(track_ref):
     fory = Fory(xlang=False, ref=track_ref, strict=False, compatible=False)
-    fory.register_type(TupleFieldObject)
     obj = TupleFieldObject(bar=("a", 1))
     assert ser_de(fory, obj) == obj
 
@@ -1135,8 +1131,6 @@ def test_optional_fields(xlang, compatible):
     fory = Fory(xlang=xlang, ref=True, compatible=compatible, strict=False)
     if xlang:
         fory.register_type(OptionalFieldsObject, name="example.OptionalFieldsObject")
-    else:
-        fory.register_type(OptionalFieldsObject)
 
     obj_with_none = OptionalFieldsObject(f1=None, f2=None, f3=None, f4=42, f5="test")
     result = ser_de(fory, obj_with_none)
@@ -1177,9 +1171,6 @@ def test_nested_optional_fields(xlang, compatible):
     if xlang:
         fory.register_type(ComplexObject, name="example.ComplexObject")
         fory.register_type(NestedOptionalObject, name="example.NestedOptionalObject")
-    else:
-        fory.register_type(ComplexObject)
-        fory.register_type(NestedOptionalObject)
 
     obj_with_none = NestedOptionalObject(f1=None, f2=None, f3="test")
     result = ser_de(fory, obj_with_none)

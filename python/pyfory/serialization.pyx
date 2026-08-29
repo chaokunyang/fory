@@ -269,12 +269,6 @@ cdef class TypeResolver:
     cdef flat_hash_map[uint32_t, PyObject *] _c_user_type_id_to_type_info
     cdef flat_hash_map[uint64_t, PyObject *] _c_types_info
     cdef flat_hash_map[pair[int64_t, int64_t], PyObject *] _c_meta_hash_to_type_info
-    # The Python resolver owns registry mutability. Native completion is published only
-    # after that owner succeeds and every native table is synchronized. Failure is
-    # retained without its exception so a partial native cache is never retried or used.
-    cdef bint registry_finalization_complete
-    cdef bint registry_finalization_failed
-
     def __init__(self, Config config, *, shared_registry):
         """
         Build the Cython resolver and its hot caches.
@@ -305,8 +299,6 @@ cdef class TypeResolver:
         self._ns_type_to_type_info = resolver._ns_type_to_type_info
         self._local_type_info_by_hash = resolver._local_type_info_by_hash
         self._meta_shared_type_info = resolver._meta_shared_type_info
-        self.registry_finalization_complete = False
-        self.registry_finalization_failed = False
         for typeinfo in resolver._types_info.values():
             self._populate_type_info(typeinfo)
 
@@ -318,18 +310,7 @@ cdef class TypeResolver:
             self._populate_type_info(typeinfo)
 
     cdef inline void _freeze_registry(self):
-        cdef object typeinfo
-        if not self.registry_finalization_complete:
-            if self.registry_finalization_failed:
-                raise RuntimeError("Registry finalization did not complete")
-            self.resolver._freeze_registry()
-            try:
-                for typeinfo in self.resolver._types_info.values():
-                    self._populate_type_info(typeinfo)
-            except BaseException:
-                self.registry_finalization_failed = True
-                raise
-            self.registry_finalization_complete = True
+        self.resolver._freeze_registry()
 
     def register_type(
         self,
@@ -370,10 +351,7 @@ cdef class TypeResolver:
         cdef uint8_t previous_type_id
         cdef uint32_t previous_user_type_id
         self.resolver._check_registry_mutable()
-        typeinfo = self._types_info.get(normalize_fory_type(cls))
-        if typeinfo is None:
-            self.resolver.register_serializer(cls, serializer)
-            return
+        typeinfo = self.resolver.get_type_info(cls)
         previous_type_id = typeinfo.type_id
         previous_user_type_id = typeinfo.user_type_id
         self.resolver.register_serializer(cls, serializer)
@@ -590,7 +568,7 @@ cdef class TypeResolver:
         write_context.write_var_uint32(index << 1)
         type_def = typeinfo.type_def
         if type_def is None:
-            self.resolver._finalize_type_info(typeinfo)
+            self.resolver._set_type_info(typeinfo)
             type_def = typeinfo.type_def
         write_context.write_bytes(type_def.encoded)
 
@@ -733,7 +711,7 @@ cdef class TypeResolver:
                 raise TypeError("Type metadata owner does not match the declared type")
         if typeinfo is not None:
             if typeinfo.type_def is None:
-                self.resolver._finalize_type_info(typeinfo)
+                self.resolver._set_type_info(typeinfo)
             if typeinfo.type_def is not None:
                 local_header = Buffer(typeinfo.type_def.encoded).read_int64()
                 if _typedef_hash_key(local_header) == hash_key:

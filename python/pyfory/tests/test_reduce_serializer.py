@@ -516,7 +516,6 @@ def test_reduce_with_list_items():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = ReduceWithListItems([1, 2, 3, 4])
-    fory.register_type(type(iter([])))
 
     # Verify ReduceSerializer is used
     serializer = fory.type_resolver.get_serializer(ReduceWithListItems)
@@ -536,7 +535,6 @@ def test_reduce_with_dict_items():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = ReduceWithDictItems({"a": 1, "b": 2})
-    fory.register_type(type(iter({}.items())))
 
     # Verify ReduceSerializer is used
     serializer = fory.type_resolver.get_serializer(ReduceWithDictItems)

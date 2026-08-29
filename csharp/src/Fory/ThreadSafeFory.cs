@@ -35,7 +35,7 @@ public sealed class ThreadSafeFory : IDisposable
     internal ThreadSafeFory(Config config)
     {
         _config = config;
-        _threadLocalFory = new ThreadLocal<Fory>(CreatePerThreadFory, trackAllValues: true);
+        _threadLocalFory = new ThreadLocal<Fory>(CreatePerThreadFory);
     }
 
     /// <summary>
@@ -232,10 +232,6 @@ public sealed class ThreadSafeFory : IDisposable
             }
 
             _registrations.Add(registration);
-            foreach (Fory fory in _threadLocalFory.Values)
-            {
-                registration(fory);
-            }
         }
     }
 

@@ -22,9 +22,10 @@ Load this file when changing `cpp/`, Cython build plumbing, or C++ xlang behavio
   explicit registration before codec work. Route facade and resolver registration through one
   authoritative frozen flag for that registry. Do not add another lifecycle flag or a multi-state
   machine around the existing read/write-context resolver construction.
-- Freezing clones the registered resolver tables but must not eagerly complete every registered
-  `TypeInfo`. Complete metadata only when a read/write context clone first uses that type for
-  metadata, struct-version, or skip behavior; keep ordinary type lookup free of completion work.
+- A root freezes explicit registration before the existing read/write-context construction clones
+  the registered resolver tables. Context construction must not eagerly complete every registered
+  `TypeInfo`; complete metadata only when a context first uses that type for metadata,
+  struct-version, or skip behavior. Keep ordinary type lookup free of completion work.
 - Keep the registration check out of normal runtime lookup hot paths.
 - Put private methods last in class definitions, immediately before private fields.
 - Do not redesign alias-based or low-level public type shapes to add convenience methods unless the user explicitly asks for that API change.

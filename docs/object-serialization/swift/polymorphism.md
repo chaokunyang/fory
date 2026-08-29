@@ -169,11 +169,6 @@ var animal: AnimalBase
 
 Register every concrete subclass that may appear.
 
-`@ForyStruct` cannot be applied to a class with any superclass because Swift
-macros cannot inspect inherited storage. Protocol conformances remain supported.
-Use a custom serializer for each concrete subclass, then select it through the
-dynamic field serializer.
-
 ## Dynamic `Any` Fields
 
 ```swift

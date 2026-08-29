@@ -1277,16 +1277,9 @@ final class TypeResolver {
                 throw ForyError.invalidData(
                     "structural serializer \(type) must use STRUCT, ENUM, or UNION type identity")
             }
-            if let targetClass = T.Target.self as? AnyClass {
-                if !T.isRefType {
-                    throw ForyError.invalidData(
-                        "value structural serializer \(type) cannot target class type \(T.Target.self)")
-                }
-                if _getSuperclass(targetClass) != nil {
-                    throw ForyError.invalidData(
-                        "@ForyStruct classes cannot inherit from a superclass because macros cannot inspect inherited storage"
-                    )
-                }
+            if !T.isRefType, T.Target.self is AnyObject.Type {
+                throw ForyError.invalidData(
+                    "value structural serializer \(type) cannot target class type \(T.Target.self)")
             }
             return
         }

@@ -223,8 +223,27 @@ def _construct_serializer(serializer_factory, type_resolver, cls):
         (0, ()),
     ):
         if _accepts_n_positional_args(serializer_factory, nargs):
-            return serializer_factory(*args)
-    raise TypeError(f"Unsupported serializer constructor for {serializer_factory!r}; expected `(type_resolver, cls)`, `(type_resolver)`, or `()`.")
+            serializer = serializer_factory(*args)
+            break
+    else:
+        raise TypeError(
+            f"Unsupported serializer constructor for {serializer_factory!r}; "
+            "expected `(type_resolver, cls)`, `(type_resolver)`, or `()`."
+        )
+    if not isinstance(serializer, (Serializer, CythonSerializer)):
+        raise TypeError("Serializer factory must return a Fory serializer")
+    if serializer.type_resolver is not type_resolver:
+        raise TypeError("Serializer factory returned a serializer for another resolver")
+    return serializer
+
+
+def _check_serializer_owner(serializer, type_resolver, cls):
+    if not isinstance(serializer, (Serializer, CythonSerializer)):
+        raise TypeError("Expected a Fory serializer")
+    if serializer.type_resolver is not type_resolver:
+        raise TypeError("Serializer belongs to another resolver")
+    if normalize_fory_type(serializer.type_) != normalize_fory_type(cls):
+        raise TypeError("Serializer belongs to another type")
 
 
 def _split_registration_name(name: str):
@@ -609,13 +628,14 @@ class TypeResolver:
         namespace, typename = _split_registration_name(name)
         if serializer is None:
             raise TypeError("register_union requires a serializer")
-        if serializer is not None and not isinstance(serializer, Serializer):
+        if serializer is not None and not isinstance(serializer, (Serializer, CythonSerializer)):
             serializer = _construct_serializer(
                 serializer,
                 self._actual_type_resolver,
                 cls,
             )
             self._check_registry_mutable()
+        _check_serializer_owner(serializer, self._actual_type_resolver, cls)
         if typename is not None and type_id is not None:
             raise TypeError(f"type name {typename} and id {type_id} should not be set at the same time")
         auto_type_id = typename is None and type_id is None
@@ -663,7 +683,7 @@ class TypeResolver:
         else:
             if user_type_id not in {None, NO_USER_TYPE_ID} and (user_type_id < 0 or user_type_id > 0xFFFFFFFE):
                 raise ValueError(f"user_type_id must be in range [0, 0xfffffffe], got {user_type_id}")
-        if serializer is not None and not isinstance(serializer, Serializer):
+        if serializer is not None and not isinstance(serializer, (Serializer, CythonSerializer)):
             serializer = _construct_serializer(
                 serializer,
                 self._actual_type_resolver,
@@ -671,6 +691,8 @@ class TypeResolver:
             )
             if not internal:
                 self._check_registry_mutable()
+        if serializer is not None and not internal:
+            _check_serializer_owner(serializer, self._actual_type_resolver, cls)
         if (
             cls in self._types_info
             and type_id is None
@@ -680,12 +702,6 @@ class TypeResolver:
             and user_type_id in {None, NO_USER_TYPE_ID}
         ):
             return self._types_info[cls]
-        if not internal and not self.xlang and not self.strict and type_id is None and typename is None and namespace is None and serializer is None:
-            # Native carriers keep their reserved discovery identity when users
-            # configure them explicitly; application classes retain struct registration.
-            typeinfo = self._register_inferred_type(cls, native_only=True)
-            if typeinfo is not None:
-                return typeinfo
         n_params = len({typename, type_id, None}) - 1
         auto_type_id = n_params == 0 and typename is None
         if auto_type_id:
@@ -851,6 +867,7 @@ class TypeResolver:
         self._check_registry_mutable()
         cls = normalize_fory_type(cls)
         assert isinstance(cls, type) or type(cls) is int, cls
+        _check_serializer_owner(serializer, self._actual_type_resolver, cls)
         if cls not in self._types_info:
             raise TypeUnregisteredError(f"{cls} not registered")
         typeinfo = self._types_info[cls]
@@ -899,15 +916,11 @@ class TypeResolver:
         logger.info("Type %s not registered", cls)
         return self._register_inferred_type(cls)
 
-    def _register_inferred_type(self, cls, native_only=False):
+    def _register_inferred_type(self, cls):
         serializer = self._create_serializer(cls)
-        if native_only:
-            self._check_registry_mutable()
         native_registration = self._internal_py_serializer_map.get(type(serializer))
         if native_registration is not None:
             type_id = native_registration[1]
-        elif native_only:
-            return None
         elif not self.xlang and isinstance(serializer, EnumSerializer):
             type_id = TypeId.NAMED_ENUM
         elif not self.xlang and isinstance(serializer, (ObjectSerializer, StatefulSerializer)):

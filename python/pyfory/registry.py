@@ -618,15 +618,19 @@ class TypeResolver:
             self._check_registry_mutable()
         if typename is not None and type_id is not None:
             raise TypeError(f"type name {typename} and id {type_id} should not be set at the same time")
+        auto_type_id = typename is None and type_id is None
         if typename is None and type_id is None:
-            type_id = self._next_type_id()
+            type_id = self._type_id_counter + 1
+            while type_id in self._used_user_type_ids:
+                type_id += 1
+        assigned_type_id = type_id
         if type_id not in {0, None}:
             user_type_id = type_id
             type_id = TypeId.TYPED_UNION
         else:
             user_type_id = NO_USER_TYPE_ID
             type_id = TypeId.NAMED_UNION
-        return self.__register_type(
+        typeinfo = self.__register_type(
             cls,
             type_id=type_id,
             user_type_id=user_type_id,
@@ -635,6 +639,9 @@ class TypeResolver:
             serializer=serializer,
             internal=False,
         )
+        if auto_type_id:
+            self._type_id_counter = assigned_type_id
+        return typeinfo
 
     def _register_type(
         self,
@@ -680,13 +687,16 @@ class TypeResolver:
             if typeinfo is not None:
                 return typeinfo
         n_params = len({typename, type_id, None}) - 1
-        if n_params == 0 and typename is None:
-            type_id = self._next_type_id()
+        auto_type_id = n_params == 0 and typename is None
+        if auto_type_id:
+            type_id = self._type_id_counter + 1
+            while type_id in self._used_user_type_ids:
+                type_id += 1
         if n_params == 2:
             raise TypeError(f"type name {typename} and id {type_id} should not be set at the same time")
         if cls in self._types_info:
             raise TypeError(f"{cls} registered already")
-        return self._register_xtype(
+        typeinfo = self._register_xtype(
             cls,
             type_id=type_id,
             user_type_id=user_type_id,
@@ -695,6 +705,9 @@ class TypeResolver:
             serializer=serializer,
             internal=internal,
         )
+        if auto_type_id:
+            self._type_id_counter = type_id
+        return typeinfo
 
     def _register_xtype(
         self,

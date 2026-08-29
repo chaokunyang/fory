@@ -382,7 +382,7 @@ from pyfory.utils import is_little_endian
 
 class NoneSerializer(Serializer):
     def __init__(self, type_resolver):
-        super().__init__(type_resolver, type(None))
+        super().__init__(type_resolver, None)
         self.need_to_write_ref = False
 
     def write(self, buffer, value):
@@ -525,6 +525,8 @@ class DecimalSerializer(Serializer):
 
 
 class PandasRangeIndexSerializer(Serializer):
+    __slots__ = "_cached"
+
     def __init__(self, type_resolver):
         import pandas as pd
 
@@ -561,9 +563,7 @@ class PandasRangeIndexSerializer(Serializer):
             else:
                 write_context.write_int8(NOT_NULL_VALUE_FLAG)
                 write_context.write_no_ref(step)
-        # Concrete dtype classes differ across NumPy versions. Keep this wire slot owned by
-        # RangeIndex and encode NumPy's stable descriptor instead of a version-specific object ref.
-        write_context.write_string(value.dtype.str)
+        write_context.write_ref(value.dtype)
         write_context.write_ref(value.name)
 
     def read(self, read_context):
@@ -579,7 +579,7 @@ class PandasRangeIndexSerializer(Serializer):
             step = None
         else:
             step = read_context.read_no_ref()
-        dtype = np.dtype(read_context.read_string())
+        dtype = read_context.read_ref()
         name = read_context.read_ref()
         return self.type_(start, stop, step, dtype=dtype, name=name)
 

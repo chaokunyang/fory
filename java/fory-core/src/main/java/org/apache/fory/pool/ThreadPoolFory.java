@@ -181,7 +181,9 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
     }
     PooledEntry entry = acquireEntry();
     try {
-      entry.fory.getTypeResolver().freezeRegistration();
+      if (!entry.fory.getTypeResolver().isRegistrationFrozen()) {
+        entry.fory.getTypeResolver().freezeRegistration();
+      }
       return action.apply(entry.fory);
     } finally {
       release(entry);

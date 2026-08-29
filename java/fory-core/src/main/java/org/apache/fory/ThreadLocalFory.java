@@ -119,7 +119,9 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
         }
       }
     }
-    fory.getTypeResolver().freezeRegistration();
+    if (!fory.getTypeResolver().isRegistrationFrozen()) {
+      fory.getTypeResolver().freezeRegistration();
+    }
     return action.apply(fory);
   }
 

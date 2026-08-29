@@ -664,9 +664,6 @@ public:
   /// @return Deserialized object, or error.
   template <typename T>
   Result<T, Error> deserialize(const uint8_t *data, size_t size) {
-    if (FORY_PREDICT_FALSE(!finalized_)) {
-      ensure_finalized();
-    }
     return deserialize_bytes<T>(data, size);
   }
 
@@ -677,9 +674,6 @@ public:
   /// @return Deserialized object, or error.
   template <typename T>
   Result<T, Error> deserialize(const std::vector<uint8_t> &data) {
-    if (FORY_PREDICT_FALSE(!finalized_)) {
-      ensure_finalized();
-    }
     return deserialize_bytes<T>(data.data(), data.size());
   }
 
@@ -848,6 +842,9 @@ private:
 
   template <typename T>
   Result<T, Error> deserialize_bytes(const uint8_t *data, size_t size) {
+    if (FORY_PREDICT_FALSE(!finalized_)) {
+      ensure_finalized();
+    }
     if (data == nullptr) {
       return Unexpected(Error::invalid("Data pointer is null"));
     }

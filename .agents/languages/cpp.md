@@ -18,9 +18,11 @@ Load this file when changing `cpp/`, Cython build plumbing, or C++ xlang behavio
   resource amplification, publish reference or cache state that survives root cleanup, or return
   success past the required safepoint. Do not add per-field checks, cursor rollback, or tests that
   pin the first detection point solely to make an error earlier or more precise.
-- Every public `Fory` and `ThreadSafeFory` root overload freezes facade registration as its first
-  action, before constructing stream wrappers, accessing stream buffers, validating arguments, or
-  acquiring pooled instances. `BaseFory` and the source `TypeResolver` keep separate owner-local
+- Every public `Fory` and `ThreadSafeFory` root overload must enter a root owner whose first action
+  freezes facade registration, before constructing stream wrappers, accessing stream buffers,
+  validating arguments, or acquiring pooled instances. Overloads for the same byte input shape
+  share that one owner instead of duplicating the hot-path gate. `BaseFory` and the source
+  `TypeResolver` keep separate owner-local
   freeze gates so direct resolver registration cannot bypass the facade gate. Both reject before
   mutation; do not collapse these gates or describe permanent registry freeze as finalization.
 - Keep `TypeResolver::check_registration()` as the single out-of-line owner of the frozen and

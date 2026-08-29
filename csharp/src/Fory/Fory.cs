@@ -73,13 +73,7 @@ public sealed class Fory
     public Fory Register<T>(uint typeId)
     {
         EnsureRegistrationOpen();
-        if (_typeResolver.CheckRegistration(typeof(T), typeId))
-        {
-            return this;
-        }
-
-        TypeInfo typeInfo = PrepareRegistration(typeof(T));
-        _typeResolver.Register(typeof(T), typeId, typeInfo);
+        _typeResolver.Register(typeof(T), typeId);
         return this;
     }
 
@@ -95,13 +89,7 @@ public sealed class Fory
     {
         EnsureRegistrationOpen();
         (string namespaceName, string typeName) = TypeResolver.SplitTypeName(name);
-        if (_typeResolver.CheckRegistration(typeof(T), namespaceName, typeName))
-        {
-            return this;
-        }
-
-        TypeInfo typeInfo = PrepareRegistration(typeof(T));
-        _typeResolver.Register(typeof(T), namespaceName, typeName, typeInfo);
+        _typeResolver.Register(typeof(T), namespaceName, typeName);
         return this;
     }
 
@@ -117,14 +105,7 @@ public sealed class Fory
     public Fory Register<T>(string typeNamespace, string typeName)
     {
         EnsureRegistrationOpen();
-        TypeResolver.ValidateSplitTypeName(typeNamespace, typeName);
-        if (_typeResolver.CheckRegistration(typeof(T), typeNamespace, typeName))
-        {
-            return this;
-        }
-
-        TypeInfo typeInfo = PrepareRegistration(typeof(T));
-        _typeResolver.Register(typeof(T), typeNamespace, typeName, typeInfo);
+        _typeResolver.Register(typeof(T), typeNamespace, typeName);
         return this;
     }
 
@@ -141,12 +122,7 @@ public sealed class Fory
         where TSerializer : Serializer<T>, new()
     {
         EnsureRegistrationOpen();
-        if (_typeResolver.CheckRegistration(typeof(T), typeId, typeof(TSerializer)))
-        {
-            return this;
-        }
-
-        TypeInfo typeInfo = PrepareRegistration<T, TSerializer>();
+        TypeInfo typeInfo = _typeResolver.RegisterSerializer<T, TSerializer>();
         _typeResolver.Register(typeof(T), typeId, typeInfo);
         return this;
     }
@@ -165,16 +141,7 @@ public sealed class Fory
     {
         EnsureRegistrationOpen();
         (string namespaceName, string typeName) = TypeResolver.SplitTypeName(name);
-        if (_typeResolver.CheckRegistration(
-                typeof(T),
-                namespaceName,
-                typeName,
-                typeof(TSerializer)))
-        {
-            return this;
-        }
-
-        TypeInfo typeInfo = PrepareRegistration<T, TSerializer>();
+        TypeInfo typeInfo = _typeResolver.RegisterSerializer<T, TSerializer>();
         _typeResolver.Register(typeof(T), namespaceName, typeName, typeInfo);
         return this;
     }
@@ -194,16 +161,7 @@ public sealed class Fory
     {
         EnsureRegistrationOpen();
         TypeResolver.ValidateSplitTypeName(typeNamespace, typeName);
-        if (_typeResolver.CheckRegistration(
-                typeof(T),
-                typeNamespace,
-                typeName,
-                typeof(TSerializer)))
-        {
-            return this;
-        }
-
-        TypeInfo typeInfo = PrepareRegistration<T, TSerializer>();
+        TypeInfo typeInfo = _typeResolver.RegisterSerializer<T, TSerializer>();
         _typeResolver.Register(typeof(T), typeNamespace, typeName, typeInfo);
         return this;
     }
@@ -216,7 +174,7 @@ public sealed class Fory
     /// <returns>Serialized bytes.</returns>
     public byte[] Serialize<T>(in T value)
     {
-        FreezeRegistry();
+        _registryFrozen = true;
         ByteWriter writer = _writeContext.Writer;
         writer.Reset();
         // A previous failed root may leave references behind. Reset before serializer lookup,
@@ -252,10 +210,9 @@ public sealed class Fory
     /// <exception cref="InvalidDataException">Thrown when trailing bytes remain after decoding.</exception>
     public T Deserialize<T>(ReadOnlySpan<byte> payload)
     {
-        FreezeRegistry();
         ByteReader reader = _readContext.Reader;
         reader.Reset(payload);
-        T value = DeserializeFromReaderCore<T>(reader);
+        T value = DeserializeFromReader<T>(reader);
         if (reader.Remaining != 0)
         {
             _readContext.ResetAfterFailure();
@@ -274,10 +231,9 @@ public sealed class Fory
     /// <exception cref="InvalidDataException">Thrown when trailing bytes remain after decoding.</exception>
     public T Deserialize<T>(byte[] payload)
     {
-        FreezeRegistry();
         ByteReader reader = _readContext.Reader;
         reader.Reset(payload);
-        T value = DeserializeFromReaderCore<T>(reader);
+        T value = DeserializeFromReader<T>(reader);
         if (reader.Remaining != 0)
         {
             _readContext.ResetAfterFailure();
@@ -326,13 +282,7 @@ public sealed class Fory
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal T DeserializeFromReader<T>(ByteReader reader)
     {
-        FreezeRegistry();
-        return DeserializeFromReaderCore<T>(reader);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private T DeserializeFromReaderCore<T>(ByteReader reader)
-    {
+        _registryFrozen = true;
         ReadContext readContext = _readContext;
         readContext.ResetFor(reader);
         readContext._remainingGraphMemoryBytes = Config.MaxGraphMemoryBytes;
@@ -364,48 +314,12 @@ public sealed class Fory
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void FreezeRegistry()
-    {
-        // Generated descriptors and serializers become operation-visible at the first root, so
-        // failed roots freeze registration just as successful roots do.
-        if (!_registryFrozen)
-        {
-            FreezeRegistrySlow();
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private void FreezeRegistrySlow()
-    {
-        _registryFrozen = true;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void EnsureRegistrationOpen()
     {
         if (_registryFrozen)
         {
             ThrowRegistryFrozen();
         }
-    }
-
-    private TypeInfo PrepareRegistration(Type type)
-    {
-        TypeInfo typeInfo = _typeResolver.PrepareRegistration(type);
-        // Serializer factories can call application code that starts a root. Recheck before
-        // the resolver publishes any type or serializer state.
-        EnsureRegistrationOpen();
-        return typeInfo;
-    }
-
-    private TypeInfo PrepareRegistration<T, TSerializer>()
-        where TSerializer : Serializer<T>, new()
-    {
-        TypeInfo typeInfo = _typeResolver.PrepareRegistration<T, TSerializer>();
-        // Serializer construction can call application code that starts a root. Recheck before
-        // the resolver publishes any type or serializer state.
-        EnsureRegistrationOpen();
-        return typeInfo;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

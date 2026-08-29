@@ -204,7 +204,7 @@ public sealed class TypeResolver
 
     public TypeInfo GetTypeInfo(Type type)
     {
-        return GetOrCreateTypeInfo(type);
+        return GetOrCreateTypeInfo(type, null);
     }
 
     public TypeInfo GetTypeInfo<T>()
@@ -453,15 +453,23 @@ public sealed class TypeResolver
         return typeInfo.TypeMetaFields(trackRef);
     }
 
-    private TypeInfo GetOrCreateTypeInfo(Type type)
+    private TypeInfo GetOrCreateTypeInfo(Type type, TypeInfo? explicitTypeInfo)
     {
         ulong typeKey = TypeMapKey.Get(type);
         if (_typeInfos.TryGetValue(typeKey, out TypeInfo? existing))
         {
-            return existing;
+            if (explicitTypeInfo is null || ReferenceEquals(existing, explicitTypeInfo))
+            {
+                return existing;
+            }
+
+            if (existing.IsRegistered)
+            {
+                throw new InvalidDataException($"cannot override serializer for registered type {type}");
+            }
         }
 
-        TypeInfo typeInfo = CreateBindingCore(type);
+        TypeInfo typeInfo = explicitTypeInfo ?? CreateBindingCore(type);
         if (typeInfo.Type != type)
         {
             throw new InvalidDataException($"serializer type mismatch for {type}, got {typeInfo.Type}");
@@ -477,74 +485,22 @@ public sealed class TypeResolver
         return typeInfo;
     }
 
-    internal TypeInfo PrepareRegistration(Type type)
+    internal TypeInfo RegisterSerializer<T, TSerializer>()
+        where TSerializer : Serializer<T>, new()
     {
-        if (_typeInfos.TryGetValue(TypeMapKey.Get(type), out TypeInfo? existing))
-        {
-            return existing;
-        }
-
-        // Registration factories can run application code. Return the binding without publishing
-        // it so the facade can recheck its lifecycle boundary first.
-        TypeInfo typeInfo = CreateBindingCore(type);
-        if (typeInfo.Type != type)
-        {
-            throw new InvalidDataException($"serializer type mismatch for {type}, got {typeInfo.Type}");
-        }
-
+        TypeInfo typeInfo = TypeInfo.Create(typeof(T), new TSerializer());
+        RegisterSerializer(typeof(T), typeInfo);
         return typeInfo;
     }
 
-    internal TypeInfo PrepareRegistration<T, TSerializer>()
-        where TSerializer : Serializer<T>, new()
+    internal void RegisterSerializer(Type type, TypeInfo typeInfo)
     {
-        return TypeInfo.Create(typeof(T), new TSerializer());
+        GetOrCreateTypeInfo(type, typeInfo);
     }
 
-    internal bool CheckRegistration(Type type, uint id, Type? serializerType = null)
+    internal void Register(Type type, uint id, TypeInfo? explicitTypeInfo = null)
     {
-        if (_byUserTypeId.TryGetValue(id, out TypeInfo? wireOwner) && wireOwner.Type != type)
-        {
-            throw new InvalidDataException($"type ID {id} is already registered for {wireOwner.Type}");
-        }
-
-        if (!_typeInfos.TryGetValue(TypeMapKey.Get(type), out TypeInfo? typeInfo) || !typeInfo.IsRegistered)
-        {
-            return false;
-        }
-
-        if (!typeInfo.RegisterByName && typeInfo.UserTypeId == id)
-        {
-            if (serializerType is not null && typeInfo.SerializerType != serializerType)
-            {
-                throw new InvalidDataException(
-                    $"type {type} is already registered with serializer {typeInfo.SerializerType}");
-            }
-
-            return true;
-        }
-
-        throw new InvalidDataException($"type {type} is already registered with a different wire identity");
-    }
-
-    internal void Register(Type type, uint id)
-    {
-        if (CheckRegistration(type, id))
-        {
-            return;
-        }
-
-        Register(type, id, PrepareRegistration(type));
-    }
-
-    internal void Register(Type type, uint id, TypeInfo typeInfo)
-    {
-        if (CheckRegistration(type, id, typeInfo.SerializerType))
-        {
-            return;
-        }
-
-        typeInfo = PrepareRegistration(type, typeInfo).WithTypeIdRegistration(id);
+        TypeInfo typeInfo = GetOrCreateTypeInfo(type, explicitTypeInfo).WithTypeIdRegistration(id);
         _typeInfos.Set(TypeMapKey.Get(type), typeInfo);
         _byUserTypeId[id] = typeInfo;
         InvalidateFinalizedVersion();
@@ -584,84 +540,16 @@ public sealed class TypeResolver
         }
     }
 
-    internal bool CheckRegistration(
-        Type type,
-        string namespaceName,
-        string typeName,
-        Type? serializerType = null)
-    {
-        if (_byTypeName.TryGetValue((namespaceName, typeName), out TypeInfo? wireOwner) && wireOwner.Type != type)
-        {
-            throw new InvalidDataException(
-                $"type name {namespaceName}.{typeName} is already registered for {wireOwner.Type}");
-        }
-
-        if (!_typeInfos.TryGetValue(TypeMapKey.Get(type), out TypeInfo? typeInfo) || !typeInfo.IsRegistered)
-        {
-            return false;
-        }
-
-        if (typeInfo.RegisterByName &&
-            typeInfo.NamespaceName?.Value == namespaceName &&
-            typeInfo.TypeName?.Value == typeName)
-        {
-            if (serializerType is not null && typeInfo.SerializerType != serializerType)
-            {
-                throw new InvalidDataException(
-                    $"type {type} is already registered with serializer {typeInfo.SerializerType}");
-            }
-
-            return true;
-        }
-
-        throw new InvalidDataException($"type {type} is already registered with a different wire identity");
-    }
-
-    internal void Register(Type type, string namespaceName, string typeName)
+    internal void Register(Type type, string namespaceName, string typeName, TypeInfo? explicitTypeInfo = null)
     {
         ValidateSplitTypeName(namespaceName, typeName);
-        if (CheckRegistration(type, namespaceName, typeName))
-        {
-            return;
-        }
-
-        Register(type, namespaceName, typeName, PrepareRegistration(type));
-    }
-
-    internal void Register(Type type, string namespaceName, string typeName, TypeInfo typeInfo)
-    {
-        ValidateSplitTypeName(namespaceName, typeName);
-        if (CheckRegistration(type, namespaceName, typeName, typeInfo.SerializerType))
-        {
-            return;
-        }
-
+        TypeInfo typeInfo = GetOrCreateTypeInfo(type, explicitTypeInfo);
         MetaString namespaceMeta = MetaStringEncoder.Namespace.Encode(namespaceName, TypeMetaEncodings.NamespaceMetaStringEncodings);
         MetaString typeNameMeta = MetaStringEncoder.TypeName.Encode(typeName, TypeMetaEncodings.TypeNameMetaStringEncodings);
-        typeInfo = PrepareRegistration(type, typeInfo).WithTypeNameRegistration(namespaceMeta, typeNameMeta);
+        typeInfo = typeInfo.WithTypeNameRegistration(namespaceMeta, typeNameMeta);
         _typeInfos.Set(TypeMapKey.Get(type), typeInfo);
         _byTypeName[(namespaceName, typeName)] = typeInfo;
         InvalidateFinalizedVersion();
-    }
-
-    private TypeInfo PrepareRegistration(Type type, TypeInfo typeInfo)
-    {
-        if (typeInfo.Type != type)
-        {
-            throw new InvalidDataException($"serializer type mismatch for {type}, got {typeInfo.Type}");
-        }
-
-        if (!_typeInfos.TryGetValue(TypeMapKey.Get(type), out TypeInfo? existing) || ReferenceEquals(existing, typeInfo))
-        {
-            return typeInfo;
-        }
-
-        if (existing.IsRegistered)
-        {
-            throw new InvalidDataException($"cannot override serializer for registered type {type}");
-        }
-
-        return typeInfo.WithRegistrationFrom(existing);
     }
 
     /// <summary>

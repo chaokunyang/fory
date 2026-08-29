@@ -29,14 +29,13 @@ public sealed class ThreadSafeFory : IDisposable
     private readonly object _registrationLock = new();
     private readonly List<Action<Fory>> _registrations = [];
     private readonly ThreadLocal<Fory> _threadLocalFory;
-    private Fory? _registrationFory;
     private int _registryFrozen;
     private bool _disposed;
 
     internal ThreadSafeFory(Config config)
     {
         _config = config;
-        _threadLocalFory = new ThreadLocal<Fory>(CreatePerThreadFory);
+        _threadLocalFory = new ThreadLocal<Fory>(CreatePerThreadFory, trackAllValues: true);
     }
 
     /// <summary>
@@ -45,7 +44,7 @@ public sealed class ThreadSafeFory : IDisposable
     public Config Config => _config;
 
     /// <summary>
-    /// Registers a user type by numeric type identifier.
+    /// Registers a user type by numeric type identifier for all current and future thread-local runtimes.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <param name="typeId">Numeric type identifier used on the wire.</param>
@@ -59,7 +58,7 @@ public sealed class ThreadSafeFory : IDisposable
     }
 
     /// <summary>
-    /// Registers a user type by name.
+    /// Registers a user type by name for all current and future thread-local runtimes.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <param name="name">Name used on the wire. A dotted name is split at the last dot.</param>
@@ -68,12 +67,13 @@ public sealed class ThreadSafeFory : IDisposable
     /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public ThreadSafeFory Register<T>(string name)
     {
+        _ = TypeResolver.SplitTypeName(name);
         ApplyRegistration(fory => fory.Register<T>(name));
         return this;
     }
 
     /// <summary>
-    /// Registers a user type by namespace and name.
+    /// Registers a user type by namespace and name for all current and future thread-local runtimes.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <param name="typeNamespace">Namespace used on the wire.</param>
@@ -83,12 +83,13 @@ public sealed class ThreadSafeFory : IDisposable
     /// <exception cref="InvalidOperationException">Registration has closed because a root operation was attempted.</exception>
     public ThreadSafeFory Register<T>(string typeNamespace, string typeName)
     {
+        TypeResolver.ValidateSplitTypeName(typeNamespace, typeName);
         ApplyRegistration(fory => fory.Register<T>(typeNamespace, typeName));
         return this;
     }
 
     /// <summary>
-    /// Registers a user type by numeric type identifier with a custom serializer.
+    /// Registers a user type by numeric type identifier with a custom serializer for all thread-local runtimes.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>
@@ -104,7 +105,7 @@ public sealed class ThreadSafeFory : IDisposable
     }
 
     /// <summary>
-    /// Registers a user type by name with a custom serializer.
+    /// Registers a user type by name with a custom serializer for all thread-local runtimes.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>
@@ -115,12 +116,13 @@ public sealed class ThreadSafeFory : IDisposable
     public ThreadSafeFory Register<T, TSerializer>(string name)
         where TSerializer : Serializer<T>, new()
     {
+        _ = TypeResolver.SplitTypeName(name);
         ApplyRegistration(fory => fory.Register<T, TSerializer>(name));
         return this;
     }
 
     /// <summary>
-    /// Registers a user type by namespace and name with a custom serializer.
+    /// Registers a user type by namespace and name with a custom serializer for all thread-local runtimes.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>
@@ -132,6 +134,7 @@ public sealed class ThreadSafeFory : IDisposable
     public ThreadSafeFory Register<T, TSerializer>(string typeNamespace, string typeName)
         where TSerializer : Serializer<T>, new()
     {
+        TypeResolver.ValidateSplitTypeName(typeNamespace, typeName);
         ApplyRegistration(fory => fory.Register<T, TSerializer>(typeNamespace, typeName));
         return this;
     }
@@ -186,7 +189,6 @@ public sealed class ThreadSafeFory : IDisposable
 
             _threadLocalFory.Dispose();
             _registrations.Clear();
-            _registrationFory = null;
             _disposed = true;
         }
     }
@@ -229,15 +231,11 @@ public sealed class ThreadSafeFory : IDisposable
                 ThrowRegistryFrozen();
             }
 
-            registration(_registrationFory ??= new Fory(_config));
-
-            ThrowIfDisposed();
-            if (_registryFrozen != 0)
-            {
-                ThrowRegistryFrozen();
-            }
-
             _registrations.Add(registration);
+            foreach (Fory fory in _threadLocalFory.Values)
+            {
+                registration(fory);
+            }
         }
     }
 
@@ -260,7 +258,6 @@ public sealed class ThreadSafeFory : IDisposable
             ThrowIfDisposed();
             if (_registryFrozen == 0)
             {
-                _registrationFory = null;
                 Volatile.Write(ref _registryFrozen, 1);
             }
         }

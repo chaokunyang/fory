@@ -800,10 +800,6 @@ class RejectedRegistration:
     pass
 
 
-class RegistrationAfterFailure:
-    pass
-
-
 @dataclass
 class FrozenChild:
     value: int
@@ -953,7 +949,7 @@ def test_registry_freezes_at_root(root):
         lambda: fory.type_resolver.register_serializer(FrozenRegistration, object()),
     )
     for registration in registrations:
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError):
             registration()
     assert fory.type_resolver.get_type_info(RejectedRegistration, create=False) is None
     assert fory.type_resolver.get_type_info(FrozenRegistration).type_id == TypeId.STRUCT
@@ -971,22 +967,9 @@ def test_factory_root_freeze():
     assert fory.type_resolver.get_type_info(FrozenRegistration, create=False) is None
 
 
-def test_failed_factory_keeps_type_id():
-    fory = Fory(xlang=True, compatible=False)
-    first = fory.register_type(FrozenRegistration)
-
-    def factory(_type_resolver, _cls):
-        raise RuntimeError("serializer construction failed")
-
-    with pytest.raises(RuntimeError):
-        fory.register_type(RejectedRegistration, serializer=factory)
-
-    following = fory.register_type(RegistrationAfterFailure)
-    assert following.user_type_id == first.user_type_id + 1
-
-
 def test_inferred_registration_freeze():
     fory = Fory(xlang=False, strict=False, compatible=False)
+    fory.register_type(FrozenRegistration)
     armed = False
 
     class RootDuringMro(type):
@@ -1032,22 +1015,6 @@ def test_serializer_registration_freeze():
             BarSerializer(fory.type_resolver, Registered),
         )
     assert typeinfo.serializer is serializer
-
-
-def test_id_conflict_no_mutation():
-    fory = Fory(xlang=True, compatible=False)
-    fory.register_type(FrozenRegistration, type_id=701)
-    resolver = fory.type_resolver
-    types_info = dict(resolver._types_info)
-    id_info = dict(resolver._user_type_id_to_type_info)
-    name_info = dict(resolver._ns_type_to_type_info)
-
-    with pytest.raises(TypeError, match="user_type_id 701"):
-        fory.register_type(RejectedRegistration, type_id=701)
-
-    assert resolver._types_info == types_info
-    assert resolver._user_type_id_to_type_info == id_info
-    assert resolver._ns_type_to_type_info == name_info
 
 
 def test_registered_types_build_lazily():

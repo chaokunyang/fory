@@ -11,53 +11,26 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
 - Python mode is the pure-Python xlang implementation and is mainly for debugging and testing.
 - Cython mode is the default high-performance implementation.
 - Cython mode owns the hot runtime path. Do not duplicate core runtime types between Python and Cython, tunnel Python facade methods into hidden Cython internals, or keep dead shims unless the user explicitly needs a compatibility module path.
-- Python `TypeResolver` separately owns permanent registry freeze, active finalization, and
-  successful finalization. A root may bypass that owner only after successful completion; roots
-  entered during finalization or after failed finalization must fail before codec work. Its Cython
-  companion may cache completion only after the Python owner succeeds and every native resolver
-  table is synchronized; the `Fory` facade must not mirror that state. Cython roots call the
-  resolver owner directly until then. The Python owner permanently rejects its own incomplete
-  finalization; if native synchronization fails, the companion records only permanent failure,
-  never the exception, and rejects later roots without retrying partial synchronization.
-  Serializer construction may reenter registration or a root, so the resolver rechecks both
-  registration conflicts and its frozen state after construction and before publishing type,
-  serializer, name, or ID state. Allocate automatic type IDs only after those checks at the common
-  publication point; do not reserve IDs before callbacks or maintain rollback state.
-  `ThreadSafeFory` validates registrations before retaining their semantic replay descriptors, and
-  it must not execute application factories or registrations while holding its pool lock. Its
-  registration linearization is reentrant so nested facade registrations share the same
-  publication order. A root started during registration must not reuse the staging instance, and
-  root reentry from a running user `fory_factory` or retained registration replay fails without
-  recursively building another instance. The build thread must be rejected before pool acquisition
-  even when another instance becomes available during that build. The non-reentrant pool lock owns
-  pool publication, root-started state, registration depth, and the staging instance; the separate
-  instance-build boundary covers the factory and complete registration replay. During child replay, a nested
-  facade registration is a no-op only when it exactly matches an accepted descriptor in the prefix
-  already applied to that child; reject every unknown or different request before that request
-  mutates the child.
-  Retained descriptors may contain a serializer class or factory, but never a resolver-bound
-  serializer instance. A serializer factory must return a supported serializer carrier bound to
-  the provided child resolver and normalized declared type; singleton serializers cannot be shared
-  across children. Instance-specific serializer configuration belongs in `fory_factory`, which
-  creates and configures each child.
+- A direct Python `TypeResolver` owns one authoritative `_registry_frozen` flag. Pure Python and
+  Cython roots set that owner before codec work and never clear it, including after failure.
+  `ThreadSafeFory` owns its own `_registry_frozen` flag for the public registration boundary over
+  pooled children. Its existing callback list configures newly created children; it is not another
+  lifecycle state.
+- Explicit type, serializer, name, and ID registration checks the frozen flag before mutation.
+  Automatic IDs remain registration-owned and must not turn native runtime discovery into explicit
+  registration.
+- `ThreadSafeFory` accepts serializer classes or factories and constructs a serializer for each
+  child resolver. It must reject resolver-bound serializer instances instead of replaying one
+  instance across pooled children.
 - Registry freeze prohibits explicit type and serializer registration after the first root; it
-  does not prohibit policy-authorized native runtime type resolution. Non-strict native roots may
-  resolve module-global classes or callables and materialize resolver-owned type information or
-  serializer cache entries without creating or changing an explicit type, serializer, ID, name, or
-  policy registration. Do not describe these operations as late registration.
-- In non-strict native mode, public unqualified `register_type` for a built-in native carrier uses
-  the same reserved type identity as pre-root discovery. Ordinary application classes and
-  dataclasses retain their struct registration identity. Configure both through public registration;
-  do not prewarm private resolver state or enumerate version-specific transitive object shapes.
+  does not prohibit native runtime type resolution. Non-strict native writes may discover runtime
+  classes or callables, and reads may resolve those authorized by the deserialization policy. Both
+  paths may materialize resolver-owned type information or serializer cache entries without
+  creating or changing an explicit type, serializer, ID, name, or policy registration. Do not
+  describe these operations as late registration.
 - Function serialization writes captured globals as a data-only exact `dict`. Keep the reader's
   exact-type check before sizing or merging the namespace; a dict subclass or other mapping must not
   introduce runtime behavior into function reconstruction.
-- Python reduction list-item and dict-item iterators remain native carrier values. Register their
-  concrete iterator types before the first root; do not materialize them into lists in the serializer,
-  which changes the established carrier path and allocates storage proportional to their contents.
-- Pandas `RangeIndex` owns its dtype wire slot. Encode `dtype.str` and reconstruct it with
-  `numpy.dtype`; do not serialize the dtype object as a reference because concrete NumPy dtype
-  classes vary across versions and would make the wire depend on version-specific registration.
 - Use explicit Cython fields and methods for fixed hot-path shapes. Avoid `__getattr__`, generic `object` fields, public bridge internals, or `Fory` backreferences where ownership can stay explicit.
 - Keep Python and Cython context/ref-tracking branch conditions and stack mutations semantically aligned unless a documented intentional difference exists.
 - Root deserialization graph memory budget state belongs to pure-Python and Cython `ReadContext`.

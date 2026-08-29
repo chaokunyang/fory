@@ -198,7 +198,7 @@ def test_thread_safe_fory_register_after_use():
         fory.register(Address)
 
 
-def test_thread_safe_serializer_factory_owns_children():
+def test_child_serializer_owners():
     fory = ThreadSafeFory(xlang=False, compatible=False)
     fory.register(Person, serializer=PersonSerializer)
 
@@ -215,7 +215,7 @@ def test_thread_safe_serializer_factory_owns_children():
         fory._return_fory(second)
 
 
-def test_thread_safe_rejects_serializer_instance():
+def test_rejects_serializer_instance():
     runtime = pyfory.Fory(xlang=False, compatible=False)
     serializer = PersonSerializer(runtime.type_resolver, Person)
     fory = ThreadSafeFory(xlang=False, compatible=False)
@@ -224,11 +224,11 @@ def test_thread_safe_rejects_serializer_instance():
         fory.register(Person, serializer=serializer)
 
 
-def test_thread_safe_rejects_foreign_factory_serializer():
+def test_rejects_foreign_factory():
     runtime = pyfory.Fory(xlang=False, compatible=False)
     serializer = PersonSerializer(runtime.type_resolver, Person)
     fory = ThreadSafeFory(xlang=False, compatible=False)
-    fory.register(Person, serializer=lambda: serializer)
+    fory.register(Person, serializer=lambda _resolver: serializer)
 
     with pytest.raises(TypeError, match="another resolver"):
         fory._get_fory()
@@ -237,11 +237,11 @@ def test_thread_safe_rejects_foreign_factory_serializer():
 @pytest.mark.parametrize(
     "serializer_factory, error",
     [
-        (lambda: object(), "must return a Fory serializer"),
+        (lambda _resolver: object(), "must return a Fory serializer"),
         (lambda resolver: PersonSerializer(resolver, Address), "another type"),
     ],
 )
-def test_thread_safe_validates_serializer_factory(serializer_factory, error):
+def test_validates_serializer_factory(serializer_factory, error):
     fory = ThreadSafeFory(xlang=False, compatible=False)
     fory.register(Person, serializer=serializer_factory)
 

@@ -800,6 +800,10 @@ class RejectedRegistration:
     pass
 
 
+class RegistrationAfterFailure:
+    pass
+
+
 @dataclass
 class FrozenChild:
     value: int
@@ -959,7 +963,6 @@ def test_registry_freezes_at_root(root):
 
 def test_factory_root_freeze():
     fory = Fory(xlang=True, compatible=False)
-    next_type_id = getattr(fory.type_resolver, "_type_id_counter", None)
 
     def factory(type_resolver, cls):
         fory.serialize(None)
@@ -968,8 +971,20 @@ def test_factory_root_freeze():
     with pytest.raises(RuntimeError):
         fory.register_type(FrozenRegistration, serializer=factory)
     assert fory.type_resolver.get_type_info(FrozenRegistration, create=False) is None
-    if next_type_id is not None:
-        assert fory.type_resolver._type_id_counter == next_type_id
+
+
+def test_failed_factory_keeps_type_id():
+    fory = Fory(xlang=True, compatible=False)
+    first = fory.register_type(FrozenRegistration)
+
+    def factory(_type_resolver, _cls):
+        raise RuntimeError("serializer construction failed")
+
+    with pytest.raises(RuntimeError):
+        fory.register_type(RejectedRegistration, serializer=factory)
+
+    following = fory.register_type(RegistrationAfterFailure)
+    assert following.user_type_id == first.user_type_id + 1
 
 
 def test_inferred_registration_freeze():

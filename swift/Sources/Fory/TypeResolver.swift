@@ -466,12 +466,19 @@ public final class TypeInfo: @unchecked Sendable {
         context.writeStaticTypeInfo(wireTypeID)
         switch wireTypeID {
         case .compatibleStruct, .namedCompatibleStruct:
+            // Generic type lookup must not prepare metadata; this wire owner does so only on a miss.
+            if typeDefBytes == nil {
+                try ensureTypeMeta(resolver: context.typeResolver)
+            }
             guard typeDefBytes != nil else {
                 throw ForyError.invalidData("missing compatible type definition for \(typeID)")
             }
             try context.writeTypeMeta(self)
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
+                if typeDefBytes == nil {
+                    try ensureTypeMeta(resolver: context.typeResolver)
+                }
                 guard typeDefBytes != nil else {
                     throw ForyError.invalidData("missing compatible type definition for \(typeID)")
                 }

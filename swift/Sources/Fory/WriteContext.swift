@@ -139,9 +139,6 @@ public final class WriteContext {
             return lastTypeInfo
         }
         let info = try typeResolver.requireTypeInfo(for: type)
-        if compatible && info.typeDefBytes == nil {
-            try info.ensureTypeMeta(resolver: typeResolver)
-        }
         lastTypeInfo = info
         return info
     }
@@ -153,9 +150,6 @@ public final class WriteContext {
             return lastTargetTypeInfo
         }
         let info = try typeResolver.requireTypeInfo(forTarget: type)
-        if compatible && info.typeDefBytes == nil {
-            try info.ensureTypeMeta(resolver: typeResolver)
-        }
         lastTargetTypeInfo = info
         return info
     }

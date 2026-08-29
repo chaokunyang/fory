@@ -345,6 +345,8 @@ public:
   void reset();
 
 private:
+  FORY_NOINLINE void ensure_type_meta(const TypeInfo *type_info);
+
   // Error state - accumulated during serialization, checked at the end
   Error error_;
 

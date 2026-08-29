@@ -334,7 +334,9 @@ public final class Fory implements BaseFory {
 
   @Override
   public MemoryBuffer serialize(MemoryBuffer buffer, Object obj, BufferCallback callback) {
-    typeResolver.freezeRegistration();
+    if (!typeResolver.isRegistrationFrozen()) {
+      typeResolver.freezeRegistration();
+    }
     writeContext.prepare(buffer, callback);
     try {
       byte bitmap = headerBitmap;
@@ -420,7 +422,9 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T deserialize(MemoryBuffer buffer, Class<T> type) {
-    typeResolver.freezeRegistration();
+    if (!typeResolver.isRegistrationFrozen()) {
+      typeResolver.freezeRegistration();
+    }
     byte bitmap = buffer.readByte();
     if (bitmap != headerBitmap) {
       checkHeaderBitmapWithoutOutOfBand(bitmap);
@@ -445,7 +449,9 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T deserialize(ForyInputStream inputStream, Class<T> type) {
-    typeResolver.freezeRegistration();
+    if (!typeResolver.isRegistrationFrozen()) {
+      typeResolver.freezeRegistration();
+    }
     try {
       return deserialize(inputStream.getBuffer(), type);
     } finally {
@@ -455,7 +461,9 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T deserialize(ForyReadableChannel channel, Class<T> type) {
-    typeResolver.freezeRegistration();
+    if (!typeResolver.isRegistrationFrozen()) {
+      typeResolver.freezeRegistration();
+    }
     try {
       return deserialize(channel.getBuffer(), type);
     } finally {
@@ -488,7 +496,9 @@ public final class Fory implements BaseFory {
    */
   @Override
   public Object deserialize(MemoryBuffer buffer, Iterable<MemoryBuffer> outOfBandBuffers) {
-    typeResolver.freezeRegistration();
+    if (!typeResolver.isRegistrationFrozen()) {
+      typeResolver.freezeRegistration();
+    }
     byte bitmap = buffer.readByte();
     boolean peerOutOfBandEnabled = false;
     if (bitmap != headerBitmap) {
@@ -531,7 +541,9 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(ForyInputStream inputStream, Iterable<MemoryBuffer> outOfBandBuffers) {
-    typeResolver.freezeRegistration();
+    if (!typeResolver.isRegistrationFrozen()) {
+      typeResolver.freezeRegistration();
+    }
     try {
       MemoryBuffer buf = inputStream.getBuffer();
       return deserialize(buf, outOfBandBuffers);
@@ -547,7 +559,9 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(ForyReadableChannel channel, Iterable<MemoryBuffer> outOfBandBuffers) {
-    typeResolver.freezeRegistration();
+    if (!typeResolver.isRegistrationFrozen()) {
+      typeResolver.freezeRegistration();
+    }
     try {
       MemoryBuffer buf = channel.getBuffer();
       return deserialize(buf, outOfBandBuffers);

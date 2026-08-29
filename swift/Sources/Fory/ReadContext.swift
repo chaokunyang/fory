@@ -184,9 +184,6 @@ public final class ReadContext {
             return lastTypeInfo
         }
         let info = try typeResolver.requireTypeInfo(for: type)
-        if compatible && info.typeDefBytes == nil {
-            try info.ensureTypeMeta(resolver: typeResolver)
-        }
         lastTypeInfo = info
         return info
     }
@@ -321,6 +318,10 @@ public final class ReadContext {
         for localTypeInfo: TypeInfo,
         wireTypeID: TypeId
     ) throws -> TypeInfo? {
+        // Generic type lookup must not prepare metadata; this wire owner does so only on a miss.
+        if localTypeInfo.typeDefBytes == nil {
+            try localTypeInfo.ensureTypeMeta(resolver: typeResolver)
+        }
         let buffer = self.buffer
         let compatibleTypeDefTypeInfos = self.compatibleTypeDefTypeInfos
         if !checkClassVersion,

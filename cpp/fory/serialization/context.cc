@@ -89,9 +89,8 @@ WriteContext::write_type_meta(const std::type_index &type_id) {
 void WriteContext::write_type_meta(const TypeInfo *type_info) {
   if (first_type_info_ == nullptr) {
     if (FORY_PREDICT_FALSE(!type_info->type_meta)) {
-      auto result = type_resolver_->ensure_type_meta(type_info);
-      if (FORY_PREDICT_FALSE(!result.ok())) {
-        set_error(std::move(result).error());
+      ensure_type_meta(type_info);
+      if (FORY_PREDICT_FALSE(has_error())) {
         return;
       }
     }
@@ -120,9 +119,8 @@ void WriteContext::write_type_meta(const TypeInfo *type_info) {
 
   // New type: index << 1, LSB=0, followed by TypeDef bytes inline
   if (FORY_PREDICT_FALSE(!type_info->type_meta)) {
-    auto result = type_resolver_->ensure_type_meta(type_info);
-    if (FORY_PREDICT_FALSE(!result.ok())) {
-      set_error(std::move(result).error());
+    ensure_type_meta(type_info);
+    if (FORY_PREDICT_FALSE(has_error())) {
       return;
     }
   }
@@ -137,6 +135,13 @@ void WriteContext::write_type_meta(const TypeInfo *type_info) {
 
   // write TypeDef bytes inline
   buffer_.write_bytes(type_info->type_def.data(), type_info->type_def.size());
+}
+
+void WriteContext::ensure_type_meta(const TypeInfo *type_info) {
+  auto result = type_resolver_->ensure_type_meta(type_info);
+  if (FORY_PREDICT_FALSE(!result.ok())) {
+    set_error(std::move(result).error());
+  }
 }
 
 /// write pre-encoded meta string to buffer (avoids re-encoding on each write)

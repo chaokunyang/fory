@@ -59,23 +59,23 @@ class ThreadSafeFory:
 
 ## Parameters
 
-| Parameter                              | Type                            | Default     | Description                                                                                                                                                                 |
-| -------------------------------------- | ------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `xlang`                                | `bool`                          | `True`      | Use xlang mode. Set `False` for Python native mode.                                                                                                                         |
-| `ref`                                  | `bool`                          | `False`     | Enable reference tracking for shared/circular references. Disable for better performance if your data has no shared references.                                             |
-| `strict`                               | `bool`                          | `True`      | Require registration before loading application classes. Compatible unknown Structs use `UnknownStruct`. `False` permits policy-authorized native module-global resolution. |
-| `compatible`                           | `bool \| None`                  | `None`      | Schema evolution mode. `None` enables compatible mode in both xlang and native mode. Set `False` only when every reader and writer uses the same schema.                    |
-| `max_depth`                            | `int`                           | `50`        | Maximum deserialization depth for security, preventing stack overflow attacks.                                                                                              |
-| `max_type_fields`                      | `int`                           | `512`       | Maximum fields accepted in one received remote struct metadata body.                                                                                                        |
-| `max_type_meta_bytes`                  | `int`                           | `4096`      | Maximum encoded body bytes accepted for one received TypeDef body, excluding the 8-byte header and any extended-size varint.                                                |
-| `max_schema_versions_per_type`         | `int`                           | `10`        | Maximum accepted remote metadata versions for one logical type.                                                                                                             |
-| `max_average_schema_versions_per_type` | `int`                           | `3`         | Average accepted remote metadata versions across accepted remote types. The effective global floor is `8192` schemas.                                                       |
-| `max_graph_memory_bytes`               | `int`                           | `134217728` | Approximate graph-memory gate for one root deserialization. Explicit non-positive values are rejected.                                                                      |
-| `max_unbacked_container_items`         | `int`                           | `8192`      | Maximum collection elements and map entries whose repeated reads are not backed by input progress. Zero is strict.                                                          |
-| `policy`                               | `DeserializationPolicy \| None` | `None`      | Deserialization policy used for security checks. Strongly recommended when `strict=False`.                                                                                  |
-| `field_nullable`                       | `bool`                          | `False`     | Treat dataclass fields as nullable by default.                                                                                                                              |
-| `meta_compressor`                      | `Any`                           | `None`      | Optional metadata compressor used for compatible-mode metadata encoding.                                                                                                    |
-| `fory_factory`                         | `Callable \| None`              | `None`      | `ThreadSafeFory` factory hook. When set, `ThreadSafeFory` creates instances via this callback; otherwise it forwards `**kwargs` to `Fory` construction.                     |
+| Parameter                              | Type                            | Default     | Description                                                                                                                                                                                                           |
+| -------------------------------------- | ------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `xlang`                                | `bool`                          | `True`      | Use xlang mode. Set `False` for Python native mode.                                                                                                                                                                   |
+| `ref`                                  | `bool`                          | `False`     | Enable reference tracking for shared/circular references. Disable for better performance if your data has no shared references.                                                                                       |
+| `strict`                               | `bool`                          | `True`      | Require registration before loading application classes. Compatible unknown Structs use `UnknownStruct`. `False` permits policy-authorized native module-global resolution but does not replace carrier registration. |
+| `compatible`                           | `bool \| None`                  | `None`      | Schema evolution mode. `None` enables compatible mode in both xlang and native mode. Set `False` only when every reader and writer uses the same schema.                                                              |
+| `max_depth`                            | `int`                           | `50`        | Maximum deserialization depth for security, preventing stack overflow attacks.                                                                                                                                        |
+| `max_type_fields`                      | `int`                           | `512`       | Maximum fields accepted in one received remote struct metadata body.                                                                                                                                                  |
+| `max_type_meta_bytes`                  | `int`                           | `4096`      | Maximum encoded body bytes accepted for one received TypeDef body, excluding the 8-byte header and any extended-size varint.                                                                                          |
+| `max_schema_versions_per_type`         | `int`                           | `10`        | Maximum accepted remote metadata versions for one logical type.                                                                                                                                                       |
+| `max_average_schema_versions_per_type` | `int`                           | `3`         | Average accepted remote metadata versions across accepted remote types. The effective global floor is `8192` schemas.                                                                                                 |
+| `max_graph_memory_bytes`               | `int`                           | `134217728` | Approximate graph-memory gate for one root deserialization. Explicit non-positive values are rejected.                                                                                                                |
+| `max_unbacked_container_items`         | `int`                           | `8192`      | Maximum collection elements and map entries whose repeated reads are not backed by input progress. Zero is strict.                                                                                                    |
+| `policy`                               | `DeserializationPolicy \| None` | `None`      | Deserialization policy used for security checks. Strongly recommended when `strict=False`.                                                                                                                            |
+| `field_nullable`                       | `bool`                          | `False`     | Treat dataclass fields as nullable by default.                                                                                                                                                                        |
+| `meta_compressor`                      | `Any`                           | `None`      | Optional metadata compressor used for compatible-mode metadata encoding.                                                                                                                                              |
+| `fory_factory`                         | `Callable \| None`              | `None`      | `ThreadSafeFory` factory hook. When set, `ThreadSafeFory` creates instances via this callback; otherwise it forwards `**kwargs` to `Fory` construction.                                                               |
 
 ## Key Methods
 
@@ -89,7 +89,7 @@ fory.register(MyClass)
 # fory.register(MyClass, name="my.package.MyClass")
 
 # Direct Fory accepts an instance; ThreadSafeFory requires a serializer class or factory.
-# fory.register(MyClass, serializer=MySerializer)
+# fory.register(MyClass, serializer=MySerializer(fory.type_resolver, MyClass))
 
 # Serialization (serialize/deserialize are identical to dumps/loads)
 data: bytes = fory.serialize(obj)
@@ -109,15 +109,15 @@ a value. See
 
 ## Xlang And Native Mode Comparison
 
-| Feature             | Native mode (`xlang=False`)                  | Xlang mode (default)                                                             |
-| ------------------- | -------------------------------------------- | -------------------------------------------------------------------------------- |
-| Use case            | Python-only applications                     | Multi-language systems                                                           |
-| Compatibility       | Python only                                  | Java, C++, Go, Rust, JavaScript/TypeScript, C#, Swift, Dart, Scala, Kotlin, etc. |
-| Supported types     | Configured Python object surface             | Cross-language compatible types                                                  |
-| Functions/lambdas   | Supported when their carriers are registered | Not allowed                                                                      |
-| Local classes       | Supported when their carriers are registered | Not allowed                                                                      |
-| Class objects       | Supported when their carriers are registered | Not allowed                                                                      |
-| Schema mode default | Compatible                                   | Compatible                                                                       |
+| Feature             | Native mode (`xlang=False`)                           | Xlang mode (default)                                                             |
+| ------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Use case            | Python-only applications                              | Multi-language systems                                                           |
+| Compatibility       | Python only                                           | Java, C++, Go, Rust, JavaScript/TypeScript, C#, Swift, Dart, Scala, Kotlin, etc. |
+| Supported types     | Configured Python object surface                      | Cross-language compatible types                                                  |
+| Functions/lambdas   | Require carrier registration and policy authorization | Not allowed                                                                      |
+| Local classes       | Require carrier registration and policy authorization | Not allowed                                                                      |
+| Class objects       | Require type registration and policy authorization    | Not allowed                                                                      |
+| Schema mode default | Compatible                                            | Compatible                                                                       |
 
 ## Xlang Mode
 
@@ -136,18 +136,25 @@ Use `compatible=False` for xlang payloads only when every reader and writer alwa
 ## Native Mode
 
 ```python
-import types
+from dataclasses import dataclass
 
 import pyfory
 
-fory = pyfory.Fory(xlang=False, ref=True, strict=False)
-fory.register_type(types.FunctionType)
+
+@dataclass
+class Event:
+    name: str
+
+
+fory = pyfory.Fory(xlang=False, ref=True, strict=True)
+fory.register_type(Event)
 ```
 
 Native mode supports Python-specific object features such as functions, local classes, methods,
 `__reduce__`, and `__getstate__` when their application and carrier types are registered before the
-first root attempt. Compatible mode is still enabled by default. Set `compatible=False` only when
-every reader and writer always uses the same Python class schema.
+first root attempt and the configured policy authorizes their deserialization. Compatible mode is
+still enabled by default. Set `compatible=False` only when every reader and writer always uses the
+same Python class schema.
 
 ## Compatible Mode
 
@@ -177,24 +184,29 @@ fory.register(UserModel, name="example.User")
 ### Native Mode With Configured Python Types
 
 ```python
-import types
+from dataclasses import dataclass
 
 import pyfory
+
+
+@dataclass
+class Event:
+    name: str
+
 
 fory = pyfory.Fory(
     xlang=False,
     ref=True,
-    strict=False,
-    max_depth=1000,
+    strict=True,
 )
-
-fory.register_type(types.FunctionType)
+fory.register_type(Event)
 ```
 
-Use `strict=False` only for trusted data, preferably with a `policy=` deserialization policy.
-Register every application and Python-native carrier type whose serializer must be installed before
-the first root attempt. Policy-authorized module-global classes and callables may still be resolved
-while reading a native payload; that lookup does not reopen or mutate the frozen registry.
+Use `strict=False` only for trusted data and configure a `policy=` deserialization policy for
+functions, local classes, class objects, or other dynamic native values. Register every application
+and Python-native carrier type whose serializer must be installed before the first root attempt.
+Policy-authorized module-global classes and callables may still be resolved while reading a native
+payload; that lookup does not reopen or mutate the frozen registry.
 
 ## Security
 

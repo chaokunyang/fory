@@ -73,11 +73,8 @@ for model_class in [User, Order, Product, Invoice]:
 ```
 
 A direct `Fory` may receive a serializer instance. `ThreadSafeFory` accepts a serializer class or
-factory so every pooled child constructs a serializer against its own resolver. Use
-`fory_factory` for serializer instances that need per-child configuration. A serializer factory
-may accept `(resolver, type)`, `(resolver)`, or no arguments, but it must return a serializer bound
-to that invocation's child resolver and normalized registered type. It must not reuse one serializer
-instance across pooled children.
+factory. The factory must accept `(resolver, type)` or `(resolver)` and return a serializer for that
+resolver and registered type.
 
 ## Strict Mode Relationship
 

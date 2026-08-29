@@ -80,7 +80,7 @@ pip install -e ".[dev]"
 
 ## Thread Safety
 
-`pyfory` provides `ThreadSafeFory` for thread-safe serialization using a pooled wrapper:
+`pyfory` provides `ThreadSafeFory` for sharing one configured serialization facade across threads:
 
 ```python
 import threading
@@ -109,10 +109,10 @@ for t in threads: t.start()
 for t in threads: t.join()
 ```
 
-**Key Features:**
+**Key Behavior:**
 
-- **Instance Pool**: Maintains a pool of `Fory` instances protected by a lock for thread safety
-- **Shared Configuration**: All registrations must be done upfront and are applied to all instances
+- **Thread-safe use**: Root serialization and deserialization may be called from multiple threads
+- **Shared Configuration**: Complete every registration before the first root attempt
 - **Matching Operations**: Exposes the corresponding root and registration methods
 - **Registration Safety**: The first root attempt permanently freezes registration, even if the
   operation fails

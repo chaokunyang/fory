@@ -134,26 +134,15 @@ fory.register(MyClass, name="com.example.MyClass", serializer=MySerializer(fory.
 ### Thread-safe registration
 
 `ThreadSafeFory` accepts a serializer class or factory rather than an already constructed
-serializer. Each pooled `Fory` then owns a serializer bound to its own resolver:
+serializer:
 
 ```python
 thread_safe = pyfory.ThreadSafeFory(xlang=False)
 thread_safe.register(Foo, type_id=100, serializer=FooSerializer)
 ```
 
-When construction needs instance-specific settings, configure each child through the existing
-`fory_factory`:
-
-```python
-def create_fory():
-    child = pyfory.Fory(xlang=False)
-    serializer = FooSerializer(child.type_resolver, Foo)
-    serializer.application_option = "configured"
-    child.register(Foo, type_id=100, serializer=serializer)
-    return child
-
-thread_safe = pyfory.ThreadSafeFory(fory_factory=create_fory)
-```
+A serializer factory passed to `ThreadSafeFory.register` must accept `(resolver, type)` or
+`(resolver)` and return a serializer for that resolver and registered type.
 
 ## Related Topics
 

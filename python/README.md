@@ -7,38 +7,39 @@
 [![Slack Channel](https://img.shields.io/badge/slack-join-3f0e40?logo=slack&style=for-the-badge)](https://join.slack.com/t/fory-project/shared_invite/zt-36g0qouzm-kcQSvV_dtfbtBKHRwT5gsw)
 [![X](https://img.shields.io/badge/@ApacheFory-follow-blue?logo=x&style=for-the-badge)](https://x.com/ApacheFory)
 
-`pyfory` is the Python implementation of Apache Fory™. It provides Python-native and cross-language
-object serialization together with row-format APIs for analytical data.
+**Apache Fory™** is a blazing fast multi-language serialization framework powered by **JIT compilation** and **zero-copy** techniques, providing up to **ultra-fast performance** while maintaining ease of use and safety.
+
+`pyfory` provides the Python implementation of Apache Fory™, offering both high-performance object serialization and advanced row-format capabilities for data processing tasks.
 
 ## Key Features
 
 ### **Flexible Serialization Modes**
 
 - **Xlang mode**: Default cross-language wire format with compatible schema evolution
-- **Python native mode**: Same-language mode for configured Python type surfaces
-- **Row Format**: Random and partial access to analytical row data
+- **Python native mode**: Same-language mode and drop-in replacement for pickle/cloudpickle
+- **Row Format**: Zero-copy row format for analytics workloads
 
 ### Versatile Serialization Features
 
 - **Shared/circular reference support** for complex object graphs in both Python native and xlang modes
 - **Polymorphism support** for customized types with automatic type dispatching
 - **Schema evolution** support for backward/forward compatibility when using dataclasses in xlang mode
-- **Out-of-band buffer support** for NumPy arrays and `pickle.PickleBuffer` values
+- **Out-of-band buffer support** for zero-copy serialization of large data structures like NumPy arrays and Pandas DataFrames, compatible with pickle protocol 5
 - **Reduced-precision xlang types** use reserved `pyfory.Float16` and `pyfory.BFloat16` annotations and native Python `float` values; dense array payloads use public wrappers such as `Float16Array` and `BFloat16Array`
 
-### Python Runtime Implementation
+### Blazing Fast Performance
 
-- **Runtime code generation** for supported Python classes
-- **Cython-accelerated** core implementation
+- **Extremely fast performance** compared to other serialization frameworks
+- **Runtime code generation** and **Cython-accelerated** core implementation for optimal performance
 
 ### Compact Data Size
 
-- **Compact object graph protocol** for Python-native and cross-language payloads
+- **Compact object graph protocol** with minimal space overhead—up to 3× size reduction compared to pickle/cloudpickle
 - **Meta packing and sharing** to minimize type forward/backward compatibility space overhead
 
 ### **Security & Safety**
 
-- **Strict mode** limits application class loading to the configured registration surface.
+- **Strict mode** prevents deserialization of untrusted types by type registration and checks.
 - **Reference tracking** for handling circular references safely
 
 ## Installation
@@ -70,12 +71,11 @@ pip install -e ".[dev,format]"
 
 ## Python Native Serialization
 
-`pyfory` provides a Python native mode for configured Python-only payloads, with support for
-functions, methods, dataclasses, stateful types, and reduction hooks.
+`pyfory` provides a Python native mode for Python-only payloads. It is optimized for Python's type
+system and offers the same object surface as pickle/cloudpickle, but with **significantly better
+performance, smaller data size, and enhanced security features**.
 
-Register every application type and native carrier before the first root operation. The first
-serialization or deserialization attempt permanently freezes that `Fory` instance's registry,
-including when the attempt fails.
+The binary protocol and API are similar to Fory's xlang mode, but Python native mode can serialize any Python object—including global functions, local functions, lambdas, local classes and types with custom serialization using `__getstate__/__reduce__/__reduce_ex__`, which are not allowed in xlang mode.
 
 To use Python native mode, create `Fory` with `xlang=False`. Use this mode when replacing pickle or
 cloudpickle for pure Python applications:
@@ -131,26 +131,18 @@ result = fory.deserialize(data)
 print(result)  # Person(name='Bob', age=25, ...)
 ```
 
-## Pickle-Style Python-Native Serialization
+## Drop-in Replacement for Pickle/Cloudpickle
 
-`pyfory` can serialize a configured Python type surface with the following options:
+`pyfory` can serialize any Python object with the following configuration:
 
 - **For circular references**: Set `ref=True` to enable reference tracking
-- **For Python-native carriers**: Set `strict=False` only for trusted payloads
+- **For functions/classes**: Set `strict=False` to allow deserialization of dynamic types
 
-Register every application type and native carrier type before the first root serialization or
-deserialization call. The first root operation permanently freezes that `Fory` instance's registry,
-even when the operation fails. `strict=False` may authorize module-global resolution while reading
-a trusted native payload, but it does not permit late type or serializer registration. If the first
-operation exposes incomplete or invalid registration, configure a new instance before retrying.
-
-**Security Warning**: Configured native carriers can import modules and construct Python objects
-when `strict=False`. Use this mode only with trusted payloads, and provide a
-`DeserializationPolicy` through `policy=` when the accepted surface must be restricted.
+**Security Warning**: When `strict=False`, Fory will deserialize arbitrary types, which can pose security risks if data comes from untrusted sources. Only use `strict=False` in controlled environments where you trust the data source completely. If you do need to use `strict=False`, please configure a `DeserializationPolicy` when creating fory using `policy=your_policy` to controlling deserialization behavior.
 
 ### Common Usage
 
-Built-in containers require no registration. Register custom classes before the first root:
+Serialize common Python objects including dicts, lists, and custom classes without any registration:
 
 ```python
 import pyfory
@@ -158,6 +150,11 @@ import pyfory
 # Create Fory instance
 fory = pyfory.Fory(xlang=False, ref=True, strict=False)
 
+# serialize common Python objects
+data = fory.dumps({"name": "Alice", "age": 30, "scores": [95, 87, 92]})
+print(fory.loads(data))
+
+# serialize custom objects
 from dataclasses import dataclass
 
 @dataclass
@@ -165,44 +162,287 @@ class Person:
     name: str
     age: int
 
-fory.register_type(Person)
-
-# serialize common Python objects
-data = fory.dumps({"name": "Alice", "age": 30, "scores": [95, 87, 92]})
-print(fory.loads(data))
-
-# serialize custom objects
 person = Person("Bob", 25)
 data = fory.dumps(person)
 print(fory.loads(data))  # Person(name='Bob', age=25)
 ```
 
-### Functions, Classes, And Methods
+### Serialize Global Functions
 
-Python native mode supports configured global and local functions, lambdas, class objects, and
-methods. Register their application and carrier types and authorize them with a deserialization
-policy before the first root operation. See
-[Functions, Classes, and Methods](https://fory.apache.org/docs/object-serialization/python/functions-classes-methods)
-for the supported shapes and complete examples.
+Capture and get functions defined at module level. Fory deserialize and return same function object:
+
+```python
+import pyfory
+
+# Create Fory instance
+fory = pyfory.Fory(xlang=False, ref=True, strict=False)
+
+# serialize global functions
+def my_global_function(x):
+    return 10 * x
+
+data = fory.dumps(my_global_function)
+print(fory.loads(data)(10))  # 100
+```
+
+#### Serialize Local Functions/Lambdas
+
+Serialize functions with closures and lambda expressions. Fory captures the closure variables automatically:
+
+```python
+import pyfory
+
+# Create Fory instance
+fory = pyfory.Fory(xlang=False, ref=True, strict=False)
+
+# serialize local functions with closures
+def my_function():
+    local_var = 10
+    def local_func(x):
+        return x * local_var
+    return local_func
+
+data = fory.dumps(my_function())
+print(fory.loads(data)(10))  # 100
+
+# serialize lambdas
+data = fory.dumps(lambda x: 10 * x)
+print(fory.loads(data)(10))  # 100
+```
+
+#### Serialize Global Classes/Methods
+
+Serialize class objects, instance methods, class methods, and static methods. All method types are supported:
+
+```python
+from dataclasses import dataclass
+import pyfory
+fory = pyfory.Fory(xlang=False, ref=True, strict=False)
+
+# serialize global class
+@dataclass
+class Person:
+    name: str
+    age: int
+
+    def f(self, x):
+        return self.age * x
+
+    @classmethod
+    def g(cls, x):
+        return 10 * x
+
+    @staticmethod
+    def h(x):
+        return 10 * x
+
+print(fory.loads(fory.dumps(Person))("Bob", 25))  # Person(name='Bob', age=25)
+# serialize global class instance method
+print(fory.loads(fory.dumps(Person("Bob", 20).f))(10))  # 200
+# serialize global class class method
+print(fory.loads(fory.dumps(Person.g))(10))  # 100
+# serialize global class static method
+print(fory.loads(fory.dumps(Person.h))(10))  # 100
+```
+
+#### Serialize Local Classes/Methods
+
+Serialize classes defined inside functions along with their methods. Useful for dynamic class creation:
+
+```python
+from dataclasses import dataclass
+import pyfory
+fory = pyfory.Fory(xlang=False, ref=True, strict=False)
+
+def create_local_class():
+    class LocalClass:
+        def f(self, x):
+            return 10 * x
+
+        @classmethod
+        def g(cls, x):
+            return 10 * x
+
+        @staticmethod
+        def h(x):
+            return 10 * x
+    return LocalClass
+
+# serialize local class
+data = fory.dumps(create_local_class())
+print(fory.loads(data)().f(10))  # 100
+
+# serialize local class instance method
+data = fory.dumps(create_local_class()().f)
+print(fory.loads(data)(10))  # 100
+
+# serialize local class method
+data = fory.dumps(create_local_class().g)
+print(fory.loads(data)(10))  # 100
+
+# serialize local class static method
+data = fory.dumps(create_local_class().h)
+print(fory.loads(data)(10))  # 100
+```
 
 ### Out-of-Band Buffer Serialization
 
-Python native mode can separate supported NumPy ndarray and `pickle.PickleBuffer` storage from the
-root bytes through `buffer_callback`. Transport the collected buffers with the root bytes and pass
-them to `deserialize` in the same order. For contiguous storage, `BufferObject.getbuffer()` can
-expose a `memoryview` without an additional source-side copy; non-contiguous storage may be copied.
-This does not promise copy-free transport or decoding.
+Fory supports pickle5-compatible out-of-band buffer serialization for efficient zero-copy handling of large data structures. This is particularly useful for NumPy arrays, Pandas DataFrames, and other objects with large memory footprints.
 
-See [Out-of-Band Buffers](https://fory.apache.org/docs/object-serialization/python/out-of-band) for
-the callback, transport, and stream APIs.
+Out-of-band serialization separates metadata from the actual data buffers, allowing for:
+
+- **Zero-copy transfers** when sending data over networks or IPC using `memoryview`
+- **Improved performance** for large datasets
+- **Pickle5 compatibility** using `pickle.PickleBuffer`
+- **Flexible stream support** - write to any writable object (files, BytesIO, sockets, etc.)
+
+#### Basic Out-of-Band Serialization
+
+```python
+import pyfory
+import numpy as np
+
+fory = pyfory.Fory(xlang=False, ref=False, strict=False)
+
+# Large numpy array
+array = np.arange(10000, dtype=np.float64)
+
+# Serialize with out-of-band buffers
+buffer_objects = []
+serialized_data = fory.serialize(array, buffer_callback=buffer_objects.append)
+
+# Convert buffer objects to memoryview for zero-copy transmission
+# For contiguous buffers (bytes, numpy arrays), this is zero-copy
+# For non-contiguous data, a copy may be created to ensure contiguity
+buffers = [obj.getbuffer() for obj in buffer_objects]
+
+# Deserialize with out-of-band buffers (accepts memoryview, bytes, or Buffer)
+deserialized_array = fory.deserialize(serialized_data, buffers=buffers)
+
+assert np.array_equal(array, deserialized_array)
+```
+
+#### Out-of-Band with Pandas DataFrames
+
+```python
+import pyfory
+import pandas as pd
+import numpy as np
+
+fory = pyfory.Fory(xlang=False, ref=False, strict=False)
+
+# Create a DataFrame with numeric columns
+df = pd.DataFrame({
+    'a': np.arange(1000, dtype=np.float64),
+    'b': np.arange(1000, dtype=np.int64),
+    'c': ['text'] * 1000
+})
+
+# Serialize with out-of-band buffers
+buffer_objects = []
+serialized_data = fory.serialize(df, buffer_callback=buffer_objects.append)
+buffers = [obj.getbuffer() for obj in buffer_objects]
+
+# Deserialize
+deserialized_df = fory.deserialize(serialized_data, buffers=buffers)
+
+assert df.equals(deserialized_df)
+```
+
+#### Selective Out-of-Band Serialization
+
+You can control which buffers go out-of-band by providing a callback that returns `True` to keep data in-band or `False` (and appending to a list) to send it out-of-band:
+
+```python
+import pyfory
+import numpy as np
+
+fory = pyfory.Fory(xlang=False, ref=True, strict=False)
+
+arr1 = np.arange(1000, dtype=np.float64)
+arr2 = np.arange(2000, dtype=np.float64)
+data = [arr1, arr2]
+
+buffer_objects = []
+counter = 0
+
+def selective_callback(buffer_object):
+    global counter
+    counter += 1
+    # Only send even-numbered buffers out-of-band
+    if counter % 2 == 0:
+        buffer_objects.append(buffer_object)
+        return False  # Out-of-band
+    return True  # In-band
+
+serialized = fory.serialize(data, buffer_callback=selective_callback)
+buffers = [obj.getbuffer() for obj in buffer_objects]
+deserialized = fory.deserialize(serialized, buffers=buffers)
+```
+
+#### Pickle5 Compatibility
+
+Fory's out-of-band serialization is fully compatible with pickle protocol 5. When objects implement `__reduce_ex__(protocol)`, Fory automatically uses protocol 5 to enable `pickle.PickleBuffer` support:
+
+```python
+import pyfory
+import pickle
+
+fory = pyfory.Fory(xlang=False, ref=False, strict=False)
+
+# PickleBuffer objects are automatically supported
+data = b"Large binary data"
+pickle_buffer = pickle.PickleBuffer(data)
+
+# Serialize with buffer callback for out-of-band handling
+buffer_objects = []
+serialized = fory.serialize(pickle_buffer, buffer_callback=buffer_objects.append)
+buffers = [obj.getbuffer() for obj in buffer_objects]
+
+# Deserialize with buffers
+deserialized = fory.deserialize(serialized, buffers=buffers)
+assert bytes(deserialized.raw()) == data
+```
+
+#### Writing Buffers to Different Streams
+
+The `BufferObject.write_to()` method accepts any writable stream object, making it flexible for various use cases:
+
+```python
+import pyfory
+import numpy as np
+import io
+
+fory = pyfory.Fory(xlang=False, ref=False, strict=False)
+
+array = np.arange(1000, dtype=np.float64)
+
+# Collect out-of-band buffers
+buffer_objects = []
+serialized = fory.serialize(array, buffer_callback=buffer_objects.append)
+
+# Write to different stream types
+for buffer_obj in buffer_objects:
+    # Write to BytesIO (in-memory stream)
+    bytes_stream = io.BytesIO()
+    buffer_obj.write_to(bytes_stream)
+
+    # Write to file
+    with open('/tmp/buffer_data.bin', 'wb') as f:
+        buffer_obj.write_to(f)
+
+    # Get zero-copy memoryview (for contiguous buffers)
+    mv = buffer_obj.getbuffer()
+    assert isinstance(mv, memoryview)
+```
+
+**Note**: For contiguous memory buffers (like bytes, numpy arrays), `getbuffer()` returns a zero-copy `memoryview`. For non-contiguous data, a copy may be created to ensure contiguity.
 
 ## Cross-Language Object Graph Serialization
 
 `pyfory` supports cross-language object graph serialization, allowing you to serialize data in Python and deserialize it in Java, Go, Rust, or other supported languages.
 
-The binary protocol and API are similar to `pyfory`'s Python native mode. Python-specific callable,
-stateful, and reduction carriers are available only in native mode and must be registered before
-the first root operation.
+The binary protocol and API are similar to `pyfory`'s Python native mode, but Python native mode can serialize any Python object—including global functions, local functions, lambdas, local classes, and types with custom serialization using `__getstate__/__reduce__/__reduce_ex__`, which are not allowed in xlang mode.
 
 Xlang mode is the default. Set `xlang=True` explicitly in cross-language examples so the mode choice is visible:
 
@@ -259,12 +499,9 @@ fory.register(Person.class, "example.Person");
 Person person = (Person) fory.deserialize(binaryData);
 ```
 
-## Row Format
+## Row Format - Zero-Copy Processing
 
-Row Format provides random and partial access to trusted analytical data without reconstructing the
-complete object graph. See the
-[Python Row Format guide](https://fory.apache.org/docs/row-format/python) for supported types, schema
-requirements, and APIs.
+Apache Fory™ provides a random-access row format that enables reading nested fields from binary data without full deserialization. This drastically reduces overhead when working with large objects where only partial data access is needed. The format also supports memory-mapped files for ultra-low memory footprint.
 
 ### Basic Row Format Usage
 
@@ -304,7 +541,7 @@ foo = Foo(
 # Encode to row format
 binary: bytes = encoder.to_row(foo).to_bytes()
 
-# Access selected fields without full deserialization.
+# Zero-copy access - no full deserialization needed!
 foo_row = pyfory.RowData(encoder.schema, binary)
 print(foo_row.f2[100000])              # Access 100,000th element directly
 print(foo_row.f4[100000].f1)           # Access nested field directly
@@ -349,7 +586,7 @@ foo.f4 = bars;
 // Encode to row format (cross-language compatible with Python)
 BinaryRow binaryRow = encoder.toRow(foo);
 
-// Random access without full deserialization
+// Zero-copy random access without full deserialization
 BinaryArray f2Array = binaryRow.getArray(1);              // Access f2 list
 BinaryArray f4Array = binaryRow.getArray(3);              // Access f4 list
 BinaryRow bar10 = f4Array.getStruct(10);                  // Access 11th Bar
@@ -407,7 +644,7 @@ fory::row::encoder::RowEncoder<Foo> encoder;
 encoder.encode(foo);
 auto row = encoder.get_writer().to_row();
 
-// Random access without full deserialization
+// Zero-copy random access without full deserialization
 auto f2_array = row->get_array(1);                   // Access f2 list
 auto f4_array = row->get_array(3);                   // Access f4 list
 auto bar10 = f4_array->get_struct(10);               // Access 11th Bar
@@ -417,15 +654,176 @@ std::string str = bar10->get_string(0);              // Access bar.f1
 
 ### Key Benefits
 
-- **Random access**: Read nested fields without deserializing the entire object
-- **Cross-language layout**: Share Standard Row Format data between supported runtimes
-- **Partial deserialization**: Deserialize only the elements the application needs
+- **Zero-Copy Access**: Read nested fields without deserializing the entire object
+- **Memory Efficiency**: Memory-map large datasets directly from disk
+- **Cross-Language**: Binary format is compatible between Python, Java, and other Fory implementations
+- **Partial Deserialization**: Deserialize only the specific elements you need
+- **High Performance**: Skip unnecessary data parsing for analytics and big data workloads
 
-## API Reference
+## Core API Reference
 
-See [Python Configuration](https://fory.apache.org/docs/object-serialization/python/configuration)
-for the current `Fory` and `ThreadSafeFory` constructors, mode comparison, registration lifecycle,
-configuration options, and root methods.
+### Fory Class
+
+The main serialization interface:
+
+```python
+class Fory:
+    def __init__(
+        self,
+        xlang: bool = True,
+        ref: bool = False,
+        strict: bool = True,
+        compatible: bool | None = None,
+        max_depth: int = 50
+    )
+```
+
+### ThreadSafeFory Class
+
+Thread-safe serialization interface using an instance pool:
+
+```python
+class ThreadSafeFory:
+    def __init__(
+        self,
+        fory_factory=None,
+        **kwargs
+    )
+```
+
+`ThreadSafeFory` provides thread-safe serialization by maintaining a pool of `Fory` instances protected by a lock. When a thread needs to serialize/deserialize, it gets an instance from the pool, uses it, and returns it. Complete explicit type and serializer registration before the first serialization or deserialization attempt.
+
+**Thread Safety Example:**
+
+```python
+import pyfory
+import threading
+from dataclasses import dataclass
+
+@dataclass
+class Person:
+    name: str
+    age: int
+
+# Create thread-safe Fory instance
+fory = pyfory.ThreadSafeFory(xlang=False, ref=True)
+fory.register(Person)
+
+# Use in multiple threads safely
+def serialize_in_thread(thread_id):
+    person = Person(name=f"User{thread_id}", age=25 + thread_id)
+    data = fory.serialize(person)
+    result = fory.deserialize(data)
+    print(f"Thread {thread_id}: {result}")
+
+threads = [threading.Thread(target=serialize_in_thread, args=(i,)) for i in range(10)]
+for t in threads: t.start()
+for t in threads: t.join()
+```
+
+**Key Features:**
+
+- **Instance Pool**: Maintains a pool of `Fory` instances protected by a lock for thread safety
+- **Shared Configuration**: All registrations must be done upfront and are applied to all instances
+- **Shared Root API**: Provides the same root serialization and deserialization operations as
+  `Fory`
+- **Registration Safety**: Prevents explicit registration after the first root serialization or
+  deserialization attempt
+
+**When to Use:**
+
+- **Multi-threaded Applications**: Web servers, concurrent workers, parallel processing
+- **Shared Fory Instances**: When multiple threads need to serialize/deserialize data
+- **Thread Pools**: Applications using thread pools or concurrent.futures
+
+**Parameters:**
+
+- **`xlang`** (`bool`, default=`True`): Use xlang mode. Set `False` for Python native mode supporting Python-specific objects.
+- **`ref`** (`bool`, default=`False`): Enable reference tracking for shared/circular references. Disable for better performance if your data has no shared references.
+- **`strict`** (`bool`, default=`True`): Require type registration for security. **Highly recommended** for production. Only disable in trusted environments.
+- **`compatible`** (`bool | None`, default `None`): Enable schema evolution. `None` enables compatible mode in both xlang and native mode. Set `False` only when every reader and writer always uses the same Python class schema and you want faster serialization and smaller size.
+- **`max_depth`** (`int`, default=`50`): Maximum deserialization depth for security, preventing stack overflow attacks.
+
+**Key Methods:**
+
+```python
+# Serialization (serialize/deserialize are identical to dumps/loads)
+data: bytes = fory.serialize(obj)
+obj = fory.deserialize(data)
+
+# Alternative API (aliases)
+data: bytes = fory.dumps(obj)
+obj = fory.loads(data)
+
+# Direct Fory registration by id; serializer instances belong to that Fory.
+fory.register(MyClass, type_id=123)
+fory.register(MyClass, type_id=123, serializer=custom_serializer)
+
+# ThreadSafeFory constructs one serializer per pooled child from a class or factory.
+thread_safe_fory.register(MyClass, type_id=123, serializer=CustomSerializer)
+
+# Direct Fory registration by name
+fory.register(MyClass, name="my.package.MyClass")
+fory.register(MyClass, name="my.package.MyClass", serializer=custom_serializer)
+```
+
+### Xlang And Native Mode Comparison
+
+| Feature             | Native mode (`xlang=False`)                    | Xlang mode (default)                  |
+| ------------------- | ---------------------------------------------- | ------------------------------------- |
+| Use case            | Pure Python applications                       | Multi-language systems                |
+| Compatibility       | Python only                                    | Java, Go, Rust, C++, JavaScript, etc. |
+| Supported types     | Python object surface                          | Cross-language compatible types       |
+| Functions/lambdas   | Supported with trusted dynamic deserialization | Not allowed                           |
+| Local classes       | Supported with trusted dynamic deserialization | Not allowed                           |
+| Dynamic classes     | Supported with trusted dynamic deserialization | Not allowed                           |
+| Schema mode default | Compatible                                     | Compatible                            |
+
+#### Native Mode (`xlang=False`)
+
+Python native mode supports Python-specific objects including functions, classes, and closures. Use it for Python-only applications:
+
+```python
+import pyfory
+
+# Python native mode
+fory = pyfory.Fory(xlang=False, ref=True, strict=False)
+
+# Supports ALL Python objects:
+data = fory.dumps({
+    'function': lambda x: x * 2,        # Functions and lambdas
+    'class': type('Dynamic', (), {}),    # Dynamic classes
+    'method': str.upper,                # Methods
+    'nested': {'circular_ref': None}    # Circular references (when ref=True)
+})
+
+# Drop-in replacement for pickle/cloudpickle
+import pickle
+obj = [1, 2, {"nested": [3, 4]}]
+assert fory.loads(fory.dumps(obj)) == pickle.loads(pickle.dumps(obj))
+
+# Significantly faster and more compact than pickle
+import timeit
+obj = {f"key{i}": f"value{i}" for i in range(10000)}
+print(f"Fory: {timeit.timeit(lambda: fory.dumps(obj), number=1000):.3f}s")
+print(f"Pickle: {timeit.timeit(lambda: pickle.dumps(obj), number=1000):.3f}s")
+```
+
+#### Xlang Mode
+
+Xlang mode restricts types to those compatible across all Fory implementations. Use it for multi-language systems:
+
+```python
+import pyfory
+
+f = pyfory.Fory(xlang=True, ref=True)
+
+# Only supports cross-language compatible types
+f.register(MyDataClass, name="com.example.MyDataClass")
+
+# Data can be read by Java, Go, Rust, etc.
+data = f.serialize(MyDataClass(field1="value", field2=42))
+```
 
 ## Advanced Features
 
@@ -434,51 +832,130 @@ configuration options, and root methods.
 Handle shared references and circular dependencies safely. Set `ref=True` to deduplicate objects:
 
 ```python
-from dataclasses import dataclass
-from typing import Optional
-
 import pyfory
 
 f = pyfory.Fory(xlang=False, ref=True)  # Enable reference tracking
 
-@dataclass
+# Handle circular references safely
 class Node:
-    value: str
-    next: Optional["Node"] = pyfory.field(ref=True, nullable=True, default=None)
-
-f.register_type(Node)
+    def __init__(self, value):
+        self.value = value
+        self.children = []
+        self.parent = None
 
 root = Node("root")
 child = Node("child")
-root.next = child
-child.next = root  # Circular reference
+child.parent = root  # Circular reference
+root.children.append(child)
 
 # Serializes without infinite recursion
 data = f.serialize(root)
 result = f.deserialize(data)
-assert result.next.next is result  # Reference preserved
+assert result.children[0].parent is result  # Reference preserved
 ```
 
 ### Type Registration
 
-Register the complete application type surface before the first root operation. See
-[Type Registration](https://fory.apache.org/docs/object-serialization/python/type-registration) for
-registration identity, strict-mode behavior, and the frozen registry lifecycle. See
-[Python Security](https://fory.apache.org/docs/object-serialization/python/security) before
-accepting untrusted input.
+In strict mode, Fory loads and instantiates only registered application types.
+Compatible metadata for an unregistered remote Struct returns the fixed
+data-only `pyfory.UnknownStruct` carrier; it does not load or generate the
+sender-named class. This prevents arbitrary class materialization.
+
+The first root serialization or deserialization attempt permanently freezes explicit type and
+serializer registration for that `Fory` instance, including when the attempt fails. Non-strict
+native writes may still discover runtime types lazily, and reads may resolve those authorized by
+the configured policy. That discovery does not add an explicit registration.
+
+```python
+import pyfory
+
+# Strict mode (recommended for production)
+f = pyfory.Fory(xlang=False, strict=True)
+
+class SafeClass:
+    def __init__(self, data):
+        self.data = data
+
+# Must register types in strict mode
+f.register(SafeClass, name="com.example.SafeClass")
+
+# Now serialization works
+obj = SafeClass("safe data")
+data = f.serialize(obj)
+result = f.deserialize(data)
+
+# Unregistered types will raise an exception
+class UnsafeClass:
+    pass
+
+# This will fail in strict mode
+try:
+    f.serialize(UnsafeClass())
+except Exception as e:
+    print("Security protection activated!")
+```
 
 ### Custom Serializers
 
-Custom serializers implement the serializer-owned `write` and `read` operations and are registered
-before the first root operation. See
-[Custom Serializers](https://fory.apache.org/docs/object-serialization/python/custom-serializers) for
-the supported constructor and context APIs.
+Implement custom serialization logic for specialized types with a single `write/read` API:
 
-### NumPy & Scientific Computing
+```python
+import pyfory
+from pyfory.serializer import Serializer
+from dataclasses import dataclass
 
-Python native mode supports NumPy ndarrays, including multidimensional and object-dtype arrays. See
-[NumPy Integration](https://fory.apache.org/docs/object-serialization/python/numpy-integration) for
-supported behavior and out-of-band transport.
+@dataclass
+class Foo:
+    f1: int
+    f2: str
+
+class FooSerializer(Serializer):
+    def __init__(self, type_resolver, cls):
+        super().__init__(type_resolver, cls)
+
+    def write(self, write_context, obj: Foo):
+        # Custom serialization logic
+        write_context.write_varint32(obj.f1)
+        write_context.write_string(obj.f2)
+
+    def read(self, read_context):
+        # Custom deserialization logic
+        f1 = read_context.read_varint32()
+        f2 = read_context.read_string()
+        return Foo(f1, f2)
+
+f = pyfory.Fory(xlang=False)
+f.register(Foo, type_id=100, serializer=FooSerializer(f.type_resolver, Foo))
+
+# Now Foo uses your custom serializer
+data = f.dumps(Foo(42, "hello"))
+result = f.loads(data)
+print(result)  # Foo(f1=42, f2='hello')
+```
+
+### Numpy & Scientific Computing
+
+Fory natively supports numpy arrays with optimized serialization. Large arrays use zero-copy when possible:
+
+```python
+import pyfory
+import numpy as np
+
+f = pyfory.Fory(xlang=False)
+
+# Numpy arrays are supported natively
+arrays = {
+    'matrix': np.random.rand(1000, 1000),
+    'vector': np.arange(10000),
+    'bool_mask': np.random.choice([True, False], size=5000)
+}
+
+data = f.serialize(arrays)
+result = f.deserialize(data)
+
+# Zero-copy for compatible array types
+assert np.array_equal(arrays['matrix'], result['matrix'])
+```
 
 ## Best Practices
 
@@ -505,16 +982,14 @@ fory.register(ProductModel, type_id=102)
 
 ### Performance Tips
 
-Use these configuration rules before measuring an application workload:
+Optimize serialization speed and memory usage with these guidelines:
 
 1. **Disable `ref=True` if not needed**: Reference tracking has overhead
-2. **Reuse configured Fory instances**: Create once, use many times; use `ThreadSafeFory` when an
-   instance must be shared across threads
-3. **Use `compatible=False` only for same-schema data**: Every reader and writer must use the same
-   Python class schema
-4. **Use Row Format for partial reads**: Choose it when applications need random access to trusted
-   analytical row data instead of object reconstruction; see the
-   [Python Row Format guide](https://fory.apache.org/docs/row-format/python)
+2. **Use type_id instead of name**: Integer IDs are faster than string names
+3. **Reuse Fory instances**: Create once, use many times
+4. **Use `compatible=False` only for same-schema data**: Disable compatible mode only when every reader and writer always uses the same Python class schema and you want faster serialization and smaller size
+5. **Enable Cython**: Make sure `ENABLE_FORY_CYTHON_SERIALIZATION=1`, should be enabled by default
+6. **Use row format for large arrays**: Zero-copy access for analytics
 
 ```python
 # Good: Reuse instance
@@ -530,17 +1005,54 @@ for obj in objects:
 
 ### Type Registration Patterns
 
-Use stable names for shared xlang schemas and numeric IDs for Python-native type identity. See
-[Type Registration](https://fory.apache.org/docs/object-serialization/python/type-registration) for
-the supported patterns, including custom serializers and batch registration.
+Choose the right registration approach for your use case:
+
+```python
+# Pattern 1: Simple registration
+fory.register(MyClass, type_id=100)
+
+# Pattern 2: Cross-language with name
+fory.register(MyClass, name="com.example.MyClass")
+
+# Pattern 3: With custom serializer
+fory.register(MyClass, type_id=100, serializer=MySerializer(fory.type_resolver, MyClass))
+
+# Pattern 4: Batch registration
+type_id = 100
+for model_class in [User, Order, Product, Invoice]:
+    fory.register(model_class, type_id=type_id)
+    type_id += 1
+```
 
 ### Error Handling
 
-A failed root never reopens the registry. Create and fully configure a new instance after a missing
-or invalid registration failure. A fully configured instance can process another root after a
-failure while reading input data or serializing a value. See
-[Error Handling](https://fory.apache.org/docs/object-serialization/python/troubleshooting#error-handling)
-for a complete example.
+Handle common serialization errors gracefully. Catch specific exceptions for better error recovery:
+
+```python
+import pyfory
+from pyfory.error import TypeUnregisteredError, TypeNotCompatibleError
+
+fory = pyfory.Fory(strict=True)
+
+try:
+    data = fory.dumps(my_object)
+except TypeUnregisteredError as e:
+    print(f"Type not registered: {e}")
+    # A failed root has already frozen this instance. Configure a new one.
+    fory = pyfory.Fory(strict=True)
+    fory.register(type(my_object), type_id=100)
+    data = fory.dumps(my_object)
+except Exception as e:
+    print(f"Serialization failed: {e}")
+
+try:
+    obj = fory.loads(data)
+except TypeNotCompatibleError as e:
+    print(f"Schema mismatch: {e}")
+    # Handle version mismatch
+except Exception as e:
+    print(f"Deserialization failed: {e}")
+```
 
 ## Security Best Practices
 
@@ -577,11 +1089,9 @@ if os.getenv('ENV') == 'development':
     fory = pyfory.Fory(
         xlang=False,
         ref=True,
-        strict=False,    # Use only with trusted development payloads
+        strict=False,    # Allow any type for development
         max_depth=1000   # Higher limit for development
     )
-    for model_class in [UserModel, ProductModel, OrderModel]:
-        fory.register_type(model_class)
 else:
     # Production configuration (security hardened)
     fory = pyfory.Fory(
@@ -596,11 +1106,65 @@ else:
 
 ### DeserializationPolicy
 
-When `strict=False` is necessary for trusted native-mode payloads, configure a
-`DeserializationPolicy` before the first root operation to restrict accepted types and object hooks.
-See
-[Python Security](https://fory.apache.org/docs/object-serialization/python/security#deserializationpolicy)
-for the supported policy hooks and configuration example.
+When `strict=False` is necessary (e.g., deserializing functions/lambdas), use `DeserializationPolicy` to implement fine-grained security controls during deserialization. This provides protection similar to `pickle.Unpickler.find_class()` but with more comprehensive hooks.
+
+**Why use DeserializationPolicy?**
+
+- Block dangerous classes/modules (e.g., `subprocess.Popen`)
+- Intercept and validate `__reduce__` callables before invocation
+- Sanitize sensitive data during `__setstate__`
+- Replace or reject deserialized objects based on custom rules
+
+**Example: Blocking Dangerous Classes**
+
+```python
+import pyfory
+from pyfory import DeserializationPolicy
+
+dangerous_modules = {'subprocess', 'os', '__builtin__'}
+
+class SafeDeserializationPolicy(DeserializationPolicy):
+    """Block potentially dangerous classes during deserialization."""
+
+    def validate_class(self, cls, is_local, **kwargs):
+        # Block dangerous modules
+        if cls.__module__ in dangerous_modules:
+            raise ValueError(f"Blocked dangerous class: {cls.__module__}.{cls.__name__}")
+
+    def intercept_reduce_call(self, callable_obj, args, **kwargs):
+        # Block specific callable invocations during __reduce__
+        if getattr(callable_obj, '__name__', "") == 'Popen':
+            raise ValueError("Blocked attempt to invoke subprocess.Popen")
+        return None
+
+    def intercept_setstate(self, obj, state, **kwargs):
+        # Sanitize sensitive data
+        if isinstance(state, dict) and 'password' in state:
+            state['password'] = '***REDACTED***'
+        return None
+
+# Create Fory with custom security policy
+policy = SafeDeserializationPolicy()
+fory = pyfory.Fory(xlang=False, ref=True, strict=False, policy=policy)
+
+# Now deserialization is protected by your custom policy
+data = fory.serialize(my_object)
+result = fory.deserialize(data)  # Policy hooks will be invoked
+```
+
+**Available Policy Hooks:**
+
+- Reference validation hooks reject by raising exceptions and otherwise leave deserialized references unchanged.
+- `validate_class(cls, is_local)` - Validate/block class types during deserialization
+- `validate_module(module_name, is_local)` - Validate/block module imports
+- `validate_function(func, is_local)` - Validate/block function references
+- `validate_method(method, is_local)` - Validate/block method references
+- `intercept_reduce_call(callable_obj, args)` - Intercept `__reduce__` invocations
+- `inspect_reduced_object(obj)` - Inspect/replace objects created via `__reduce__`
+- `intercept_setstate(obj, state)` - Sanitize state before `__setstate__`
+- `authorize_instantiation(cls, args, kwargs)` - Control class instantiation
+
+**See also:** `pyfory/policy.py` contains detailed documentation and examples for each hook.
 
 ## Troubleshooting
 
@@ -650,9 +1214,26 @@ object identity or cycles matter:
 f = pyfory.Fory(ref=True)
 ```
 
-For configured Python object graphs with circular references, use native mode, register every
-application type before the first root, and declare reference-tracked recursive fields as shown in
-[Reference Tracking & Circular References](#reference-tracking--circular-references).
+For arbitrary Python object graphs with circular references, use Python native mode:
+
+```python
+f = pyfory.Fory(xlang=False, ref=True, strict=False)
+
+# Example with circular reference
+class Node:
+    def __init__(self, value):
+        self.value = value
+        self.next = None
+
+node1 = Node(1)
+node2 = Node(2)
+node1.next = node2
+node2.next = node1  # Circular reference
+
+data = f.dumps(node1)
+result = f.loads(data)
+assert result.next.next is result  # Circular reference preserved
+```
 
 ### Debug Mode
 
@@ -670,10 +1251,30 @@ import pyfory  # Now uses pure Python implementation
 
 **Q: Schema evolution not working**
 
-Xlang mode defaults to compatible schema evolution. Configure writer and reader schemas on separate
-instances because each instance's registry freezes on its first root operation. See
-[Schema Evolution](https://fory.apache.org/docs/object-serialization/python/schema-evolution) for a
-complete example.
+```python
+# A: Xlang mode defaults to compatible schema evolution.
+f = pyfory.Fory(xlang=True)
+
+# Version 1: Original class
+@dataclass
+class User:
+    name: str
+    age: int
+
+f.register(User, name="User")
+data = f.dumps(User("Alice", 30))
+
+# Version 2: Add new field (backward compatible)
+@dataclass
+class User:
+    name: str
+    age: int
+    email: str = "unknown@example.com"  # New field with default
+
+# Can still deserialize old data
+user = f.loads(data)
+print(user.email)  # "unknown@example.com"
+```
 
 **Q: Type registration errors in strict mode**
 
@@ -685,9 +1286,8 @@ f = pyfory.Fory(strict=True)
 f.register(MyClass, type_id=100)
 f.register(AnotherClass, type_id=101)
 
-# Native carriers still require pre-registration when strict mode is disabled.
-f = pyfory.Fory(xlang=False, strict=False)  # Use only with trusted payloads
-f.register_type(MyClass)
+# Or disable strict mode (NOT recommended for production)
+f = pyfory.Fory(strict=False)  # Use only in trusted environments
 ```
 
 ## Contributing
@@ -706,6 +1306,10 @@ Apache Fory™ is an open-source project under the Apache Software Foundation. W
 ## License
 
 Apache License 2.0. See [LICENSE](https://github.com/apache/fory/blob/main/LICENSE) for details.
+
+---
+
+**Apache Fory™** - Blazing fast, secure, and versatile serialization for modern applications.
 
 ## Links
 

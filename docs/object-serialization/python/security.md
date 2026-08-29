@@ -29,10 +29,10 @@ Before deserialization:
 
 - Authenticate the sender and protect message integrity at the transport or storage layer.
 - Enforce request or file size, timeout, and concurrency limits outside Fory.
-- Register only the application types the endpoint accepts and configure the reader before its
-  first root operation.
-- In native mode, register every callable, class, method, state, or reduction carrier that an
-  accepted graph may contain.
+- In strict or xlang mode, register only the application types the endpoint accepts and configure
+  the reader before its first root operation.
+- In non-strict native mode, use a policy to authorize every callable, class, method, state, or
+  reduction path that an accepted graph may contain.
 - Validate the deserialized value against application authorization and domain rules before use.
 
 ## Built-in safeguards
@@ -68,8 +68,6 @@ fory.register(OrderModel, name="example.Order")
 Use native-mode deserialization with `strict=False` only for trusted Python-only payloads:
 
 ```python
-import types
-
 import pyfory
 
 fory = pyfory.Fory(
@@ -78,16 +76,15 @@ fory = pyfory.Fory(
     strict=False,
     max_depth=100,
 )
-
-fory.register_type(types.FunctionType)
 ```
 
 The first root attempt permanently freezes registration, including when that attempt fails.
 `strict=False` does not permit type or serializer registration after that boundary, but its policy
 may authorize module-global classes and callables resolved while reading a trusted native payload.
-That resolution does not mutate the registry. If the first operation exposes an incomplete or
-invalid registration, create and configure a new instance before retrying. A fully configured
-reader can process a later root after a malformed-data failure.
+That resolution may populate resolver-owned caches but does not add or change an explicit
+registration. If a strict-mode failure requires adding a missing registration, create and configure
+a new instance. An already configured reader can process a later root after a malformed-data
+failure.
 
 Received remote metadata is also limited:
 
@@ -159,7 +156,8 @@ unchanged.
 ### Security Checklist
 
 - Keep `strict=True` for untrusted data.
-- Register all expected application and Python-native carrier types before the first root attempt.
+- Complete any explicit type, name, ID, or custom serializer registration before the first root
+  attempt.
 - Use `DeserializationPolicy` when `strict=False` is necessary.
 - Keep `max_depth` low enough to reject unexpectedly deep payloads.
 - Keep `max_graph_memory_bytes` at the fixed `128 MiB` default for most inputs, or set a positive

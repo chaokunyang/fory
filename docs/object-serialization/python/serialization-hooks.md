@@ -20,15 +20,14 @@ license: |
 ---
 
 Python native mode honors Python object customization protocols while writing Fory native bytes.
-It does not emit Pickle wire data. Use this page when a class controls its reduction, construction,
-or state restoration.
+It does not emit Pickle wire data. Use this page when replacing pickle or cloudpickle or when a
+class controls its reduction, construction, or state restoration.
 
-## When To Use Native Mode
+## Pickle And Cloudpickle Replacement
 
-Native mode supports a configured Python-only type surface that may include Python functions, local
-classes, closures, and reduction hooks. Register every application type and Python-native carrier
-before the first root attempt. The first attempt permanently freezes registration, even if it
-fails, and `strict=False` does not permit late type or serializer registration.
+Native mode is the Python mode to choose when the existing boundary uses `pickle` or
+`cloudpickle`. It supports richer Python values than JSON and xlang mode, including Python
+functions, local classes, closures, and reduction hooks.
 
 Use xlang mode instead when the payload crosses language boundaries or the data model should be a
 portable schema shared with other Fory implementations.
@@ -50,15 +49,13 @@ class SessionToken:
     def __setstate__(self, state):
         self.value = state["value"]
 
-fory = pyfory.Fory(xlang=False, ref=True, strict=False, compatible=False)
-fory.register_type(SessionToken)
+fory = pyfory.Fory(xlang=False, strict=False)
 token = fory.loads(fory.dumps(SessionToken("abc")))
 print(token.value)  # abc
 ```
 
 Use these hooks for Python-only payloads. For xlang payloads, model the data as dataclasses with
-portable field annotations instead. Complete all registration before the first root operation, as
-described in [Type Registration](type-registration.md).
+portable field annotations instead.
 
 ## Protocol 5 buffers
 

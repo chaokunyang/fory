@@ -84,12 +84,12 @@ payloads, and keep the same registration IDs or names on every peer that shares
 those payloads.
 
 The first root serialization or deserialization attempt permanently closes
-registration, including when that attempt fails. `strict=False` permits its
-configured policy to resolve module-global classes and callables while reading
-trusted native payloads, but that resolution does not reopen the registry or
-install a new serializer. Register native carrier types and application types
-whose serializers must be installed before the first root operation.
-Later registration attempts fail.
+registration, including when that attempt fails. `strict=False` permits native
+writes to discover runtime classes and callables and permits reads to resolve
+those authorized by the configured policy. That lazy resolution does not
+reopen the registry or create an explicit binding. Explicit names, IDs, and custom
+serializers must be configured before the first root; later registration
+attempts fail.
 
 Compatible metadata has one data-only exception: when a remote Struct has no
 local registration, deserialization returns the fixed framework

@@ -1,5 +1,5 @@
 ---
-title: NumPy
+title: NumPy & Pandas
 sidebar_position: 12
 id: numpy-integration
 license: |
@@ -19,61 +19,85 @@ license: |
   limitations under the License.
 ---
 
-Python native mode supports NumPy ndarrays as built-in values.
+Fory natively supports numpy arrays and pandas DataFrame with optimized serialization.
 
 ## NumPy Array Serialization
 
-Serialize and deserialize an ndarray directly:
+Large arrays use zero-copy when possible:
 
 ```python
-import numpy as np
 import pyfory
+import numpy as np
 
-fory = pyfory.Fory(xlang=False)
+f = pyfory.Fory(xlang=False)
 
 # Numpy arrays are supported natively
 arrays = {
-    "matrix": np.arange(12, dtype=np.float64).reshape(3, 4),
-    "vector": np.arange(10, dtype=np.int64),
-    "bool_mask": np.array([True, False, True]),
+    'matrix': np.random.rand(1000, 1000),
+    'vector': np.arange(10000),
+    'bool_mask': np.random.choice([True, False], size=5000)
 }
 
-data = fory.serialize(arrays)
-result = fory.deserialize(data)
+data = f.serialize(arrays)
+result = f.deserialize(data)
 
-assert np.array_equal(arrays["matrix"], result["matrix"])
+# Zero-copy for compatible array types
+assert np.array_equal(arrays['matrix'], result['matrix'])
 ```
 
-The ndarray carrier itself is available when the instance is created. Register application types
-that contain ndarrays, plus every custom type that can appear inside an object-dtype ndarray, before
-the first root attempt. The first root attempt permanently freezes registration, including when it
-fails. `strict=False` does not permit late type or serializer registration.
+## Pandas DataFrames
 
-## Out-of-Band Buffers
-
-Use a buffer callback to transport ndarray storage separately from the root bytes:
+Fory can serialize Pandas DataFrames efficiently:
 
 ```python
-import numpy as np
 import pyfory
+import pandas as pd
+import numpy as np
 
-fory = pyfory.Fory(xlang=False, ref=False)
+f = pyfory.Fory(xlang=False, ref=False, strict=False)
 
-array = np.arange(10000, dtype=np.float64).reshape(100, 100)
+df = pd.DataFrame({
+    'a': np.arange(1000, dtype=np.float64),
+    'b': np.arange(1000, dtype=np.int64),
+    'c': ['text'] * 1000
+})
 
+data = f.serialize(df)
+result = f.deserialize(data)
+
+assert df.equals(result)
+```
+
+## Zero-Copy with Out-of-Band Buffers
+
+For maximum performance with large arrays, use out-of-band serialization:
+
+```python
+import pyfory
+import numpy as np
+
+f = pyfory.Fory(xlang=False, ref=False, strict=False)
+
+# Large array
+array = np.random.rand(10000, 1000)
+
+# Out-of-band for zero-copy
 buffer_objects = []
-data = fory.serialize(array, buffer_callback=buffer_objects.append)
+data = f.serialize(array, buffer_callback=buffer_objects.append)
 buffers = [obj.getbuffer() for obj in buffer_objects]
 
-result = fory.deserialize(data, buffers=buffers)
+result = f.deserialize(data, buffers=buffers)
 assert np.array_equal(array, result)
 ```
 
-For a contiguous ndarray, `getbuffer()` can expose the existing storage as a `memoryview`. A
-non-contiguous ndarray may be copied to create a contiguous transport buffer. The application must
-send all collected buffers with the root bytes and provide them to `deserialize` in the same order.
+## Supported Array Types
+
+- `np.ndarray` (all dtypes)
+- `np.matrix`
+- Structured arrays
+- Record arrays
 
 ## Related Topics
 
-- [Out-of-Band Serialization](out-of-band.md) - Buffer callback APIs
+- [Out-of-Band Serialization](out-of-band.md) - Zero-copy buffers
 - [Basic Serialization](basic-serialization.md) - Standard usage

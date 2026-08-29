@@ -98,8 +98,8 @@ Load this file when changing `dart/`.
 - Do not add parallel header-low/header-high slot caches or multi-slot recent caches in TypeMeta hot paths to chase benchmark gaps. Header-cache hits must use the concrete checked cache owner directly; if a hit hint is needed, cache one TypeInfo/TypeMeta object and compare the protocol-defined top 52 header bits on that object, not separate low/high header fields or benchmark-pattern state.
 - The top 52 TypeDef/TypeMeta header bits are the schema identity. The full low 12 bits belong only to the current frame and must not participate in hit selection. On a hit, decode the current body size from its low eight bits and any extended-size varuint, prove those bytes readable, and skip exactly that body. Do not validate reserved/compress flags, compare cached or local low bits, parse or rehash the body, repeat schema or policy validation, or grow low-bit sentinels, accepted-header fields, parallel header slots, or benchmark-pattern state. The cold miss path owns low-flag validation.
 - Dart expected-type TypeDef reads should compare only the top 52 bits of the expected `TypeInfo` object's cached local TypeDef header before consulting the parsed-metadata map. A match is a direct local-schema hit: use the current frame's size encoding only for bounds and skip, add the expected type to the per-read shared type table, and do not validate its low flags, publish to `ParsedTypeMetaCache`, record a remote schema version, or parse/hash the body.
-- Dart local TypeDef construction is registration-owned: record registrations
-  and finalize their dependent TypeDefs and struct serializers before the first
+- Dart local TypeDef construction is registration-owned: each explicit registration constructs its
+  dependent TypeDefs and struct serializers before the first
   root read or write. The first `serialize`, `serializeTo`, `serializeBuiltin`,
   `serializeBuiltinTo`, `deserialize`, or `deserializeFrom` call permanently
   freezes that `Fory` instance's resolver;

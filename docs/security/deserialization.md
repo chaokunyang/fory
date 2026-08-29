@@ -54,7 +54,7 @@ Fory security boundaries include:
 - Explicit Fory policy checks, such as type, function, method, class, or
   registration policies that are intended to restrict what may be materialized.
 - Cleanup boundaries, where state created during a failed read must be released
-  or reset before the next root operation.
+  or reset before the root error escapes.
 
 Fory security boundaries do not include:
 
@@ -383,9 +383,8 @@ derived from input size, and stream budgeting should not depend on dynamic bytes
 
 Graph budget accounting should:
 
-- be initialized in top-level read state, with restoration owned by the runtime's root lifecycle
-  boundary before that read state is reused; runtimes may restore it in the root `finally` or in
-  the next root-entry reset according to their established context lifecycle;
+- be initialized in top-level read state, with cleanup owned by the top-level deserialization
+  `finally`;
 - account only for Fory-created objects or storage that are retained by the
   returned value graph; temporary helper objects used only during construction
   are outside the graph budget;
@@ -618,20 +617,19 @@ that case, classify the behavior by concrete impact:
 
 ## Registry Lifecycle
 
-The first root operation permanently closes type and serializer registration, including when that
-operation or registry finalization fails. Permanent freeze and successful finalization are distinct:
-a root entered during finalization or after failed finalization must fail before serializer or read
-work, and an accelerator must neither cache nor retry incomplete finalization. Failure state must
-not retain the exception or traceback graph. Registration that invokes application code must
-recheck the authoritative lifecycle before publishing application-derived state. Thread-safe
-facades retain only registrations that completed before the freeze. During child
-construction, a semantic replay log may reuse only an identical accepted registration that the
-child has already applied; unknown or different requests fail before that request mutates the child.
-A facade that replays opaque registration callbacks and cannot roll them back must become
-permanently unusable when a callback fails rather than expose partially registered children. These
-rules prevent a failed or reentrant registration from changing the accepted type surface after
-deserialization has begun.
-Runtime-specific publication ownership belongs in the implementation guide and language guidance.
+The first root serialization or deserialization permanently closes explicit type and serializer
+registration, including when that operation fails. Each natural registration owner keeps one
+authoritative frozen flag, and every later explicit registration attempt fails before changing
+type, serializer, ID, name, metadata, or policy bindings. A thread-safe facade with its own public
+registration surface may own its boundary flag, but must not mirror a child registry's flag.
+Implementations must use one boolean flag without another lifecycle state, a registration commit
+path, or eager whole-registry preparation.
+
+Registry freeze does not disable native runtime type resolution. When a mode supports unregistered
+types, a root may still discover an allowed runtime type and materialize resolver-owned metadata,
+serializers, or generated code. Lazy completion of an existing binding is also allowed. These
+internal cache operations are not explicit registration and must not create or change an explicit
+type or serializer registration, ID, name, or policy binding.
 
 ## Metadata And Type Resolution
 
@@ -658,12 +656,16 @@ Metadata readers should:
   entry so input cannot make the JVM derive an unbounded family of array classes.
 - Reset or release metadata state at the correct root-operation boundary.
 
-Operation-local metadata occurrences and writer IDs must be reset before the context is reused,
-including after a failed root. The reset must make prior-root entries invisible through the current
-logical size and release unusual high-water backing without adding allocation or slot-clearing work
-to normal roots. Bounded backing may retain inactive slot references when the runtime-specific
-retention rule permits it. Runtime-specific thresholds and reset ownership belong in the
-implementation guide and language guidance.
+Operation-local metadata occurrences and writer IDs from a failed root must reset before its error
+escapes. Successful roots may reset before the context is reused. The reset must make prior-root
+entries invisible through the current logical size and release unusual high-water backing without
+adding allocation or slot-clearing work to normal roots. Bounded backing may retain inactive slot
+references when the runtime-specific retention rule permits it. Runtime-specific thresholds and
+reset ownership belong in the implementation guide and language guidance.
+
+One-time warning registries retain their keys beyond the current root. A warning selected by a
+remote class or type name must therefore use a fixed key instead of including that untrusted name or
+another unbounded remote value in the message arguments.
 
 A class-resolution cache reachable from untrusted deserialization may publish
 an entry only from explicit trusted configuration or after the active class
@@ -681,11 +683,6 @@ reader must not infer another accepted name from inverse registration,
 class-keyed state, or `Class.getName()`. A custom-name registration does not by
 itself publish the Java class name as an additional alias; ID registration does
 publish the Java class name.
-
-Read-side warnings selected by remote class or type names must use fixed
-one-time-log keys. They must not include remote names or other
-untrusted-cardinality values in the message or arguments, because those keys are
-retained for the logger lifetime.
 
 Remote metadata that can create persistent read state must be bounded before
 that state is retained. The check is resource control only: it must not change

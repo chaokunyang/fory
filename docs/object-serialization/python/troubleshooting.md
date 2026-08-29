@@ -62,23 +62,16 @@ object identity or cycles matter:
 f = pyfory.Fory(ref=True)
 ```
 
-For configured Python-native object graphs with circular references, use Python native mode:
+For arbitrary Python object graphs with circular references, use Python native mode:
 
 ```python
-from dataclasses import dataclass
-from typing import Optional
-
-import pyfory
-
 f = pyfory.Fory(xlang=False, ref=True, strict=False)
 
 # Example with circular reference
-@dataclass
 class Node:
-    value: int
-    next: Optional["Node"] = pyfory.field(ref=True, nullable=True, default=None)
-
-f.register_type(Node)
+    def __init__(self, value):
+        self.value = value
+        self.next = None
 
 node1 = Node(1)
 node2 = Node(2)
@@ -93,18 +86,17 @@ assert result.next.next is result  # Circular reference preserved
 ### Schema Evolution Not Working
 
 ```python
-from dataclasses import dataclass
+# Keep compatible mode enabled. This is the default.
+f = pyfory.Fory()
 
-import pyfory
-
-# Version 1: Original class
+# Version 1: Writer schema
 @dataclass
 class UserV1:
     name: str
     age: pyfory.Int32
 
 writer = pyfory.Fory(xlang=True)
-writer.register(UserV1, name="example.User")
+writer.register(UserV1, name="User")
 data = writer.dumps(UserV1("Alice", 30))
 
 # Version 2: Add new field (backward compatible)
@@ -114,8 +106,9 @@ class UserV2:
     age: pyfory.Int32
     email: str = "unknown@example.com"  # New field with default
 
+# Register the reader schema on a separate instance.
 reader = pyfory.Fory(xlang=True)
-reader.register(UserV2, name="example.User")
+reader.register(UserV2, name="User")
 user = reader.loads(data)
 print(user.email)  # "unknown@example.com"
 ```
@@ -130,15 +123,14 @@ f = pyfory.Fory(strict=True)
 f.register(MyClass, type_id=100)
 f.register(AnotherClass, type_id=101)
 
-# Native mode may use strict=False only for trusted data, but application
-# and Python-native carrier types still must be registered before use.
-native_fory = pyfory.Fory(xlang=False, strict=False)
-native_fory.register_type(MyClass)
+# Or disable strict mode (NOT recommended for production)
+f = pyfory.Fory(strict=False)  # Use only in trusted environments
 ```
 
-The first root attempt permanently freezes registration, even when it fails. Do not register a
-missing type and retry on that same instance. Create a new instance, register the complete type
-surface, and retry with the new instance.
+The first root serialization or deserialization attempt permanently freezes explicit registration,
+including when that attempt fails. Non-strict native writes may still discover runtime types
+lazily, and reads may resolve those authorized by the configured policy, without creating an
+explicit registration.
 
 ## Debug Mode
 
@@ -160,33 +152,29 @@ import pyfory  # Now uses pure Python implementation
 Handle common serialization errors gracefully:
 
 ```python
-from dataclasses import dataclass
-
 import pyfory
-from pyfory.error import TypeUnregisteredError
+from pyfory.error import TypeUnregisteredError, TypeNotCompatibleError
 
-@dataclass
-class Message:
-    text: str
+fory = pyfory.Fory(strict=True)
 
-message = Message("hello")
-unconfigured = pyfory.Fory(xlang=False, strict=True, compatible=False)
 try:
-    unconfigured.dumps(message)
+    data = fory.dumps(my_object)
 except TypeUnregisteredError as e:
     print(f"Type not registered: {e}")
-    # The failed instance is already frozen. Configure a new one.
-    fory = pyfory.Fory(xlang=False, strict=True, compatible=False)
-    fory.register_type(Message, type_id=100)
-    data = fory.dumps(message)
+    # A failed root has already frozen this instance. Configure a new one.
+    fory = pyfory.Fory(strict=True)
+    fory.register(type(my_object), type_id=100)
+    data = fory.dumps(my_object)
+except Exception as e:
+    print(f"Serialization failed: {e}")
 
 try:
-    fory.loads(b"")
-except Exception:
-    pass
-
-# Root cleanup makes the configured instance reusable after the failed read.
-assert fory.loads(data) == message
+    obj = fory.loads(data)
+except TypeNotCompatibleError as e:
+    print(f"Schema mismatch: {e}")
+    # Handle version mismatch
+except Exception as e:
+    print(f"Deserialization failed: {e}")
 ```
 
 ## Development Setup

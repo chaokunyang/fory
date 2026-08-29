@@ -40,10 +40,13 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.resolver.XtypeResolver;
 import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.Types;
 import org.apache.fory.util.ExceptionUtils;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -539,6 +542,98 @@ public class RegisterTest extends ForyTestBase {
     Assert.assertFalse(creatorCalled.get());
   }
 
+  @Test(dataProvider = "xlang")
+  public void testFrozenResolverRegistration(boolean xlang) {
+    Fory fory =
+        Fory.builder()
+            .withXlang(xlang)
+            .withCodegen(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .build();
+    TypeResolver resolver = fory.getTypeResolver();
+    TypeInfo stringTypeInfo = resolver.getTypeInfo(String.class, false);
+    Serializer<?> stringSerializer = stringTypeInfo.getSerializer();
+    fory.serialize("freeze");
+    int factoryCount = serializerFactoryCount(resolver);
+
+    Assert.assertThrows(
+        ForyException.class, () -> resolver.registerSerializerFactory((r, type) -> null));
+    Assert.assertEquals(serializerFactoryCount(resolver), factoryCount);
+    Assert.assertThrows(
+        ForyException.class, () -> resolver.registerRuntimeTypeAlias(String.class, String.class));
+    Assert.assertThrows(ForyException.class, () -> resolver.register("missing.FrozenType"));
+    Assert.assertThrows(ForyException.class, () -> resolver.register(ObjectField.class, -1L));
+    Assert.assertThrows(ForyException.class, resolver::initialize);
+    Assert.assertSame(resolver.getTypeInfo(String.class, false), stringTypeInfo);
+    Assert.assertSame(stringTypeInfo.getSerializer(), stringSerializer);
+
+    if (xlang) {
+      Assert.assertThrows(
+          ForyException.class,
+          () ->
+              resolver.registerInternalSerializer(char.class, new ObjectFieldSerializer(resolver)));
+      Assert.assertNull(resolver.getTypeInfo(ObjectField.class, false));
+      Assert.assertThrows(
+          ForyException.class,
+          () ->
+              ((XtypeResolver) resolver)
+                  .registerForyType(
+                      ObjectField.class, new ObjectFieldSerializer(resolver), Types.EXT));
+      Assert.assertNull(resolver.getTypeInfo(ObjectField.class, false));
+    } else {
+      ClassResolver classResolver = (ClassResolver) resolver;
+      Object extRegistry = TestUtils.getFieldValue(resolver, "extRegistry");
+      int classIdGenerator = TestUtils.getFieldValue(extRegistry, "classIdGenerator");
+      Assert.assertThrows(
+          ForyException.class, () -> classResolver.registerInternal(ObjectField.class));
+      Assert.assertThrows(ForyException.class, () -> classResolver.registerInternal(String.class));
+      Assert.assertThrows(
+          ForyException.class, () -> classResolver.registerInternal(new Class<?>[0]));
+      Assert.assertThrows(
+          ForyException.class,
+          () ->
+              classResolver.registerInternalSerializer(
+                  String.class, new ObjectFieldSerializer(resolver)));
+      int currentClassIdGenerator = TestUtils.getFieldValue(extRegistry, "classIdGenerator");
+      Assert.assertEquals(currentClassIdGenerator, classIdGenerator);
+      Assert.assertNull(resolver.getTypeInfo(ObjectField.class, false));
+    }
+  }
+
+  @Test(dataProvider = "xlang")
+  public void testFactoryRegistrationReentry(boolean xlang) {
+    Fory fory =
+        Fory.builder()
+            .withXlang(xlang)
+            .withCodegen(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .build();
+    TypeResolver resolver = fory.getTypeResolver();
+    int factoryCount = serializerFactoryCount(resolver);
+    FactoryRegisteringSerializer.ATTEMPTED.set(false);
+    FactoryRegisteringSerializer.FACTORY.set((r, type) -> null);
+    try {
+      Assert.assertThrows(
+          ForyException.class,
+          () -> fory.registerSerializerAndType(MyExt.class, FactoryRegisteringSerializer.class));
+    } finally {
+      FactoryRegisteringSerializer.FACTORY.set(null);
+    }
+
+    Assert.assertTrue(FactoryRegisteringSerializer.ATTEMPTED.get());
+    Assert.assertEquals(serializerFactoryCount(resolver), factoryCount);
+    Assert.assertFalse(resolver.isRegistered(MyExt.class));
+    Assert.assertNull(resolver.getTypeInfo(MyExt.class, false));
+  }
+
+  private static int serializerFactoryCount(TypeResolver resolver) {
+    Object extRegistry = TestUtils.getFieldValue(resolver, "extRegistry");
+    List<?> factories = TestUtils.getFieldValue(extRegistry, "serializerFactories");
+    return factories.size();
+  }
+
   @Test
   public void testReentrantModuleFreeze() {
     Fory fory =
@@ -702,6 +797,21 @@ public class RegisterTest extends ForyTestBase {
     public ReentrantSerializer(TypeResolver typeResolver) {
       super(typeResolver);
       CONSTRUCTION.get().run();
+    }
+  }
+
+  public static class FactoryRegisteringSerializer extends MyExtSerializer {
+    private static final AtomicBoolean ATTEMPTED = new AtomicBoolean();
+    private static final AtomicReference<SerializerFactory> FACTORY = new AtomicReference<>();
+
+    public FactoryRegisteringSerializer(TypeResolver typeResolver) {
+      super(typeResolver);
+      ATTEMPTED.set(true);
+      try {
+        typeResolver.registerSerializerFactory(FACTORY.get());
+      } catch (ForyException ignored) {
+        // The enclosing registration must remain rejected after this callback returns.
+      }
     }
   }
 

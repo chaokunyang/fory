@@ -290,11 +290,13 @@ public abstract class TypeResolver {
 
   /** Registers a class by name with an auto-assigned user ID. */
   public void register(String className) {
+    checkRegisterAllowed();
     register(loadClassFromLoader(className));
   }
 
   /** Registers a class by name with a user-specified ID. */
   public void register(String className, long classId) {
+    checkRegisterAllowed();
     register(loadClassFromLoader(className), classId);
   }
 
@@ -302,6 +304,7 @@ public abstract class TypeResolver {
    * Registers a class by name with a namespace and type name. The type name must not contain `.`.
    */
   public void register(String className, String namespace, String typeName) {
+    checkRegisterAllowed();
     register(loadClassFromLoader(className), namespace, typeName);
   }
 
@@ -315,12 +318,12 @@ public abstract class TypeResolver {
    */
   @Internal
   public final void registerRuntimeTypeAlias(Class<?> runtimeType, Class<?> canonicalType) {
+    checkRegisterAllowed();
     Preconditions.checkNotNull(runtimeType, "runtimeType");
     Preconditions.checkNotNull(canonicalType, "canonicalType");
     if (runtimeType == canonicalType) {
       return;
     }
-    checkRegisterAllowed();
     TypeInfo canonicalInfo = classInfoMap.get(canonicalType);
     Preconditions.checkArgument(
         canonicalInfo != null,
@@ -418,6 +421,7 @@ public abstract class TypeResolver {
    * @param type the class to register
    * @param serializer the serializer to use
    */
+  @Internal
   public abstract void registerInternalSerializer(Class<?> type, Serializer<?> serializer);
 
   /**
@@ -582,6 +586,7 @@ public abstract class TypeResolver {
    * <p>When the wire and user IDs are unchanged, the resolver must update the existing {@link
    * TypeInfo} owner because generated serializers and field metadata may already retain it.
    */
+  @Internal
   protected abstract TypeInfo publishSerializerTypeInfo(
       TypeInfo typeInfo, boolean registerType, boolean explicitRegistration);
 
@@ -1746,8 +1751,10 @@ public abstract class TypeResolver {
 
   public abstract Serializer<?> getRawSerializer(Class<?> cls);
 
+  @Internal
   public abstract <T> void setSerializer(Class<T> cls, Serializer<T> serializer);
 
+  @Internal
   public abstract <T> void setSerializerIfAbsent(Class<T> cls, Serializer<T> serializer);
 
   /** Returns the final metadata owner for a declared field during serializer construction. */
@@ -1833,6 +1840,7 @@ public abstract class TypeResolver {
   /**
    * Reset serializer if {@code serializer} is not null, otherwise clear serializer for {@code cls}.
    */
+  @Internal
   public <T> void resetSerializer(Class<T> cls, Serializer<T> serializer) {
     TypeInfo constructedTypeInfo = getConstructedTypeInfo(cls);
     if (constructedTypeInfo != null) {
@@ -1913,6 +1921,7 @@ public abstract class TypeResolver {
     return map.getOrDefault(genericTypeStr, OBJECT_GENERIC_TYPE);
   }
 
+  @Internal
   public abstract void initialize();
 
   public abstract void ensureSerializersCompiled();
@@ -2580,6 +2589,7 @@ public abstract class TypeResolver {
   }
 
   public void registerSerializerFactory(SerializerFactory serializerFactory) {
+    checkRegisterAllowed();
     extRegistry.serializerFactories.add(Preconditions.checkNotNull(serializerFactory));
   }
 

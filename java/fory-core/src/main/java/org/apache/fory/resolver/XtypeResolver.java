@@ -168,7 +168,9 @@ public class XtypeResolver extends TypeResolver {
   }
 
   @Override
+  @Internal
   public void initialize() {
+    checkRegisterAllowed();
     registerDefaultTypes();
     Serializers.registerDefaultSerializers(this);
     if (shareMeta) {
@@ -465,6 +467,7 @@ public class XtypeResolver extends TypeResolver {
    */
   @Internal
   public void registerForyType(Class<?> type, Serializer serializer, int typeId) {
+    checkRegisterAllowed();
     Preconditions.checkArgument(typeId < MAX_TYPE_ID, "Too big type id %s", typeId);
     register(
         type,
@@ -610,6 +613,7 @@ public class XtypeResolver extends TypeResolver {
   }
 
   @Override
+  @Internal
   protected TypeInfo publishSerializerTypeInfo(
       TypeInfo typeInfo, boolean registerType, boolean explicitRegistration) {
     Class<?> type = typeInfo.type;
@@ -657,6 +661,7 @@ public class XtypeResolver extends TypeResolver {
   }
 
   @Override
+  @Internal
   public void registerInternalSerializer(Class<?> type, Serializer<?> serializer) {
     checkRegisterAllowed();
     Class<?> unwrapped = TypeUtils.unwrap(type);
@@ -1347,6 +1352,7 @@ public class XtypeResolver extends TypeResolver {
   }
 
   @Override
+  @Internal
   public <T> void setSerializer(Class<T> cls, Serializer<T> serializer) {
     if (isConstructingSerializer()) {
       bindConstructedSerializer(cls, serializer);
@@ -1356,6 +1362,7 @@ public class XtypeResolver extends TypeResolver {
   }
 
   @Override
+  @Internal
   public <T> void setSerializerIfAbsent(Class<T> cls, Serializer<T> serializer) {
     if (isConstructingSerializer()) {
       if (!hasConstructedSerializer(cls)) {

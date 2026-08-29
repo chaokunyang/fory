@@ -266,7 +266,9 @@ public class ClassResolver extends TypeResolver {
   }
 
   @Override
+  @Internal
   public void initialize() {
+    checkRegisterAllowed();
     extRegistry.objectGenericType = buildGenericType(OBJECT_TYPE);
     registerInternal(LambdaSerializer.ReplaceStub.class, LAMBDA_STUB_ID);
     registerInternal(JdkProxySerializer.ReplaceStub.class, JDK_PROXY_STUB_ID);
@@ -484,31 +486,8 @@ public class ClassResolver extends TypeResolver {
       while (containsUserTypeId(extRegistry.userIdGenerator)) {
         extRegistry.userIdGenerator++;
       }
-      register(cls, extRegistry.userIdGenerator);
+      registerUserImpl(cls, extRegistry.userIdGenerator);
     }
-  }
-
-  /**
-   * Registers a class by its fully qualified name with an auto-assigned user ID.
-   *
-   * @param className the fully qualified class name
-   * @see #register(Class)
-   */
-  @Override
-  public void register(String className) {
-    register(loadClassFromLoader(className));
-  }
-
-  /**
-   * Registers a class by its fully qualified name with a specified user ID.
-   *
-   * @param className the fully qualified class name
-   * @param classId the user ID to assign (0-based, in user ID space)
-   * @see #register(Class, long)
-   */
-  @Override
-  public void register(String className, long classId) {
-    register(loadClassFromLoader(className), classId);
   }
 
   /**
@@ -523,6 +502,7 @@ public class ClassResolver extends TypeResolver {
    */
   @Override
   public void register(Class<?> cls, long id) {
+    checkRegisterAllowed();
     registerUserImpl(cls, toUserTypeId(id));
   }
 
@@ -668,9 +648,11 @@ public class ClassResolver extends TypeResolver {
    *
    * @param classes the classes to register
    */
+  @Internal
   public void registerInternal(Class<?>... classes) {
+    checkRegisterAllowed();
     for (Class<?> cls : classes) {
-      registerInternal(cls);
+      registerInternalType(cls);
     }
   }
 
@@ -682,22 +664,10 @@ public class ClassResolver extends TypeResolver {
    *
    * @param cls the class to register
    */
+  @Internal
   public void registerInternal(Class<?> cls) {
-    if (!extRegistry.registeredClassIdMap.containsKey(cls)) {
-      Preconditions.checkArgument(
-          extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
-          "Internal type id overflow: %s",
-          extRegistry.classIdGenerator);
-      while (extRegistry.classIdGenerator < typeIdToTypeInfo.length
-          && typeIdToTypeInfo[extRegistry.classIdGenerator] != null) {
-        extRegistry.classIdGenerator++;
-      }
-      Preconditions.checkArgument(
-          extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
-          "Internal type id overflow: %s",
-          extRegistry.classIdGenerator);
-      registerInternal(cls, extRegistry.classIdGenerator);
-    }
+    checkRegisterAllowed();
+    registerInternalType(cls);
   }
 
   /**
@@ -712,13 +682,32 @@ public class ClassResolver extends TypeResolver {
    * @param classId the internal ID, must be in range [0, 255]
    * @throws IllegalArgumentException if the ID is out of range or already in use
    */
+  @Internal
   public void registerInternal(Class<?> cls, int classId) {
+    checkRegisterAllowed();
     Preconditions.checkArgument(classId >= 0 && classId < INTERNAL_NATIVE_ID_LIMIT);
     registerInternalImpl(cls, classId);
   }
 
+  private void registerInternalType(Class<?> cls) {
+    if (!extRegistry.registeredClassIdMap.containsKey(cls)) {
+      Preconditions.checkArgument(
+          extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
+          "Internal type id overflow: %s",
+          extRegistry.classIdGenerator);
+      while (extRegistry.classIdGenerator < typeIdToTypeInfo.length
+          && typeIdToTypeInfo[extRegistry.classIdGenerator] != null) {
+        extRegistry.classIdGenerator++;
+      }
+      Preconditions.checkArgument(
+          extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
+          "Internal type id overflow: %s",
+          extRegistry.classIdGenerator);
+      registerInternalImpl(cls, extRegistry.classIdGenerator);
+    }
+  }
+
   private void registerInternalImpl(Class<?> cls, int typeId) {
-    checkRegisterAllowed();
     Preconditions.checkArgument(typeId >= 0 && typeId < INTERNAL_NATIVE_ID_LIMIT);
     checkRegistration(cls, typeId, cls.getName(), true);
     extRegistry.registeredClassIdMap.put(cls, typeId);
@@ -734,7 +723,6 @@ public class ClassResolver extends TypeResolver {
   }
 
   private void registerUserImpl(Class<?> cls, int userId) {
-    checkRegisterAllowed();
     Preconditions.checkArgument(userId != -1, "User type id 0xffffffff is reserved");
     checkRegistration(cls, userId, cls.getName(), false);
     extRegistry.registeredClassIdMap.put(cls, userId);
@@ -944,6 +932,7 @@ public class ClassResolver extends TypeResolver {
    * Compute the typeId used in TypeDef without forcing serializer creation. This avoids recursive
    * serializer construction while building class metadata.
    */
+  @Internal
   public int getTypeIdForTypeDef(Class<?> cls) {
     TypeInfo typeInfo = classInfoMap.get(cls);
     if (typeInfo != null) {
@@ -970,6 +959,7 @@ public class ClassResolver extends TypeResolver {
     return typeId;
   }
 
+  @Internal
   public int getTypeDefRootTypeId(Class<?> cls, boolean hasFieldMetadata) {
     if (hasFieldMetadata) {
       // Preserve the normal TypeInfo/name cache so locally generated or dynamically registered
@@ -1236,7 +1226,9 @@ public class ClassResolver extends TypeResolver {
    * @param serializer serializer for object of {@code type}
    */
   @Override
+  @Internal
   public void registerInternalSerializer(Class<?> type, Serializer<?> serializer) {
+    checkRegisterAllowed();
     Integer classId = extRegistry.registeredClassIdMap.get(type);
     if (classId != null && !isInternalRegisteredClassId(type, classId)) {
       throw new IllegalArgumentException(
@@ -1251,7 +1243,7 @@ public class ClassResolver extends TypeResolver {
           classId);
     }
     if (classId == null) {
-      registerInternal(type);
+      registerInternalType(type);
     }
     // Internal serializers are owned by the resolver path, not by their runtime package name.
     // Android/R8 may obfuscate Fory packages, so package text is not a stable internal marker.
@@ -1259,7 +1251,6 @@ public class ClassResolver extends TypeResolver {
   }
 
   private void registerSerializerImpl(Class<?> type, Serializer<?> serializer) {
-    checkRegisterAllowed();
     TypeInfo typeInfo = newSerializerTypeInfo(type, serializer, false);
     publishSerializerTypeInfo(typeInfo, false, true);
   }
@@ -1328,6 +1319,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   @Override
+  @Internal
   protected TypeInfo publishSerializerTypeInfo(
       TypeInfo typeInfo, boolean registerType, boolean explicitRegistration) {
     Class<?> type = typeInfo.type;
@@ -1397,6 +1389,7 @@ public class ClassResolver extends TypeResolver {
    * classinfo.
    */
   @Override
+  @Internal
   public <T> void setSerializer(Class<T> cls, Serializer<T> serializer) {
     if (isConstructingSerializer()) {
       bindConstructedSerializer(cls, serializer);
@@ -1412,6 +1405,7 @@ public class ClassResolver extends TypeResolver {
    * creating a data serializer for serialization of parts fields of a class.
    */
   @Override
+  @Internal
   public <T> void setSerializerIfAbsent(Class<T> cls, Serializer<T> serializer) {
     if (isConstructingSerializer()) {
       if (!hasConstructedSerializer(cls)) {
@@ -1425,16 +1419,7 @@ public class ClassResolver extends TypeResolver {
     }
   }
 
-  /** Clear serializer associated with <code>cls</code> if not null. */
-  public void clearSerializer(Class<?> cls) {
-    TypeInfo typeInfo = classInfoMap.get(cls);
-    if (typeInfo != null) {
-      typeInfo.setSerializer(this, null);
-    }
-  }
-
-  /** Add serializer for specified class. */
-  public void addSerializer(Class<?> type, Serializer<?> serializer) {
+  private void addSerializer(Class<?> type, Serializer<?> serializer) {
     Preconditions.checkNotNull(serializer);
     TypeInfo typeInfo = newAutomaticTypeInfo(type, serializer);
     publishSerializerTypeInfo(typeInfo, false, false);
@@ -1708,6 +1693,7 @@ public class ClassResolver extends TypeResolver {
     return typeInfo;
   }
 
+  @Internal
   public TypeInfo getTypeInfo(short classId) {
     TypeInfo typeInfo = typeIdToTypeInfo[classId];
     assert typeInfo != null : classId;

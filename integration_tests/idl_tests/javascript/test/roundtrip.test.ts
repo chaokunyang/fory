@@ -22,7 +22,7 @@ import Fory, {
   BoolArray,
   Decimal,
   ForyFloat16Array,
-  Type,
+  type Serializer,
 } from "@apache-fory/core";
 import {
   AddressBook,
@@ -79,10 +79,12 @@ import {
 import { Color, Monster, registerMonsterTypes } from "../generated/monster";
 import { TreeNode, registerTreeTypes } from "../generated/tree";
 
-type RegisterFn = (fory: Fory) => unknown;
-type RegisteredTypeInfo =
-  | ReturnType<typeof Type.struct>
-  | ReturnType<typeof Type.union>;
+type RegisterFn = (fory: Fory) => Record<string, { serializer: Serializer }>;
+
+interface RegisteredFory {
+  fory: Fory;
+  serializers: Map<number, Serializer>;
+}
 
 const MODES = [
   { title: "schema-consistent", compatible: false },
@@ -93,38 +95,28 @@ function buildFory(
   compatible: boolean,
   ref: boolean,
   registerFns: ReadonlyArray<RegisterFn>,
-): Fory {
+): RegisteredFory {
   const fory = new Fory({ compatible, ref });
+  const serializers = new Map<number, Serializer>();
   for (const registerFn of registerFns) {
-    registerFn(fory);
+    for (const { serializer } of Object.values(registerFn(fory))) {
+      serializers.set(serializer.getTypeInfo().userTypeId, serializer);
+    }
   }
-  return fory;
-}
-
-function getSerializer(fory: Fory, typeInfo: RegisteredTypeInfo) {
-  const serializer = fory.typeResolver.getSerializerByTypeInfo(typeInfo);
-  if (!serializer) {
-    throw new Error(`Missing serializer for type id ${typeInfo.typeId}`);
-  }
-  return serializer;
+  return { fory, serializers };
 }
 
 function roundTripValue<T>(
-  fory: Fory,
-  typeInfo: RegisteredTypeInfo,
+  registeredFory: RegisteredFory,
+  typeId: number,
   value: T,
 ): unknown {
-  const serializer = getSerializer(fory, typeInfo);
-  const bytes = fory.serialize(value, serializer);
-  return fory.deserialize(bytes, serializer);
-}
-
-function roundTripStruct<T>(fory: Fory, typeId: number, value: T): unknown {
-  return roundTripValue(fory, Type.struct(typeId), value);
-}
-
-function roundTripUnion<T>(fory: Fory, typeId: number, value: T): unknown {
-  return roundTripValue(fory, Type.union(typeId), value);
+  const serializer = registeredFory.serializers.get(typeId);
+  if (!serializer) {
+    throw new Error(`Missing serializer for type id ${typeId}`);
+  }
+  const bytes = registeredFory.fory.serialize(value, serializer);
+  return registeredFory.fory.deserialize(bytes, serializer);
 }
 
 function normalize(value: unknown): unknown {
@@ -652,7 +644,7 @@ describe.each(MODES)(
 
       expectAcyclicEqual(
         buildAddressBook(),
-        roundTripStruct(fory, 103, buildAddressBook()),
+        roundTripValue(fory, 103, buildAddressBook()),
       );
 
       const dogAnimal: Animal = {
@@ -663,8 +655,8 @@ describe.each(MODES)(
         case: AnimalCase.CAT,
         value: buildCat(),
       };
-      expectAcyclicEqual(dogAnimal, roundTripUnion(fory, 106, dogAnimal));
-      expectAcyclicEqual(catAnimal, roundTripUnion(fory, 106, catAnimal));
+      expectAcyclicEqual(dogAnimal, roundTripValue(fory, 106, dogAnimal));
+      expectAcyclicEqual(catAnimal, roundTripValue(fory, 106, catAnimal));
     });
 
     test("round-trips auto_id messages and root wrapper unions", () => {
@@ -680,14 +672,14 @@ describe.each(MODES)(
         value: "raw-payload",
       };
 
-      expectAcyclicEqual(envelope, roundTripStruct(fory, 3022445236, envelope));
+      expectAcyclicEqual(envelope, roundTripValue(fory, 3022445236, envelope));
       expectAcyclicEqual(
         wrapperEnvelope,
-        roundTripUnion(fory, 1471345060, wrapperEnvelope),
+        roundTripValue(fory, 1471345060, wrapperEnvelope),
       );
       expectAcyclicEqual(
         wrapperRaw,
-        roundTripUnion(fory, 1471345060, wrapperRaw),
+        roundTripValue(fory, 1471345060, wrapperRaw),
       );
     });
 
@@ -699,23 +691,23 @@ describe.each(MODES)(
 
       expectAcyclicEqual(
         buildPrimitiveTypes(),
-        roundTripStruct(fory, 200, buildPrimitiveTypes()),
+        roundTripValue(fory, 200, buildPrimitiveTypes()),
       );
       expectAcyclicEqual(
         buildNumericCollections(),
-        roundTripStruct(fory, 210, buildNumericCollections()),
+        roundTripValue(fory, 210, buildNumericCollections()),
       );
       expectAcyclicEqual(
         buildNumericCollectionsArray(),
-        roundTripStruct(fory, 212, buildNumericCollectionsArray()),
+        roundTripValue(fory, 212, buildNumericCollectionsArray()),
       );
       expectAcyclicEqual(
         buildNumericCollectionUnion(),
-        roundTripUnion(fory, 211, buildNumericCollectionUnion()),
+        roundTripValue(fory, 211, buildNumericCollectionUnion()),
       );
       expectAcyclicEqual(
         buildNumericCollectionArrayUnion(),
-        roundTripUnion(fory, 213, buildNumericCollectionArrayUnion()),
+        roundTripValue(fory, 213, buildNumericCollectionArrayUnion()),
       );
     });
 
@@ -728,15 +720,15 @@ describe.each(MODES)(
 
       expectAcyclicEqual(
         buildMonster(),
-        roundTripStruct(flatbufferFory, 438716985, buildMonster()),
+        roundTripValue(flatbufferFory, 438716985, buildMonster()),
       );
       expectAcyclicEqual(
         buildContainer(),
-        roundTripStruct(flatbufferFory, 372413680, buildContainer()),
+        roundTripValue(flatbufferFory, 372413680, buildContainer()),
       );
       expectAcyclicEqual(
         buildOptionalHolder(),
-        roundTripStruct(flatbufferFory, 122, buildOptionalHolder()),
+        roundTripValue(flatbufferFory, 122, buildOptionalHolder()),
       );
     });
 
@@ -745,15 +737,11 @@ describe.each(MODES)(
 
       expectAcyclicEqual(
         buildExampleMessage(),
-        roundTripValue(
-          fory,
-          Type.struct({ typeId: 1500, evolving: true }),
-          buildExampleMessage(),
-        ),
+        roundTripValue(fory, 1500, buildExampleMessage()),
       );
       expectAcyclicEqual(
         buildExampleMessageUnion(),
-        roundTripUnion(fory, 1501, buildExampleMessageUnion()),
+        roundTripValue(fory, 1501, buildExampleMessageUnion()),
       );
     });
   },
@@ -765,13 +753,13 @@ describe.each(MODES)(
     test("round-trips tree and preserves shared-node topology", () => {
       const fory = buildFory(compatible, true, [registerTreeTypes]);
       const tree = buildTree();
-      expectTreeEqual(tree, roundTripStruct(fory, 2251833438, tree));
+      expectTreeEqual(tree, roundTripValue(fory, 2251833438, tree));
     });
 
     test("round-trips graph and preserves edge/node references", () => {
       const fory = buildFory(compatible, true, [registerGraphTypes]);
       const graph = buildGraph();
-      expectGraphEqual(graph, roundTripStruct(fory, 2373163777, graph));
+      expectGraphEqual(graph, roundTripValue(fory, 2373163777, graph));
     });
   },
 );

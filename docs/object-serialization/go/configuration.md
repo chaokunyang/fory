@@ -391,7 +391,7 @@ f := threadsafe.NewWithFactory(func() *fory.Fory {
         fory.WithXlang(true),
         fory.WithMaxDepth(30),
     )
-    if err := inner.RegisterStructByName(Request{}, "example.Request"); err != nil {
+    if err := inner.RegisterStruct(Request{}, 1); err != nil {
         panic(err)
     }
     return inner

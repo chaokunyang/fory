@@ -81,7 +81,7 @@ import (
 
 f := threadsafe.NewWithFactory(func() *fory.Fory {
     inner := fory.New(fory.WithXlang(false), fory.WithTrackRef(true))
-    if err := inner.RegisterStructByName(Order{}, "example.Order"); err != nil {
+    if err := inner.RegisterStruct(Order{}, 100); err != nil {
         panic(err)
     }
     return inner

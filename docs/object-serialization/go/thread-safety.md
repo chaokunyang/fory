@@ -66,6 +66,32 @@ go func() {
 }()
 ```
 
+### How It Works
+
+The thread-safe wrapper uses `sync.Pool`:
+
+1. **Acquire**: Gets a Fory instance from the pool
+2. **Use**: Performs serialization/deserialization
+3. **Copy**: Copies result data because the buffer will be reused
+4. **Release**: Returns the instance to the pool
+
+```go
+// Simplified implementation
+func (f *Fory) Serialize(v any) ([]byte, error) {
+    inner := f.pool.Get().(*fory.Fory)
+    defer f.pool.Put(inner)
+
+    data, err := inner.Serialize(v)
+    if err != nil {
+        return nil, err
+    }
+
+    result := make([]byte, len(data))
+    copy(result, data)
+    return result, nil
+}
+```
+
 ### API
 
 ```go
@@ -93,10 +119,10 @@ returning it to the pool:
 ```go
 f := threadsafe.NewWithFactory(func() *fory.Fory {
     inner := fory.New(fory.WithXlang(true))
-    if err := inner.RegisterStructByName(User{}, "example.User"); err != nil {
+    if err := inner.RegisterStruct(User{}, 1); err != nil {
         panic(err)
     }
-    if err := inner.RegisterStructByName(Order{}, "example.Order"); err != nil {
+    if err := inner.RegisterStruct(Order{}, 2); err != nil {
         panic(err)
     }
     return inner
@@ -117,7 +143,7 @@ when the root fails:
 
 ```go
 inner := fory.New(fory.WithXlang(true))
-if err := inner.RegisterStructByName(User{}, "example.User"); err != nil {
+if err := inner.RegisterStruct(User{}, 1); err != nil {
     panic(err)
 }
 
@@ -184,7 +210,7 @@ func BenchmarkNonThreadSafe(b *testing.B) {
 func BenchmarkThreadSafe(b *testing.B) {
     f := threadsafe.NewWithFactory(func() *fory.Fory {
         inner := fory.New(fory.WithXlang(true))
-        if err := inner.RegisterStructByName(User{}, "example.User"); err != nil {
+        if err := inner.RegisterStruct(User{}, 1); err != nil {
             panic(err)
         }
         return inner
@@ -231,7 +257,7 @@ For dynamic goroutine count or simplicity:
 ```go
 var f = threadsafe.NewWithFactory(func() *fory.Fory {
     inner := fory.New(fory.WithXlang(true))
-    if err := inner.RegisterStructByName(User{}, "example.User"); err != nil {
+    if err := inner.RegisterStruct(User{}, 1); err != nil {
         panic(err)
     }
     return inner
@@ -249,7 +275,7 @@ func handleRequest(user *User) []byte {
 ```go
 var serializer = threadsafe.NewWithFactory(func() *fory.Fory {
     inner := fory.New(fory.WithXlang(true))
-    if err := inner.RegisterStructByName(Response{}, "example.Response"); err != nil {
+    if err := inner.RegisterStruct(Response{}, 1); err != nil {
         panic(err)
     }
     return inner

@@ -106,7 +106,7 @@ func TestRegistryFreezeRegistrations(t *testing.T) {
 	}
 }
 
-func TestFrozenRegistryAllowsLazySerializer(t *testing.T) {
+func TestFrozenAllowsLazySerializer(t *testing.T) {
 	f := New(WithXlang(false), WithCompatible(false))
 	_, err := f.Serialize(int32(1))
 	require.NoError(t, err)

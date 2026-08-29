@@ -9,11 +9,10 @@ Load this file when changing `go/fory/` or Go xlang behavior.
 - The Go implementation focuses on fast serializers.
 - A Go `Fory` instance has one authoritative registry-frozen flag. The first root serialization or
   deserialization sets it before codec work and leaves it set after failure. Explicit registration
-  checks that flag before mutation. Do not add registry finalization or failure states, alternate
-  identity/preflight machinery, or input normalization beyond the existing registration behavior.
+  checks that flag before mutation. Do not add another registry lifecycle state or alter existing
+  registration semantics beyond that boundary check.
   `threadsafe.Fory` has no registration API or facade registry: configure every pooled child in the
-  factory passed to `NewWithFactory` before returning it. Do not add prepared runtimes, replay logs,
-  facade registry state, or callback-reentry lifecycle machinery.
+  factory passed to `NewWithFactory` before returning it.
 - Go `ReadContext` intentionally defers codec errors to existing `HasError` or `CheckError`
   boundaries. After an error, work may continue only while it remains panic- and bounds-safe and
   cannot cause disproportionate work or allocation, publish state that survives root cleanup, or

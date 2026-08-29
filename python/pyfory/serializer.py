@@ -525,8 +525,6 @@ class DecimalSerializer(Serializer):
 
 
 class PandasRangeIndexSerializer(Serializer):
-    __slots__ = "_cached"
-
     def __init__(self, type_resolver):
         import pandas as pd
 

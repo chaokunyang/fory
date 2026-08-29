@@ -1183,9 +1183,6 @@ func hiddenCarrierAliasIsRejected() throws {
     #expect(throws: ForyError.self) {
         _ = try fory.serialize(HiddenCarrierHolder(users: []))
     }
-    #expect(throws: ForyError.self) {
-        try fory.register(KeySerializer.self, id: 80)
-    }
 }
 
 @Test
@@ -1225,5 +1222,16 @@ func registrationFreezesAtFirstRoot() throws {
     _ = try fory.serialize(Int32(1))
     #expect(throws: ForyError.self) {
         try fory.register(UserSerializer.self, id: 131)
+    }
+}
+
+@Test
+func failedRootFreezesRegistration() throws {
+    let fory = Fory()
+    #expect(throws: ForyError.self) {
+        let _: Int32 = try fory.deserialize(Data())
+    }
+    #expect(throws: ForyError.self) {
+        try fory.register(UserSerializer.self, id: 132)
     }
 }

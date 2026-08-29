@@ -102,10 +102,7 @@ public struct ForyStructMacro: MemberMacro, ExtensionMacro {
 
         let schemaHashDecl: DeclSyntax = DeclSyntax(stringLiteral: try buildSchemaHashDecl(fields: parsed.fields))
         let compatibleTypeMetaDecl: DeclSyntax = DeclSyntax(
-            stringLiteral: buildCompatibleTypeMetaFieldsDecl(
-                sortedFields: sortedFields,
-                accessPrefix: accessPrefix
-            )
+            stringLiteral: buildCompatibleTypeMetaFieldsDecl(sortedFields: sortedFields, accessPrefix: accessPrefix)
         )
         let defaultDecl: DeclSyntax = DeclSyntax(
             stringLiteral: buildDefaultDecl(
@@ -2543,10 +2540,7 @@ private func buildSchemaHashDecl(fields: [ParsedField]) throws -> String {
         """
 }
 
-private func buildCompatibleTypeMetaFieldsDecl(
-    sortedFields: [ParsedField],
-    accessPrefix: String
-) -> String {
+private func buildCompatibleTypeMetaFieldsDecl(sortedFields: [ParsedField], accessPrefix: String) -> String {
     let disabledExpr = compatibleTypeMetaFieldsExpr(sortedFields: sortedFields, trackRefExpression: "false")
     let enabledExpr = compatibleTypeMetaFieldsExpr(sortedFields: sortedFields, trackRefExpression: "true")
     let resolvedBody = resolvedTypeMetaFieldsBody(sortedFields: sortedFields)

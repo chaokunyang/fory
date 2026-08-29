@@ -66,7 +66,7 @@ public protocol StructSerializer: Serializer {
     static func foryFieldsInfo(trackRef: Bool) -> [TypeMeta.FieldInfo]
 
     /// Builds field metadata after all serializer registrations are visible to the resolver.
-    /// Serialization and deserialization hot paths must use finalized TypeInfo metadata instead.
+    /// The registered TypeInfo completes this metadata lazily on first use.
     static func foryFieldsInfo(
         trackRef: Bool,
         resolveSerializerTypeId: (Any.Type) throws -> TypeId

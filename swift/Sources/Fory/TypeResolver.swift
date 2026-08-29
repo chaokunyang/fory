@@ -271,7 +271,7 @@ public final class TypeInfo: @unchecked Sendable {
     let evolving: Bool
     let namespace: MetaString
     let typeName: MetaString
-    /// Finalized local metadata. Generated compatible readers use this for local field comparison;
+    /// Local metadata prepared on demand. Generated compatible readers use it for field comparison;
     /// remote metadata remains exposed through `compatibleTypeMeta`.
     public private(set) var typeMeta: TypeMeta?
     public var compatibleTypeMeta: TypeMeta? { remoteCompatibleTypeMeta ?? typeMeta }
@@ -501,8 +501,8 @@ public final class TypeInfo: @unchecked Sendable {
     }
 
     @inline(never)
-    func finalizeTypeMeta(resolver: TypeResolver) throws {
-        guard typeDefBytes == nil, let typeMetaFieldsBuilder else {
+    func ensureTypeMeta(resolver: TypeResolver) throws {
+        guard let typeMetaFieldsBuilder else {
             return
         }
         let fields = try typeMetaFieldsBuilder(resolver)
@@ -516,7 +516,7 @@ public final class TypeInfo: @unchecked Sendable {
         )
         let typeDefBytes = try typeMeta.encode()
         let typeDefHeaderHash = try encodedTypeDefHeaderHash(typeDefBytes)
-        self.typeMeta = try TypeMeta(
+        let resolvedTypeMeta = try TypeMeta(
             typeID: compatibleWireTypeID.rawValue,
             userTypeID: registerByName ? nil : userTypeID,
             namespace: namespace,
@@ -525,6 +525,9 @@ public final class TypeInfo: @unchecked Sendable {
             fields: fields,
             headerHash: typeDefHeaderHash
         )
+        // Publish only after all fallible work succeeds. A failed lazy build keeps its builder and
+        // can be retried without exposing partial metadata.
+        self.typeMeta = resolvedTypeMeta
         self.typeDefBytes = typeDefBytes
         self.typeDefHeaderHash = typeDefHeaderHash
         self.typeDefHasUserTypeFields = encodedTypeDefHasUserTypeFields(fields)
@@ -623,20 +626,16 @@ final class TypeResolver {
 
     private let trackRef: Bool
     private var registryFrozen = false
-    private var registrationFinalized = false
 
     private var bySerializerType = UInt64Map<TypeInfo>(initialCapacity: 64)
     private var byTargetType = UInt64Map<TypeInfo>(initialCapacity: 64)
     private var byUserTypeID = UInt64Map<TypeInfo>(initialCapacity: 64)
     private var byTypeName: [TypeNameKey: TypeInfo] = [:]
-    private var registeredTypeInfos: [TypeInfo] = []
     private var builtinTypeInfoByID: [TypeInfo?] = []
     // Never key this cache by the complete header: its low 12 framing bits may vary on a hit.
     private var typeInfoByHeaderHash = UInt64Map<TypeInfo>(initialCapacity: 64)
     private var remoteSchemaVersionsByType: [String: Int] = [:]
     private var totalAcceptedSchemaVersions = 0
-    private var registrationFailure: (any Error)?
-
     init(trackRef: Bool = false) {
         self.trackRef = trackRef
         seedBuiltinTypeInfos()
@@ -834,35 +833,8 @@ final class TypeResolver {
     }
 
     @inline(__always)
-    func finishRegistration() throws {
-        if registrationFinalized {
-            return
-        }
-        try finishRegistrationSlow()
-    }
-
-    @inline(never)
-    private func finishRegistrationSlow() throws {
-        // Freezing and finalization are separate states: the first root permanently closes
-        // registration, while a partial builder failure must never be mistaken for success.
-        if let registrationFailure {
-            throw registrationFailure
-        }
-        // Application-owned field metadata can invoke another root on this Fory. Once frozen,
-        // an unfinished registry is already inside finalization and must not rerun its builders.
-        guard !registryFrozen else {
-            throw ForyError.invalidData("registration finalization is already in progress")
-        }
+    func freezeRegistration() {
         registryFrozen = true
-        do {
-            for typeInfo in registeredTypeInfos {
-                try typeInfo.finalizeTypeMeta(resolver: self)
-            }
-            registrationFinalized = true
-        } catch {
-            registrationFailure = error
-            throw error
-        }
     }
 
     func register<T: Serializer>(_ type: T.Type, id: UInt32) throws {
@@ -1055,6 +1027,7 @@ final class TypeResolver {
         if let cached = typeInfoByHeaderHash.value(for: headerHash) {
             return cached
         }
+        try localTypeInfo.ensureTypeMeta(resolver: self)
         if localTypeInfo.typeDefHeaderHash == headerHash {
             // A validated 52-bit hash is the complete schema identity. The local metadata bytes
             // may use different current-frame low bits, so byte equality must not decide ownership.
@@ -1062,7 +1035,7 @@ final class TypeResolver {
             return localTypeInfo
         }
         guard let localTypeMeta = localTypeInfo.typeMeta else {
-            throw ForyError.invalidData("local type metadata for \(localTypeInfo.typeID) is not finalized")
+            throw ForyError.invalidData("local type metadata for \(localTypeInfo.typeID) is unavailable")
         }
         let canonicalTypeMeta = try typeMeta.assigningFieldIDs(from: localTypeMeta)
         // Failed compatibility checks must not consult or mutate persistent remote accounting.
@@ -1142,7 +1115,6 @@ final class TypeResolver {
         if let typeNameKey {
             byTypeName[typeNameKey] = typeInfo
         }
-        registeredTypeInfos.append(typeInfo)
     }
 
     @inline(never)
@@ -1305,9 +1277,16 @@ final class TypeResolver {
                 throw ForyError.invalidData(
                     "structural serializer \(type) must use STRUCT, ENUM, or UNION type identity")
             }
-            if !T.isRefType, T.Target.self is AnyObject.Type {
-                throw ForyError.invalidData(
-                    "value structural serializer \(type) cannot target class type \(T.Target.self)")
+            if let targetClass = T.Target.self as? AnyClass {
+                if !T.isRefType {
+                    throw ForyError.invalidData(
+                        "value structural serializer \(type) cannot target class type \(T.Target.self)")
+                }
+                if _getSuperclass(targetClass) != nil {
+                    throw ForyError.invalidData(
+                        "@ForyStruct classes cannot inherit from a superclass because macros cannot inspect inherited storage"
+                    )
+                }
             }
             return
         }

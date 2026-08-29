@@ -184,6 +184,9 @@ public final class ReadContext {
             return lastTypeInfo
         }
         let info = try typeResolver.requireTypeInfo(for: type)
+        if compatible {
+            try info.ensureTypeMeta(resolver: typeResolver)
+        }
         lastTypeInfo = info
         return info
     }

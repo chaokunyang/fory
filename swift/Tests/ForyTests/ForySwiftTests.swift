@@ -202,47 +202,6 @@ struct LateMetaExt: Serializer, Equatable {
     }
 }
 
-private final class RegistrationFinalizationError: Error {}
-
-private struct FailingRegistrationSerializer: StructSerializer {
-    typealias Target = Self
-
-    static let failure = RegistrationFinalizationError()
-    static var staticTypeId: TypeId { .structType }
-
-    static func defaultValue(_: ReadContext) throws -> Self { Self() }
-    static func writeData(_: Self, _: WriteContext) throws {}
-    static func readData(_: ReadContext) throws -> Self { Self() }
-    static func readCompatible(_: ReadContext, typeInfo _: TypeInfo) throws -> Self { Self() }
-
-    static func foryFieldsInfo(
-        trackRef _: Bool,
-        resolveSerializerTypeId _: (Any.Type) throws -> TypeId
-    ) throws -> [TypeMeta.FieldInfo] {
-        throw failure
-    }
-}
-
-private struct ReentrantRegistrationSerializer: StructSerializer {
-    typealias Target = Self
-
-    nonisolated(unsafe) static var fieldsCallback: (() throws -> Void)?
-    static var staticTypeId: TypeId { .structType }
-
-    static func defaultValue(_: ReadContext) throws -> Self { Self() }
-    static func writeData(_: Self, _: WriteContext) throws {}
-    static func readData(_: ReadContext) throws -> Self { Self() }
-    static func readCompatible(_: ReadContext, typeInfo _: TypeInfo) throws -> Self { Self() }
-
-    static func foryFieldsInfo(
-        trackRef _: Bool,
-        resolveSerializerTypeId _: (Any.Type) throws -> TypeId
-    ) throws -> [TypeMeta.FieldInfo] {
-        try fieldsCallback?()
-        return []
-    }
-}
-
 @ForyStruct
 struct LateMetaHolder: Equatable {
     var ext: LateMetaExt
@@ -682,7 +641,7 @@ func schemaLimitTracksStructTypesSeparately() throws {
     let resolver = TypeResolver(config: config)
     try resolver.register(Person.self, id: 901)
     try resolver.register(Address.self, id: 902)
-    try resolver.finishRegistration()
+    resolver.freezeRegistration()
 
     func remoteTypeMeta(userTypeID: UInt32, fieldName: String) throws -> TypeMeta {
         try TypeMeta(
@@ -728,7 +687,7 @@ func nonStructTypeMetaUsesSchemaLimit() throws {
     let config = Config(maxSchemaVersionsPerType: 1)
     let resolver = TypeResolver(config: config)
     try resolver.register(SparseStatus.self, name: "example.SharedEnum")
-    try resolver.finishRegistration()
+    resolver.freezeRegistration()
     let namespace = try MetaStringEncoder.namespace.encode("example")
     let typeName = try MetaStringEncoder.typeName.encode("SharedEnum")
 
@@ -769,8 +728,9 @@ func localNonStructMetaBypassesLimit() throws {
     let config = Config(compatible: true, maxSchemaVersionsPerType: 1)
     let resolver = TypeResolver(config: config)
     try resolver.register(SparseStatus.self, name: "example.SharedEnum")
-    try resolver.finishRegistration()
+    resolver.freezeRegistration()
     let localTypeInfo = try resolver.requireTypeInfo(for: SparseStatus.self)
+    try localTypeInfo.ensureTypeMeta(resolver: resolver)
     let namespace = try MetaStringEncoder.namespace.encode("example")
     let typeName = try MetaStringEncoder.typeName.encode("SharedEnum")
 
@@ -804,7 +764,7 @@ func localNonStructMetaBypassesLimit() throws {
 }
 
 @Test
-func typeMetaUsesFinalRegistration() throws {
+func typeMetaUsesAllRegistrations() throws {
     func holderTypeDefBytes(registerFieldTypeFirst: Bool) throws -> [UInt8] {
         let resolver = TypeResolver(config: Config(compatible: true))
         if registerFieldTypeFirst {
@@ -814,8 +774,10 @@ func typeMetaUsesFinalRegistration() throws {
             try resolver.register(LateMetaHolder.self, name: "example.LateMetaHolder")
             try resolver.register(LateMetaExt.self, name: "example.LateMetaExt")
         }
-        try resolver.finishRegistration()
-        return try resolver.requireTypeInfo(for: LateMetaHolder.self).typeDefBytes!
+        resolver.freezeRegistration()
+        let typeInfo = try resolver.requireTypeInfo(for: LateMetaHolder.self)
+        try typeInfo.ensureTypeMeta(resolver: resolver)
+        return typeInfo.typeDefBytes!
     }
 
     let fieldFirst = try holderTypeDefBytes(registerFieldTypeFirst: true)
@@ -833,7 +795,7 @@ func failedSchemaDoesNotConsumeLimit() throws {
     let resolver = TypeResolver(config: config)
     try resolver.register(Person.self, id: 901)
     try resolver.register(Address.self, id: 902)
-    try resolver.finishRegistration()
+    resolver.freezeRegistration()
 
     func remoteTypeMeta(fieldName: String, fieldType: TypeMeta.FieldType) throws -> TypeMeta {
         try TypeMeta(
@@ -894,7 +856,7 @@ func staticTypeRejectsWrongMetaOwner() throws {
     let resolver = TypeResolver(config: config)
     try resolver.register(Person.self, id: 901)
     try resolver.register(Address.self, id: 902)
-    try resolver.finishRegistration()
+    resolver.freezeRegistration()
     let wrongTypeMeta = try TypeMeta(
         typeID: TypeId.compatibleStruct.rawValue,
         userTypeID: 901,
@@ -934,7 +896,7 @@ func cachedMetaChecksConcreteOwner() throws {
     let resolver = TypeResolver(config: config)
     try resolver.register(Person.self, id: 901)
     try resolver.register(Address.self, id: 902)
-    try resolver.finishRegistration()
+    resolver.freezeRegistration()
     let remote = try TypeMeta(
         typeID: TypeId.compatibleStruct.rawValue,
         userTypeID: 901,
@@ -982,7 +944,7 @@ func failedStaticMetaDoesNotCount() throws {
     let resolver = TypeResolver(config: config)
     try resolver.register(Person.self, id: 901)
     try resolver.register(Address.self, id: 902)
-    try resolver.finishRegistration()
+    resolver.freezeRegistration()
 
     func typeMeta(userTypeID: UInt32, fieldName: String) throws -> TypeMeta {
         try TypeMeta(
@@ -1218,48 +1180,6 @@ func registrationIsRejectedAfterFirstTopLevelUse() throws {
         #expect(Bool(false))
     } catch {
         #expect("\(error)".contains("cannot register more types"))
-    }
-}
-
-@Test
-func finalizationPreservesFailure() throws {
-    let fory = Fory()
-    try fory.register(FailingRegistrationSerializer.self, id: 701)
-
-    for _ in 0..<2 {
-        do {
-            _ = try fory.serialize(FailingRegistrationSerializer())
-            Issue.record("expected registration finalization failure")
-        } catch {
-            #expect(
-                (error as? RegistrationFinalizationError)
-                    === FailingRegistrationSerializer.failure
-            )
-        }
-    }
-}
-
-@Test
-func reentrantFinalizationIsRejected() throws {
-    let fory = Fory()
-    var callbackCount = 0
-    ReentrantRegistrationSerializer.fieldsCallback = {
-        callbackCount += 1
-        _ = try fory.serialize(Int32(1))
-    }
-    defer {
-        ReentrantRegistrationSerializer.fieldsCallback = nil
-    }
-    try fory.register(ReentrantRegistrationSerializer.self, id: 702)
-
-    for _ in 0..<2 {
-        #expect(throws: ForyError.self) {
-            _ = try fory.serialize(ReentrantRegistrationSerializer())
-        }
-    }
-    #expect(callbackCount == 1)
-    #expect(throws: ForyError.self) {
-        try fory.register(Address.self, id: 703)
     }
 }
 

@@ -1184,9 +1184,6 @@ func hiddenCarrierAliasIsRejected() throws {
         _ = try fory.serialize(HiddenCarrierHolder(users: []))
     }
     #expect(throws: ForyError.self) {
-        _ = try fory.serialize(Int32(1))
-    }
-    #expect(throws: ForyError.self) {
         try fory.register(KeySerializer.self, id: 80)
     }
 }
@@ -1194,9 +1191,8 @@ func hiddenCarrierAliasIsRejected() throws {
 @Test
 func superclassIsRejected() throws {
     let fory = Fory()
-    try fory.register(SuperclassChild.self, id: 133)
     #expect(throws: ForyError.self) {
-        _ = try fory.serialize(SuperclassChild())
+        try fory.register(SuperclassChild.self, id: 133)
     }
 }
 

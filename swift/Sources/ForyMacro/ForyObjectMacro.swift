@@ -62,9 +62,6 @@ public struct ForyStructMacro: MemberMacro, ExtensionMacro {
             objectConfig.targetType
             ?? declaration.as(ClassDeclSyntax.self)?.name.text
             ?? "Self"
-        // SwiftSyntax uses the same inheritance clause for a superclass and protocol
-        // conformances, so semantic superclass validation must happen after registration.
-        let needsSuperclassValidation = declaration.as(ClassDeclSyntax.self)?.inheritanceClause != nil
         let successBodyAttribute =
             objectConfig.targetType != nil
                 && parsed.fields.contains(where: {
@@ -107,8 +104,7 @@ public struct ForyStructMacro: MemberMacro, ExtensionMacro {
         let compatibleTypeMetaDecl: DeclSyntax = DeclSyntax(
             stringLiteral: buildCompatibleTypeMetaFieldsDecl(
                 sortedFields: sortedFields,
-                accessPrefix: accessPrefix,
-                needsSuperclassValidation: needsSuperclassValidation
+                accessPrefix: accessPrefix
             )
         )
         let defaultDecl: DeclSyntax = DeclSyntax(
@@ -2549,26 +2545,11 @@ private func buildSchemaHashDecl(fields: [ParsedField]) throws -> String {
 
 private func buildCompatibleTypeMetaFieldsDecl(
     sortedFields: [ParsedField],
-    accessPrefix: String,
-    needsSuperclassValidation: Bool
+    accessPrefix: String
 ) -> String {
     let disabledExpr = compatibleTypeMetaFieldsExpr(sortedFields: sortedFields, trackRefExpression: "false")
     let enabledExpr = compatibleTypeMetaFieldsExpr(sortedFields: sortedFields, trackRefExpression: "true")
     let resolvedBody = resolvedTypeMetaFieldsBody(sortedFields: sortedFields)
-    let superclassValidation: String
-    if needsSuperclassValidation {
-        // Swift has no public API for querying an arbitrary Swift class's superclass.
-        // Keep the underscored query in this registration-finalization check only.
-        superclassValidation = """
-            if _getSuperclass(Self.self) != nil {
-                throw ForyError.encodingError(
-                    "@ForyStruct classes cannot inherit from a superclass because macros cannot inspect inherited storage"
-                )
-            }
-            """
-    } else {
-        superclassValidation = ""
-    }
     return """
         private static let __foryFieldsInfoTrackRefDisabled: [TypeMeta.FieldInfo] = \(disabledExpr)
         private static let __foryFieldsInfoTrackRefEnabled: [TypeMeta.FieldInfo] = \(enabledExpr)
@@ -2581,7 +2562,6 @@ private func buildCompatibleTypeMetaFieldsDecl(
             trackRef: Bool,
             resolveSerializerTypeId: (Any.Type) throws -> TypeId
         ) throws -> [TypeMeta.FieldInfo] {
-            \(superclassValidation)
             \(resolvedBody)
         }
         """

@@ -363,7 +363,7 @@ public final class Fory {
     private func serializeRoot(
         _ body: (WriteContext) throws -> Void
     ) throws -> Data {
-        try typeResolver.finishRegistration()
+        typeResolver.freezeRegistration()
         let context = writeContext
         context.buffer.clear()
         defer {
@@ -379,7 +379,7 @@ public final class Fory {
         to output: inout Data,
         _ body: (WriteContext) throws -> Void
     ) throws {
-        try typeResolver.finishRegistration()
+        typeResolver.freezeRegistration()
         let context = writeContext
         context.buffer.clear()
         defer {
@@ -395,7 +395,7 @@ public final class Fory {
         data: Data,
         _ body: (ReadContext) throws -> R
     ) throws -> R {
-        try typeResolver.finishRegistration()
+        typeResolver.freezeRegistration()
         return try withReusableReadContext(data: data) { context in
             try readHead(buffer: context.buffer)
             let value = try body(context)
@@ -411,7 +411,7 @@ public final class Fory {
         from buffer: ByteBuffer,
         _ body: (ReadContext) throws -> R
     ) throws -> R {
-        try typeResolver.finishRegistration()
+        typeResolver.freezeRegistration()
         readContext.buffer.swapState(with: buffer)
         readContext.remainingGraphMemoryBytes = Int(self.config.maxGraphMemoryBytes)
         readContext.remainingUnbackedContainerItems = self.config.maxUnbackedContainerItems

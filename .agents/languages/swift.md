@@ -37,13 +37,14 @@ Load this file when changing `swift/` or Swift xlang behavior.
   ignored declaration fields are budget-only and must not enter target access,
   construction, metadata, or wire code. Omitted large value storage must be
   declared explicitly and ignored.
-- `@ForyStruct` supports protocol conformances but rejects every superclass during registration
-  finalization because macros cannot inspect inherited storage. SwiftSyntax represents both in one
-  inheritance clause, and Swift provides no public superclass query for arbitrary Swift classes;
-  keep the minimal `_getSuperclass` check finalization-owned and out of root hot paths.
-- Swift registration finalization invokes application-owned `StructSerializer.foryFieldsInfo`.
-  Reject a same-`Fory` root that reenters while finalization is in progress, cache that first
-  failure, and do not retry partially finalized metadata builders.
+- `@ForyStruct` supports protocol conformances but registration rejects every superclass because
+  macros cannot inspect inherited storage. SwiftSyntax represents both in one inheritance clause,
+  so keep the minimal `_getSuperclass` check in the existing TypeResolver registration preflight and
+  out of root hot paths.
+- Swift registry lifecycle uses one authoritative frozen flag set by the first root serialization or
+  deserialization. Do not add finalizing, finalized, or failed states or cache a registration
+  preparation failure as a second lifecycle state. Registered TypeInfo owns lazy TypeMeta completion
+  after freeze; do not restore an eager whole-registry metadata pass.
 - Direct `Any` and `AnyObject` root overloads remain disfavored forwarding facades over
   `DynamicSerializer<Any>` and `DynamicSerializer<AnyObject>`, including their Data-buffer forms.
   Arbitrary protocol roots explicitly select `DynamicSerializer<T>`. Do not add an unconstrained

@@ -143,7 +143,7 @@ func remoteSchemaLogicalKeyLimitPersists() throws {
     let resolver = TypeResolver(config: config)
     try resolver.register(Person.self, id: 901)
     try resolver.register(Address.self, id: 902)
-    try resolver.finishRegistration()
+    resolver.freezeRegistration()
     let localTypeInfo = try resolver.requireTypeInfo(for: Person.self)
 
     func remoteTypeMeta(

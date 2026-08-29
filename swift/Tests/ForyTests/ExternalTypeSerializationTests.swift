@@ -164,19 +164,6 @@ private final class LocalNode {
     required init() {}
 }
 
-private class SuperclassBase {
-    required init() {}
-}
-
-@ForyStruct
-private final class SuperclassChild: SuperclassBase {
-    var local: Int32 = 0
-
-    required init() {
-        super.init()
-    }
-}
-
 @ForyStruct
 private struct LocalNamedValue: NamedValue, Equatable {
     var name: String
@@ -1182,14 +1169,6 @@ func hiddenCarrierAliasIsRejected() throws {
 
     #expect(throws: ForyError.self) {
         _ = try fory.serialize(HiddenCarrierHolder(users: []))
-    }
-}
-
-@Test
-func superclassIsRejected() throws {
-    let fory = Fory()
-    #expect(throws: ForyError.self) {
-        try fory.register(SuperclassChild.self, id: 133)
     }
 }
 

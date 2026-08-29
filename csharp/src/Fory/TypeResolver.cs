@@ -109,7 +109,7 @@ public sealed class TypeResolver
     private readonly Dictionary<(string NamespaceName, string TypeName), TypeInfo> _byTypeName = [];
     private readonly UInt64Map<TypeInfo> _typeInfos = new();
     private ulong _versionHash;
-    private bool _finalized;
+    private bool _versionHashReady;
 
     /// <summary>
     /// Registers a generated enum or union serializer factory for a runtime target type.
@@ -188,7 +188,7 @@ public sealed class TypeResolver
 
     public Serializer<T> GetSerializer<T>()
     {
-        if (_finalized)
+        if (_versionHashReady)
         {
             ulong version = _versionHash;
             GenericTypeCacheEntry<T>? cacheEntry = Volatile.Read(ref GenericTypeCache<T>.Entry);
@@ -209,7 +209,7 @@ public sealed class TypeResolver
 
     public TypeInfo GetTypeInfo<T>()
     {
-        if (_finalized)
+        if (_versionHashReady)
         {
             ulong version = _versionHash;
             GenericTypeCacheEntry<T>? cacheEntry = Volatile.Read(ref GenericTypeCache<T>.Entry);
@@ -220,7 +220,7 @@ public sealed class TypeResolver
         }
 
         TypeInfo typeInfo = GetTypeInfo(typeof(T));
-        EnsureFinalizedVersion();
+        EnsureVersionHash();
         Volatile.Write(
             ref GenericTypeCache<T>.Entry,
             new GenericTypeCacheEntry<T>(_versionHash, typeInfo));
@@ -481,7 +481,7 @@ public sealed class TypeResolver
         }
 
         _typeInfos.Set(typeKey, typeInfo);
-        InvalidateFinalizedVersion();
+        InvalidateVersionHash();
         return typeInfo;
     }
 
@@ -503,7 +503,7 @@ public sealed class TypeResolver
         TypeInfo typeInfo = GetOrCreateTypeInfo(type, explicitTypeInfo).WithTypeIdRegistration(id);
         _typeInfos.Set(TypeMapKey.Get(type), typeInfo);
         _byUserTypeId[id] = typeInfo;
-        InvalidateFinalizedVersion();
+        InvalidateVersionHash();
     }
 
     internal static (string NamespaceName, string TypeName) SplitTypeName(string name)
@@ -549,35 +549,35 @@ public sealed class TypeResolver
         typeInfo = typeInfo.WithTypeNameRegistration(namespaceMeta, typeNameMeta);
         _typeInfos.Set(TypeMapKey.Get(type), typeInfo);
         _byTypeName[(namespaceName, typeName)] = typeInfo;
-        InvalidateFinalizedVersion();
+        InvalidateVersionHash();
     }
 
     /// <summary>
-    /// Returns a finalized semantic resolver version used by generated/static caches.
+    /// Returns the semantic resolver version used by generated/static caches.
     /// The version is computed lazily and changes whenever bindings/registrations change.
     /// </summary>
     /// <returns>Resolver version token.</returns>
     public ulong VersionHash()
     {
-        EnsureFinalizedVersion();
+        EnsureVersionHash();
         return _versionHash;
     }
 
-    private void InvalidateFinalizedVersion()
+    private void InvalidateVersionHash()
     {
-        _finalized = false;
+        _versionHashReady = false;
         _versionHash = 0;
     }
 
-    private void EnsureFinalizedVersion()
+    private void EnsureVersionHash()
     {
-        if (_finalized)
+        if (_versionHashReady)
         {
             return;
         }
 
         _versionHash = ComputeVersionHash();
-        _finalized = true;
+        _versionHashReady = true;
     }
 
     private ulong ComputeVersionHash()

@@ -3093,7 +3093,7 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
-    public void TypeResolverVersionHashIsStableWithinSameFinalizedResolver()
+    public void VersionHashIsStable()
     {
         TypeResolver resolver = new();
         _ = resolver.GetTypeInfo<List<int>>();

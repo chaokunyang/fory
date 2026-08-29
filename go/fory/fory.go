@@ -308,9 +308,7 @@ func (f *Fory) checkRegistrationOpen() error {
 }
 
 func (f *Fory) beginRoot() {
-	if !f.registryFrozen {
-		f.registryFrozen = true
-	}
+	f.registryFrozen = true
 }
 
 // RegisterStruct registers a struct type with a numeric ID for cross-language serialization.

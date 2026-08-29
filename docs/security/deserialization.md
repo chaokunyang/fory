@@ -619,14 +619,18 @@ that case, classify the behavior by concrete impact:
 ## Registry Lifecycle
 
 The first root operation permanently closes type and serializer registration, including when that
-operation or registry finalization fails. Registration that invokes application code must recheck
-the authoritative lifecycle before publishing application-derived state. Thread-safe facades
-retain only registrations that completed before the freeze. During child construction, a semantic
-replay log may reuse only an identical accepted registration that the child has already applied;
-unknown or different requests fail before that request mutates the child. A facade that replays opaque
-registration callbacks and cannot roll them back must become permanently unusable when a callback
-fails rather than expose partially registered children. These rules prevent a failed or reentrant
-registration from changing the accepted type surface after deserialization has begun.
+operation or registry finalization fails. Permanent freeze and successful finalization are distinct:
+a root entered during finalization or after failed finalization must fail before serializer or read
+work, and an accelerator must neither cache nor retry incomplete finalization. Failure state must
+not retain the exception or traceback graph. Registration that invokes application code must
+recheck the authoritative lifecycle before publishing application-derived state. Thread-safe
+facades retain only registrations that completed before the freeze. During child
+construction, a semantic replay log may reuse only an identical accepted registration that the
+child has already applied; unknown or different requests fail before that request mutates the child.
+A facade that replays opaque registration callbacks and cannot roll them back must become
+permanently unusable when a callback fails rather than expose partially registered children. These
+rules prevent a failed or reentrant registration from changing the accepted type surface after
+deserialization has begun.
 Runtime-specific publication ownership belongs in the implementation guide and language guidance.
 
 ## Metadata And Type Resolution

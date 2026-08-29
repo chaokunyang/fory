@@ -1286,10 +1286,27 @@ def test_named_serializer_id_map():
 
 def test_failed_finalization_freezes(monkeypatch):
     writer = Fory(xlang=True, compatible=True)
-    writer.register_type(FrozenChild, name="test.PendingFinalization")
-    pending_data = writer.serialize(FrozenChild(7))
+    writer.register_type(
+        FrozenExt,
+        name="test.FinalizedRoot",
+        serializer=FrozenExtSerializer(writer.type_resolver, FrozenExt),
+    )
+    data = writer.serialize(FrozenExt(7))
 
     fory = Fory(xlang=True, compatible=True)
+    read_calls = 0
+
+    class CountingSerializer(FrozenExtSerializer):
+        def read(self, read_context):
+            nonlocal read_calls
+            read_calls += 1
+            return super().read(read_context)
+
+    fory.register_type(
+        FrozenExt,
+        name="test.FinalizedRoot",
+        serializer=CountingSerializer(fory.type_resolver, FrozenExt),
+    )
     type_info = fory.register_type(
         BrokenFinalization,
         name="test.BrokenFinalization",
@@ -1299,12 +1316,15 @@ def test_failed_finalization_freezes(monkeypatch):
         name="test.PendingFinalization",
     )
     encode_type_def = registry_module.encode_typedef
+    finalization_calls = 0
 
     class FinalizationAbort(BaseException):
         pass
 
     def fail_finalization(resolver, cls):
+        nonlocal finalization_calls
         if cls is type_info.cls:
+            finalization_calls += 1
             assert type_info.serializer is not None
             raise FinalizationAbort
         return encode_type_def(resolver, cls)
@@ -1316,14 +1336,18 @@ def test_failed_finalization_freezes(monkeypatch):
     )
 
     with pytest.raises(FinalizationAbort):
-        fory.serialize(None)
+        fory.deserialize(data)
+    assert read_calls == 0
+    assert finalization_calls == 1
     assert type_info.serializer is None
     assert type_info.type_def is None
     assert pending_info.serializer is None
     assert pending_info.type_def is None
 
-    with pytest.raises(Exception):
-        fory.deserialize(pending_data)
+    with pytest.raises(RuntimeError):
+        fory.deserialize(data)
+    assert read_calls == 0
+    assert finalization_calls == 1
     assert pending_info.serializer is None
     assert pending_info.type_def is None
 
@@ -1331,6 +1355,112 @@ def test_failed_finalization_freezes(monkeypatch):
         fory.type_resolver.get_type_info(type_info.cls)
     assert type_info.serializer is None
     assert type_info.type_def is None
+    with pytest.raises(Exception):
+        fory.register_type(RejectedRegistration, name="test.Rejected")
+    assert fory.type_resolver.get_type_info(RejectedRegistration, create=False) is None
+
+
+def test_reentrant_finalization_freezes(monkeypatch):
+    writer = Fory(xlang=True, compatible=True)
+    writer.register_type(
+        FrozenExt,
+        name="test.ReentrantRoot",
+        serializer=FrozenExtSerializer(writer.type_resolver, FrozenExt),
+    )
+    data = writer.serialize(FrozenExt(7))
+
+    fory = Fory(xlang=True, compatible=True)
+    read_calls = 0
+
+    class CountingSerializer(FrozenExtSerializer):
+        def read(self, read_context):
+            nonlocal read_calls
+            read_calls += 1
+            return super().read(read_context)
+
+    fory.register_type(
+        FrozenExt,
+        name="test.ReentrantRoot",
+        serializer=CountingSerializer(fory.type_resolver, FrozenExt),
+    )
+    type_info = fory.register_type(
+        BrokenFinalization,
+        name="test.ReentrantFinalization",
+    )
+    encode_type_def = registry_module.encode_typedef
+    finalization_calls = 0
+
+    def reenter_root(resolver, cls):
+        nonlocal finalization_calls
+        if cls is type_info.cls:
+            finalization_calls += 1
+            fory.deserialize(data)
+        return encode_type_def(resolver, cls)
+
+    monkeypatch.setattr(
+        registry_module,
+        "encode_typedef",
+        reenter_root,
+    )
+
+    with pytest.raises(RuntimeError):
+        fory.deserialize(data)
+    assert read_calls == 0
+    assert finalization_calls == 1
+    assert type_info.serializer is None
+    assert type_info.type_def is None
+
+    with pytest.raises(RuntimeError):
+        fory.deserialize(data)
+    assert read_calls == 0
+    assert finalization_calls == 1
+    with pytest.raises(Exception):
+        fory.register_type(RejectedRegistration, name="test.Rejected")
+    assert fory.type_resolver.get_type_info(RejectedRegistration, create=False) is None
+
+
+@pytest.mark.skipif(
+    not pyfory.ENABLE_FORY_CYTHON_SERIALIZATION,
+    reason="Requires the Cython resolver cache",
+)
+def test_native_finalization_failure():
+    write_calls = 0
+
+    class CountingSerializer(FrozenExtSerializer):
+        def write(self, write_context, value):
+            nonlocal write_calls
+            write_calls += 1
+            super().write(write_context, value)
+
+    fory = Fory(xlang=True, compatible=False)
+    type_info = fory.register_type(
+        FrozenExt,
+        name="test.NativeFinalization",
+        serializer=CountingSerializer(fory.type_resolver, FrozenExt),
+    )
+    hash_reads = 0
+
+    class NativeSyncAbort(BaseException):
+        pass
+
+    class BrokenMetaString:
+        @property
+        def hashcode(self):
+            nonlocal hash_reads
+            hash_reads += 1
+            raise NativeSyncAbort
+
+    type_info.namespace_bytes = BrokenMetaString()
+
+    with pytest.raises(NativeSyncAbort):
+        fory.serialize(FrozenExt(7))
+    assert hash_reads == 1
+    assert write_calls == 0
+
+    with pytest.raises(RuntimeError):
+        fory.serialize(FrozenExt(7))
+    assert hash_reads == 1
+    assert write_calls == 0
     with pytest.raises(Exception):
         fory.register_type(RejectedRegistration, name="test.Rejected")
     assert fory.type_resolver.get_type_info(RejectedRegistration, create=False) is None

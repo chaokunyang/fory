@@ -11,9 +11,14 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
 - Python mode is the pure-Python xlang implementation and is mainly for debugging and testing.
 - Cython mode is the default high-performance implementation.
 - Cython mode owns the hot runtime path. Do not duplicate core runtime types between Python and Cython, tunnel Python facade methods into hidden Cython internals, or keep dead shims unless the user explicitly needs a compatibility module path.
-- Python `TypeResolver` owns registry freeze and finalization state. Its Cython companion may cache
-  completion of the one Python-owner dispatch needed to populate native resolver tables, but the
-  `Fory` facade must not mirror that state. Cython roots call the resolver owner directly.
+- Python `TypeResolver` separately owns permanent registry freeze, active finalization, and
+  successful finalization. A root may bypass that owner only after successful completion; roots
+  entered during finalization or after failed finalization must fail before codec work. Its Cython
+  companion may cache completion only after the Python owner succeeds and every native resolver
+  table is synchronized; the `Fory` facade must not mirror that state. Cython roots call the
+  resolver owner directly until then. The Python owner permanently rejects its own incomplete
+  finalization; if native synchronization fails, the companion records only permanent failure,
+  never the exception, and rejects later roots without retrying partial synchronization.
   Serializer construction may reenter registration or a root, so the resolver rechecks both
   registration conflicts and its frozen state after construction and before publishing type,
   serializer, name, or ID state. Allocate automatic type IDs only after those checks at the common
@@ -23,11 +28,10 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
   registration linearization is reentrant so nested facade registrations share the same
   publication order. A root started during registration must not reuse the staging instance, and
   root reentry from a running user `fory_factory` or retained registration replay fails without
-  recursively building
-  another instance. The build thread must be rejected before pool acquisition even when another
-  instance becomes available during that build. The non-reentrant pool lock owns pool publication,
-  root-started state, registration depth, and the staging instance; the separate instance-build
-  boundary covers the factory and complete registration replay. During child replay, a nested
+  recursively building another instance. The build thread must be rejected before pool acquisition
+  even when another instance becomes available during that build. The non-reentrant pool lock owns
+  pool publication, root-started state, registration depth, and the staging instance; the separate
+  instance-build boundary covers the factory and complete registration replay. During child replay, a nested
   facade registration is a no-op only when it exactly matches an accepted descriptor in the prefix
   already applied to that child; reject every unknown or different request before that request
   mutates the child.

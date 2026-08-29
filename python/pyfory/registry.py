@@ -220,7 +220,6 @@ def _construct_serializer(serializer_factory, type_resolver, cls):
     for nargs, args in (
         (2, (type_resolver, cls)),
         (1, (type_resolver,)),
-        (0, ()),
     ):
         if _accepts_n_positional_args(serializer_factory, nargs):
             serializer = serializer_factory(*args)
@@ -231,7 +230,7 @@ def _construct_serializer(serializer_factory, type_resolver, cls):
             if normalize_fory_type(serializer.type_) != normalize_fory_type(cls):
                 raise TypeError("Serializer factory returned a serializer bound to a different type")
             return serializer
-    raise TypeError(f"Unsupported serializer constructor for {serializer_factory!r}; expected `(type_resolver, cls)`, `(type_resolver)`, or `()`.")
+    raise TypeError(f"Unsupported serializer constructor for {serializer_factory!r}; expected `(type_resolver, cls)` or `(type_resolver)`.")
 
 
 def _split_registration_name(name: str):
@@ -379,6 +378,7 @@ class TypeResolver:
         "meta_share",
         "_internal_py_serializer_map",
         "_actual_type_resolver",
+        "_registry_finalization_complete",
         "_registry_frozen",
         "_registry_finalizing",
     )
@@ -422,7 +422,9 @@ class TypeResolver:
         self._internal_py_serializer_map = {}
         self._actual_type_resolver = self
         # Fory exposes this resolver, so the resolver must own the root-use gate;
-        # facade-only state would leave direct registration methods mutable.
+        # facade-only state would leave direct registration methods mutable. Freeze
+        # is permanent, while completion records only a successful finalization.
+        self._registry_finalization_complete = False
         self._registry_frozen = False
         self._registry_finalizing = False
 
@@ -441,17 +443,19 @@ class TypeResolver:
         return self.meta_share and type_info.type_def is None and TypeId.is_type_share_meta(type_info.type_id)
 
     def _freeze_registry(self):
+        if self._registry_finalization_complete:
+            return
         if self._registry_frozen:
-            return False
+            raise RuntimeError("Registry finalization did not complete")
         self._registry_frozen = True
         self._registry_finalizing = True
         try:
             for type_info in self._types_info.values():
                 if self._needs_registration_finalization(type_info):
                     self._set_type_info(type_info)
+            self._registry_finalization_complete = True
         finally:
             self._registry_finalizing = False
-        return True
 
     def _set_actual_resolver(self, type_resolver):
         # Cython mode injects the compiled companion before initialize() so all

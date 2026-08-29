@@ -269,9 +269,11 @@ cdef class TypeResolver:
     cdef flat_hash_map[uint32_t, PyObject *] _c_user_type_id_to_type_info
     cdef flat_hash_map[uint64_t, PyObject *] _c_types_info
     cdef flat_hash_map[pair[int64_t, int64_t], PyObject *] _c_meta_hash_to_type_info
-    # The Python resolver owns registry mutability. This monotonic native cache only
-    # avoids re-entering Python after that owner has completed its first freeze attempt.
-    cdef bint registry_freeze_complete
+    # The Python resolver owns registry mutability. Native completion is published only
+    # after that owner succeeds and every native table is synchronized. Failure is
+    # retained without its exception so a partial native cache is never retried or used.
+    cdef bint registry_finalization_complete
+    cdef bint registry_finalization_failed
 
     def __init__(self, Config config, *, shared_registry):
         """
@@ -303,7 +305,8 @@ cdef class TypeResolver:
         self._ns_type_to_type_info = resolver._ns_type_to_type_info
         self._local_type_info_by_hash = resolver._local_type_info_by_hash
         self._meta_shared_type_info = resolver._meta_shared_type_info
-        self.registry_freeze_complete = False
+        self.registry_finalization_complete = False
+        self.registry_finalization_failed = False
         for typeinfo in resolver._types_info.values():
             self._populate_type_info(typeinfo)
 
@@ -316,11 +319,17 @@ cdef class TypeResolver:
 
     cdef inline void _freeze_registry(self):
         cdef object typeinfo
-        if not self.registry_freeze_complete:
-            if self.resolver._freeze_registry():
+        if not self.registry_finalization_complete:
+            if self.registry_finalization_failed:
+                raise RuntimeError("Registry finalization did not complete")
+            self.resolver._freeze_registry()
+            try:
                 for typeinfo in self.resolver._types_info.values():
                     self._populate_type_info(typeinfo)
-            self.registry_freeze_complete = True
+            except BaseException:
+                self.registry_finalization_failed = True
+                raise
+            self.registry_finalization_complete = True
 
     def register_type(
         self,

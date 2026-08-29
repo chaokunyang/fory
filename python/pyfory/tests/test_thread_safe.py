@@ -229,6 +229,42 @@ def test_invalid_registration():
     assert valid_constructions == 1
 
 
+def test_zero_arg_serializer_rejected():
+    class AddressSerializer(pyfory.Serializer):
+        def write(self, write_context, value):
+            write_context.write_string(value.city)
+            write_context.write_string(value.country)
+
+        def read(self, read_context):
+            return Address(read_context.read_string(), read_context.read_string())
+
+    children = []
+    constructions = 0
+
+    def fory_factory():
+        child = pyfory.Fory(xlang=False, compatible=False)
+        children.append(child)
+        return child
+
+    def serializer_factory():
+        nonlocal constructions
+        constructions += 1
+        child = children[-1]
+        return AddressSerializer(child.type_resolver, Address)
+
+    fory = ThreadSafeFory(fory_factory=fory_factory)
+    with pytest.raises(TypeError):
+        fory.register_type(Address, serializer=serializer_factory)
+
+    assert constructions == 0
+    assert len(children) == 1
+    assert children[0].type_resolver.get_type_info(Address, create=False) is None
+
+    fory.register_type(Address, serializer=AddressSerializer)
+    value = Address(city="Oslo", country="Norway")
+    assert fory.deserialize(fory.serialize(value)) == value
+
+
 @pytest.mark.parametrize("method", ["register", "register_type", "register_union"])
 def test_serializer_instance_rejected(method):
     class AddressSerializer(pyfory.Serializer):

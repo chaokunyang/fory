@@ -1008,7 +1008,7 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
-    public void RootHeaderFailureClearsMetaCache()
+    public void RootHeaderFailureKeepsMetaCache()
     {
         ForyRuntime fory = ForyRuntime.Builder()
             .Compatible(false)
@@ -1020,15 +1020,15 @@ public sealed class RuntimeEdgeCaseTests
 
         Assert.ThrowsAny<Exception>(() => fory.Deserialize<int>([0]));
 
-        Assert.False(context.TryGetTypeMetaByHash(firstHash, out _));
-        TypeMeta second = ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "second"));
-        Assert.True(context.TryGetTypeMetaByHash(EncodedTypeMetaHash(second), out _));
+        Assert.True(context.TryGetTypeMetaByHash(firstHash, out _));
+        Assert.Throws<InvalidDataException>(
+            () => ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "second")));
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void TrailingFailureClearsTypeMetaCache(bool useSpan)
+    public void TrailingFailureKeepsTypeMetaCache(bool useSpan)
     {
         ForyRuntime fory = ForyRuntime.Builder()
             .Compatible(false)
@@ -1048,9 +1048,9 @@ public sealed class RuntimeEdgeCaseTests
             Assert.ThrowsAny<Exception>(() => fory.Deserialize<int>(invalidPayload));
         }
 
-        Assert.False(context.TryGetTypeMetaByHash(firstHash, out _));
-        TypeMeta second = ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "second"));
-        Assert.True(context.TryGetTypeMetaByHash(EncodedTypeMetaHash(second), out _));
+        Assert.True(context.TryGetTypeMetaByHash(firstHash, out _));
+        Assert.Throws<InvalidDataException>(
+            () => ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "second")));
     }
 
     private static ForyRuntime NewCompatibleTimeFory()

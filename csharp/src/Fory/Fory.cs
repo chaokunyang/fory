@@ -215,7 +215,7 @@ public sealed class Fory
         T value = DeserializeFromReader<T>(reader);
         if (reader.Remaining != 0)
         {
-            _readContext.ResetAfterFailure();
+            _readContext.Reset();
             ThrowUnexpectedTrailingBytes<T>();
         }
 
@@ -236,7 +236,7 @@ public sealed class Fory
         T value = DeserializeFromReader<T>(reader);
         if (reader.Remaining != 0)
         {
-            _readContext.ResetAfterFailure();
+            _readContext.Reset();
             ThrowUnexpectedTrailingBytes<T>();
         }
 
@@ -308,7 +308,7 @@ public sealed class Fory
         {
             // Failed roots can leave partially published refs, metadata refs, or graph-budget state.
             // Keep the success path minimal, but fully reset failed reads before this context is reused.
-            readContext.ResetAfterFailure();
+            readContext.Reset();
             throw;
         }
     }

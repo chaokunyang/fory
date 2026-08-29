@@ -565,14 +565,4 @@ public sealed class ReadContext
         _remainingUnbackedContainerItems = 0;
     }
 
-    internal void ResetAfterFailure()
-    {
-        Reset();
-        // Remote metadata may be accepted before the owning value body fails. Failed roots must
-        // not accumulate that decoded state across operations, while successful roots keep using
-        // this map as the sole checked-cache owner.
-        _typeMetasByHash.Clear();
-        _remoteSchemaVersionsByType.Clear();
-        _totalAcceptedSchemaVersions = 0;
-    }
 }

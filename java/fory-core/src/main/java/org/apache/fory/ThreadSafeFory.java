@@ -22,7 +22,6 @@ package org.apache.fory;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.fory.annotation.Internal;
-import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.resolver.TypeChecker;
 
 /**
@@ -31,18 +30,12 @@ import org.apache.fory.resolver.TypeChecker;
  *
  * <p>The runtime class loader is fixed when the thread-safe serializer is built. If you need a
  * different class loader, build a different {@link ThreadSafeFory} instance.
- *
- * <p>Configure runtime modules through {@link ForyBuilder#withModule(ForyModule)} before building
- * the facade.
  */
 public interface ThreadSafeFory extends BaseFory {
 
   /**
-   * Executes {@code action} with an underlying {@link Fory} instance and returns its result.
-   *
-   * <p>Calling this method permanently freezes registration before {@code action} runs. Complete
-   * all facade registration first; the supplied instance is already frozen and remains frozen if
-   * the callback returns or retains it.
+   * Provide a context to execution operations on {@link Fory} directly and return the executed
+   * result.
    */
   <R> R execute(Function<Fory, R> action);
 

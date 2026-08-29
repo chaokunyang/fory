@@ -23,7 +23,6 @@ package org.apache.fory.idl_tests
 
 import addressbook.AddressBook
 import addressbook.AddressbookForyModule
-import basic.BasicForyModule
 import basic.Money
 import example.ExampleForyModule
 import example.ExampleMessage
@@ -110,10 +109,10 @@ private fun runGeneratedSurfaceChecks() {
   assertRoundTrip(fory, ExampleMessageUnion.Uint32Array(uintArrayOf(1u, UInt.MAX_VALUE)))
   assertRoundTrip(fory, ExampleMessageUnion.Float16Array(Float16Array.of(1.0f, -2.0f)))
   assertRoundTrip(fory, ExampleMessageUnion.Bfloat16Array(BFloat16Array.of(3.0f, -4.0f)))
-  assertRegistrationOwners()
+  assertBaseForyExtensionReceivers()
 }
 
-private fun assertRegistrationOwners() {
+private fun assertBaseForyExtensionReceivers() {
   val expected = Money(BigDecimal("12.34"), "USD")
 
   val direct = ForyKotlin.builder().withXlang(true).build()
@@ -121,13 +120,13 @@ private fun assertRegistrationOwners() {
   val directBytes = direct.serialize(expected)
   require(direct.deserialize(directBytes, Money::class.java) == expected)
 
-  val threadLocal =
-    ForyKotlin.builder().withXlang(true).withModule(BasicForyModule).buildThreadLocalFory()
+  val threadLocal = ForyKotlin.builder().withXlang(true).buildThreadLocalFory()
+  threadLocal.register<Money>(130L)
   val threadLocalBytes = threadLocal.serialize(expected)
   require(threadLocal.deserialize(threadLocalBytes, Money::class.java) == expected)
 
-  val pooled =
-    ForyKotlin.builder().withXlang(true).withModule(BasicForyModule).buildThreadSafeForyPool(1)
+  val pooled = ForyKotlin.builder().withXlang(true).buildThreadSafeForyPool(1)
+  pooled.register<Money>(130L)
   val pooledBytes = pooled.serialize(expected)
   require(pooled.deserialize(pooledBytes, Money::class.java) == expected)
 }

@@ -426,8 +426,6 @@ public final class ForyBuilder {
    * <p>Each created Fory instance ignores repeated registration of the same module object. Dedupe
    * uses identity, not {@link Object#equals(Object)}, so distinct module instances are installed
    * independently.
-   *
-   * <p>Thread-safe facades accept modules only through this builder configuration.
    */
   public ForyBuilder withModule(ForyModule module) {
     ForyModule checkedModule = Objects.requireNonNull(module);

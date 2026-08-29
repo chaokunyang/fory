@@ -19,40 +19,46 @@
 
 package org.apache.fory.kotlin
 
+import org.apache.fory.BaseFory
 import org.apache.fory.Fory
+import org.apache.fory.ForyModule
 import org.apache.fory.serializer.kotlin.KotlinSerializers
 
-public inline fun <reified T : Any> Fory.register() {
+public inline fun <reified T : Any> BaseFory.register() {
   registerKotlin(this, T::class.java, null, null, null, null)
 }
 
-public inline fun <reified T : Any> Fory.register(typeId: Long) {
+public inline fun <reified T : Any> BaseFory.register(typeId: Long) {
   registerKotlin(this, T::class.java, typeId, null, null, null)
 }
 
-public inline fun <reified T : Any> Fory.register(name: String) {
+public inline fun <reified T : Any> BaseFory.register(name: String) {
   registerKotlin(this, T::class.java, null, name, null, null)
 }
 
-public inline fun <reified T : Any> Fory.register(namespace: String, typeName: String) {
+public inline fun <reified T : Any> BaseFory.register(namespace: String, typeName: String) {
   registerKotlin(this, T::class.java, null, null, namespace, typeName)
 }
 
 @PublishedApi
 internal fun registerKotlin(
-  fory: Fory,
+  fory: BaseFory,
   cls: Class<*>,
   typeId: Long?,
   name: String?,
   namespace: String?,
   typeName: String?,
 ) {
-  fory.register(ForyKotlin)
-  when {
-    typeId != null -> KotlinSerializers.register(fory, cls, typeId)
-    name != null -> KotlinSerializers.register(fory, cls, name)
-    namespace != null && typeName != null ->
-      KotlinSerializers.register(fory, cls, namespace, typeName)
-    else -> KotlinSerializers.register(fory, cls)
-  }
+  fory.register(
+    ForyModule { runtime: Fory ->
+      runtime.register(ForyKotlin)
+      when {
+        typeId != null -> KotlinSerializers.register(runtime, cls, typeId)
+        name != null -> KotlinSerializers.register(runtime, cls, name)
+        namespace != null && typeName != null ->
+          KotlinSerializers.register(runtime, cls, namespace, typeName)
+        else -> KotlinSerializers.register(runtime, cls)
+      }
+    },
+  )
 }

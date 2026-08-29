@@ -128,10 +128,6 @@ public class ForyTest extends ForyTestBase {
     Fory reader = newNativeFory();
     reader.deserialize(bytes);
     assertRegistrationFrozen(reader);
-
-    Fory copier = newNativeFory();
-    copier.copy(1);
-    assertRegistrationFrozen(copier);
   }
 
   private static Fory newNativeFory() {

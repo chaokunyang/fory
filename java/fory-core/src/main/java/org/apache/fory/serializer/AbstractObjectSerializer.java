@@ -931,12 +931,11 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     fieldValues = RecordUtils.remapping(copyRecordInfo, fieldValues);
     try {
       T t = objectInstantiator.newInstanceWithArguments(fieldValues);
+      Arrays.fill(copyRecordInfo.getRecordComponents(), null);
       copyContext.reference(originObj, t);
       return t;
     } catch (Throwable e) {
       ExceptionUtils.throwException(e);
-    } finally {
-      Arrays.fill(copyRecordInfo.getRecordComponents(), null);
     }
     return originObj;
   }

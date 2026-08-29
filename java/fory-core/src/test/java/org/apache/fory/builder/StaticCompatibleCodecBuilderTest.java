@@ -47,7 +47,6 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.AbstractObjectSerializer;
 import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.FieldGroups.FieldCodecCategory;
 import org.apache.fory.serializer.ObjectSerializer;
@@ -430,48 +429,6 @@ public class StaticCompatibleCodecBuilderTest {
       setField(type, null, "fail", false);
       Assert.assertEquals(
           invoke(type, fory.deserialize(bytes, cast(type)), "value"), "retained-value");
-    }
-  }
-
-  @Test
-  public void testRecordCopyClearsArgs() throws Exception {
-    assumeRecordSupport();
-    CompilationResult result =
-        compile(
-            "test.CopyFailingRecord",
-            "package test;\n"
-                + "public record CopyFailingRecord(String value) {\n"
-                + "  public static boolean fail;\n"
-                + "  public CopyFailingRecord {\n"
-                + "    if (fail) throw new IllegalStateException(\"expected\");\n"
-                + "  }\n"
-                + "}\n");
-    Assert.assertTrue(result.success, result.diagnostics());
-    try (URLClassLoader loader = result.classLoader()) {
-      Class<?> type = loader.loadClass("test.CopyFailingRecord");
-      Fory fory =
-          Fory.builder()
-              .withClassLoader(loader)
-              .withXlang(false)
-              .withRefTracking(true)
-              .withRefCopy(true)
-              .withCodegen(false)
-              .requireClassRegistration(false)
-              .build();
-      Object value = type.getConstructor(String.class).newInstance("retained-value");
-      Serializer<?> serializer = fory.getTypeResolver().getSerializer(type);
-      Assert.assertTrue(serializer instanceof ObjectSerializer);
-
-      setField(type, null, "fail", true);
-      Assert.assertThrows(RuntimeException.class, () -> fory.copy(value));
-
-      Field copyRecordInfoField = AbstractObjectSerializer.class.getDeclaredField("copyRecordInfo");
-      copyRecordInfoField.setAccessible(true);
-      RecordInfo recordInfo = (RecordInfo) copyRecordInfoField.get(serializer);
-      Assert.assertEquals(recordInfo.getRecordComponents(), new Object[] {null});
-
-      setField(type, null, "fail", false);
-      Assert.assertEquals(invoke(type, fory.copy(value), "value"), "retained-value");
     }
   }
 

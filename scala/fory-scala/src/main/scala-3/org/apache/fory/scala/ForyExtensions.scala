@@ -19,33 +19,37 @@
 
 package org.apache.fory.scala
 
-import org.apache.fory.Fory
+import org.apache.fory.BaseFory
 
 import scala.reflect.ClassTag
 
-extension (fory: Fory)
-  def register[T](using serializer: ForySerializer[T], tag: ClassTag[T]): Unit = {
-    fory.register(ForyScala)
-    ForySerializer.register(fory, tag.runtimeClass.asInstanceOf[Class[T]])
-  }
+extension (fory: BaseFory)
+  def register[T](using serializer: ForySerializer[T], tag: ClassTag[T]): Unit =
+    ForySerializer.registerModule(fory, tag.runtimeClass.asInstanceOf[Class[T]], null, null, null)
 
-  def register[T](typeId: Long)(using serializer: ForySerializer[T], tag: ClassTag[T]): Unit = {
-    fory.register(ForyScala)
-    ForySerializer.register(fory, tag.runtimeClass.asInstanceOf[Class[T]], typeId)
-  }
+  def register[T](typeId: Long)(using serializer: ForySerializer[T], tag: ClassTag[T]): Unit =
+    ForySerializer.registerModule(
+      fory,
+      tag.runtimeClass.asInstanceOf[Class[T]],
+      java.lang.Long.valueOf(typeId),
+      null,
+      null)
 
-  def register[T](name: String)(using serializer: ForySerializer[T], tag: ClassTag[T]): Unit = {
-    fory.register(ForyScala)
-    ForySerializer.register(fory, tag.runtimeClass.asInstanceOf[Class[T]], name)
-  }
+  def register[T](name: String)(using serializer: ForySerializer[T], tag: ClassTag[T]): Unit =
+    val (namespace, typeName) = ForySerializer.splitName(name)
+    ForySerializer.registerModule(
+      fory,
+      tag.runtimeClass.asInstanceOf[Class[T]],
+      null,
+      namespace,
+      typeName)
 
   def register[T](namespace: String, typeName: String)(using
       serializer: ForySerializer[T],
-      tag: ClassTag[T]): Unit = {
-    fory.register(ForyScala)
-    ForySerializer.register(
+      tag: ClassTag[T]): Unit =
+    ForySerializer.registerModule(
       fory,
       tag.runtimeClass.asInstanceOf[Class[T]],
+      null,
       namespace,
       typeName)
-  }

@@ -293,7 +293,7 @@ public class ReplaceResolveSerializer extends Serializer {
   private static Serializer createDataSerializer(
       TypeResolver typeResolver, Class<?> cls, Class<? extends Serializer> sc) {
     ClassResolver classResolver = (ClassResolver) typeResolver;
-    Serializer prev = classResolver.getConstructionSerializer(cls);
+    Serializer prev = classResolver.getSerializer(cls, false);
     Serializer serializer = Serializers.newSerializer(typeResolver, cls, sc);
     classResolver.resetSerializer(cls, prev);
     return serializer;

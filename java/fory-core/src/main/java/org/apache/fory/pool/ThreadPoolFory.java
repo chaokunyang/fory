@@ -29,10 +29,10 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.fory.AbstractThreadSafeFory;
-import org.apache.fory.FacadeRegistrationGate;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.config.ForyBuilder;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
@@ -53,7 +53,8 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   private final Fory[] pooledFory;
   private final Semaphore waiterSignal = new Semaphore(0);
   private final AtomicInteger waitingBorrowers = new AtomicInteger();
-  private final FacadeRegistrationGate registrationGate;
+  private final Object callbackLock = new Object();
+  private volatile boolean registrationFrozen;
 
   public ThreadPoolFory(Function<ForyBuilder, Fory> foryFactory, int poolSize) {
     if (poolSize <= 0) {
@@ -71,17 +72,14 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
       pooledFory[i] = fory;
       slots.set(i, new PooledEntry(fory, i));
     }
-    registrationGate = new FacadeRegistrationGate(this::finishChildRegistration);
-  }
-
-  private void finishChildRegistration() {
-    for (Fory fory : pooledFory) {
-      fory.getTypeResolver().finishRegistration();
-    }
   }
 
   private PooledEntry acquire() {
-    registrationGate.freeze();
+    freezeRegistration();
+    return acquireEntry();
+  }
+
+  private PooledEntry acquireEntry() {
     int slotIndex = slotIndexForCurrentThread();
     PooledEntry entry = tryBorrowPreferredSlots(slotIndex);
     if (entry != null) {
@@ -156,25 +154,56 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   @Internal
   @Override
   public void registerCallback(Consumer<Fory> callback) {
-    registrationGate.applyRegistration(
-        () -> {
-          for (Fory fory : pooledFory) {
-            callback.accept(fory);
-            if (fory.getTypeResolver().isRegistrationFrozen()) {
-              throw new IllegalStateException(
-                  "A ThreadSafeFory child started a root operation during registration.");
-            }
-          }
-        });
+    synchronized (callbackLock) {
+      checkRegistrationOpen();
+      for (Fory fory : pooledFory) {
+        callback.accept(fory);
+      }
+    }
   }
 
   @Override
   public <R> R execute(Function<Fory, R> action) {
-    PooledEntry entry = acquire();
+    if (!registrationFrozen) {
+      synchronized (callbackLock) {
+        if (!registrationFrozen) {
+          PooledEntry entry = acquireEntry();
+          try {
+            return action.apply(entry.fory);
+          } finally {
+            if (entry.fory.getTypeResolver().isRegistrationFrozen()) {
+              registrationFrozen = true;
+            }
+            release(entry);
+          }
+        }
+      }
+    }
+    PooledEntry entry = acquireEntry();
     try {
+      entry.fory.getTypeResolver().freezeRegistration();
       return action.apply(entry.fory);
     } finally {
       release(entry);
+    }
+  }
+
+  private void freezeRegistration() {
+    if (!registrationFrozen) {
+      synchronized (callbackLock) {
+        if (!registrationFrozen) {
+          registrationFrozen = true;
+        }
+      }
+    }
+  }
+
+  private void checkRegistrationOpen() {
+    if (registrationFrozen) {
+      throw new ForyException(
+          "Cannot register class/serializer after registration has been frozen. Please register "
+              + "all classes before invoking top-level `serialize/deserialize` methods of "
+              + "ThreadSafeFory.");
     }
   }
 
@@ -370,7 +399,19 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
 
   @Override
   public <T> T copy(T obj) {
-    PooledEntry entry = acquire();
+    if (!registrationFrozen) {
+      synchronized (callbackLock) {
+        if (!registrationFrozen) {
+          PooledEntry entry = acquireEntry();
+          try {
+            return entry.fory.copy(obj);
+          } finally {
+            release(entry);
+          }
+        }
+      }
+    }
+    PooledEntry entry = acquireEntry();
     try {
       return entry.fory.copy(obj);
     } finally {

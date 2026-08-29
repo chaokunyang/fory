@@ -36,6 +36,7 @@ import kotlin.time.DurationUnit;
 import kotlin.time.TimedValue;
 import kotlin.uuid.Uuid;
 import org.apache.fory.Fory;
+import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.GeneratedClassNames;
 import org.apache.fory.config.Config;
@@ -53,115 +54,118 @@ import org.apache.fory.util.DefaultValueUtils;
 public class KotlinSerializers {
   private static final String XLANG_GENERATED_SERIALIZER_SUFFIX = "_ForySerializer";
 
+  public static void registerSerializers(ThreadSafeFory fory) {
+    fory.register(ForyKotlin.INSTANCE);
+  }
+
   public static void registerSerializers(Fory fory) {
     fory.register(ForyKotlin.INSTANCE);
   }
 
   @Internal
   public static void installSerializers(Fory fory) {
-    TypeResolver resolver = fory.getTypeResolver();
-    checkRegistrationOpen(resolver);
-    if (!resolver.isCrossLanguage()) {
-      Config config = resolver.getConfig();
-
-      // UByte
-      Class ubyteClass = KotlinToJavaClass.INSTANCE.getUByteClass();
-      registerIfAbsent(resolver, ubyteClass);
-      resolver.registerSerializer(ubyteClass, new UByteSerializer(config));
-
-      // UShort
-      Class ushortClass = KotlinToJavaClass.INSTANCE.getUShortClass();
-      registerIfAbsent(resolver, ushortClass);
-      resolver.registerSerializer(ushortClass, new UShortSerializer(config));
-
-      // UInt
-      Class uintClass = KotlinToJavaClass.INSTANCE.getUIntClass();
-      registerIfAbsent(resolver, uintClass);
-      resolver.registerSerializer(uintClass, new UIntSerializer(config));
-
-      // ULong
-      Class ulongClass = KotlinToJavaClass.INSTANCE.getULongClass();
-      registerIfAbsent(resolver, ulongClass);
-      resolver.registerSerializer(ulongClass, new ULongSerializer(config));
-
-      // EmptyList
-      Class emptyListClass = KotlinToJavaClass.INSTANCE.getEmptyListClass();
-      registerIfAbsent(resolver, emptyListClass);
-      resolver.registerSerializer(
-          emptyListClass, new CollectionSerializers.EmptyListSerializer(resolver, emptyListClass));
-
-      // EmptySet
-      Class emptySetClass = KotlinToJavaClass.INSTANCE.getEmptySetClass();
-      registerIfAbsent(resolver, emptySetClass);
-      resolver.registerSerializer(
-          emptySetClass, new CollectionSerializers.EmptySetSerializer(resolver, emptySetClass));
-
-      // EmptyMap
-      Class emptyMapClass = KotlinToJavaClass.INSTANCE.getEmptyMapClass();
-      registerIfAbsent(resolver, emptyMapClass);
-      resolver.registerSerializer(
-          emptyMapClass, new MapSerializers.EmptyMapSerializer(resolver, emptyMapClass));
-
-      // Non-Java collection implementation in kotlin stdlib.
-      Class arrayDequeClass = KotlinToJavaClass.INSTANCE.getArrayDequeClass();
-      registerIfAbsent(resolver, arrayDequeClass);
-      resolver.registerSerializer(
-          arrayDequeClass, new KotlinArrayDequeSerializer(resolver, arrayDequeClass));
-
-      // Unsigned array classes: UByteArray, UShortArray, UIntArray, ULongArray.
-      registerIfAbsent(resolver, UByteArray.class);
-      resolver.registerSerializer(UByteArray.class, new UByteArraySerializer(resolver));
-      registerIfAbsent(resolver, UShortArray.class);
-      resolver.registerSerializer(UShortArray.class, new UShortArraySerializer(resolver));
-      registerIfAbsent(resolver, UIntArray.class);
-      resolver.registerSerializer(UIntArray.class, new UIntArraySerializer(resolver));
-      registerIfAbsent(resolver, ULongArray.class);
-      resolver.registerSerializer(ULongArray.class, new ULongArraySerializer(resolver));
-
-      // Ranges and Progressions.
-      registerIfAbsent(resolver, kotlin.ranges.CharRange.class);
-      registerIfAbsent(resolver, kotlin.ranges.CharProgression.class);
-      registerIfAbsent(resolver, kotlin.ranges.IntRange.class);
-      registerIfAbsent(resolver, kotlin.ranges.IntProgression.class);
-      registerIfAbsent(resolver, kotlin.ranges.LongRange.class);
-      registerIfAbsent(resolver, kotlin.ranges.LongProgression.class);
-      registerIfAbsent(resolver, kotlin.ranges.UIntRange.class);
-      registerIfAbsent(resolver, kotlin.ranges.UIntProgression.class);
-      registerIfAbsent(resolver, kotlin.ranges.ULongRange.class);
-      registerIfAbsent(resolver, kotlin.ranges.ULongProgression.class);
-
-      // Built-in classes.
-      registerIfAbsent(resolver, kotlin.Pair.class);
-      registerIfAbsent(resolver, kotlin.Triple.class);
-      registerIfAbsent(resolver, kotlin.Result.class);
-      registerIfAbsent(resolver, Result.Failure.class);
-
-      // kotlin.random
-      registerIfAbsent(resolver, KotlinToJavaClass.INSTANCE.getRandomDefaultClass());
-      registerIfAbsent(resolver, KotlinToJavaClass.INSTANCE.getRandomInternalClass());
-      registerIfAbsent(resolver, KotlinToJavaClass.INSTANCE.getRandomSerializedClass());
-
-      // kotlin.text
-      registerIfAbsent(resolver, Regex.class);
-      registerIfAbsent(resolver, KotlinToJavaClass.INSTANCE.getRegexSerializedClass());
-      registerIfAbsent(resolver, RegexOption.class);
-      registerIfAbsent(resolver, CharCategory.class);
-      registerIfAbsent(resolver, CharDirectionality.class);
-      registerIfAbsent(resolver, HexFormat.class);
-      registerIfAbsent(resolver, MatchGroup.class);
-
-      // kotlin.time
-      registerIfAbsent(resolver, DurationUnit.class);
-      registerIfAbsent(resolver, Duration.class);
-      resolver.registerSerializer(Duration.class, new DurationSerializer(config));
-      registerIfAbsent(resolver, TimedValue.class);
-
-      // kotlin.uuid
-      registerIfAbsent(resolver, Uuid.class);
-      resolver.registerSerializer(Uuid.class, new UuidSerializer(config));
-    }
-    checkRegistrationOpen(resolver);
     DefaultValueUtils.setKotlinDefaultValueSupport(KotlinDefaultValueSupport.INSTANCE);
+    TypeResolver resolver = fory.getTypeResolver();
+    if (resolver.isCrossLanguage()) {
+      return;
+    }
+    Config config = resolver.getConfig();
+
+    // UByte
+    Class ubyteClass = KotlinToJavaClass.INSTANCE.getUByteClass();
+    registerIfAbsent(resolver, ubyteClass);
+    resolver.registerSerializer(ubyteClass, new UByteSerializer(config));
+
+    // UShort
+    Class ushortClass = KotlinToJavaClass.INSTANCE.getUShortClass();
+    registerIfAbsent(resolver, ushortClass);
+    resolver.registerSerializer(ushortClass, new UShortSerializer(config));
+
+    // UInt
+    Class uintClass = KotlinToJavaClass.INSTANCE.getUIntClass();
+    registerIfAbsent(resolver, uintClass);
+    resolver.registerSerializer(uintClass, new UIntSerializer(config));
+
+    // ULong
+    Class ulongClass = KotlinToJavaClass.INSTANCE.getULongClass();
+    registerIfAbsent(resolver, ulongClass);
+    resolver.registerSerializer(ulongClass, new ULongSerializer(config));
+
+    // EmptyList
+    Class emptyListClass = KotlinToJavaClass.INSTANCE.getEmptyListClass();
+    registerIfAbsent(resolver, emptyListClass);
+    resolver.registerSerializer(
+        emptyListClass, new CollectionSerializers.EmptyListSerializer(resolver, emptyListClass));
+
+    // EmptySet
+    Class emptySetClass = KotlinToJavaClass.INSTANCE.getEmptySetClass();
+    registerIfAbsent(resolver, emptySetClass);
+    resolver.registerSerializer(
+        emptySetClass, new CollectionSerializers.EmptySetSerializer(resolver, emptySetClass));
+
+    // EmptyMap
+    Class emptyMapClass = KotlinToJavaClass.INSTANCE.getEmptyMapClass();
+    registerIfAbsent(resolver, emptyMapClass);
+    resolver.registerSerializer(
+        emptyMapClass, new MapSerializers.EmptyMapSerializer(resolver, emptyMapClass));
+
+    // Non-Java collection implementation in kotlin stdlib.
+    Class arrayDequeClass = KotlinToJavaClass.INSTANCE.getArrayDequeClass();
+    registerIfAbsent(resolver, arrayDequeClass);
+    resolver.registerSerializer(
+        arrayDequeClass, new KotlinArrayDequeSerializer(resolver, arrayDequeClass));
+
+    // Unsigned array classes: UByteArray, UShortArray, UIntArray, ULongArray.
+    registerIfAbsent(resolver, UByteArray.class);
+    resolver.registerSerializer(UByteArray.class, new UByteArraySerializer(resolver));
+    registerIfAbsent(resolver, UShortArray.class);
+    resolver.registerSerializer(UShortArray.class, new UShortArraySerializer(resolver));
+    registerIfAbsent(resolver, UIntArray.class);
+    resolver.registerSerializer(UIntArray.class, new UIntArraySerializer(resolver));
+    registerIfAbsent(resolver, ULongArray.class);
+    resolver.registerSerializer(ULongArray.class, new ULongArraySerializer(resolver));
+
+    // Ranges and Progressions.
+    registerIfAbsent(resolver, kotlin.ranges.CharRange.class);
+    registerIfAbsent(resolver, kotlin.ranges.CharProgression.class);
+    registerIfAbsent(resolver, kotlin.ranges.IntRange.class);
+    registerIfAbsent(resolver, kotlin.ranges.IntProgression.class);
+    registerIfAbsent(resolver, kotlin.ranges.LongRange.class);
+    registerIfAbsent(resolver, kotlin.ranges.LongProgression.class);
+    registerIfAbsent(resolver, kotlin.ranges.UIntRange.class);
+    registerIfAbsent(resolver, kotlin.ranges.UIntProgression.class);
+    registerIfAbsent(resolver, kotlin.ranges.ULongRange.class);
+    registerIfAbsent(resolver, kotlin.ranges.ULongProgression.class);
+
+    // Built-in classes.
+    registerIfAbsent(resolver, kotlin.Pair.class);
+    registerIfAbsent(resolver, kotlin.Triple.class);
+    registerIfAbsent(resolver, kotlin.Result.class);
+    registerIfAbsent(resolver, Result.Failure.class);
+
+    // kotlin.random
+    registerIfAbsent(resolver, KotlinToJavaClass.INSTANCE.getRandomDefaultClass());
+    registerIfAbsent(resolver, KotlinToJavaClass.INSTANCE.getRandomInternalClass());
+    registerIfAbsent(resolver, KotlinToJavaClass.INSTANCE.getRandomSerializedClass());
+
+    // kotlin.text
+    registerIfAbsent(resolver, Regex.class);
+    registerIfAbsent(resolver, KotlinToJavaClass.INSTANCE.getRegexSerializedClass());
+    registerIfAbsent(resolver, RegexOption.class);
+    registerIfAbsent(resolver, CharCategory.class);
+    registerIfAbsent(resolver, CharDirectionality.class);
+    registerIfAbsent(resolver, HexFormat.class);
+    registerIfAbsent(resolver, MatchGroup.class);
+
+    // kotlin.time
+    registerIfAbsent(resolver, DurationUnit.class);
+    registerIfAbsent(resolver, Duration.class);
+    resolver.registerSerializer(Duration.class, new DurationSerializer(config));
+    registerIfAbsent(resolver, TimedValue.class);
+
+    // kotlin.uuid
+    registerIfAbsent(resolver, Uuid.class);
+    resolver.registerSerializer(Uuid.class, new UuidSerializer(config));
   }
 
   private static void registerIfAbsent(TypeResolver resolver, Class<?> cls) {
@@ -206,87 +210,106 @@ public class KotlinSerializers {
   }
 
   public static void register(Fory fory, Class<?> cls) {
-    fory.register(cls);
-    registerSerializer(fory, cls);
+    TypeResolver resolver = fory.getTypeResolver();
+    resolver.checkRegistrationOpen();
+    resolver.register(cls);
+    Serializer serializer = newGeneratedSerializer(resolver, cls);
+    resolver.checkRegistrationOpen();
+    resolver.setSerializer(cls, serializer);
   }
 
   public static void register(Fory fory, Class<?> cls, long typeId) {
-    registerType(fory, cls, typeId);
-    registerSerializer(fory, cls);
+    TypeResolver resolver = fory.getTypeResolver();
+    resolver.checkRegistrationOpen();
+    resolver.register(cls, typeId);
+    Serializer serializer = newGeneratedSerializer(resolver, cls);
+    resolver.checkRegistrationOpen();
+    resolver.setSerializer(cls, serializer);
   }
 
   public static void register(Fory fory, Class<?> cls, String name) {
-    registerType(fory, cls, name);
-    registerSerializer(fory, cls);
+    TypeResolver resolver = fory.getTypeResolver();
+    resolver.checkRegistrationOpen();
+    fory.register(cls, name);
+    Serializer serializer = newGeneratedSerializer(resolver, cls);
+    resolver.checkRegistrationOpen();
+    resolver.setSerializer(cls, serializer);
   }
 
   public static void register(Fory fory, Class<?> cls, String namespace, String typeName) {
-    registerType(fory, cls, namespace, typeName);
-    registerSerializer(fory, cls);
+    checkTypeName(typeName);
+    TypeResolver resolver = fory.getTypeResolver();
+    resolver.checkRegistrationOpen();
+    resolver.register(cls, namespace, typeName);
+    Serializer serializer = newGeneratedSerializer(resolver, cls);
+    resolver.checkRegistrationOpen();
+    resolver.setSerializer(cls, serializer);
   }
 
   public static void registerSerializer(Fory fory, Class<?> cls) {
     TypeResolver resolver = fory.getTypeResolver();
-    checkRegistrationOpen(resolver);
-    if (!resolver.isRegistered(cls) || resolver.getTypeInfo(cls, false) == null) {
-      throw new IllegalArgumentException(
-          "Generated Kotlin serializer requires registering the type first: " + cls.getName());
-    }
-    resolver.registerSerializer(cls, owner -> newGeneratedSerializer(owner, cls));
-  }
-
-  private static void checkRegistrationOpen(TypeResolver resolver) {
-    if (resolver.isRegistrationFrozen()) {
-      throw new ForyException(
-          "Cannot register class/serializer after registration has been frozen. Please register "
-              + "all classes before invoking top-level `serialize/deserialize/copy` methods of "
-              + "Fory.");
-    }
+    resolver.checkRegistrationOpen();
+    Serializer serializer = newGeneratedSerializer(resolver, cls);
+    resolver.checkRegistrationOpen();
+    resolver.setSerializer(cls, serializer);
   }
 
   public static void registerEnum(Fory fory, Class<?> cls, long typeId) {
     TypeResolver resolver = fory.getTypeResolver();
-    checkRegistrationOpen(resolver);
-    resolver.registerEnum(cls, typeId, new EnumSerializer(resolver.getConfig(), enumClass(cls)));
+    resolver.checkRegistrationOpen();
+    Serializer serializer = new EnumSerializer(resolver.getConfig(), enumClass(cls));
+    resolver.checkRegistrationOpen();
+    resolver.registerEnum(cls, typeId, serializer);
   }
 
   public static void registerEnum(Fory fory, Class<?> cls, String namespace, String typeName) {
     checkTypeName(typeName);
     TypeResolver resolver = fory.getTypeResolver();
-    checkRegistrationOpen(resolver);
-    resolver.registerEnum(
-        cls, namespace, typeName, new EnumSerializer(resolver.getConfig(), enumClass(cls)));
+    resolver.checkRegistrationOpen();
+    Serializer serializer = new EnumSerializer(resolver.getConfig(), enumClass(cls));
+    resolver.checkRegistrationOpen();
+    resolver.registerEnum(cls, namespace, typeName, serializer);
   }
 
   public static void registerEnum(Fory fory, Class<?> cls, String name) {
     TypeResolver resolver = fory.getTypeResolver();
+    resolver.checkRegistrationOpen();
     String[] parts = splitName(name);
-    checkRegistrationOpen(resolver);
-    resolver.registerEnum(
-        cls, parts[0], parts[1], new EnumSerializer(resolver.getConfig(), enumClass(cls)));
+    Serializer serializer = new EnumSerializer(resolver.getConfig(), enumClass(cls));
+    resolver.checkRegistrationOpen();
+    resolver.registerEnum(cls, parts[0], parts[1], serializer);
   }
 
   public static void registerUnion(Fory fory, Class<?> cls, long typeId) {
     TypeResolver resolver = fory.getTypeResolver();
-    checkRegistrationOpen(resolver);
-    resolver.registerUnion(cls, typeId, newGeneratedSerializer(resolver, cls));
-    registerCaseAliases(fory, cls);
+    resolver.checkRegistrationOpen();
+    Serializer serializer = newGeneratedSerializer(resolver, cls);
+    Class<?>[] caseClasses = cls.getDeclaredClasses();
+    resolver.checkRegistrationOpen();
+    resolver.registerUnion(cls, typeId, serializer);
+    registerCaseAliases(fory, cls, caseClasses);
   }
 
   public static void registerUnion(Fory fory, Class<?> cls, String namespace, String typeName) {
     checkTypeName(typeName);
     TypeResolver resolver = fory.getTypeResolver();
-    checkRegistrationOpen(resolver);
-    resolver.registerUnion(cls, namespace, typeName, newGeneratedSerializer(resolver, cls));
-    registerCaseAliases(fory, cls);
+    resolver.checkRegistrationOpen();
+    Serializer serializer = newGeneratedSerializer(resolver, cls);
+    Class<?>[] caseClasses = cls.getDeclaredClasses();
+    resolver.checkRegistrationOpen();
+    resolver.registerUnion(cls, namespace, typeName, serializer);
+    registerCaseAliases(fory, cls, caseClasses);
   }
 
   public static void registerUnion(Fory fory, Class<?> cls, String name) {
     TypeResolver resolver = fory.getTypeResolver();
+    resolver.checkRegistrationOpen();
     String[] parts = splitName(name);
-    checkRegistrationOpen(resolver);
-    resolver.registerUnion(cls, parts[0], parts[1], newGeneratedSerializer(resolver, cls));
-    registerCaseAliases(fory, cls);
+    Serializer serializer = newGeneratedSerializer(resolver, cls);
+    Class<?>[] caseClasses = cls.getDeclaredClasses();
+    resolver.checkRegistrationOpen();
+    resolver.registerUnion(cls, parts[0], parts[1], serializer);
+    registerCaseAliases(fory, cls, caseClasses);
   }
 
   private static Serializer<?> newGeneratedSerializer(TypeResolver resolver, Class<?> cls) {
@@ -333,8 +356,9 @@ public class KotlinSerializers {
     return (Class<Enum>) cls;
   }
 
-  private static void registerCaseAliases(Fory fory, Class<?> canonicalClass) {
-    for (Class<?> nestedClass : canonicalClass.getDeclaredClasses()) {
+  private static void registerCaseAliases(
+      Fory fory, Class<?> canonicalClass, Class<?>[] caseClasses) {
+    for (Class<?> nestedClass : caseClasses) {
       if (canonicalClass.isAssignableFrom(nestedClass)) {
         fory.getTypeResolver().registerRuntimeTypeAlias(nestedClass, canonicalClass);
       }

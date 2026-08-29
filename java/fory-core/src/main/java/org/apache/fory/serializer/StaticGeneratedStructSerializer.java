@@ -93,14 +93,13 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   }
 
   private void setSerializerIfAbsent(TypeResolver typeResolver, Class<T> type) {
-    TypeInfo typeInfo = typeResolver.getConstructionTypeInfo(type);
-    Serializer<?> serializer = typeResolver.getConstructionSerializer(type);
+    TypeInfo typeInfo = typeResolver.getTypeInfo(type, false);
     if (!typeResolver.isCrossLanguage() || typeInfo != null) {
       // Field-group construction resolves monomorphic field serializers. A generated serializer can
       // therefore encounter its own type before the subclass constructor has finished, just like
-      // ObjectSerializer. The resolver routes combined registration to its construction owner so
-      // recursive fields never observe an incomplete serializer in the runtime registry.
-      if (typeInfo != null && serializer instanceof DeferedLazySerializer) {
+      // ObjectSerializer. Install this instance early so recursive fields reuse it instead of
+      // constructing another serializer for the same type.
+      if (typeInfo != null && typeInfo.getSerializer() instanceof DeferedLazySerializer) {
         typeResolver.setSerializer(type, this);
       } else {
         typeResolver.setSerializerIfAbsent(type, this);

@@ -55,6 +55,7 @@ import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
 import org.apache.fory.serializer.collection.ChildContainerSerializers;
@@ -107,7 +108,8 @@ public class Serializers {
    */
   public static <T> Serializer<T> newSerializer(
       TypeResolver typeResolver, Class type, Class<? extends Serializer> serializerClass) {
-    Serializer serializer = typeResolver.getConstructionSerializer(type);
+    TypeInfo typeInfo = typeResolver.getTypeInfo(type, false);
+    Serializer serializer = typeInfo == null ? null : typeInfo.getSerializer();
     try {
       return buildSerializer(typeResolver, type, serializerClass);
     } catch (Throwable t) {

@@ -192,15 +192,6 @@ public class ForyCopyTest extends ForyTestBase {
   }
 
   @Test
-  public void testCopyFinalizesRegistrationPhase() {
-    Fory fory =
-        builder().withCodegen(false).withRefCopy(true).requireClassRegistration(true).build();
-    fory.register(BeanA.class);
-    assertEquals(fory.copy(BeanA.createBeanA(2)), BeanA.createBeanA(2));
-    Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
-  }
-
-  @Test
   public void testCopyOnlySerializerStillRejectsSerialize() {
     Fory fory =
         builder().withCodegen(false).withRefCopy(true).requireClassRegistration(true).build();

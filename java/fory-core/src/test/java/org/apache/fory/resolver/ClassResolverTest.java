@@ -851,8 +851,8 @@ public class ClassResolverTest extends ForyTestBase {
 
     ClassResolver resolver1 = (ClassResolver) fory1.getTypeResolver();
     ClassResolver resolver2 = (ClassResolver) fory2.getTypeResolver();
-    resolver1.finishRegistration();
-    resolver2.finishRegistration();
+    resolver1.freezeRegistration();
+    resolver2.freezeRegistration();
 
     List<Descriptor> descriptors1 = resolver1.getFieldDescriptors(BeanB.class, true);
     List<Descriptor> descriptors2 = resolver2.getFieldDescriptors(BeanB.class, true);
@@ -887,8 +887,8 @@ public class ClassResolverTest extends ForyTestBase {
 
     ClassResolver resolver1 = (ClassResolver) fory1.getTypeResolver();
     ClassResolver resolver2 = (ClassResolver) fory2.getTypeResolver();
-    resolver1.finishRegistration();
-    resolver2.finishRegistration();
+    resolver1.freezeRegistration();
+    resolver2.freezeRegistration();
 
     TypeDef canonicalTypeDef = resolver1.getTypeDef(BeanB.class, true);
     MemoryBuffer buffer1 = MemoryBuffer.newHeapBuffer(256);
@@ -978,11 +978,11 @@ public class ClassResolverTest extends ForyTestBase {
     assertNull(resolver2.getRegisteredClassId(BeanB.class));
     assertNull(resolver2.getRegisteredClass("ns.C1"));
 
-    resolver1.finishRegistration();
+    resolver1.freezeRegistration();
 
     assertEquals(sharedRegistry.registeredClassIdMap.get(BeanB.class), Integer.valueOf(1));
     assertEquals(sharedRegistry.registeredClasses.get("ns.C1"), C1.class);
-    resolver2.finishRegistration();
+    resolver2.freezeRegistration();
     assertEquals(resolver2.getRegisteredClassId(BeanB.class), Integer.valueOf(1));
     assertEquals(resolver2.getRegisteredClass("ns.C1"), C1.class);
   }
@@ -1489,8 +1489,8 @@ public class ClassResolverTest extends ForyTestBase {
     resolver2.register(Foo.class, 101);
     resolver1.registerSerializer(Foo.class, ShareableFooSerializer.class);
     resolver2.registerSerializer(Foo.class, ShareableFooSerializer.class);
-    resolver1.finishRegistration();
-    resolver2.finishRegistration();
+    resolver1.freezeRegistration();
+    resolver2.freezeRegistration();
 
     Serializer<?> serializer1 = resolver1.getSerializer(Foo.class);
     TypeInfo sharedTypeInfo = sharedRegistry.registeredTypeInfoCache.get(Foo.class);

@@ -22,7 +22,6 @@ package org.apache.fory.resolver;
 import static org.apache.fory.meta.Encoders.PACKAGE_DECODER;
 import static org.apache.fory.meta.Encoders.TYPE_NAME_DECODER;
 
-import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
@@ -164,7 +163,6 @@ public class TypeInfo {
     return (Serializer<T>) serializer;
   }
 
-  @Internal
   public void setSerializer(Serializer<?> serializer) {
     this.serializer = serializer;
   }

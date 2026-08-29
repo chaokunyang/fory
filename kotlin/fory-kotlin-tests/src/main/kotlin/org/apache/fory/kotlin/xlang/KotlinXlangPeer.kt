@@ -32,7 +32,6 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import org.apache.fory.BaseFory
 import org.apache.fory.Fory
-import org.apache.fory.ForyModule
 import org.apache.fory.annotation.ArrayType
 import org.apache.fory.annotation.ForyCase
 import org.apache.fory.annotation.ForyField
@@ -306,7 +305,6 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   compatibleScalarContainerRefs()
   compatibleDenseUIntList()
   trackedDenseArrayRefs()
-  serializerRegistrationFreezes()
 
   val fory = newFory()
   fory.register<KotlinUser>("kotlin.KotlinUser")
@@ -755,62 +753,6 @@ private fun trackedDenseArrayRefs() {
   check(noRefDecoded.added == "reader-default")
 }
 
-private fun serializerRegistrationFreezes() {
-  val registeredFory = newFory()
-  registeredFory.register<KotlinUser>("kotlin.KotlinUser")
-  registeredFory.serialize(KotlinUser(1u, "freeze", 2L))
-  val serializer = registeredFory.getSerializer(KotlinUser::class.java)
-  val typeId = registeredFory.typeResolver.getTypeInfo(KotlinUser::class.java).typeId
-  check(
-    runCatching { KotlinSerializers.registerSerializer(registeredFory, KotlinUser::class.java) }
-      .isFailure
-  )
-  check(registeredFory.getSerializer(KotlinUser::class.java) === serializer)
-  check(registeredFory.typeResolver.getTypeInfo(KotlinUser::class.java).typeId == typeId)
-
-  val unregisteredFory = newFory()
-  unregisteredFory.serialize("freeze")
-  check(!unregisteredFory.typeResolver.isRegistered(KotlinUser::class.java))
-  check(
-    runCatching { KotlinSerializers.registerSerializer(unregisteredFory, KotlinUser::class.java) }
-      .isFailure
-  )
-  check(!unregisteredFory.typeResolver.isRegistered(KotlinUser::class.java))
-
-  val failedRootFory = newFory()
-  check(runCatching { failedRootFory.deserialize(byteArrayOf()) }.isFailure)
-  for (frozenFory in listOf(unregisteredFory, failedRootFory)) {
-    val resolver = frozenFory.typeResolver
-    check(
-      runCatching {
-          KotlinSerializers.registerUnion(
-            frozenFory,
-            KotlinPet::class.java,
-            "kotlin.LateKotlinPet",
-          )
-        }
-        .isFailure
-    )
-    check(!resolver.isRegistered(KotlinPet::class.java))
-  }
-
-  val compatibleFory = newCompatibleFory()
-  KotlinSerializers.registerType(
-    compatibleFory,
-    KotlinUser::class.java,
-    "kotlin.KotlinUserCompatible",
-  )
-  check(
-    compatibleFory.typeResolver.getTypeInfo(KotlinUser::class.java).typeId ==
-      Types.NAMED_COMPATIBLE_STRUCT
-  )
-  KotlinSerializers.registerSerializer(compatibleFory, KotlinUser::class.java)
-  check(
-    compatibleFory.typeResolver.getTypeInfo(KotlinUser::class.java).typeId ==
-      Types.NAMED_COMPATIBLE_STRUCT
-  )
-}
-
 private fun checkUnionListBudget(values: List<UInt>) {
   val writer = newFory()
   writer.register<KotlinUser>("kotlin.KotlinUser")
@@ -942,18 +884,15 @@ private fun compatibleDefaultRoundTrip() {
 
 private fun checkNoArgRegisterReceivers() {
   checkNoArgRegister(newFory())
-  val module = ForyModule { it.register<KotlinInternalUser>() }
-  checkNoArgRegistered(
+  checkNoArgRegister(
     ForyKotlin.builder()
-      .withModule(module)
       .withXlang(true)
       .requireClassRegistration(true)
       .withRefTracking(false)
       .buildThreadLocalFory()
   )
-  checkNoArgRegistered(
+  checkNoArgRegister(
     ForyKotlin.builder()
-      .withModule(module)
       .withXlang(true)
       .requireClassRegistration(true)
       .withRefTracking(false)
@@ -961,12 +900,8 @@ private fun checkNoArgRegisterReceivers() {
   )
 }
 
-private fun checkNoArgRegister(fory: Fory) {
+private fun checkNoArgRegister(fory: BaseFory) {
   fory.register<KotlinInternalUser>()
-  checkNoArgRegistered(fory)
-}
-
-private fun checkNoArgRegistered(fory: BaseFory) {
   val value = KotlinInternalUser(id = 7u, name = "receiver")
   check(fory.deserialize(fory.serialize(value), KotlinInternalUser::class.java) == value)
 }

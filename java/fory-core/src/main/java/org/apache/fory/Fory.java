@@ -22,9 +22,7 @@ package org.apache.fory;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.util.Collections;
 import java.util.IdentityHashMap;
-import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -101,8 +99,7 @@ public final class Fory implements BaseFory {
   private final WriteContext writeContext;
   private final ReadContext readContext;
   private final CopyContext copyContext;
-  private final Set<ForyModule> moduleRegistrations =
-      Collections.newSetFromMap(new IdentityHashMap<>());
+  private final IdentityHashMap<ForyModule, Boolean> installedModules = new IdentityHashMap<>();
   private final byte headerBitmap;
   private MemoryBuffer buffer;
 
@@ -172,13 +169,13 @@ public final class Fory implements BaseFory {
 
   @Override
   public void register(Class<?> cls) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     getTypeResolver().register(cls);
   }
 
   @Override
   public void register(Class<?> cls, int id) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     getTypeResolver().register(cls, Integer.toUnsignedLong(id));
   }
 
@@ -188,71 +185,67 @@ public final class Fory implements BaseFory {
    */
   @Override
   public void register(Class<?> cls, String name) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     String[] parts = splitRegistrationName(name);
     register(cls, parts[0], parts[1]);
   }
 
   public void register(Class<?> cls, String namespace, String typeName) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     getTypeResolver().register(cls, namespace, typeName);
   }
 
   @Override
   public void register(String className) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     getTypeResolver().register(className);
   }
 
   @Override
   public void register(String className, int classId) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     getTypeResolver().register(className, Integer.toUnsignedLong(classId));
   }
 
   @Override
   public void register(String className, String name) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     String[] parts = splitRegistrationName(name);
     getTypeResolver().register(className, parts[0], parts[1]);
   }
 
   @Override
   public void register(String className, String namespace, String typeName) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     getTypeResolver().register(className, namespace, typeName);
   }
 
-  /**
-   * Installs a module into this runtime before its first root operation. Configure modules for a
-   * thread-safe facade through {@link ForyBuilder#withModule(ForyModule)} before building it.
-   */
+  /** Installs a module into this runtime before its first root operation. */
+  @Override
   public void register(ForyModule module) {
     Preconditions.checkNotNull(module);
-    checkRegisterAllowed();
-    if (!moduleRegistrations.add(module)) {
+    typeResolver.checkRegistrationOpen();
+    if (installedModules.containsKey(module)) {
       return;
     }
+    installedModules.put(module, Boolean.TRUE);
     try {
-      // Publishing the identity before the callback breaks self and mutual installation cycles.
-      // A failure removes it, while a successful installation retains the identity for idempotence.
       module.install(this);
-      checkRegisterAllowed();
-    } catch (Throwable e) {
-      moduleRegistrations.remove(module);
-      throw ExceptionUtils.throwException(e);
+    } catch (RuntimeException | Error e) {
+      installedModules.remove(module);
+      throw e;
     }
   }
 
   @Override
   public void registerUnion(Class<?> cls, int id, Serializer<?> serializer) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     getTypeResolver().registerUnion(cls, Integer.toUnsignedLong(id), serializer);
   }
 
   @Override
   public void registerUnion(Class<?> cls, String name, Serializer<?> serializer) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     String[] parts = splitRegistrationName(name);
     getTypeResolver().registerUnion(cls, parts[0], parts[1], serializer);
   }
@@ -260,64 +253,58 @@ public final class Fory implements BaseFory {
   @Override
   public void registerUnion(
       Class<?> cls, String namespace, String typeName, Serializer<?> serializer) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     getTypeResolver().registerUnion(cls, namespace, typeName, serializer);
   }
 
   @Override
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     getTypeResolver().registerSerializer(type, serializerClass);
   }
 
   @Override
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     getTypeResolver().registerSerializer(type, serializer);
   }
 
   @Override
   public void registerSerializer(
       Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator) {
-    checkRegisterAllowed();
-    getTypeResolver().registerSerializer(type, serializerCreator);
+    typeResolver.checkRegistrationOpen();
+    getTypeResolver().registerSerializer(type, serializerCreator.apply(typeResolver));
   }
 
   @Override
   public <T> void registerSerializerAndType(
       Class<T> type, Class<? extends Serializer> serializerClass) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     getTypeResolver().registerSerializerAndType(type, serializerClass);
   }
 
   @Override
   public void registerSerializerAndType(Class<?> type, Serializer<?> serializer) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     getTypeResolver().registerSerializerAndType(type, serializer);
   }
 
   @Override
   public void registerSerializerAndType(
       Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator) {
-    checkRegisterAllowed();
-    getTypeResolver().registerSerializerAndType(type, serializerCreator);
+    typeResolver.checkRegistrationOpen();
+    getTypeResolver().registerSerializerAndType(type, serializerCreator.apply(typeResolver));
   }
 
   @Override
   public void registerSerializerFactory(SerializerFactory serializerFactory) {
-    checkRegisterAllowed();
+    typeResolver.checkRegistrationOpen();
     typeResolver.registerSerializerFactory(serializerFactory);
   }
 
   public <T> Serializer<T> getSerializer(Class<T> cls) {
     Preconditions.checkNotNull(cls);
     return typeResolver.getSerializer(cls);
-  }
-
-  private void ensureRegistrationFinished() {
-    if (!typeResolver.isRegistrationFinished()) {
-      typeResolver.finishRegistration();
-    }
   }
 
   @Override
@@ -347,7 +334,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public MemoryBuffer serialize(MemoryBuffer buffer, Object obj, BufferCallback callback) {
-    ensureRegistrationFinished();
+    typeResolver.freezeRegistration();
     writeContext.prepare(buffer, callback);
     try {
       byte bitmap = headerBitmap;
@@ -433,7 +420,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T deserialize(MemoryBuffer buffer, Class<T> type) {
-    ensureRegistrationFinished();
+    typeResolver.freezeRegistration();
     byte bitmap = buffer.readByte();
     if (bitmap != headerBitmap) {
       checkHeaderBitmapWithoutOutOfBand(bitmap);
@@ -458,6 +445,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T deserialize(ForyInputStream inputStream, Class<T> type) {
+    typeResolver.freezeRegistration();
     try {
       return deserialize(inputStream.getBuffer(), type);
     } finally {
@@ -467,6 +455,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T deserialize(ForyReadableChannel channel, Class<T> type) {
+    typeResolver.freezeRegistration();
     try {
       return deserialize(channel.getBuffer(), type);
     } finally {
@@ -499,7 +488,7 @@ public final class Fory implements BaseFory {
    */
   @Override
   public Object deserialize(MemoryBuffer buffer, Iterable<MemoryBuffer> outOfBandBuffers) {
-    ensureRegistrationFinished();
+    typeResolver.freezeRegistration();
     byte bitmap = buffer.readByte();
     boolean peerOutOfBandEnabled = false;
     if (bitmap != headerBitmap) {
@@ -542,6 +531,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(ForyInputStream inputStream, Iterable<MemoryBuffer> outOfBandBuffers) {
+    typeResolver.freezeRegistration();
     try {
       MemoryBuffer buf = inputStream.getBuffer();
       return deserialize(buf, outOfBandBuffers);
@@ -557,6 +547,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(ForyReadableChannel channel, Iterable<MemoryBuffer> outOfBandBuffers) {
+    typeResolver.freezeRegistration();
     try {
       MemoryBuffer buf = channel.getBuffer();
       return deserialize(buf, outOfBandBuffers);
@@ -608,7 +599,6 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T copy(T obj) {
-    ensureRegistrationFinished();
     try {
       return copyContext.copyObject(obj);
     } catch (Throwable e) {
@@ -715,15 +705,6 @@ public final class Fory implements BaseFory {
   @Internal
   SharedRegistry getSharedRegistry() {
     return sharedRegistry;
-  }
-
-  private void checkRegisterAllowed() {
-    if (typeResolver.isRegistrationFrozen()) {
-      throw new ForyException(
-          "Cannot register class/serializer after registration has been frozen. Please register "
-              + "all classes before invoking top-level `serialize/deserialize/copy` methods of "
-              + "Fory.");
-    }
   }
 
   public Config getConfig() {

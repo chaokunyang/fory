@@ -208,24 +208,26 @@ public class FieldGroups {
       boolean primitiveListCollection =
           TypeUtils.isPrimitiveListClass(typeRef.getRawType())
               && resolver.isCollectionDescriptor(d);
-      Serializer fieldSerializer;
+      // invoke `copy` to avoid ObjectSerializer construct clear serializer by `clearSerializer`.
       if (resolver.isMonomorphic(descriptor)) {
-        typeInfo = resolver.getFieldTypeInfo(typeRef.getRawType());
-        fieldSerializer = resolver.getConstructionSerializer(typeInfo.getType());
+        typeInfo = resolver.getTypeInfo(typeRef.getRawType());
         if (!resolver.isShareMeta()
             && !resolver.isCompatible()
-            && fieldSerializer instanceof ReplaceResolveSerializer) {
+            && typeInfo.getSerializer() instanceof ReplaceResolveSerializer) {
           // overwrite replace resolve serializer for final field
-          fieldSerializer = new FinalFieldReplaceResolveSerializer(resolver, typeInfo.getType());
-          resolver.setSerializer(typeInfo.getType(), fieldSerializer);
+          typeInfo.setSerializer(
+              new FinalFieldReplaceResolveSerializer(resolver, typeInfo.getType()));
         }
       } else {
         typeInfo = null;
-        fieldSerializer = null;
       }
       useDeclaredTypeInfo =
           typeInfo != null && resolver.isMonomorphic(descriptor) && !primitiveListCollection;
-      serializer = fieldSerializer;
+      if (typeInfo != null) {
+        serializer = typeInfo.getSerializer();
+      } else {
+        serializer = null;
+      }
 
       this.qualifiedFieldName = d.getDeclaringClass() + "." + d.getName();
       if (d.getField() != null) {
@@ -299,7 +301,7 @@ public class FieldGroups {
       } else {
         if (!primitiveListCollection
             && (resolver.isMap(cls) || resolver.isCollection(cls) || resolver.isSet(cls))) {
-          containerTypeInfo = resolver.getFieldTypeInfo(cls);
+          containerTypeInfo = resolver.getTypeInfo(cls);
         } else {
           containerTypeInfo = null;
         }

@@ -310,7 +310,7 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
     }
     ByteBuffer byteBuf = byteBuffer;
     // A read method may compute its post-fill absolute cursor before invoking fillBuffer, so moving
-    // bytes during a fill invalidates that pending cursor. Root finalization is the safe owner for
+    // bytes during a fill invalidates that pending cursor. The root cleanup boundary owns
     // compaction and still preserves bytes prefetched from the following root.
     int dataEnd = byteBuf.position();
     int dataStart = dataEnd - memoryBuf.size();

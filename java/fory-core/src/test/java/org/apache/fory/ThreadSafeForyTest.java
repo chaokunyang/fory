@@ -26,19 +26,15 @@ import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
 import java.nio.ByteBuffer;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.atomic.AtomicReferenceArray;
 import lombok.Data;
+import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.context.ReadContext;
@@ -46,13 +42,11 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.pool.ThreadPoolFory;
-import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.BeanB;
-import org.apache.fory.util.ExceptionUtils;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -155,6 +149,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
     AtomicReference<SharedRegistry> threadPoolRegistry1 = new AtomicReference<>();
     AtomicReference<SharedRegistry> threadPoolRegistry2 = new AtomicReference<>();
     AtomicReference<Throwable> error = new AtomicReference<>();
+    threadPool.serialize("warm");
     Thread poolThread1 =
         new Thread(
             () -> {
@@ -527,6 +522,37 @@ public class ThreadSafeForyTest extends ForyTestBase {
     }
   }
 
+  private static final class BlockingCopyValue {}
+
+  private static final class BlockingCopySerializer extends Serializer<BlockingCopyValue> {
+    private final CountDownLatch copyStarted;
+    private final CountDownLatch finishCopy;
+
+    private BlockingCopySerializer(
+        TypeResolver resolver, CountDownLatch copyStarted, CountDownLatch finishCopy) {
+      super(resolver.getConfig(), BlockingCopyValue.class);
+      this.copyStarted = copyStarted;
+      this.finishCopy = finishCopy;
+    }
+
+    @Override
+    public void write(WriteContext writeContext, BlockingCopyValue value) {
+      throw new UnsupportedOperationException("unused");
+    }
+
+    @Override
+    public BlockingCopyValue read(ReadContext readContext) {
+      throw new UnsupportedOperationException("unused");
+    }
+
+    @Override
+    public BlockingCopyValue copy(CopyContext copyContext, BlockingCopyValue value) {
+      copyStarted.countDown();
+      awaitUnchecked(finishCopy);
+      return new BlockingCopyValue();
+    }
+  }
+
   public static class CustomClassLoader extends ClassLoader {
     public CustomClassLoader(ClassLoader parent) {
       super(parent);
@@ -626,555 +652,203 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
-  public void testExecuteFreezesThreadLocal() throws Exception {
-    ThreadSafeFory fory =
-        Fory.builder()
-            .withXlang(false)
-            .requireClassRegistration(true)
-            .withCompatible(false)
-            .buildThreadLocalFory();
-    fory.register(BeanA.class);
-
-    Fory escaped = fory.execute(value -> value);
-    Assert.assertThrows(ForyException.class, () -> escaped.register(BeanB.class));
-    assertNull(((ClassResolver) escaped.getTypeResolver()).getRegisteredClassId(BeanB.class));
-
-    ExecutorService executor = Executors.newSingleThreadExecutor();
-    try {
-      Fory otherThreadFory =
-          executor.submit(() -> fory.execute(value -> value)).get(10, TimeUnit.SECONDS);
-      ClassResolver otherResolver = (ClassResolver) otherThreadFory.getTypeResolver();
-      assertNotNull(otherResolver.getRegisteredClassId(BeanA.class));
-      assertTrue(otherResolver.isRegistrationFinished());
-      Assert.assertThrows(ForyException.class, () -> otherThreadFory.register(BeanB.class));
-      assertNull(otherResolver.getRegisteredClassId(BeanB.class));
-    } finally {
-      executor.shutdownNow();
+  public void testFailedRootFreezesRegistration() {
+    for (ThreadSafeFory fory : newThreadSafeRuntimes()) {
+      Assert.assertThrows(RuntimeException.class, () -> fory.deserialize(new byte[0]));
+      Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
     }
   }
 
   @Test
-  public void testRegistrationGateLinearization() throws Exception {
-    FacadeRegistrationGate gate = new FacadeRegistrationGate(() -> {});
-    CountDownLatch registrationEntered = new CountDownLatch(1);
-    CountDownLatch freezeEntered = new CountDownLatch(1);
-    CountDownLatch releaseRegistration = new CountDownLatch(1);
-    ExecutorService executor = Executors.newFixedThreadPool(2);
-    try {
-      Future<?> registration =
-          executor.submit(
-              () ->
-                  gate.applyRegistration(
-                      () -> {
-                        registrationEntered.countDown();
-                        awaitUnchecked(releaseRegistration);
-                      }));
-      assertTrue(registrationEntered.await(10, TimeUnit.SECONDS));
-      Future<?> freeze =
-          executor.submit(
-              () -> {
-                freezeEntered.countDown();
-                gate.freeze();
-              });
-      assertTrue(freezeEntered.await(10, TimeUnit.SECONDS));
-      Assert.assertThrows(TimeoutException.class, () -> freeze.get(100, TimeUnit.MILLISECONDS));
+  public void testExecuteRootFreezesFacade() {
+    for (ThreadSafeFory fory : newThreadSafeRuntimes()) {
+      fory.execute(child -> child.serialize("value"));
+      AtomicInteger callbacks = new AtomicInteger();
 
-      releaseRegistration.countDown();
-      registration.get(10, TimeUnit.SECONDS);
-      freeze.get(10, TimeUnit.SECONDS);
       Assert.assertThrows(
-          ForyException.class, () -> gate.applyRegistration(() -> Assert.fail("must not run")));
-    } finally {
-      releaseRegistration.countDown();
-      executor.shutdownNow();
+          ForyException.class, () -> fory.registerCallback(child -> callbacks.incrementAndGet()));
+      assertEquals(callbacks.get(), 0);
     }
   }
 
   @Test
-  public void testFreezeWaitsForChildPublish() throws Exception {
-    AtomicReference<Fory> published = new AtomicReference<>();
-    AtomicInteger finishSawChild = new AtomicInteger();
-    FacadeRegistrationGate gate =
-        new FacadeRegistrationGate(
-            () -> {
-              Fory child = published.get();
-              assertNotNull(child);
-              finishSawChild.incrementAndGet();
-              child.getTypeResolver().finishRegistration();
-            });
-    Fory child =
+  public void testExecuteRootRegistrationRace() throws InterruptedException {
+    for (ThreadSafeFory fory : newThreadSafeRuntimes()) {
+      CountDownLatch rootStarted = new CountDownLatch(1);
+      CountDownLatch registrationStarted = new CountDownLatch(1);
+      CountDownLatch finishRoot = new CountDownLatch(1);
+      AtomicInteger callbacks = new AtomicInteger();
+      AtomicReference<Throwable> rootError = new AtomicReference<>();
+      AtomicReference<Throwable> registrationError = new AtomicReference<>();
+      Thread rootThread =
+          new Thread(
+              () -> {
+                try {
+                  fory.execute(
+                      child -> {
+                        child.serialize("value");
+                        rootStarted.countDown();
+                        awaitUnchecked(finishRoot);
+                        return null;
+                      });
+                } catch (Throwable t) {
+                  rootError.set(t);
+                }
+              });
+      Thread registrationThread =
+          new Thread(
+              () -> {
+                try {
+                  registrationStarted.countDown();
+                  fory.registerCallback(child -> callbacks.incrementAndGet());
+                } catch (Throwable t) {
+                  registrationError.set(t);
+                }
+              });
+
+      rootThread.start();
+      assertTrue(rootStarted.await(30, TimeUnit.SECONDS));
+      registrationThread.start();
+      assertTrue(registrationStarted.await(30, TimeUnit.SECONDS));
+      finishRoot.countDown();
+      rootThread.join();
+      registrationThread.join();
+
+      assertNull(rootError.get());
+      assertTrue(registrationError.get() instanceof ForyException);
+      assertEquals(callbacks.get(), 0);
+    }
+  }
+
+  @Test
+  public void testExecuteChildRegisterRace() throws InterruptedException {
+    for (ThreadSafeFory fory : newThreadSafeRuntimes()) {
+      CountDownLatch rootStarted = new CountDownLatch(1);
+      CountDownLatch finishRoot = new CountDownLatch(1);
+      AtomicReference<Throwable> rootError = new AtomicReference<>();
+      AtomicReference<Throwable> registrationError = new AtomicReference<>();
+      Thread rootThread =
+          new Thread(
+              () -> {
+                try {
+                  fory.execute(
+                      child -> {
+                        child.serialize("value");
+                        rootStarted.countDown();
+                        awaitUnchecked(finishRoot);
+                        return null;
+                      });
+                } catch (Throwable t) {
+                  rootError.set(t);
+                }
+              });
+      Thread registrationThread =
+          new Thread(
+              () -> {
+                try {
+                  fory.execute(
+                      child -> {
+                        child.register(BeanB.class);
+                        return null;
+                      });
+                } catch (Throwable t) {
+                  registrationError.set(t);
+                }
+              });
+
+      rootThread.start();
+      assertTrue(rootStarted.await(30, TimeUnit.SECONDS));
+      registrationThread.start();
+      finishRoot.countDown();
+      rootThread.join();
+      registrationThread.join();
+
+      assertNull(rootError.get());
+      assertTrue(registrationError.get() instanceof ForyException);
+    }
+  }
+
+  @Test
+  public void testCopyRegistrationRace() throws InterruptedException {
+    for (ThreadSafeFory fory : newThreadSafeRuntimes()) {
+      CountDownLatch copyStarted = new CountDownLatch(1);
+      CountDownLatch finishCopy = new CountDownLatch(1);
+      CountDownLatch registrationStarted = new CountDownLatch(1);
+      CountDownLatch registrationDone = new CountDownLatch(1);
+      AtomicInteger callbacks = new AtomicInteger();
+      AtomicReference<Throwable> copyError = new AtomicReference<>();
+      AtomicReference<Throwable> registrationError = new AtomicReference<>();
+      fory.registerSerializer(
+          BlockingCopyValue.class,
+          resolver -> new BlockingCopySerializer(resolver, copyStarted, finishCopy));
+      Thread copyThread =
+          new Thread(
+              () -> {
+                try {
+                  fory.copy(new BlockingCopyValue());
+                } catch (Throwable t) {
+                  copyError.set(t);
+                }
+              });
+      Thread registrationThread =
+          new Thread(
+              () -> {
+                registrationStarted.countDown();
+                try {
+                  fory.registerCallback(child -> callbacks.incrementAndGet());
+                } catch (Throwable t) {
+                  registrationError.set(t);
+                } finally {
+                  registrationDone.countDown();
+                }
+              });
+
+      copyThread.start();
+      assertTrue(copyStarted.await(30, TimeUnit.SECONDS));
+      registrationThread.start();
+      assertTrue(registrationStarted.await(30, TimeUnit.SECONDS));
+      Assert.assertFalse(registrationDone.await(100, TimeUnit.MILLISECONDS));
+      finishCopy.countDown();
+      copyThread.join();
+      registrationThread.join();
+
+      assertNull(copyError.get());
+      assertNull(registrationError.get());
+      assertTrue(callbacks.get() > 0);
+    }
+  }
+
+  @Test
+  public void testNonRootKeepsRegistrationOpen() {
+    Fory direct =
         Fory.builder()
             .withXlang(false)
             .requireClassRegistration(true)
             .withCompatible(false)
             .build();
-    CountDownLatch publishEntered = new CountDownLatch(1);
-    CountDownLatch releasePublish = new CountDownLatch(1);
-    CountDownLatch freezeStarted = new CountDownLatch(1);
-    ExecutorService executor = Executors.newFixedThreadPool(2);
-    try {
-      Future<Fory> initialization =
-          executor.submit(
-              () ->
-                  gate.initializeChild(
-                      () -> child,
-                      value -> {
-                        publishEntered.countDown();
-                        awaitUnchecked(releasePublish);
-                        published.set(value);
-                      }));
-      assertTrue(publishEntered.await(10, TimeUnit.SECONDS));
-      Future<?> freeze =
-          executor.submit(
-              () -> {
-                freezeStarted.countDown();
-                gate.freeze();
-              });
-      assertTrue(freezeStarted.await(10, TimeUnit.SECONDS));
-      Assert.assertThrows(TimeoutException.class, () -> freeze.get(100, TimeUnit.MILLISECONDS));
+    direct.copy("value");
+    direct.register(BeanA.class);
 
-      releasePublish.countDown();
-      assertSame(initialization.get(10, TimeUnit.SECONDS), child);
-      freeze.get(10, TimeUnit.SECONDS);
-      assertSame(published.get(), child);
-      assertEquals(finishSawChild.get(), 1);
-      assertTrue(child.getTypeResolver().isRegistrationFinished());
-    } finally {
-      releasePublish.countDown();
-      executor.shutdownNow();
-      executor.awaitTermination(10, TimeUnit.SECONDS);
+    for (ThreadSafeFory fory : newThreadSafeRuntimes()) {
+      fory.copy("value");
+      fory.execute(child -> child.getConfig());
+      fory.register(BeanA.class);
     }
   }
 
-  @Test
-  public void testFreezeWaitsForChildren() throws Exception {
-    CountDownLatch finishEntered = new CountDownLatch(1);
-    CountDownLatch releaseFinish = new CountDownLatch(1);
-    FacadeRegistrationGate gate =
-        new FacadeRegistrationGate(
-            () -> {
-              finishEntered.countDown();
-              awaitUnchecked(releaseFinish);
-            });
-    ExecutorService executor = Executors.newFixedThreadPool(2);
-    try {
-      Future<?> first = executor.submit(gate::freeze);
-      assertTrue(finishEntered.await(10, TimeUnit.SECONDS));
-      CountDownLatch secondStarted = new CountDownLatch(1);
-      Future<?> second =
-          executor.submit(
-              () -> {
-                secondStarted.countDown();
-                gate.freeze();
-              });
-      assertTrue(secondStarted.await(10, TimeUnit.SECONDS));
-      Assert.assertThrows(TimeoutException.class, () -> second.get(100, TimeUnit.MILLISECONDS));
-
-      releaseFinish.countDown();
-      first.get(10, TimeUnit.SECONDS);
-      second.get(10, TimeUnit.SECONDS);
-    } finally {
-      releaseFinish.countDown();
-      executor.shutdownNow();
-    }
-  }
-
-  @Test
-  public void testFailedFreezeStaysClosed() {
-    AtomicInteger finishCalls = new AtomicInteger();
-    FacadeRegistrationGate gate =
-        new FacadeRegistrationGate(
-            () -> {
-              finishCalls.incrementAndGet();
-              throw new IllegalStateException("failed");
-            });
-
-    Assert.assertThrows(IllegalStateException.class, gate::freeze);
-    Assert.assertThrows(ForyException.class, gate::freeze);
-    Assert.assertThrows(ForyException.class, () -> gate.applyRegistration(() -> {}));
-    assertEquals(finishCalls.get(), 1);
-  }
-
-  @Test
-  public void testCheckedFailureStaysClosed() {
-    FacadeRegistrationGate gate = new FacadeRegistrationGate(() -> {});
-
-    Assert.assertThrows(
-        Exception.class,
-        () ->
-            gate.applyRegistration(
-                () -> {
-                  throw ExceptionUtils.throwException(new Exception("failed"));
-                }));
-    Assert.assertThrows(ForyException.class, gate::freeze);
-    Assert.assertThrows(ForyException.class, () -> gate.applyRegistration(() -> {}));
-  }
-
-  @Test
-  public void testRejectedCallbackNotReplayed() throws Exception {
-    ThreadLocalFory facade =
-        Fory.builder()
-            .withXlang(false)
-            .requireClassRegistration(true)
-            .withCompatible(false)
-            .buildThreadLocalFory();
-    AtomicInteger callbackCalls = new AtomicInteger();
-    Assert.assertThrows(
-        ForyException.class,
-        () ->
-            facade.registerCallback(
-                child -> {
-                  callbackCalls.incrementAndGet();
-                  facade.serialize("freeze");
-                }));
-    assertEquals(callbackCalls.get(), 1);
-    Assert.assertThrows(ForyException.class, () -> facade.serialize("closed"));
-    assertEquals(callbackCalls.get(), 1);
-  }
-
-  @Test
-  public void testNestedRegistrationCloses() throws Exception {
-    ThreadLocalFory facade =
-        Fory.builder()
-            .withXlang(false)
-            .requireClassRegistration(true)
-            .withCompatible(false)
-            .buildThreadLocalFory();
-    threadLocalChildren(facade);
-    AtomicInteger callbackCalls = new AtomicInteger();
-
-    Assert.assertThrows(
-        ForyException.class,
-        () ->
-            facade.registerCallback(
-                child -> {
-                  callbackCalls.incrementAndGet();
-                  try {
-                    facade.register(BeanB.class);
-                  } catch (ForyException ignored) {
-                    // The outer callback must still observe the failed gate before publication.
-                  }
-                  child.register(BeanA.class);
-                }));
-
-    assertTrue(callbackCalls.get() > 0);
-    Assert.assertThrows(ForyException.class, () -> facade.serialize("closed"));
-    Assert.assertThrows(ForyException.class, () -> facade.register(BeanA.class));
-  }
-
-  @Test
-  public void testReentrantRegistrationFreeze() throws Exception {
-    ThreadLocalFory threadLocal =
-        Fory.builder()
-            .withXlang(false)
-            .requireClassRegistration(true)
-            .withCompatible(false)
-            .buildThreadLocalFory();
-    assertReentrantRegistrationRejected(threadLocal, threadLocalChildren(threadLocal));
-
-    ThreadPoolFory threadPool =
-        (ThreadPoolFory)
-            Fory.builder()
-                .withXlang(false)
-                .requireClassRegistration(true)
-                .withCompatible(false)
-                .buildThreadSafeForyPool(2);
-    Fory[] pooledFory = TestUtils.getFieldValue(threadPool, "pooledFory");
-    assertReentrantRegistrationRejected(threadPool, pooledFory);
-  }
-
-  private static void assertReentrantRegistrationRejected(ThreadSafeFory facade, Fory[] children) {
-    AtomicInteger creatorCalls = new AtomicInteger();
-    Assert.assertThrows(
-        ForyException.class,
-        () ->
-            facade.registerSerializerAndType(
-                Foo.class,
-                resolver -> {
-                  creatorCalls.incrementAndGet();
-                  facade.serialize("freeze");
-                  return new FooSerializer(resolver, Foo.class);
-                }));
-    Assert.assertEquals(creatorCalls.get(), 1);
-    for (Fory child : children) {
-      TypeResolver resolver = child.getTypeResolver();
-      assertNull(((ClassResolver) resolver).getRegisteredClassId(Foo.class));
-    }
-    Assert.assertThrows(ForyException.class, () -> facade.serialize("closed"));
-  }
-
-  private static Fory[] threadLocalChildren(ThreadLocalFory facade) throws Exception {
-    ThreadLocal<Fory> local = TestUtils.getFieldValue(facade, "foryThreadLocal");
-    Fory first = local.get();
-    ExecutorService executor = Executors.newSingleThreadExecutor();
-    try {
-      Fory second = executor.submit(local::get).get(10, TimeUnit.SECONDS);
-      return new Fory[] {first, second};
-    } finally {
-      executor.shutdownNow();
-    }
-  }
-
-  @Test
-  public void testBuilderModuleForLateChild() throws Exception {
-    AtomicInteger installs = new AtomicInteger();
-    ForyModule module =
-        child -> {
-          installs.incrementAndGet();
-          child.registerSerializerAndType(Foo.class, FooSerializer.class);
-        };
-    ThreadLocalFory facade =
-        Fory.builder()
-            .withXlang(false)
-            .requireClassRegistration(true)
-            .withModule(module)
-            .withCompatible(false)
-            .buildThreadLocalFory();
-    assertEquals(installs.get(), 1);
-    facade.serialize("freeze");
-
-    ExecutorService executor = Executors.newSingleThreadExecutor();
-    try {
-      Foo value = new Foo();
-      value.f1 = 42;
-      Foo result =
-          executor
-              .submit(() -> facade.deserialize(facade.serialize(value), Foo.class))
-              .get(10, TimeUnit.SECONDS);
-      assertEquals(result, value);
-      assertEquals(installs.get(), 2);
-    } finally {
-      executor.shutdownNow();
-    }
-  }
-
-  @Test
-  public void testLateChildReplaysRegistration() throws Exception {
-    ThreadLocalFory facade =
-        Fory.builder()
-            .withXlang(false)
-            .requireClassRegistration(true)
-            .withCompatible(false)
-            .buildThreadLocalFory();
-    facade.registerSerializerAndType(Foo.class, FooSerializer.class);
-    facade.serialize("freeze");
-
-    ExecutorService executor = Executors.newSingleThreadExecutor();
-    try {
-      Foo value = new Foo();
-      value.f1 = 42;
-      Foo result =
-          executor
-              .submit(() -> facade.deserialize(facade.serialize(value), Foo.class))
-              .get(10, TimeUnit.SECONDS);
-      assertEquals(result, value);
-      Class<?> serializerType =
-          executor
-              .submit(
-                  () ->
-                      facade.execute(
-                          child -> child.getTypeResolver().getSerializer(Foo.class).getClass()))
-              .get(10, TimeUnit.SECONDS);
-      assertSame(serializerType, FooSerializer.class);
-    } finally {
-      executor.shutdownNow();
-    }
-  }
-
-  @Test
-  public void testReentrantReplayCleanup() throws Exception {
-    ThreadLocalFory facade =
-        Fory.builder()
-            .withXlang(false)
-            .requireClassRegistration(true)
-            .withCompatible(false)
-            .buildThreadLocalFory();
-    Map<Fory, Object> children = TestUtils.getFieldValue(facade, "allFory");
-    AtomicInteger callbackCalls = new AtomicInteger();
-    AtomicInteger replayPublished = new AtomicInteger(-1);
-    facade.registerCallback(
-        child -> {
-          if (callbackCalls.incrementAndGet() > 1) {
-            replayPublished.set(children.containsKey(child) ? 1 : 0);
-            facade.serialize("nested");
-          }
-          child.register(BeanA.class);
-        });
-    facade.serialize("freeze");
-
-    ExecutorService executor = Executors.newSingleThreadExecutor();
-    try {
-      Assert.expectThrows(
-          ExecutionException.class,
-          () -> executor.submit(() -> facade.execute(child -> child)).get(10, TimeUnit.SECONDS));
-      assertEquals(children.size(), 1);
-      assertEquals(callbackCalls.get(), 2);
-      assertEquals(replayPublished.get(), 0);
-
-      Assert.assertThrows(ForyException.class, () -> facade.serialize("closed"));
-      assertEquals(callbackCalls.get(), 2);
-    } finally {
-      executor.shutdownNow();
-    }
-  }
-
-  @Test
-  public void testLateChildFailureRace() throws Exception {
-    ThreadLocalFory facade =
-        Fory.builder()
-            .withXlang(false)
-            .requireClassRegistration(true)
-            .withCompatible(false)
-            .buildThreadLocalFory();
-    Map<Fory, Object> children = TestUtils.getFieldValue(facade, "allFory");
-    AtomicInteger callbackCalls = new AtomicInteger();
-    CountDownLatch replayEntered = new CountDownLatch(1);
-    CountDownLatch releaseReplay = new CountDownLatch(1);
-    facade.registerCallback(
-        child -> {
-          int call = callbackCalls.incrementAndGet();
-          if (call == 2) {
-            replayEntered.countDown();
-            awaitUnchecked(releaseReplay);
-            throw new IllegalStateException("failed replay");
-          }
-          child.register(BeanA.class);
-        });
-    facade.serialize("freeze");
-
-    ExecutorService executor = Executors.newFixedThreadPool(2);
-    AtomicReference<Thread> waitingThread = new AtomicReference<>();
-    CountDownLatch waitingStarted = new CountDownLatch(1);
-    try {
-      Future<?> failing = executor.submit(() -> facade.execute(child -> child));
-      assertTrue(replayEntered.await(10, TimeUnit.SECONDS));
-      Future<?> waiting =
-          executor.submit(
-              () -> {
-                waitingThread.set(Thread.currentThread());
-                waitingStarted.countDown();
-                return facade.execute(child -> child);
-              });
-      assertTrue(waitingStarted.await(10, TimeUnit.SECONDS));
-      awaitBlocked(waitingThread.get());
-
-      releaseReplay.countDown();
-      ExecutionException replayFailure =
-          Assert.expectThrows(ExecutionException.class, () -> failing.get(10, TimeUnit.SECONDS));
-      assertTrue(replayFailure.getCause() instanceof IllegalStateException);
-      ExecutionException waitingFailure =
-          Assert.expectThrows(ExecutionException.class, () -> waiting.get(10, TimeUnit.SECONDS));
-      assertTrue(waitingFailure.getCause() instanceof ForyException);
-      assertEquals(callbackCalls.get(), 2);
-      assertEquals(children.size(), 1);
-    } finally {
-      releaseReplay.countDown();
-      executor.shutdownNow();
-      executor.awaitTermination(10, TimeUnit.SECONDS);
-    }
-  }
-
-  @Test
-  public void testPoolGatePrecedesBorrow() throws Exception {
-    ThreadPoolFory facade =
-        (ThreadPoolFory)
-            Fory.builder()
-                .withXlang(false)
-                .requireClassRegistration(true)
-                .withCompatible(false)
-                .buildThreadSafeForyPool(1);
-    AtomicReferenceArray<?> slots = TestUtils.getFieldValue(facade, "slots");
-    CountDownLatch callbackEntered = new CountDownLatch(1);
-    CountDownLatch allowReentrantRoot = new CountDownLatch(1);
-    CountDownLatch rootStarted = new CountDownLatch(1);
-    AtomicReference<Thread> rootThread = new AtomicReference<>();
-    ExecutorService executor = Executors.newFixedThreadPool(2);
-    try {
-      Future<?> registration =
-          executor.submit(
-              () ->
-                  facade.registerCallback(
-                      child -> {
-                        callbackEntered.countDown();
-                        awaitUnchecked(allowReentrantRoot);
-                        facade.execute(value -> null);
-                      }));
-      assertTrue(callbackEntered.await(10, TimeUnit.SECONDS));
-      Future<?> root =
-          executor.submit(
-              () -> {
-                rootThread.set(Thread.currentThread());
-                rootStarted.countDown();
-                return facade.execute(value -> null);
-              });
-      assertTrue(rootStarted.await(10, TimeUnit.SECONDS));
-      awaitBlocked(rootThread.get());
-      assertNotNull(slots.get(0));
-
-      allowReentrantRoot.countDown();
-      ExecutionException registrationFailure =
-          Assert.expectThrows(
-              ExecutionException.class, () -> registration.get(10, TimeUnit.SECONDS));
-      assertTrue(registrationFailure.getCause() instanceof ForyException);
-      ExecutionException rootFailure =
-          Assert.expectThrows(ExecutionException.class, () -> root.get(10, TimeUnit.SECONDS));
-      assertTrue(rootFailure.getCause() instanceof ForyException);
-    } finally {
-      allowReentrantRoot.countDown();
-      executor.shutdownNow();
-      executor.awaitTermination(10, TimeUnit.SECONDS);
-    }
-  }
-
-  private static void awaitBlocked(Thread thread) {
-    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-    while (thread.getState() != Thread.State.BLOCKED && System.nanoTime() < deadline) {
-      Thread.yield();
-    }
-    Assert.assertEquals(thread.getState(), Thread.State.BLOCKED);
-  }
-
-  @Test
-  public void testExecuteFreezesPool() {
-    ThreadPoolFory fory =
-        (ThreadPoolFory)
-            Fory.builder()
-                .withXlang(false)
-                .requireClassRegistration(true)
-                .withCompatible(false)
-                .buildThreadSafeForyPool(2);
-    fory.register(BeanA.class);
-
-    Fory escaped = fory.execute(value -> value);
-    Assert.assertThrows(ForyException.class, () -> escaped.register(BeanB.class));
-
-    Fory[] pooledFory = TestUtils.getFieldValue(fory, "pooledFory");
-    for (Fory child : pooledFory) {
-      ClassResolver resolver = (ClassResolver) child.getTypeResolver();
-      assertNotNull(resolver.getRegisteredClassId(BeanA.class));
-      assertNull(resolver.getRegisteredClassId(BeanB.class));
-    }
-  }
-
-  @Test
-  public void testFailedRootFreezesFacade() {
-    ThreadSafeFory[] runtimes =
-        new ThreadSafeFory[] {
-          Fory.builder()
-              .withXlang(false)
-              .requireClassRegistration(true)
-              .withCompatible(false)
-              .buildThreadLocalFory(),
-          Fory.builder()
-              .withXlang(false)
-              .requireClassRegistration(true)
-              .withCompatible(false)
-              .buildThreadSafeForyPool(2)
-        };
-    for (ThreadSafeFory fory : runtimes) {
-      Assert.assertThrows(RuntimeException.class, () -> fory.deserialize(new byte[0]));
-      Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
-    }
+  private static ThreadSafeFory[] newThreadSafeRuntimes() {
+    return new ThreadSafeFory[] {
+      Fory.builder()
+          .withXlang(false)
+          .requireClassRegistration(true)
+          .withCompatible(false)
+          .buildThreadLocalFory(),
+      Fory.builder()
+          .withXlang(false)
+          .requireClassRegistration(true)
+          .withCompatible(false)
+          .buildThreadSafeForyPool(2)
+    };
   }
 
   private void assertConcurrentRoundTrip(ThreadSafeFory fory, BeanA beanA)

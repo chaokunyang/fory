@@ -62,17 +62,19 @@ final class ScalaIdlRoundTripTest extends AnyWordSpec with Matchers {
       fory.deserialize(fory.serialize(envelope)) shouldEqual envelope
     }
 
-    "register generated serializers through their lifecycle owners" in {
+    "register generated serializers through BaseFory extension receivers" in {
       val expected = Money(new BigDecimal("12.34"), "USD")
 
       val direct = ForyScala.builder().withXlang(true).build()
       direct.register[Money](130L)
       direct.deserialize(direct.serialize(expected)).asInstanceOf[Money] shouldEqual expected
 
-      val threadLocal = ForyScala.builder().withXlang(true).withModule(BasicForyModule).buildThreadLocalFory()
+      val threadLocal = ForyScala.builder().withXlang(true).buildThreadLocalFory()
+      threadLocal.register[Money](130L)
       threadLocal.deserialize(threadLocal.serialize(expected)).asInstanceOf[Money] shouldEqual expected
 
-      val pooled = ForyScala.builder().withXlang(true).withModule(BasicForyModule).buildThreadSafeForyPool(1)
+      val pooled = ForyScala.builder().withXlang(true).buildThreadSafeForyPool(1)
+      pooled.register[Money](130L)
       pooled.deserialize(pooled.serialize(expected)).asInstanceOf[Money] shouldEqual expected
     }
 

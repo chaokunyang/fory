@@ -28,8 +28,6 @@ import java.util.concurrent.ConcurrentHashMap;
 final class LogOnceState {
   static final Object[] NO_ARGS = new Object[0];
 
-  // Keys live as long as the logger. Read paths selected by untrusted names must use a fixed
-  // message without name-derived arguments so input cannot grow this set without bound.
   private final Set<LogKey> logged =
       Collections.newSetFromMap(new ConcurrentHashMap<LogKey, Boolean>());
 

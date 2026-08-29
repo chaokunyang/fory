@@ -534,7 +534,7 @@ public:
   /// @return Vector containing serialized bytes, or error.
   template <typename T>
   Result<std::vector<uint8_t>, Error> serialize(const T &obj) {
-    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+    if (FORY_PREDICT_FALSE(!write_ctx_.has_value())) {
       ensure_contexts_initialized();
     }
     WriteContextGuard guard(*write_ctx_);
@@ -555,7 +555,7 @@ public:
   /// @return Number of bytes written, or error.
   template <typename T>
   Result<size_t, Error> serialize(OutputStream &output_stream, const T &obj) {
-    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+    if (FORY_PREDICT_FALSE(!write_ctx_.has_value())) {
       ensure_contexts_initialized();
     }
     return serialize_stream(output_stream, obj);
@@ -569,7 +569,7 @@ public:
   /// @return Number of bytes written, or error.
   template <typename T>
   Result<size_t, Error> serialize(std::ostream &ostream, const T &obj) {
-    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+    if (FORY_PREDICT_FALSE(!write_ctx_.has_value())) {
       ensure_contexts_initialized();
     }
     StdOutputStream output_stream(ostream);
@@ -585,7 +585,7 @@ public:
   template <typename T>
   FORY_ALWAYS_INLINE Result<size_t, Error> serialize_to(Buffer &buffer,
                                                         const T &obj) {
-    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+    if (FORY_PREDICT_FALSE(!write_ctx_.has_value())) {
       ensure_contexts_initialized();
     }
     return serialize_buffer(buffer, obj);
@@ -604,7 +604,7 @@ public:
   template <typename T>
   Result<size_t, Error> serialize_to(std::vector<uint8_t> &output,
                                      const T &obj) {
-    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+    if (FORY_PREDICT_FALSE(!write_ctx_.has_value())) {
       ensure_contexts_initialized();
     }
     // Wrap the output vector in a Buffer for zero-copy serialization
@@ -649,7 +649,7 @@ public:
   /// @param buffer Buffer to read from. Its reader_index will be updated.
   /// @return Deserialized object, or error.
   template <typename T> Result<T, Error> deserialize(Buffer &buffer) {
-    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+    if (FORY_PREDICT_FALSE(!write_ctx_.has_value())) {
       ensure_contexts_initialized();
     }
     return deserialize_buffer<T>(buffer);
@@ -665,7 +665,7 @@ public:
   /// @return Deserialized object, or error.
   template <typename T>
   Result<T, Error> deserialize(InputStream &input_stream) {
-    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+    if (FORY_PREDICT_FALSE(!write_ctx_.has_value())) {
       ensure_contexts_initialized();
     }
     return deserialize_stream<T>(input_stream);
@@ -677,7 +677,7 @@ public:
   /// @param stream Input stream wrapper to read from.
   /// @return Deserialized object, or error.
   template <typename T> Result<T, Error> deserialize(StdInputStream &stream) {
-    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+    if (FORY_PREDICT_FALSE(!write_ctx_.has_value())) {
       ensure_contexts_initialized();
     }
     return deserialize_stream<T>(stream);
@@ -702,14 +702,14 @@ public:
 private:
   /// Constructor for ForyBuilder - operation contexts are initialized lazily.
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver)
-      : BaseFory(config, std::move(resolver)), contexts_initialized_(false),
+      : BaseFory(config, std::move(resolver)),
         precomputed_header_(compute_header(config.xlang)) {}
 
   /// Constructor for ThreadSafeFory pool - resolver metadata is ready.
   struct PreparedResolver {};
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver,
                 PreparedResolver)
-      : BaseFory(config, std::move(resolver)), contexts_initialized_(true),
+      : BaseFory(config, std::move(resolver)),
         precomputed_header_(compute_header(config.xlang)) {
     write_ctx_.emplace(config_, type_resolver_->clone());
     read_ctx_.emplace(config_, type_resolver_->clone());
@@ -717,7 +717,8 @@ private:
 
   /// Initialize operation contexts from the registered type metadata.
   void ensure_contexts_initialized() {
-    if (!contexts_initialized_) {
+    if (!write_ctx_.has_value()) {
+      FORY_CHECK(!read_ctx_.has_value());
       auto final_result = type_resolver_->build_final_type_resolver();
       FORY_CHECK(final_result.ok())
           << "Failed to build finalized TypeResolver: "
@@ -727,7 +728,6 @@ private:
       write_ctx_.emplace(config_, prepared_resolver->clone());
       read_ctx_.emplace(config_, prepared_resolver->clone());
       type_resolver_ = std::move(prepared_resolver);
-      contexts_initialized_ = true;
     }
   }
 
@@ -797,7 +797,7 @@ private:
 
   template <typename T>
   Result<T, Error> deserialize_bytes(const uint8_t *data, size_t size) {
-    if (FORY_PREDICT_FALSE(!contexts_initialized_)) {
+    if (FORY_PREDICT_FALSE(!write_ctx_.has_value())) {
       ensure_contexts_initialized();
     }
     if (data == nullptr) {
@@ -911,7 +911,6 @@ private:
     return type_info;
   }
 
-  bool contexts_initialized_;
   uint8_t precomputed_header_;
   std::optional<WriteContext> write_ctx_;
   std::optional<ReadContext> read_ctx_;

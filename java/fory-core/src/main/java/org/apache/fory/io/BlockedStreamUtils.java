@@ -84,6 +84,7 @@ public class BlockedStreamUtils {
 
   private static Object readFromChannel(
       Fory fory, ReadableByteChannel channel, Function<MemoryBuffer, Object> action) {
+    fory.getTypeResolver().freezeRegistration();
     try {
       MemoryBuffer buf = fory.getBuffer();
       // resetBuffer may shrink the reusable buffer below the fixed frame header size.
@@ -153,6 +154,7 @@ public class BlockedStreamUtils {
 
   private static Object deserializeFromStream(
       Fory fory, InputStream inputStream, Function<MemoryBuffer, Object> function) {
+    fory.getTypeResolver().freezeRegistration();
     MemoryBuffer buf = fory.getBuffer();
     try {
       MemoryBuffer frame = readToBufferFromStream(inputStream, buf);

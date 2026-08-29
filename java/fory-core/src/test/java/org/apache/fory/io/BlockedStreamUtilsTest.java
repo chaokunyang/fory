@@ -24,12 +24,14 @@ import static org.testng.Assert.*;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.ReadableByteChannel;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.exception.DeserializationException;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.test.bean.Foo;
 import org.testng.annotations.Test;
@@ -106,6 +108,57 @@ public class BlockedStreamUtilsTest extends ForyTestBase {
   }
 
   @Test
+  public void testReadFreezesBeforeIo() throws IOException {
+    Fory streamFory = builder().withCodegen(false).build();
+    boolean[] streamRegistrationRejected = {false};
+    InputStream inputStream =
+        new InputStream() {
+          @Override
+          public int read() {
+            return -1;
+          }
+
+          @Override
+          public int read(byte[] bytes, int offset, int length) {
+            expectThrows(ForyException.class, () -> streamFory.register(LateType.class));
+            streamRegistrationRejected[0] = true;
+            return -1;
+          }
+        };
+    assertThrows(
+        RuntimeException.class, () -> BlockedStreamUtils.deserialize(streamFory, inputStream));
+    assertTrue(streamRegistrationRejected[0]);
+
+    Fory channelFory = builder().withCodegen(false).build();
+    boolean[] channelRegistrationRejected = {false};
+    try (ReadableByteChannel channel =
+        new ReadableByteChannel() {
+          private boolean open = true;
+
+          @Override
+          public int read(ByteBuffer dst) {
+            expectThrows(ForyException.class, () -> channelFory.register(LateType.class));
+            channelRegistrationRejected[0] = true;
+            return -1;
+          }
+
+          @Override
+          public boolean isOpen() {
+            return open;
+          }
+
+          @Override
+          public void close() {
+            open = false;
+          }
+        }) {
+      assertThrows(
+          RuntimeException.class, () -> BlockedStreamUtils.deserialize(channelFory, channel));
+    }
+    assertTrue(channelRegistrationRejected[0]);
+  }
+
+  @Test
   public void testSmallBufferStreamReuse() {
     Fory writerFory = builder().withCodegen(false).build();
     ByteArrayOutputStream stream = new ByteArrayOutputStream();
@@ -161,6 +214,8 @@ public class BlockedStreamUtilsTest extends ForyTestBase {
   private static byte[] frameHeader(int size) {
     return ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(size).array();
   }
+
+  private static final class LateType {}
 
   private static final class ChunkedReadableByteChannel implements ReadableByteChannel {
     private final byte[] data;

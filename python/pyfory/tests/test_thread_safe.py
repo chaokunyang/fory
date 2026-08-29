@@ -20,6 +20,7 @@ from dataclasses import dataclass
 
 import pytest
 
+import pyfory
 from pyfory import ThreadSafeFory
 
 
@@ -33,6 +34,10 @@ class Person:
 class Address:
     city: str
     country: str
+
+
+class PersonSerializer(pyfory.Serializer):
+    pass
 
 
 def test_thread_safe_fory_basic_serialization():
@@ -191,3 +196,29 @@ def test_thread_safe_fory_register_after_use():
 
     with pytest.raises(RuntimeError):
         fory.register(Address)
+
+
+def test_thread_safe_serializer_factory_owns_children():
+    fory = ThreadSafeFory(xlang=False, compatible=False)
+    fory.register(Person, serializer=PersonSerializer)
+
+    first = fory._get_fory()
+    second = fory._get_fory()
+    try:
+        first_serializer = first.type_resolver.get_serializer(Person)
+        second_serializer = second.type_resolver.get_serializer(Person)
+        assert first_serializer is not second_serializer
+        assert first_serializer.type_resolver is first.type_resolver
+        assert second_serializer.type_resolver is second.type_resolver
+    finally:
+        fory._return_fory(first)
+        fory._return_fory(second)
+
+
+def test_thread_safe_rejects_serializer_instance():
+    runtime = pyfory.Fory(xlang=False, compatible=False)
+    serializer = PersonSerializer(runtime.type_resolver, Person)
+    fory = ThreadSafeFory(xlang=False, compatible=False)
+
+    with pytest.raises(TypeError, match="serializer class or factory"):
+        fory.register(Person, serializer=serializer)

@@ -63,6 +63,7 @@ describe.each([
 
     if (outcome === "failure") {
       expect(read).toThrow();
+      expectRootStateCleared(readerFory.readContext);
       expect(invoke(readerFory, reader, bytes)).toEqual({ value: 7 });
     } else {
       const first = read();
@@ -94,6 +95,7 @@ describe.each([
     const read = () => invoke(fory, registered, new Uint8Array([1]));
     if (outcome === "failure") {
       expect(read).toThrow();
+      expectRootStateCleared(readContext);
       registered.serializer.readRef = () => {
         expectRootStateCleared(readContext);
         return 7;
@@ -127,6 +129,9 @@ test.each(["success", "failure"] as const)("restores root write state for %s", (
 
   if (outcome === "failure") {
     expect(() => registered.serialize(value)).toThrow();
+    expect(writeContext.refWriter.writeObjects.size).toBe(0);
+    expect(name.dynamicWriteStringId).toBe(-1);
+    expect(typeMeta.dynamicTypeId).toBe(-1);
     expect(fory.serialize(7)).toBeDefined();
   } else {
     expect(registered.serialize(value)).toBeDefined();
@@ -237,8 +242,8 @@ test("releases failed write buffer", () => {
   };
 
   expect(() => registered.serialize({})).toThrow();
-  expect(fory.serialize(7)).toBeDefined();
   expect(writer.getPlatformBuffer().byteLength).toBeLessThan(4 * 1024 * 1024);
+  expect(fory.serialize(7)).toBeDefined();
 });
 
 test("clears failed read refs", () => {
@@ -251,6 +256,7 @@ test("clears failed read refs", () => {
     throw new Error("root read failed");
   };
   expect(() => registered.deserialize(new Uint8Array([1]))).toThrow();
+  expect(refReader.readObjects).toHaveLength(0);
 
   registered.serializer.readRef = () => {
     expect(refReader.readObjects).toHaveLength(0);

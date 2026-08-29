@@ -843,6 +843,7 @@ class TypeResolver:
         typeinfo = self._types_info[cls]
         prev_type_id = typeinfo.type_id
         prev_user_type_id = typeinfo.user_type_id
+        self._check_registry_mutable()
         if needs_user_type_id(prev_type_id) and prev_user_type_id not in {None, NO_USER_TYPE_ID}:
             self._user_type_id_to_type_info.pop(prev_user_type_id, None)
         else:
@@ -887,6 +888,8 @@ class TypeResolver:
 
     def _register_inferred_type(self, cls, native_only=False):
         serializer = self._create_serializer(cls)
+        if native_only:
+            self._check_registry_mutable()
         native_registration = self._internal_py_serializer_map.get(type(serializer))
         if native_registration is not None:
             type_id = native_registration[1]

@@ -969,6 +969,55 @@ def test_factory_root_freeze():
     assert fory.type_resolver.get_type_info(FrozenRegistration, create=False) is None
 
 
+def test_inferred_registration_freeze():
+    fory = Fory(xlang=False, strict=False, compatible=False)
+    armed = False
+
+    class RootDuringMro(type):
+        def __getattribute__(cls, name):
+            nonlocal armed
+            if armed and name == "__mro__":
+                armed = False
+                fory.serialize(None)
+            return super().__getattribute__(name)
+
+    class Reduced(metaclass=RootDuringMro):
+        def __reduce__(self):
+            return Reduced, ()
+
+    armed = True
+    with pytest.raises(RuntimeError):
+        fory.register_type(Reduced)
+    assert fory.type_resolver.get_type_info(Reduced, create=False) is None
+
+
+def test_serializer_registration_freeze():
+    fory = Fory(xlang=False, strict=False, compatible=False)
+    armed = False
+
+    class RootDuringHash(type):
+        def __hash__(cls):
+            nonlocal armed
+            if armed:
+                armed = False
+                fory.serialize(None)
+            return super().__hash__()
+
+    class Registered(metaclass=RootDuringHash):
+        pass
+
+    fory.register_type(Registered, name="test.Registered")
+    typeinfo = fory.type_resolver.get_type_info(Registered)
+    serializer = typeinfo.serializer
+    armed = True
+    with pytest.raises(RuntimeError):
+        fory.register_serializer(
+            Registered,
+            BarSerializer(fory.type_resolver, Registered),
+        )
+    assert typeinfo.serializer is serializer
+
+
 def test_id_conflict_no_mutation():
     fory = Fory(xlang=True, compatible=False)
     fory.register_type(FrozenRegistration, type_id=701)

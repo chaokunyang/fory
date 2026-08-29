@@ -212,6 +212,11 @@ fory.registerSerializer(
     CustomMap.class, resolver -> new CustomMapSerializer<>(resolver, CustomMap.class));
 ```
 
+For `ThreadSafeFory`, pass a serializer class or resolver factory when the serializer is
+runtime-local. The facade constructs one instance for each underlying runtime. An instance may be
+registered directly only when it implements `Shareable`. Construct a runtime-local union serializer
+inside a `ForyModule`, which is installed separately into every underlying runtime.
+
 ## Shareability
 
 Implement the `Shareable` marker interface when the serializer can be safely reused across

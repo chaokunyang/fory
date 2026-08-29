@@ -273,10 +273,9 @@ fory.register<User>("example.User")
 
 `ForyKotlin.builder()` installs the Kotlin serializer bootstrap for the Fory
 instance. The `fory.register<T>(...)` extension registers your xlang schema type
-name and resolves the generated serializer from the target class. This extension
-targets a direct `Fory` instance. For a `ThreadSafeFory`, put generated type
-registrations in a `ForyModule` and pass it to `withModule(...)` before building
-the facade.
+name and resolves the generated serializer from the target class. The extension
+targets `BaseFory`, so it works with direct and thread-safe facades before their
+first root serialization or deserialization.
 
 Do not register or reference generated serializer classes in application code.
 Fory resolves them from the registered target class.

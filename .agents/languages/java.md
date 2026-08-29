@@ -84,37 +84,24 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   work, dynamic stream bytes-read accounting, or stale narrower-scope formulas.
 - Generated serializers must not retain runtime context fields. `Fory` should stay a root-operation facade rather than accumulating serializer or convenience state.
 - When the serializer class and constructor shape are known at the call site, prefer direct constructor lambdas or direct instantiation over reflective `Serializers.newSerializer(...)`.
-- `FacadeRegistrationGate` owns registration linearization for Java thread-local and pooled
-  facades. Starting a root closes registration before child or pool access, then finishes every
-  already-created child before exposing that root. A child created after closure must replay every
-  accepted registration, finish registration, and only then become visible; a child whose replay
-  or finalization fails must never be published. A callback registration is one facade transaction across
-  all children: reject root or registration reentry while it is active and permanently fail the
-  facade after any callback failure, rather than expose partial child mutation, divergent replay
-  order, or rollback state. Keep the lock order gate before pool or child storage.
-- Registration callbacks must recheck the authoritative freeze owner after returning and before
-  publishing the entry they prepared. `TypeResolver` owns one construction-local graph for Java
-  serializer constructors, including self and mutual recursion. The graph separates final
-  `TypeInfo` owners from unpublished serializer candidates: recursive fields capture the final
-  owner immediately, while construction owners resolving recursive fields or candidate state use
-  the construction-local serializer. Ordinary resolver lookups retain their runtime semantics.
-  When wire and user IDs match, the final owner is the existing canonical `TypeInfo`. After
-  construction and the lifecycle recheck succeed, the Class/Xtype resolver's normal commit sink
-  installs the candidate. Static-generated construction starts from an already registered canonical
-  type, retains that type's identity, and exposes immutable generated descriptors only through the
-  same construction graph; it must not publish its early-bound serializer candidate. Do not add a
-  constructor-specific publication path. Reject static-generated serializer classes from the
-  combined class overload because their construction requires prior canonical type registration.
-  `Fory.register(ForyModule)` owns module identity,
-  cycle breaking, and idempotence in one identity set: add the identity before the callback, remove
-  it on failure, and retain it on success. Do not add separate installing/completed module states.
-  Direct `Fory` accepts modules before its first root; thread-safe facades accept modules only
-  through `ForyBuilder.withModule` before construction.
-- Every explicit resolver registration or initialization entry must call the authoritative
-  registration gate as its first executable statement, before argument validation, class loading,
-  no-op return, callback invocation, or publication. Serializer completion methods used by lazy,
-  JIT, and generated serializers are internal resolver-owned operations, remain valid after
-  registration freezes, and must not be treated or repurposed as registration APIs.
+- Each natural Java registry or public facade boundary owns one authoritative frozen flag. The
+  facade flag is not a mirror of a child resolver flag. The first root serialization or
+  deserialization sets the owning flag before codec work and never clears it, including after
+  failure. Every explicit type, serializer, module, name, or ID registration checks that flag
+  before mutation. Do not add another lifecycle state or a parallel registration-commit path.
+- Direct and thread-safe facades expose module registration before their first root. Kotlin and
+  Scala registration extensions target `BaseFory`; do not narrow them to concrete `Fory` or make
+  builder installation the only thread-safe path. Before the first root, a thread-safe facade
+  serializes registration, `execute`, and copy through its existing callback monitor and rechecks
+  the frozen flag after entering it. After freeze, `execute` and copy use the monitor-free path.
+  Calling `ThreadSafeFory.execute` or copying a value does not freeze registration unless the
+  callback starts a root serialization or deserialization.
+- A serializer instance registered on a thread-safe facade must implement `Shareable`. Resolver-
+  local serializers use the class, resolver-factory, or module path so every child runtime owns its
+  instance; never replay one resolver-bound serializer across children.
+- Serializer completion used by lazy, JIT, and generated serializers is an internal resolver-owned
+  operation. It remains valid after registration freezes and must not be treated as explicit
+  registration.
 - Registration freeze does not disable native runtime type resolution. When class registration is
   not required, native roots may discover an unregistered runtime class and materialize its
   resolver-owned `TypeInfo`, descriptor, serializer, or JIT cache entry after freeze. This runtime

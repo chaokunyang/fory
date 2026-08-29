@@ -44,11 +44,14 @@ Automatically assigned IDs depend on registration order, so readers and writers 
 same classes in the same order. With explicit IDs, the order may differ, but each ID must map to the
 same class on both sides.
 
-Complete class and serializer registration before the first `serialize`, `deserialize`, or `copy`
-call. Starting one of these operations permanently freezes registration even if the operation
-fails. Calling `ThreadSafeFory#execute` also freezes registration before the callback runs. The
-`Fory` instance passed to that callback is already frozen, including when the callback retains it.
-Later registration attempts are rejected.
+Complete explicit class and serializer registration before the first `serialize` or `deserialize`
+call. Starting either operation permanently freezes registration even if the operation fails. Copy
+operations and `ThreadSafeFory#execute` do not freeze registration unless the supplied callback
+starts serialization or deserialization. Later explicit registration attempts are rejected.
+
+In native mode with registration disabled, Fory may still resolve allowed runtime classes and cache
+their descriptors or serializers after this boundary. That lazy resolution is not explicit
+registration and does not reopen or change the configured registry.
 
 `registerSerializer(Foo.class, ...)` is sufficient to use `Foo` when class registration is enabled.
 Use `registerSerializerAndType(Foo.class, ...)` when you also want Fory to assign a numeric type ID.
@@ -100,7 +103,7 @@ Fory fory = Fory.builder().withXlang(false)
 `STRICT` rejects every class outside the allow list. `WARN` rejects disallowed classes and logs a
 warning for classes outside the allow list. `DISABLE` skips allow-list checking.
 
-Configure disallow rules before the first `serialize`, `deserialize`, or `copy` call. To use
+Configure disallow rules before the first `serialize` or `deserialize` call. To use
 different disallow rules later, create a new Fory instance.
 
 ## Limit Max Deserialization Depth

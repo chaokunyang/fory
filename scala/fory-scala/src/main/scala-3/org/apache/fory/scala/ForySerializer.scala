@@ -131,7 +131,6 @@ object ForySerializer {
       case _ if serializer.isUnion =>
         val runtimeSerializer = serializer.createSerializer(resolver)
         val runtimeClasses = serializer.handledRuntimeClasses(cls)
-        resolver.checkRegistrationOpen()
         if typeId != null then {
           resolver.registerUnion(cls, typeId.longValue(), runtimeSerializer)
         } else {
@@ -151,6 +150,7 @@ object ForySerializer {
         registerType(fory, cls, typeId, namespace, typeName)
         val runtimeSerializer = serializer.createSerializer(resolver)
         resolver.checkRegistrationOpen()
+        // Preserve the registered STRUCT TypeInfo; registerSerializer would reclassify it as EXT.
         resolver.setSerializer(cls, runtimeSerializer)
     }
   }

@@ -120,9 +120,9 @@ object ForyHolder {
 }
 ```
 
-Install `ForyModule` instances with `withModule(...)` before calling
-`buildThreadSafeFory()`. Runtime module registration and Scala generated-serializer registration
-extensions are available only on a direct `Fory` instance.
+`ForyModule` registration and Scala generated-serializer registration extensions target
+`BaseFory`, so they are available on both direct and thread-safe facades. Complete registration
+before the facade's first root serialization or deserialization.
 
 ## Configuration
 

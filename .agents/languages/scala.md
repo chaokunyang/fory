@@ -9,25 +9,14 @@ Load this file when changing `scala/`.
 - Scala supports the JVM and GraalVM Native Image, not Android. Do not add Android-specific Scala
   sources, tests, resources, R8 metadata, compiler plugins, macros, dependencies, or compatibility
   design.
-- Public registration helpers must check the registry freeze before invoking generated serializer
-  construction or enum discovery. Generated serializer construction must enter the existing
-  `TypeResolver` construction graph so its candidate remains unpublished until the authoritative
-  lifecycle recheck and normal resolver commit. Scala enum registration must recheck after
-  companion-driven value discovery and reuse the values already owned by the serializer.
-- Combined generated-struct registration must publish the canonical type before constructing its
-  serializer because generated construction resolves the canonical `TypeInfo`. The serializer-only
-  helper must reject a missing canonical type rather than auto-register it. Do not move construction
-  before type registration or add direct replacement, rollback, staging, or a parallel registration
-  path.
-  Union construction is the exception because it does not require canonical registration: finish
-  its serializer-owned callbacks and recheck the freeze before publishing the union type.
-- `Fory.register(ForyModule)` is the only owner of bootstrap identity, cycle breaking, and
-  idempotence. Scala bootstrap code must not add a marker, monitor, or separate reentry policy.
-  Keep the install body replay-safe and append its serializer factory only after all repeatable
-  per-runtime registrations succeed.
-- Install modules for thread-safe facades through `ForyBuilder.withModule` before building them.
-  Runtime registration extensions target concrete `Fory` instances and must not recreate a
-  thread-safe module-registration wrapper.
+- Scala registration extensions target `BaseFory` so direct and thread-safe facades share the same
+  pre-root registration API, including module installation.
+- Explicit type, serializer, enum, and union registration checks the receiving `BaseFory` facade or
+  natural registry owner's one frozen flag before mutation. Keep generated serializer construction
+  on the existing direct resolver path; do not add a parallel registration path or lifecycle state.
+- Combined generated structural registration attaches the serializer with `setSerializer` after
+  registering the canonical STRUCT `TypeInfo`; `registerSerializer` would incorrectly reclassify
+  that wire identity as EXT. Generated unions use `registerUnion`.
 
 ## Commands
 

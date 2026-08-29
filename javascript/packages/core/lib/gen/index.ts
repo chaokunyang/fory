@@ -17,7 +17,7 @@
  * under the License.
  */
 
-import { TypeId, Serializer } from "../type";
+import { CustomSerializer, TypeId, Serializer } from "../type";
 import { sealTypeInfo, TypeInfo } from "../typeInfo";
 import { CodegenRegistry } from "./router";
 import { CodecBuilder, SerializerLookup } from "./builder";
@@ -53,12 +53,21 @@ type SerializerFactoryBuilder = () => (
   serializerLookup: SerializerLookup,
   external: unknown,
   typeInfo: TypeInfo,
-  options: { [key: string]: unknown },
+  options: object | undefined,
   localTypeMeta: TypeMeta | undefined,
   localTypeMetaSymbol: symbol,
   checkedTypeMetaSerializerSymbol: symbol,
   checkedTypeMetaWireTypeIdSymbol: symbol,
 ) => Serializer;
+
+type SerializerFactory = ReturnType<SerializerFactoryBuilder>;
+
+interface GeneratedFactory {
+  create: SerializerFactory;
+  localTypeMeta: TypeMeta | undefined;
+  fixedSize: number;
+  readDataAlwaysAdvances: boolean;
+}
 
 const uninitializedSerializer: Serializer = {
   _initialized: false,
@@ -122,6 +131,7 @@ interface GeneratedRegistration {
   typeInfo: TypeInfo;
   serializer: Serializer;
   preparing: boolean;
+  factory?: GeneratedFactory;
 }
 
 export class Gen {
@@ -129,10 +139,13 @@ export class Gen {
 
   constructor(
     private typeResolver: TypeResolver,
-    private regOptions: { [key: string]: any } = {},
+    private rootCustomSerializer?: CustomSerializer<any>,
   ) {}
 
-  private prepare(typeInfo: TypeInfo, serializerLookup: SerializerLookup): Serializer {
+  private generateFactory(
+    typeInfo: TypeInfo,
+    serializerLookup: SerializerLookup,
+  ): GeneratedFactory {
     const InnerGeneratorClass = CodegenRegistry.get(typeInfo.typeId);
     if (!InnerGeneratorClass) {
       throw new Error(`${typeInfo.typeId} generator not exists`);
@@ -144,27 +157,43 @@ export class Gen {
       scope,
     );
 
-    const funcString = generator.toSerializer();
+    const generated = generator.toSerializer();
     let factoryBuilder: SerializerFactoryBuilder;
     if (this.typeResolver.config && this.typeResolver.config.hooks) {
       const afterCodeGenerated = this.typeResolver.config.hooks.afterCodeGenerated;
       if (typeof afterCodeGenerated === "function") {
-        factoryBuilder = new Function(afterCodeGenerated(funcString)) as SerializerFactoryBuilder;
+        factoryBuilder = new Function(
+          afterCodeGenerated(generated.source),
+        ) as SerializerFactoryBuilder;
       } else {
-        factoryBuilder = new Function(funcString) as SerializerFactoryBuilder;
+        factoryBuilder = new Function(generated.source) as SerializerFactoryBuilder;
       }
     } else {
-      factoryBuilder = new Function(funcString) as SerializerFactoryBuilder;
+      factoryBuilder = new Function(generated.source) as SerializerFactoryBuilder;
     }
-    const factory = factoryBuilder();
-    const localTypeMeta = generator.getLocalTypeMeta();
-    return factory(
+    return {
+      create: factoryBuilder(),
+      localTypeMeta: generated.localTypeMeta,
+      fixedSize: generated.fixedSize,
+      readDataAlwaysAdvances: generated.readDataAlwaysAdvances,
+    };
+  }
+
+  private createSerializer(
+    typeInfo: TypeInfo,
+    serializerLookup: SerializerLookup,
+    factory: GeneratedFactory,
+  ): Serializer {
+    const options = TypeId.extType(typeInfo.typeId)
+      ? { ...typeInfo.options, customSerializer: this.rootCustomSerializer }
+      : typeInfo.options;
+    return factory.create(
       this.typeResolver,
       serializerLookup,
       Gen.external,
       typeInfo,
-      this.regOptions,
-      localTypeMeta,
+      options,
+      factory.localTypeMeta,
       localTypeMetaSymbol,
       checkedTypeMetaSerializerSymbol,
       checkedTypeMetaWireTypeIdSymbol,
@@ -382,6 +411,7 @@ export class Gen {
     typeInfo: TypeInfo,
     children: TypeInfo[],
     registrations: GeneratedRegistration[],
+    factories: GeneratedRegistration[],
     serializerLookup: SerializerLookup,
   ) {
     let entry = this.findRegistration(typeInfo, registrations);
@@ -396,10 +426,15 @@ export class Gen {
     entry.preparing = true;
     try {
       for (const child of children) {
-        this.traversalContainer(child, registrations, serializerLookup);
+        this.traversalContainer(child, registrations, factories, serializerLookup);
       }
-      const serializer = this.prepare(typeInfo, serializerLookup);
-      Object.assign(entry.serializer, serializer);
+      entry.factory = this.generateFactory(typeInfo, serializerLookup);
+      // This local owner is still unreachable by the resolver. Expose only the completed static
+      // facts to later code generation; the final pass installs its runtime methods after hooks.
+      entry.serializer.fixedSize = entry.factory.fixedSize;
+      entry.serializer.readDataAlwaysAdvances = entry.factory.readDataAlwaysAdvances;
+      entry.serializer._initialized = true;
+      factories.push(entry);
     } finally {
       entry.preparing = false;
     }
@@ -459,6 +494,7 @@ export class Gen {
   private traversalContainer(
     typeInfo: TypeInfo,
     registrations: GeneratedRegistration[],
+    factories: GeneratedRegistration[],
     serializerLookup: SerializerLookup,
   ) {
     if (TypeId.userDefinedType(typeInfo.typeId)) {
@@ -470,11 +506,26 @@ export class Gen {
         typeInfo.typeId === TypeId.UNION ||
         typeInfo.typeId === TypeId.TYPED_UNION ||
         typeInfo.typeId === TypeId.NAMED_UNION;
-      if (unionType && options?.cases && Object.keys(options.cases).length > 0) {
+      // Extension generation belongs only to an explicit root registration. Check it before the
+      // generic props path so a decorated nested extension cannot create a second local owner.
+      if (TypeId.extType(typeInfo.typeId)) {
+        if (this.findRegistration(typeInfo, registrations) === undefined) {
+          throw new Error("nested extension serializer must be registered before use");
+        }
+        this.prepareRegistration(
+          typeInfo,
+          Object.values(options?.props ?? {}),
+          registrations,
+          factories,
+          serializerLookup,
+        );
+        return;
+      } else if (unionType && options?.cases && Object.keys(options.cases).length > 0) {
         this.prepareRegistration(
           typeInfo,
           Object.values(options.cases),
           registrations,
+          factories,
           serializerLookup,
         );
         return;
@@ -483,42 +534,40 @@ export class Gen {
           typeInfo,
           Object.values(options.props),
           registrations,
+          factories,
           serializerLookup,
         );
       } else if (!this.isRegistered(typeInfo) && TypeId.structType(typeInfo.typeId)) {
         if (this.findRegistration(typeInfo, registrations) === undefined) {
           throw new Error("nested struct schema must be registered or defined before use");
         }
-      } else if (TypeId.extType(typeInfo.typeId)) {
-        if (this.findRegistration(typeInfo, registrations) === undefined) {
-          throw new Error("nested extension serializer must be registered before use");
-        }
       } else if (TypeId.enumType(typeInfo.typeId) && !this.isRegistered(typeInfo)) {
-        this.prepareRegistration(typeInfo, [], registrations, serializerLookup);
+        this.prepareRegistration(typeInfo, [], registrations, factories, serializerLookup);
       }
     }
     if (typeInfo.typeId === TypeId.LIST) {
-      this.traversalContainer(typeInfo.options!.inner!, registrations, serializerLookup);
+      this.traversalContainer(typeInfo.options!.inner!, registrations, factories, serializerLookup);
     }
     if (typeInfo.typeId === TypeId.SET) {
-      this.traversalContainer(typeInfo.options!.key!, registrations, serializerLookup);
+      this.traversalContainer(typeInfo.options!.key!, registrations, factories, serializerLookup);
     }
     if (typeInfo.typeId === TypeId.MAP) {
       if (!typeInfo.options?.key || !typeInfo.options?.value) {
         throw new Error("map type must have key and value");
       }
-      this.traversalContainer(typeInfo.options!.key!, registrations, serializerLookup);
-      this.traversalContainer(typeInfo.options!.value!, registrations, serializerLookup);
+      this.traversalContainer(typeInfo.options!.key!, registrations, factories, serializerLookup);
+      this.traversalContainer(typeInfo.options!.value!, registrations, factories, serializerLookup);
     }
     if (typeInfo.options?.cases) {
       Object.values(typeInfo.options.cases).forEach((caseTypeInfo) => {
-        this.traversalContainer(caseTypeInfo, registrations, serializerLookup);
+        this.traversalContainer(caseTypeInfo, registrations, factories, serializerLookup);
       });
     }
   }
 
   reGenerateSerializer(typeInfo: TypeInfo) {
-    return this.prepare(typeInfo, this.typeResolver);
+    const factory = this.generateFactory(typeInfo, this.typeResolver);
+    return this.createSerializer(typeInfo, this.typeResolver, factory);
   }
 
   generateSerializer(typeInfo: TypeInfo) {
@@ -528,6 +577,7 @@ export class Gen {
     // resolver before code generation or publication can continue.
     this.typeResolver.ensureRegistrationOpen();
     const registrations: GeneratedRegistration[] = [];
+    const factories: GeneratedRegistration[] = [];
     // Generator-time TypeInfo queries see initialized local serializers for codegen decisions.
     // Factory-init ID/name queries instead return the stable owner captured by runtime closures.
     const serializerLookup: SerializerLookup = {
@@ -544,7 +594,7 @@ export class Gen {
     ) {
       this.addRegistration(typeInfo, registrations);
     }
-    this.traversalContainer(typeInfo, registrations, serializerLookup);
+    this.traversalContainer(typeInfo, registrations, factories, serializerLookup);
     const publishedRoot = this.typeResolver.getSerializerByTypeInfo(typeInfo);
     if (!publishedRoot?._initialized) {
       let registration = this.findRegistration(typeInfo, registrations);
@@ -552,21 +602,40 @@ export class Gen {
         registration = this.addRegistration(typeInfo, registrations);
       }
       if (!registration.serializer._initialized) {
-        this.prepareRegistration(typeInfo, [], registrations, serializerLookup);
+        this.prepareRegistration(typeInfo, [], registrations, factories, serializerLookup);
       }
     }
 
-    // Generated factories may execute application-transformed code, so every factory completes
-    // against local owners before the resolver performs the only global publication step.
+    // Hooks may publish an owner after earlier code generation used an equivalent local schema.
+    // Reconcile every identity before invoking any factory so fixed captures use the final owner.
     for (const registration of registrations) {
+      if (!this.hasRegistryIdentity(registration.typeInfo)) {
+        continue;
+      }
       const published = this.typeResolver.getSerializerByTypeInfo(registration.typeInfo);
       if (published !== undefined) {
         this.checkDefinitionOwner(published.getTypeInfo(), registration.typeInfo);
       }
     }
+    for (const registration of factories) {
+      const published = this.hasRegistryIdentity(registration.typeInfo)
+        ? this.typeResolver.getSerializerByTypeInfo(registration.typeInfo)
+        : undefined;
+      if (published !== undefined) {
+        continue;
+      }
+      Object.assign(
+        registration.serializer,
+        this.createSerializer(registration.typeInfo, serializerLookup, registration.factory!),
+      );
+    }
     const serializer = this.getGeneratedSerializer(typeInfo, registrations)!;
     this.typeResolver.commitGeneratedSerializers(
-      registrations.filter((registration) => this.hasRegistryIdentity(registration.typeInfo)),
+      registrations.filter(
+        (registration) =>
+          this.hasRegistryIdentity(registration.typeInfo) &&
+          this.typeResolver.getSerializerByTypeInfo(registration.typeInfo) === undefined,
+      ),
     );
     return serializer;
   }

@@ -146,15 +146,20 @@ They stay in the current generation graph rather than publishing under their raw
 enum without a mapping and a union without cases use the canonical generic serializer for their raw
 wire type; they are definitions, not unresolved schema references. An extension occurrence without
 class metadata resolves through its registered custom serializer owner.
-Code generation then constructs and initializes the complete
-serializer graph against generation-local owners. The same authoritative owner supplies
-generator-time schema and progress facts and fixed factory captures; field occurrence modifiers
-remain owned by the containing schema. Runtime and dynamic dispatch retain the real
-`TypeResolver`. After every factory and application code hook succeeds, the resolver performs one
-guarded batch publication. An unresolved nested identity fails registration before resolver
-publication when its type family requires a separate definition, such as Struct. An initialized
-owner published by a nested registration is authoritative and must not be overwritten or
-contradicted by the outer registration's generated decisions.
+Code generation first builds the complete serializer source graph against generation-local owners.
+Each transaction entry stores the schema and progress facts used by later code generation, while
+field occurrence modifiers remain owned by the containing schema. Within one registration
+transaction, all of its application code hooks run before any of its runtime serializer factories
+are instantiated. After those hooks complete, a same-definition owner published by nested
+registration becomes the final owner for that identity. Each remaining factory is instantiated once
+in dependency completion order so its fixed captures point directly to the final published-or-local
+owners, and the resolver then batch-publishes only the remaining local owners. This does not rerun
+code generation or hooks, rebuild a factory after publication, or leave a transaction lookup, cell,
+callback, or wrapper in a runtime serializer. Runtime and dynamic dispatch retain the real
+`TypeResolver`. An unresolved nested identity fails registration before resolver publication when
+its type family requires a separate definition, such as Struct. An initialized owner published by a
+nested registration is authoritative and must not be overwritten. A conflicting family or complete
+definition still fails before outer publication.
 
 Nested serializers must not call back into root `serialize(...)` or
 `deserialize(...)` entry points.

@@ -213,18 +213,21 @@ export default class TypeResolver {
     this.initInternalSerializer();
   }
 
+  /** @internal */
   freezeRegistration() {
     if (!this.registrationFrozen) {
       this.registrationFrozen = true;
     }
   }
 
+  /** @internal */
   ensureRegistrationOpen() {
     if (this.registrationFrozen) {
       throw new Error("types and serializers must be registered before the first root operation");
     }
   }
 
+  /** @internal */
   commitGeneratedSerializers(entries: readonly { typeInfo: TypeInfo; serializer: Serializer }[]) {
     this.ensureRegistrationOpen();
     const publications = entries.map((entry) => {
@@ -267,7 +270,7 @@ export default class TypeResolver {
   }
 
   generateReadSerializer(typeInfo: TypeInfo) {
-    return new Gen(this, { creator: typeInfo.options?.creator }).reGenerateSerializer(typeInfo);
+    return new Gen(this).reGenerateSerializer(typeInfo);
   }
 
   getSerializerByTypeInfo(typeInfo: TypeInfo) {

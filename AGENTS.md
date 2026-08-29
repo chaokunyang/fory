@@ -163,10 +163,18 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   occurrence arrays use native replacement reset. The MetaString and TypeMeta writer owner tables each have their own
   logical size: reset active owner IDs and that table's logical size without clearing bounded
   backing, and replace either backing only after its root has more than 8192 owners.
-- JavaScript generated registration must build and initialize the complete recursive serializer
-  graph against generation-local owners before one `TypeResolver` batch publication. Factory-init
-  serializer lookup may see those local owners, but runtime and dynamic lookup must retain the real
-  resolver. Seal schema definitions before traversal and preseed complete definitions by identity,
+- JavaScript generated registration must build the complete recursive serializer source graph
+  against generation-local owners before one `TypeResolver` batch publication. Each transaction
+  entry owns the schema and progress facts used by later code generation. Within one registration
+  transaction, run all of its application code hooks before instantiating any of its runtime
+  serializer factories. After that transaction's hooks complete, reconcile same-definition
+  identities with any nested published winner, then instantiate every remaining factory once in
+  dependency completion order so its fixed captures point directly to the final published-or-local
+  owners. Batch-publish only the remaining local owners. Do not reject a valid late same-definition
+  winner, rerun code generation or a hook, rebuild a factory after publication, or retain a
+  transaction lookup, cell, callback, or wrapper in runtime serializers. Runtime and dynamic lookup
+  must retain the real resolver. Seal schema definitions before traversal and preseed complete
+  definitions by identity,
   so field order cannot affect recursive resolution. One numeric ID or name cannot identify
   different user-defined type families. Each identity has one complete schema owner; repeated clones
   are valid only when they share that owner's definition containers and settings. A nested
@@ -174,10 +182,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   in the current complete recursive schema graph; otherwise registration fails before resolver
   publication. Enum without a mapping and union without cases retain the canonical generic owner
   for their raw wire type. Complete anonymous definitions without a registry key remain
-  generation-local and distinct. Once initialized, the published nested owner is authoritative. Do
-  not publish placeholders, nested
-  serializers, descriptors, or cache state before every generated factory and application code hook
-  succeeds.
+  generation-local and distinct. A conflicting family or complete definition still fails before
+  outer publication. Do not publish placeholders, nested serializers, descriptors, or cache state
+  before every generated factory and application code hook succeeds.
 - Root failure exceptions must not copy or retain the operation reference table or materialized
   object graph for diagnostics. Root cleanup owns releasing that graph, and failure reporting must
   remain bounded independently of graph size.

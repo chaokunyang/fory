@@ -17,7 +17,7 @@ Load this file when changing `javascript/`.
   occurrence arrays use native replacement reset. The MetaString and TypeMeta writer owner tables each have
   their own logical size: reset active owner IDs and that table's logical size without clearing
   bounded backing, and replace either backing only after its root has more than 8192 owners.
-- Generated registration must initialize the complete recursive serializer graph against
+- Generated registration must build the complete recursive serializer source graph against
   generation-local owners before one `TypeResolver` batch publication. The package-internal schema
   seal must lock each `TypeInfo` schema pointer before reading or traversing it; schema fields and
   occurrence modifiers are immutable afterward, while `dynamicTypeId` remains operation-local
@@ -28,11 +28,16 @@ Load this file when changing `javascript/`.
   the same immutable definition containers and settings; reject a second conflicting definition
   before code generation without deep schema comparison. Complete anonymous definitions without a
   name or user ID do not share registry identity merely because their raw type IDs match. The
-  definition-free generic enum or union serializer remains the canonical raw-type owner. One
-  authoritative serializer owner
-  supplies both generator-time schema/progress facts and fixed factory captures; an initialized
-  owner published by a nested registration wins over an outer generation-local owner, while field
-  occurrence modifiers remain field-owned. Reject an unresolved nested Struct identity before
+  definition-free generic enum or union serializer remains the canonical raw-type owner. Each
+  transaction entry stores the schema/progress facts needed by later code generation. Within one
+  registration transaction, run all of its application code hooks before instantiating any of its
+  runtime serializer factories. Then reconcile each same-definition identity with any nested
+  published winner and instantiate each remaining factory once in dependency completion order, with
+  fixed direct captures of the final published-or-local owners. Batch-publish only the remaining
+  local owners. Do not reject a valid late winner, rerun code generation or a hook, rebuild a factory
+  after publication, or retain a transaction lookup, cell, callback, or wrapper in runtime
+  serializers. Field occurrence modifiers remain field-owned, and conflicting families or complete
+  definitions still fail before outer publication. Reject an unresolved nested Struct identity before
   resolver publication. An enum without a mapping and a union without cases keep their existing
   generic definitions; an extension reference resolves through its registered custom serializer
   owner. Never publish generated serializers, descriptors, or cache state before every generated

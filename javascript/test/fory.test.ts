@@ -208,13 +208,41 @@ describe("fory", () => {
     expect(parent.deserialize(parent.serialize(value))).toEqual(value);
   });
 
-  test("rejects unresolved extension", () => {
+  test("rejects nested extension", () => {
+    const extensionType = Type.ext(8152);
+    @extensionType
+    class NestedExtension {
+      @Type.int32()
+      value = 0;
+    }
     const fory = new Fory({ compatible: false });
-    const root = Type.struct(8151, { value: Type.ext(8152) });
+    const root = Type.struct(8151, { value: extensionType });
 
     expect(() => fory.register(root)).toThrow();
     expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8151)).toBeUndefined();
     expect(fory.typeResolver.getSerializerById(TypeId.EXT, 8152)).toBeUndefined();
+  });
+
+  test("uses decorated constructors", () => {
+    const childType = Type.struct(8153);
+    @childType
+    class Child {
+      @Type.int32()
+      value = 0;
+    }
+    const parentType = Type.struct(8154, { child: childType });
+    @parentType
+    class Parent {
+      child = new Child();
+    }
+    const registered = new Fory({ compatible: false }).register(Parent);
+    const value = new Parent();
+    value.child.value = 7;
+
+    const result = registered.deserialize(registered.serialize(value));
+    expect(result).toBeInstanceOf(Parent);
+    expect(result!.child).toBeInstanceOf(Child);
+    expect(result!.child.value).toBe(7);
   });
 
   test("registers empty roots", () => {
@@ -595,6 +623,51 @@ describe("fory", () => {
     ).toThrow("conflicting complete definitions");
     expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8141)).toBe(reentrant!.serializer);
     expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8142)).toBeUndefined();
+  });
+
+  test("uses a late reentrant owner", () => {
+    const child = Type.struct(8155, { value: Type.int32() });
+    const early = Type.struct(8156, { child });
+    const trigger = Type.struct(8157, { value: Type.string() });
+    const root = Type.struct(8158, { early, trigger });
+    let hookCount = 0;
+    let generateReentrant = false;
+    let reentrant: ReturnType<Fory["register"]>;
+    let fory: Fory;
+    fory = new Fory({
+      compatible: false,
+      hooks: {
+        afterCodeGenerated(code) {
+          hookCount++;
+          if (generateReentrant && hookCount === 3) {
+            generateReentrant = false;
+            reentrant = fory.register(child);
+          }
+          return code;
+        },
+      },
+    });
+    hookCount = 0;
+    generateReentrant = true;
+
+    const registered = fory.register(root);
+    expect(hookCount).toBe(5);
+    expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8155)).toBe(reentrant!.serializer);
+    expect(fory.typeResolver.getSerializerById(TypeId.STRUCT, 8158)).toBe(registered.serializer);
+
+    let winnerReads = 0;
+    const winnerRead = reentrant!.serializer.read;
+    reentrant!.serializer.read = (fromRef) => {
+      winnerReads++;
+      return winnerRead(fromRef);
+    };
+    const value = {
+      early: { child: { value: 7 } },
+      trigger: { value: "trigger" },
+    };
+
+    expect(registered.deserialize(registered.serialize(value))).toEqual(value);
+    expect(winnerReads).toBe(1);
   });
 
   test("seals replaced schema options", () => {

@@ -154,15 +154,10 @@ export default class Fory {
     if (constructor.prototype?.[ForyTypeInfoSymbol]) {
       const typeInfo: TypeInfo = (constructor.prototype[ForyTypeInfoSymbol] as WithForyClsInfo)
         .structTypeInfo;
-      serializer = new Gen(this.typeResolver, {
-        creator: constructor,
-        customSerializer,
-      }).generateSerializer(typeInfo);
+      serializer = new Gen(this.typeResolver, customSerializer).generateSerializer(typeInfo);
     } else {
       const typeInfo = constructor;
-      serializer = new Gen(this.typeResolver, {
-        customSerializer,
-      }).generateSerializer(typeInfo);
+      serializer = new Gen(this.typeResolver, customSerializer).generateSerializer(typeInfo);
     }
     return {
       serializer,

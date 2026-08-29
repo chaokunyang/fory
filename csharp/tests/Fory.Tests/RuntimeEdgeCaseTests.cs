@@ -873,18 +873,19 @@ public sealed class RuntimeEdgeCaseTests
     {
         ForyRuntime fory = ForyRuntime.Builder().Build();
 
-        Assert.ThrowsAny<Exception>(() => fory.Deserialize<int>(Array.Empty<byte>()));
+        Assert.ThrowsAny<Exception>(() => fory.Deserialize<int>((byte[])null!));
         Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(713));
     }
 
     [Fact]
-    public void FailedWriteRestoresNextRoot()
+    public void FailedWriteRestoresState()
     {
         ForyRuntime fory = ForyRuntime.Builder().TrackRef(true).Build();
         fory.Register<FailingWritePayload, FailingWriteSerializer>(718);
         FailingWritePayload value = new() { Value = 1 };
 
         Assert.Throws<InvalidOperationException>(() => fory.Serialize(value));
+        Assert.Equal(0u, WriteContextFor(fory).RefWriter.ReserveRefId());
         Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(719));
 
         Assert.Throws<InvalidOperationException>(() => fory.Serialize(value));

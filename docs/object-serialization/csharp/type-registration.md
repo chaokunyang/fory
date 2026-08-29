@@ -92,10 +92,6 @@ fory.Register<Order>(101);
 
 - Register user-defined types on both writer and reader sides.
 - Keep ID/name mappings consistent across services and languages.
-- Within one `Fory` instance, each numeric ID or full type name belongs to one CLR type, and each
-  CLR type has one wire identity. Repeating the same mapping is idempotent. Reusing either side for
-  a different mapping fails and leaves the existing registration unchanged. Repeating an explicit
-  custom serializer registration must use the same concrete serializer type.
 - For external-type serialization, register the third-party target, such as
   `fory.Register<ThirdParty.User>(100)`, not the local serializer declaration.
 - Register a concrete derived class by its concrete type. Annotated abstract

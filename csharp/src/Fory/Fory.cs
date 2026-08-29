@@ -183,7 +183,15 @@ public sealed class Fory
         Serializer<T> serializer = _typeResolver.GetSerializer<T>();
         WriteHead(writer);
         RefMode refMode = Config.TrackRef ? RefMode.Tracking : RefMode.NullOnly;
-        serializer.Write(_writeContext, value, refMode, true, false);
+        try
+        {
+            serializer.Write(_writeContext, value, refMode, true, false);
+        }
+        catch
+        {
+            _writeContext.Reset();
+            throw;
+        }
         _writeContext.RefWriter.Reset();
 
         return writer.ToArray();
@@ -210,6 +218,7 @@ public sealed class Fory
     /// <exception cref="InvalidDataException">Thrown when trailing bytes remain after decoding.</exception>
     public T Deserialize<T>(ReadOnlySpan<byte> payload)
     {
+        _registryFrozen = true;
         ByteReader reader = _readContext.Reader;
         reader.Reset(payload);
         T value = DeserializeFromReader<T>(reader);
@@ -231,6 +240,7 @@ public sealed class Fory
     /// <exception cref="InvalidDataException">Thrown when trailing bytes remain after decoding.</exception>
     public T Deserialize<T>(byte[] payload)
     {
+        _registryFrozen = true;
         ByteReader reader = _readContext.Reader;
         reader.Reset(payload);
         T value = DeserializeFromReader<T>(reader);

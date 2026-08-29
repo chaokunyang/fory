@@ -9,20 +9,11 @@ Load this file when changing `csharp/` or C# xlang behavior.
 - C# code must build without compiler or analyzer warnings. Treat warnings as blockers in project, test, and generated code.
 - Fory C# requires .NET SDK `8.0+` and C# `12+`.
 - Use `dotnet format` to keep C# code style consistent.
-- A direct C# `Fory` owns permanent registration freeze at first root entry, including a failed
-  root. `ThreadSafeFory` linearizes root entry and registration with its registration lock and
-  frozen state, validates registration on its staging `Fory`, and appends only successful actions
-  to the replay log. Serializer construction and generated factories may reenter a root, so direct
-  registration must recheck the facade after resolving the serializer and before resolver mutation.
-  `ThreadSafeFory` must recheck disposal and freeze after staging registration and before replay-log
-  publication. Resolver registration must prepare all serializer and MetaString state before its
-  single map commit, so failed validation needs no staging rebuild or identity workaround.
-  Before serializer resolution and again before commit, the resolver must enforce a one-to-one
-  mapping between CLR types and wire IDs or names. The same mapping is idempotent, including the
-  same concrete custom serializer when one is explicit; neither identity side nor an explicit
-  serializer may be rebound to a different owner.
-  New per-thread runtimes replay that log; do not mutate existing runtimes or introduce another
-  freeze owner.
+- A direct C# `Fory` registry and the `ThreadSafeFory` public registration boundary each own one
+  authoritative frozen flag. The first root sets the owning flag before codec work and leaves it
+  set after failure. Explicit registration checks that flag before mutation. `ThreadSafeFory` keeps
+  its existing successful-registration list only to configure newly created child runtimes; do not
+  turn that list into another registry lifecycle state.
 - Generated C# gRPC service companions are compiler-owned files that depend on application-provided gRPC packages, not `csharp/src/Fory`. Keep gRPC package references out of the Fory runtime package.
 - C# generated schema modules are source-file owners. Service companions must use that module's `ThreadSafeFory` and must not introduce namespace-owned aliases or duplicate serializer registration paths.
 - C# external-type serialization is target-keyed. A local

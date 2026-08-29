@@ -55,8 +55,7 @@ Parallel.For(0, 64, i =>
 
 - Register every type before the first serialization or deserialization attempt.
 - Starting the first root permanently freezes registration, including when that root fails.
-- `ThreadSafeFory` serializes registration against the first root. If the root wins a concurrent
-  race, registration throws `InvalidOperationException` before changing any runtime.
+- Later registration throws `InvalidOperationException` before changing the registry.
 
 ## Disposal
 

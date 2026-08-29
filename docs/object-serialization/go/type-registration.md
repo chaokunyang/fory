@@ -126,9 +126,9 @@ f1.RegisterStruct(User{}, 1)
 f2.RegisterStruct(User{}, 1)
 ```
 
-Within one Fory instance, each numeric ID or registered name identifies one registered Go value
-type. Passing a pointer value for that type uses the same registration. A conflicting ID, name, or
-type registration returns an error without replacing the first registration.
+The thread-safe wrapper creates multiple `Fory` instances. Configure registrations in
+`threadsafe.NewWithFactory` so every pooled instance receives the same registry before use; the
+wrapper does not expose registration methods.
 
 ## Registration Timing
 

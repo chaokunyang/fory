@@ -87,42 +87,44 @@ err = threadsafe.Unmarshal(data, &target)
 
 ## Type Registration
 
-Register every type before the first serialization or deserialization attempt. Starting a root
-operation permanently freezes registration on that Fory instance, including when the operation
-fails:
+Each pooled `Fory` instance owns its registry. Configure every instance in `NewWithFactory` before
+returning it to the pool:
 
 ```go
-f := threadsafe.New()
+f := threadsafe.NewWithFactory(func() *fory.Fory {
+    inner := fory.New(fory.WithXlang(true))
+    if err := inner.RegisterStructByName(User{}, "example.User"); err != nil {
+        panic(err)
+    }
+    if err := inner.RegisterStructByName(Order{}, "example.Order"); err != nil {
+        panic(err)
+    }
+    return inner
+})
 
-// Register types BEFORE concurrent access
-if err := f.RegisterStructByName(User{}, "example.User"); err != nil {
-    panic(err)
-}
-if err := f.RegisterStructByName(Order{}, "example.Order"); err != nil {
-    panic(err)
-}
-
-// Now safe to use concurrently
 go func() {
-    f.Serialize(&User{ID: 1})
+    _, _ = f.Serialize(&User{ID: 1})
 }()
 ```
 
-### Thread-Safe Registration
+The factory is the sole registration path for the thread-safe wrapper. The wrapper has no registry
+of its own, and a registration applied to one pooled instance would not configure future instances.
+Every factory invocation must return an instance with the same configuration and registrations.
 
-The thread-safe wrapper exposes named struct registration and serializes it against the first root
-operation:
+For a directly owned `Fory`, register types on that instance before its first root operation.
+Starting serialization or deserialization permanently freezes that instance's registry, including
+when the root fails:
 
 ```go
-f := threadsafe.New()
-if err := f.RegisterStructByName(User{}, "example.User"); err != nil {
+inner := fory.New(fory.WithXlang(true))
+if err := inner.RegisterStructByName(User{}, "example.User"); err != nil {
     panic(err)
 }
+
+_, _ = inner.Serialize(&User{ID: 1})
 ```
 
-If registration races with the first root, one operation wins the boundary. When the root wins,
-the registration call returns `fory.ErrRegistryFrozen` without changing the registry. Register all
-types during startup so the application does not depend on race ordering.
+Later registration on `inner` returns `fory.ErrRegistryFrozen` without changing its registry.
 
 ## Zero-Copy Considerations
 
@@ -180,10 +182,13 @@ func BenchmarkNonThreadSafe(b *testing.B) {
 }
 
 func BenchmarkThreadSafe(b *testing.B) {
-    f := threadsafe.New()
-    if err := f.RegisterStructByName(User{}, "example.User"); err != nil {
-        b.Fatal(err)
-    }
+    f := threadsafe.NewWithFactory(func() *fory.Fory {
+        inner := fory.New(fory.WithXlang(true))
+        if err := inner.RegisterStructByName(User{}, "example.User"); err != nil {
+            panic(err)
+        }
+        return inner
+    })
     user := &User{ID: 1, Name: "Alice"}
 
     for i := 0; i < b.N; i++ {
@@ -224,14 +229,13 @@ for i := 0; i < numWorkers; i++ {
 For dynamic goroutine count or simplicity:
 
 ```go
-// Single shared instance
-var f = threadsafe.New()
-
-func init() {
-    if err := f.RegisterStructByName(User{}, "example.User"); err != nil {
+var f = threadsafe.NewWithFactory(func() *fory.Fory {
+    inner := fory.New(fory.WithXlang(true))
+    if err := inner.RegisterStructByName(User{}, "example.User"); err != nil {
         panic(err)
     }
-}
+    return inner
+})
 
 func handleRequest(user *User) []byte {
     // Safe from any goroutine
@@ -243,13 +247,13 @@ func handleRequest(user *User) []byte {
 ### HTTP Handler Example
 
 ```go
-var fory = threadsafe.New()
-
-func init() {
-    if err := fory.RegisterStructByName(Response{}, "example.Response"); err != nil {
+var serializer = threadsafe.NewWithFactory(func() *fory.Fory {
+    inner := fory.New(fory.WithXlang(true))
+    if err := inner.RegisterStructByName(Response{}, "example.Response"); err != nil {
         panic(err)
     }
-}
+    return inner
+})
 
 func handler(w http.ResponseWriter, r *http.Request) {
     response := &Response{
@@ -258,7 +262,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
     }
 
     // Safe: threadsafe.Fory handles concurrency
-    data, err := fory.Serialize(response)
+    data, err := serializer.Serialize(response)
     if err != nil {
         http.Error(w, err.Error(), 500)
         return
@@ -312,26 +316,21 @@ f := threadsafe.New()
 data, _ := f.Serialize(value1)  // Already copied
 ```
 
-### Registering Types Concurrently
+### Registering Only One Pooled Instance
 
 ```go
-// The root may freeze the registry first.
-go func() {
-    if err := f.RegisterStructByName(TypeA{}, "example.TypeA"); err != nil {
-        panic(err)
-    }
-}()
-go func() {
-    _, _ = f.Serialize(value)
-}()
+// WRONG: a configured instance cannot be installed into threadsafe.New.
+inner := fory.New(fory.WithXlang(true))
+_ = inner.RegisterStructByName(TypeA{}, "example.TypeA")
+f := threadsafe.New(fory.WithXlang(true))
 ```
 
-If serialization wins, registration returns `fory.ErrRegistryFrozen`. Register all types before
-starting concurrent roots.
+`f` creates different pooled instances, so the registration on `inner` has no effect. Configure the
+registration inside `NewWithFactory` so every pooled instance receives it.
 
 ## Best Practices
 
-1. **Register types at startup**: Before any concurrent operations
+1. **Configure registrations in the factory**: Every pooled instance must receive the same setup
 2. **Clone data if keeping references**: With non-thread-safe instance
 3. **Use per-worker instances for hot paths**: Eliminates pool contention
 4. **Profile before optimizing**: Thread-safe overhead may be negligible

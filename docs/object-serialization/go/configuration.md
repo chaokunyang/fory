@@ -386,13 +386,16 @@ type Request struct {
     Payload string
 }
 
-f := threadsafe.New(
-    fory.WithXlang(true),
-    fory.WithMaxDepth(30),
-)
-if err := f.RegisterStructByName(Request{}, "example.Request"); err != nil {
-    panic(err)
-}
+f := threadsafe.NewWithFactory(func() *fory.Fory {
+    inner := fory.New(
+        fory.WithXlang(true),
+        fory.WithMaxDepth(30),
+    )
+    if err := inner.RegisterStructByName(Request{}, "example.Request"); err != nil {
+        panic(err)
+    }
+    return inner
+})
 
 // Process requests concurrently
 for req := range requests {

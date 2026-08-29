@@ -121,60 +121,6 @@ func joinRegisteredName(namespace, typeName string) string {
 	return namespace + "." + typeName
 }
 
-func (r *TypeResolver) validateNamedRegistration(namespace, typeName string) error {
-	if _, err := r.namespaceEncoder.EncodePackage(namespace); err != nil {
-		return fmt.Errorf("invalid type namespace: %w", err)
-	}
-	if _, err := r.typeNameEncoder.EncodeTypeName(typeName); err != nil {
-		return fmt.Errorf("invalid type name: %w", err)
-	}
-	return nil
-}
-
-func hasWireIdentity(info *TypeInfo) bool {
-	return info != nil &&
-		(info.UserTypeID != invalidUserTypeID || info.NameBytes != nil)
-}
-
-// A registered Go value type and its pointer form share one wire identity.
-// Check both indexes before serializer creation so failure cannot alter registration.
-func (r *TypeResolver) checkUserTypeIDOwner(
-	type_ reflect.Type,
-	typeID TypeId,
-	userTypeID uint32,
-) (bool, error) {
-	typeInfo := r.typesInfo[type_]
-	if idInfo, ok := r.userTypeIdToTypeInfo[userTypeID]; ok {
-		if idInfo.Type == type_ && TypeId(idInfo.TypeID) == typeID && typeInfo == idInfo {
-			return true, nil
-		}
-		return false, fmt.Errorf(
-			"wire type ID %d already identifies %s", userTypeID, idInfo.Type)
-	}
-	if hasWireIdentity(typeInfo) {
-		return false, fmt.Errorf("type %s already has a different wire identity", type_)
-	}
-	return false, nil
-}
-
-func (r *TypeResolver) checkNamedTypeOwner(
-	type_ reflect.Type,
-	namespace string,
-	typeName string,
-) error {
-	typeInfo := r.typesInfo[type_]
-	nameKey := namedTypeKey{namespace, typeName}
-	if nameInfo, ok := r.namedTypeToTypeInfo[nameKey]; ok {
-		return fmt.Errorf(
-			"wire name %q already identifies %s",
-			joinRegisteredName(namespace, typeName), nameInfo.Type)
-	}
-	if hasWireIdentity(typeInfo) {
-		return fmt.Errorf("type %s already has a different wire identity", type_)
-	}
-	return nil
-}
-
 type TypeInfo struct {
 	Type          reflect.Type
 	FullNameBytes []byte
@@ -499,7 +445,7 @@ func (r *TypeResolver) initialize() {
 
 func (r *TypeResolver) registerSerializer(type_ reflect.Type, typeId TypeId, s Serializer) error {
 	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
+		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
 	}
 	r.typeToSerializers[type_] = s
 	// Skip type ID registration for namespaced types, collection types, and primitive array types
@@ -516,29 +462,15 @@ func (r *TypeResolver) registerSerializer(type_ reflect.Type, typeId TypeId, s S
 	return nil
 }
 
-// valueRegistrationType returns the canonical value owner represented by an
-// instance or reflect.Type. Registration publishes that value type and creates
-// at most one pointer companion from it.
-func valueRegistrationType(type_ any) reflect.Type {
-	registeredType, ok := type_.(reflect.Type)
-	if !ok {
-		registeredType = reflect.TypeOf(type_)
-	}
-	for registeredType != nil && registeredType.Kind() == reflect.Ptr {
-		registeredType = registeredType.Elem()
-	}
-	return registeredType
-}
-
 func validateOptionalFields(type_ reflect.Type) error {
 	if type_ == nil {
 		return nil
 	}
+	if type_.Kind() == reflect.Ptr {
+		type_ = type_.Elem()
+	}
 	if type_.Kind() != reflect.Struct {
 		return nil
-	}
-	if err := validateForyTags(type_); err != nil {
-		return err
 	}
 	for i := 0; i < type_.NumField(); i++ {
 		field := type_.Field(i)
@@ -567,48 +499,59 @@ func (r *TypeResolver) RegisterStruct(type_ reflect.Type, typeID TypeId, userTyp
 	if err := r.fory.checkRegistrationOpen(); err != nil {
 		return err
 	}
-	type_ = valueRegistrationType(type_)
-	if type_.Kind() != reflect.Struct {
-		return fmt.Errorf("unsupported type for ID registration: %v (use RegisterEnum for enum types)", type_.Kind())
-	}
-	if err := validateOptionalFields(type_); err != nil {
-		return err
-	}
-	alreadyRegistered, err := r.checkUserTypeIDOwner(type_, typeID, userTypeID)
-	if err != nil {
-		return err
-	}
-	if alreadyRegistered {
-		return nil
-	}
-
-	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
-	}
-
-	tag := type_.Name()
-	serializer := newStructSerializer(type_, tag)
-	ptrType := reflect.PtrTo(type_)
-	ptrSerializer, ok := r.typeToSerializers[ptrType]
-	if !ok {
-		ptrSerializer = &ptrToValueSerializer{
-			valueSerializer: serializer,
-			valueBytes:      serializer.valueBytes,
+	// Check if already registered
+	if info, ok := r.userTypeIdToTypeInfo[userTypeID]; ok {
+		if info.Type == type_ {
+			return nil
 		}
+		return fmt.Errorf("type %s with id %d has been registered", info.Type, userTypeID)
 	}
 
-	r.typeToSerializers[type_] = serializer
-	r.typeToTypeInfo[type_] = "@" + tag
-	r.typeToSerializers[ptrType] = ptrSerializer
-	r.typeToTypeInfo[ptrType] = "*@" + tag
+	switch type_.Kind() {
+	case reflect.Struct:
+		if err := validateForyTags(type_); err != nil {
+			return err
+		}
+		if err := validateOptionalFields(type_); err != nil {
+			return err
+		}
+		// For struct types, check if serializer already registered
+		if prev, ok := r.typeToSerializers[type_]; ok {
+			return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+		}
 
-	if _, err = r.registerType(
-		type_, uint32(typeID), userTypeID, "", "", serializer, false); err != nil {
-		return fmt.Errorf("failed to register type by ID: %w", err)
-	}
-	if _, err = r.registerType(
-		ptrType, uint32(typeID), userTypeID, "", "", ptrSerializer, false); err != nil {
-		return fmt.Errorf("failed to register pointer type by ID: %w", err)
+		// Create struct serializer
+		tag := type_.Name()
+		serializer := newStructSerializer(type_, tag)
+		r.typeToSerializers[type_] = serializer
+		r.typeToTypeInfo[type_] = "@" + tag
+
+		// Create pointer serializer
+		ptrType := reflect.PtrTo(type_)
+		ptrSerializer, ok := r.typeToSerializers[ptrType]
+		if !ok {
+			ptrSerializer = &ptrToValueSerializer{
+				valueSerializer: serializer,
+				valueBytes:      serializer.valueBytes,
+			}
+			r.typeToSerializers[ptrType] = ptrSerializer
+		}
+		r.typeToTypeInfo[ptrType] = "*@" + tag
+
+		// Register value type with fullTypeID
+		_, err := r.registerType(type_, uint32(typeID), userTypeID, "", "", serializer, false)
+		if err != nil {
+			return fmt.Errorf("failed to register type by ID: %w", err)
+		}
+
+		// Register pointer type with same fullTypeID (Java treats value and pointer types the same)
+		_, err = r.registerType(ptrType, uint32(typeID), userTypeID, "", "", ptrSerializer, false)
+		if err != nil {
+			return fmt.Errorf("failed to register pointer type by ID: %w", err)
+		}
+
+	default:
+		return fmt.Errorf("unsupported type for ID registration: %v (use RegisterEnum for enum types)", type_.Kind())
 	}
 
 	return nil
@@ -619,21 +562,17 @@ func (r *TypeResolver) RegisterUnion(type_ reflect.Type, userTypeID uint32, seri
 	if err := r.fory.checkRegistrationOpen(); err != nil {
 		return err
 	}
-	type_ = valueRegistrationType(type_)
 	if serializer == nil {
 		return fmt.Errorf("RegisterUnion requires a non-nil serializer")
+	}
+	if info, ok := r.userTypeIdToTypeInfo[userTypeID]; ok {
+		return fmt.Errorf("type %s with id %d has been registered", info.Type, userTypeID)
 	}
 	if type_.Kind() != reflect.Struct {
 		return fmt.Errorf("RegisterUnion only supports struct types; got: %v", type_.Kind())
 	}
-	if alreadyRegistered, err := r.checkUserTypeIDOwner(
-		type_, TYPED_UNION, userTypeID); err != nil {
-		return err
-	} else if alreadyRegistered {
-		return fmt.Errorf("type %s with id %d has been registered", type_, userTypeID)
-	}
 	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
+		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
 	}
 
 	tag := type_.Name()
@@ -661,21 +600,18 @@ func (r *TypeResolver) RegisterEnum(type_ reflect.Type, userTypeID uint32) error
 	if err := r.fory.checkRegistrationOpen(); err != nil {
 		return err
 	}
-	type_ = valueRegistrationType(type_)
+	// Check if already registered
+	if info, ok := r.userTypeIdToTypeInfo[userTypeID]; ok {
+		return fmt.Errorf("type %s with id %d has been registered", info.Type, userTypeID)
+	}
+
+	// Verify it's a numeric type
 	switch type_.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		// OK
 	default:
 		return fmt.Errorf("RegisterEnum only supports numeric types; got: %v", type_.Kind())
-	}
-	if alreadyRegistered, err := r.checkUserTypeIDOwner(type_, ENUM, userTypeID); err != nil {
-		return err
-	} else if alreadyRegistered {
-		return fmt.Errorf("type %s with id %d has been registered", type_, userTypeID)
-	}
-	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
 	}
 
 	// Create enum serializer
@@ -703,12 +639,12 @@ func (r *TypeResolver) RegisterEnum(type_ reflect.Type, userTypeID uint32) error
 }
 
 func (r *TypeResolver) registerEnumByName(type_ reflect.Type, namespace, typeName string) error {
-	type_ = valueRegistrationType(type_)
+	// Check if already registered
+	if prev, ok := r.typeToSerializers[type_]; ok {
+		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+	}
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
-	}
-	if err := r.validateNamedRegistration(namespace, typeName); err != nil {
-		return err
 	}
 
 	// Verify it's a numeric type
@@ -719,16 +655,12 @@ func (r *TypeResolver) registerEnumByName(type_ reflect.Type, namespace, typeNam
 	default:
 		return fmt.Errorf("RegisterEnumByName only supports numeric types; got: %v", type_.Kind())
 	}
-	if err := r.checkNamedTypeOwner(type_, namespace, typeName); err != nil {
-		return err
-	}
-	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
-	}
+
+	// Compute type ID for NAMED_ENUM
+	typeId := uint32(NAMED_ENUM)
 
 	// Create enum serializer
-	typeID := uint32(NAMED_ENUM)
-	serializer := &enumSerializer{type_: type_, typeID: typeID}
+	serializer := &enumSerializer{type_: type_, typeID: typeId}
 
 	tag := joinRegisteredName(namespace, typeName)
 
@@ -736,7 +668,7 @@ func (r *TypeResolver) registerEnumByName(type_ reflect.Type, namespace, typeNam
 	r.typeToTypeInfo[type_] = "@" + tag
 
 	// Register the type
-	_, err := r.registerType(type_, typeID, invalidUserTypeID, namespace, typeName, serializer, false)
+	_, err := r.registerType(type_, typeId, invalidUserTypeID, namespace, typeName, serializer, false)
 	if err != nil {
 		return fmt.Errorf("failed to register enum by name: %w", err)
 	}
@@ -745,35 +677,29 @@ func (r *TypeResolver) registerEnumByName(type_ reflect.Type, namespace, typeNam
 }
 
 func (r *TypeResolver) registerStructByName(type_ reflect.Type, namespace, typeName string) error {
-	type_ = valueRegistrationType(type_)
+	if prev, ok := r.typeToSerializers[type_]; ok {
+		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+	}
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
 	}
-	if err := r.validateNamedRegistration(namespace, typeName); err != nil {
+	if err := validateForyTags(type_); err != nil {
 		return err
-	}
-	if err := validateOptionalFields(type_); err != nil {
-		return err
-	}
-	internalTypeID := r.structTypeID(type_, true)
-	if err := r.checkNamedTypeOwner(type_, namespace, typeName); err != nil {
-		return err
-	}
-	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
 	}
 	tag := joinRegisteredName(namespace, typeName)
 	serializer := newStructSerializer(type_, tag)
+	r.typeToSerializers[type_] = serializer
+	// multiple struct with same name defined inside function will have same `type_.String()`, but they are
+	// different types. so we use tag to encode type info.
+	// tagged type encode as `@$tag`/`*@$tag`.
+	r.typeToTypeInfo[type_] = "@" + tag
+
 	ptrType := reflect.PtrTo(type_)
 	ptrSerializer := &ptrToValueSerializer{valueSerializer: serializer, valueBytes: int(type_.Size())}
-
-	r.typeToSerializers[type_] = serializer
-	// Distinct Go types can have the same display name, so registered wire names
-	// own the encoded type information.
-	r.typeToTypeInfo[type_] = "@" + tag
 	r.typeToSerializers[ptrType] = ptrSerializer
 	// use `ptrToValueSerializer` as default deserializer when deserializing data from other languages.
 	r.typeToTypeInfo[ptrType] = "*@" + tag
+	internalTypeID := r.structTypeID(type_, true)
 	userTypeID := invalidUserTypeID
 	// For structs registered by name, directly register both their value and pointer types.
 	_, err := r.registerType(type_, uint32(internalTypeID), userTypeID, namespace, typeName, nil, false)
@@ -793,24 +719,17 @@ func (r *TypeResolver) registerUnionByName(
 	typeName string,
 	serializer Serializer,
 ) error {
-	type_ = valueRegistrationType(type_)
 	if serializer == nil {
 		return fmt.Errorf("RegisterUnionByName requires a non-nil serializer")
+	}
+	if prev, ok := r.typeToSerializers[type_]; ok {
+		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
 	}
 	if type_.Kind() != reflect.Struct {
 		return fmt.Errorf("RegisterUnionByName only supports struct types; got: %v", type_.Kind())
 	}
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
-	}
-	if err := r.validateNamedRegistration(namespace, typeName); err != nil {
-		return err
-	}
-	if err := r.checkNamedTypeOwner(type_, namespace, typeName); err != nil {
-		return err
-	}
-	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
 	}
 	tag := joinRegisteredName(namespace, typeName)
 	r.typeToSerializers[type_] = serializer
@@ -839,21 +758,14 @@ func (r *TypeResolver) registerExtensionByName(
 	typeName string,
 	userSerializer ExtensionSerializer,
 ) error {
-	type_ = valueRegistrationType(type_)
 	if userSerializer == nil {
 		return fmt.Errorf("serializer cannot be nil for extension type %s", type_)
 	}
+	if prev, ok := r.typeToSerializers[type_]; ok {
+		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+	}
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
-	}
-	if err := r.validateNamedRegistration(namespace, typeName); err != nil {
-		return err
-	}
-	if err := r.checkNamedTypeOwner(type_, namespace, typeName); err != nil {
-		return err
-	}
-	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
 	}
 	tag := joinRegisteredName(namespace, typeName)
 
@@ -891,20 +803,14 @@ func (r *TypeResolver) RegisterExtension(
 	if err := r.fory.checkRegistrationOpen(); err != nil {
 		return err
 	}
-	type_ = valueRegistrationType(type_)
 	if userTypeID > maxUserTypeID {
 		return fmt.Errorf("typeID must be in range [0, 0xfffffffe], got %d", userTypeID)
 	}
 	if userSerializer == nil {
 		return fmt.Errorf("serializer cannot be nil for extension type %s", type_)
 	}
-	if alreadyRegistered, err := r.checkUserTypeIDOwner(type_, EXT, userTypeID); err != nil {
-		return err
-	} else if alreadyRegistered {
-		return fmt.Errorf("type %s with id %d has been registered", type_, userTypeID)
-	}
 	if prev, ok := r.typeToSerializers[type_]; ok {
-		return fmt.Errorf("type %s already has a serializer of type %T registered", type_, prev)
+		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
 	}
 
 	// Create adapter wrapping the user's ExtensionSerializer
@@ -1303,18 +1209,12 @@ func (r *TypeResolver) registerType(
 			}
 		}
 
-		nsMeta, encodeErr := r.namespaceEncoder.EncodePackage(namespace)
-		if encodeErr != nil {
-			return nil, fmt.Errorf("invalid type namespace: %w", encodeErr)
-		}
+		nsMeta, _ := r.namespaceEncoder.EncodePackage(namespace)
 		if nsBytes = r.metaStringResolver.GetMetaStrBytes(&nsMeta); nsBytes == nil {
 			panic("failed to encode namespace")
 		}
 
-		typeMeta, encodeErr := r.typeNameEncoder.EncodeTypeName(typeName)
-		if encodeErr != nil {
-			return nil, fmt.Errorf("invalid type name: %w", encodeErr)
-		}
+		typeMeta, _ := r.typeNameEncoder.EncodeTypeName(typeName)
 		if typeBytes = r.metaStringResolver.GetMetaStrBytes(&typeMeta); typeBytes == nil {
 			panic("failed to encode type name")
 		}

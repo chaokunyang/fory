@@ -307,10 +307,6 @@ func (f *Fory) checkRegistrationOpen() error {
 	return nil
 }
 
-func (f *Fory) beginRoot() {
-	f.registryFrozen = true
-}
-
 // RegisterStruct registers a struct type with a numeric ID for cross-language serialization.
 // This is compatible with Java's fory.register(Class, int) method.
 // type_ can be either a reflect.Type or an instance of the type
@@ -325,7 +321,15 @@ func (f *Fory) RegisterStruct(type_ any, typeID uint32) error {
 	if err := validateUserTypeID(typeID); err != nil {
 		return err
 	}
-	t := valueRegistrationType(type_)
+	var t reflect.Type
+	if rt, ok := type_.(reflect.Type); ok {
+		t = rt
+	} else {
+		t = reflect.TypeOf(type_)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+	}
 
 	// Only struct types are supported via RegisterStruct
 	// For enums, use RegisterEnum
@@ -356,7 +360,15 @@ func (f *Fory) RegisterUnion(type_ any, typeID uint32, serializer Serializer) er
 	if err := validateUserTypeID(typeID); err != nil {
 		return err
 	}
-	t := valueRegistrationType(type_)
+	var t reflect.Type
+	if rt, ok := type_.(reflect.Type); ok {
+		t = rt
+	} else {
+		t = reflect.TypeOf(type_)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+	}
 	if t.Kind() != reflect.Struct {
 		return fmt.Errorf("RegisterUnion only supports struct types; got: %v", t.Kind())
 	}
@@ -376,7 +388,15 @@ func (f *Fory) RegisterUnionByName(type_ any, name string, serializer Serializer
 	if serializer == nil {
 		return fmt.Errorf("RegisterUnionByName requires a non-nil serializer")
 	}
-	t := valueRegistrationType(type_)
+	var t reflect.Type
+	if rt, ok := type_.(reflect.Type); ok {
+		t = rt
+	} else {
+		t = reflect.TypeOf(type_)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+	}
 	if t.Kind() != reflect.Struct {
 		return fmt.Errorf("RegisterUnionByName only supports struct types; got: %v", t.Kind())
 	}
@@ -397,7 +417,15 @@ func (f *Fory) RegisterStructByName(type_ any, name string) error {
 	if err := f.checkRegistrationOpen(); err != nil {
 		return err
 	}
-	t := valueRegistrationType(type_)
+	var t reflect.Type
+	if rt, ok := type_.(reflect.Type); ok {
+		t = rt
+	} else {
+		t = reflect.TypeOf(type_)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+	}
 	if t.Kind() != reflect.Struct {
 		return fmt.Errorf("RegisterStructByName only supports struct types; for enum types use RegisterEnumByName. Got: %v", t.Kind())
 	}
@@ -422,7 +450,15 @@ func (f *Fory) RegisterEnum(type_ any, typeID uint32) error {
 	if err := validateUserTypeID(typeID); err != nil {
 		return err
 	}
-	t := valueRegistrationType(type_)
+	var t reflect.Type
+	if rt, ok := type_.(reflect.Type); ok {
+		t = rt
+	} else {
+		t = reflect.TypeOf(type_)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+	}
 
 	// Verify it's a numeric type (Go enums are int-based)
 	switch t.Kind() {
@@ -446,7 +482,15 @@ func (f *Fory) RegisterEnumByName(type_ any, name string) error {
 	if err := f.checkRegistrationOpen(); err != nil {
 		return err
 	}
-	t := valueRegistrationType(type_)
+	var t reflect.Type
+	if rt, ok := type_.(reflect.Type); ok {
+		t = rt
+	} else {
+		t = reflect.TypeOf(type_)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+	}
 
 	// Verify it's a numeric type (Go enums are int-based)
 	switch t.Kind() {
@@ -476,7 +520,15 @@ func (f *Fory) RegisterExtension(type_ any, typeID uint32, serializer ExtensionS
 	if err := validateUserTypeID(typeID); err != nil {
 		return err
 	}
-	t := valueRegistrationType(type_)
+	var t reflect.Type
+	if rt, ok := type_.(reflect.Type); ok {
+		t = rt
+	} else {
+		t = reflect.TypeOf(type_)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+	}
 	return f.typeResolver.RegisterExtension(t, typeID, serializer)
 }
 
@@ -507,7 +559,15 @@ func (f *Fory) RegisterExtensionByName(type_ any, name string, serializer Extens
 	if err := f.checkRegistrationOpen(); err != nil {
 		return err
 	}
-	t := valueRegistrationType(type_)
+	var t reflect.Type
+	if rt, ok := type_.(reflect.Type); ok {
+		t = rt
+	} else {
+		t = reflect.TypeOf(type_)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+	}
 	namespace, typeName, err := splitRegisteredName(name)
 	if err != nil {
 		return err
@@ -540,7 +600,7 @@ func (f *Fory) Reset() {
 //
 // For thread-safe usage, use threadsafe.Fory which copies the data internally.
 func (f *Fory) Serialize(value any) ([]byte, error) {
-	f.beginRoot()
+	f.registryFrozen = true
 	defer f.resetWriteState()
 	if !validateRootDecimal(f.writeCtx.Err(), value) {
 		return nil, f.writeCtx.TakeError()
@@ -576,7 +636,7 @@ func (f *Fory) rootRefMode() RefMode {
 // Deserialize deserializes data directly into the provided target value.
 // The target must be a pointer to the value to deserialize into.
 func (f *Fory) Deserialize(data []byte, v any) error {
-	f.beginRoot()
+	f.registryFrozen = true
 	defer f.resetReadState()
 	f.readCtx.SetData(data)
 	target := reflect.ValueOf(v).Elem()
@@ -616,7 +676,7 @@ func (f *Fory) resetWriteState() {
 // This is useful when you need to write multiple serialized values to the same buffer.
 // Returns error if serialization fails.
 func (f *Fory) SerializeTo(buf *ByteBuffer, value any) error {
-	f.beginRoot()
+	f.registryFrozen = true
 	origBuffer := f.writeCtx.buffer
 	defer func() {
 		// Restore the owned buffer before reset so a serializer panic cannot reset or retain the
@@ -670,7 +730,7 @@ func (f *Fory) SerializeTo(buf *ByteBuffer, value any) error {
 // The buffer's reader index is advanced as data is read.
 // This is useful when reading multiple serialized values from the same buffer.
 func (f *Fory) DeserializeFrom(buf *ByteBuffer, v any) error {
-	f.beginRoot()
+	f.registryFrozen = true
 	// Reset contexts for each independent serialized object
 	// Temporarily swap buffer
 	origBuffer := f.readCtx.buffer
@@ -723,7 +783,7 @@ func (f *Fory) Unmarshal(data []byte, v any) error {
 // If callback is provided, it will be called for each BufferObject during serialization.
 // Return true from callback to write in-band, false for out-of-band.
 func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v any, callback func(BufferObject) bool) error {
-	f.beginRoot()
+	f.registryFrozen = true
 	buf := f.writeCtx.buffer
 	defer func() {
 		// Reset internal state but NOT the buffer - caller manages buffer state
@@ -762,7 +822,7 @@ func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v any, callback func(Bu
 // DeserializeWithCallbackBuffers deserializes from buffer into the provided value (for streaming/cross-language use).
 // The third parameter is optional external buffers for out-of-band data (can be nil).
 func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v any, buffers []*ByteBuffer) error {
-	f.beginRoot()
+	f.registryFrozen = true
 	// Use the caller buffer only for this root; later stream roots reuse the
 	// original internal buffer.
 	origBuffer := f.readCtx.buffer
@@ -897,7 +957,7 @@ func readHeaderSlow(ctx *ReadContext, bitmap byte) {
 //
 // For thread-safe usage, use threadsafe.Serialize which copies the data internally.
 func Serialize[T any](f *Fory, value T) ([]byte, error) {
-	f.beginRoot()
+	f.registryFrozen = true
 	defer f.resetWriteState()
 	v := any(value)
 	if !validateRootDecimal(f.writeCtx.Err(), v) {
@@ -1054,7 +1114,7 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 // For structs, it reads directly into the struct fields.
 // Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
 func Deserialize[T any](f *Fory, data []byte, target *T) error {
-	f.beginRoot()
+	f.registryFrozen = true
 	// Generic roots share the same reusable read and metadata owners as the
 	// method API, so both entry and every exit must start from a root-clean state.
 	f.resetReadState()

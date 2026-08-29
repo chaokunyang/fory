@@ -140,12 +140,22 @@ func TestDeserialize(t *testing.T) {
 	})
 
 	t.Run("Slice", func(t *testing.T) {
-		f := New(fory.WithXlang(false), fory.WithRefTracking(true), fory.WithCompatible(false))
 		// Serialize a struct containing the slice since *[]T is not supported
 		type SliceWrapper struct {
 			Items []int32
 		}
-		require.NoError(t, f.RegisterStructByName(SliceWrapper{}, "threadsafe.SliceWrapper"))
+		f := NewWithFactory(func() *fory.Fory {
+			inner := fory.New(
+				fory.WithXlang(false),
+				fory.WithRefTracking(true),
+				fory.WithCompatible(false),
+			)
+			if err := inner.RegisterStructByName(
+				SliceWrapper{}, "threadsafe.SliceWrapper"); err != nil {
+				panic(err)
+			}
+			return inner
+		})
 		original := SliceWrapper{Items: []int32{1, 2, 3, 4, 5}}
 		data, err := Serialize(f, &original)
 		require.NoError(t, err)

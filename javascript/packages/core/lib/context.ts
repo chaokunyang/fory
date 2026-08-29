@@ -46,6 +46,7 @@ type TypeResolverLike = {
   getSerializerByData(value: any): Serializer | null | undefined;
   isCompatible(): boolean;
   generateReadSerializer(typeInfo: TypeInfo): Serializer;
+  regenerateReadSerializer(typeInfo: TypeInfo): Serializer;
   getUnknownStructSerializer(typeMeta?: TypeMeta, wireTypeId?: number): Serializer;
 };
 
@@ -277,7 +278,7 @@ export class RefReader {
 export class MetaStringWriter {
   private static readonly MAX_RETAINED_META_STRING_OWNERS = 8192;
 
-  private disposeMetaStringBytes: MetaStringBytes[] = [];
+  private metaStringOwners: MetaStringBytes[] = [];
   private dynamicNameId = 0;
   private namespaceEncoder = new MetaStringEncoder(".", "_");
   private typenameEncoder = new MetaStringEncoder("$", "_");
@@ -289,7 +290,7 @@ export class MetaStringWriter {
       const index = this.dynamicNameId;
       bytes.dynamicWriteStringId = index;
       this.dynamicNameId += 1;
-      this.disposeMetaStringBytes[index] = bytes;
+      this.metaStringOwners[index] = bytes;
       const len = bytes.bytes.getBytes().byteLength;
       writer.writeVarUInt32(len << 1);
       if (len !== 0) {
@@ -308,7 +309,7 @@ export class MetaStringWriter {
   }
 
   reset() {
-    const owners = this.disposeMetaStringBytes;
+    const owners = this.metaStringOwners;
     const size = this.dynamicNameId;
     for (let i = 0; i < size; i++) {
       owners[i].dynamicWriteStringId = -1;
@@ -316,7 +317,7 @@ export class MetaStringWriter {
     // These owners remain serializer-owned. Keep bounded backing without making old entries
     // protocol-visible, and release only an unusual root's oversized owner table.
     if (size > MetaStringWriter.MAX_RETAINED_META_STRING_OWNERS) {
-      this.disposeMetaStringBytes = [];
+      this.metaStringOwners = [];
     }
     this.dynamicNameId = 0;
   }
@@ -371,7 +372,7 @@ export class WriteContext {
   readonly refWriter: RefWriter;
   readonly metaStringWriter: MetaStringWriter;
 
-  private disposeTypeMetaOwners: Array<{ dynamicTypeId: number }> = [];
+  private typeMetaOwners: Array<{ dynamicTypeId: number }> = [];
   private dynamicTypeId = 0;
 
   constructor(
@@ -387,7 +388,7 @@ export class WriteContext {
     this.writer.reset();
     this.refWriter.reset();
     this.metaStringWriter.reset();
-    const owners = this.disposeTypeMetaOwners;
+    const owners = this.typeMetaOwners;
     const size = this.dynamicTypeId;
     for (let i = 0; i < size; i++) {
       owners[i].dynamicTypeId = -1;
@@ -395,7 +396,7 @@ export class WriteContext {
     // The logical size is the current root's visibility boundary. Reuse bounded backing and
     // release only an unusual root's oversized owner table.
     if (size > WriteContext.MAX_RETAINED_TYPE_META_OWNERS) {
-      this.disposeTypeMetaOwners = [];
+      this.typeMetaOwners = [];
     }
     this.dynamicTypeId = 0;
   }
@@ -440,7 +441,7 @@ export class WriteContext {
     const index = this.dynamicTypeId;
     owner.dynamicTypeId = index;
     this.dynamicTypeId += 1;
-    this.disposeTypeMetaOwners[index] = owner;
+    this.typeMetaOwners[index] = owner;
     this.writer.writeVarUInt32(index << 1);
     this.writer.buffer(bytes);
   }
@@ -1603,6 +1604,34 @@ export class ReadContext {
       (remote.typeId === TypeId.BINARY && local.typeId === TypeId.UINT8_ARRAY) ||
       (remote.typeId === TypeId.UINT8_ARRAY && local.typeId === TypeId.BINARY)
     );
+  }
+
+  genSerializerByTypeMetaRuntime(
+    typeMeta: TypeMeta,
+    original?: Serializer | TypeInfo,
+    expectedLocalHash?: number,
+  ) {
+    void expectedLocalHash;
+    const typeId = typeMeta.getTypeId();
+    if (!TypeId.structType(typeId)) {
+      throw new Error("only support reconstructor struct type");
+    }
+    let originalSerializer = original instanceof TypeInfo ? undefined : original;
+    let originalTypeInfo = original instanceof TypeInfo ? original : original?.getTypeInfo();
+    if (originalSerializer === undefined && originalTypeInfo === undefined) {
+      originalSerializer = this.serializerByTypeMeta(typeMeta);
+      originalTypeInfo = originalSerializer?.getTypeInfo();
+    }
+    if (originalSerializer === undefined) {
+      originalTypeInfo ??= TypeId.isNamedType(typeId)
+        ? Type.struct({
+            typeName: typeMeta.getTypeName(),
+            namespace: typeMeta.getNs(),
+          })
+        : Type.struct(typeMeta.getUserTypeId());
+      originalSerializer = this.typeResolver.generateReadSerializer(originalTypeInfo);
+    }
+    return this.generateTypeMetaSerializer(typeMeta, originalSerializer);
   }
 
   private generateTypeMetaSerializer(typeMeta: TypeMeta, original: Serializer) {

@@ -137,33 +137,6 @@ const order = deserialize(bytes);
 
 Store and reuse this pair — it is the fast path.
 
-Registration freezes the schema and every nested `TypeInfo`. Set field IDs, nullability, reference
-tracking, and other schema options before registration. To use an already registered type as a new
-field occurrence with different field options, clone it first:
-
-```ts
-const itemType = Type.struct("example.item", {
-  value: Type.string(),
-});
-fory.register(itemType);
-
-const wrapperType = Type.struct("example.wrapper", {
-  item: itemType.clone().setId(1).setNullable(true),
-});
-```
-
-A nested Struct that supplies only an ID or name must already be registered. Alternatively, include
-a complete definition with the same identity anywhere in the recursive `TypeInfo` graph; the
-definition may appear before or after the identity-only use. Registration rejects an unresolved
-nested identity. Each identity can have only one complete definition in that graph. Repeated uses
-may share that definition, but separate conflicting definitions are rejected. One numeric ID or
-name also cannot identify different Struct, enum, extension, or union families.
-
-An anonymous union with declared cases has no registry identity. Keep and use the serializer pair
-returned by `fory.register(...)`; registering another anonymous union does not replace or reuse the
-earlier union's serializer. A union declared without cases remains an open union with the generic
-union encoding and reads each value from the type information carried by that union case.
-
 ## Field Metadata
 
 Field nullability, reference tracking, dynamic field behavior, numeric widths, and per-struct

@@ -42,7 +42,7 @@ const DEFAULT_MAX_GRAPH_MEMORY_BYTES = 128 * 1024 * 1024;
 const DEFAULT_MAX_UNBACKED_CONTAINER_ITEMS = 8192 as const;
 const EMPTY_BYTES = new Uint8Array(0);
 export default class Fory {
-  readonly typeResolver: TypeResolver;
+  private readonly typeResolver: TypeResolver;
   readonly anySerializer: Serializer;
   readonly config: Config;
   readonly writeContext: WriteContext;
@@ -260,6 +260,7 @@ export default class Fory {
   }
 
   serialize<T = any>(data: T, serializer: Serializer = this.anySerializer) {
+    this.registrationFrozen = true;
     return this.getRootSerializer(serializer)(data);
   }
 }

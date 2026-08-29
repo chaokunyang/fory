@@ -153,12 +153,12 @@ test("reuses root write metastring owners", () => {
   };
 
   expect(registered.serialize({})).toBeDefined();
-  const owners = writeContext.metaStringWriter.disposeMetaStringBytes;
+  const owners = writeContext.metaStringWriter.metaStringOwners;
   expect(owners).toHaveLength(1);
   expect(name.dynamicWriteStringId).toBe(0);
 
   expect(registered.serialize({})).toBeDefined();
-  expect(writeContext.metaStringWriter.disposeMetaStringBytes).toBe(owners);
+  expect(writeContext.metaStringWriter.metaStringOwners).toBe(owners);
   expect(owners).toHaveLength(1);
   expect(name.dynamicWriteStringId).toBe(0);
 });
@@ -174,12 +174,12 @@ test("reuses write metadata owners", () => {
   };
 
   expect(registered.serialize({})).toBeDefined();
-  const owners = writeContext.disposeTypeMetaOwners;
+  const owners = writeContext.typeMetaOwners;
   expect(owners).toHaveLength(1);
   expect(typeMeta.dynamicTypeId).toBe(0);
 
   expect(registered.serialize({})).toBeDefined();
-  expect(writeContext.disposeTypeMetaOwners).toBe(owners);
+  expect(writeContext.typeMetaOwners).toBe(owners);
   expect(owners).toHaveLength(1);
   expect(typeMeta.dynamicTypeId).toBe(0);
 });
@@ -193,14 +193,14 @@ test.each([8192, 8193])("bounds %s metastring owners", (ownerCount) => {
     const owner = metaStringWriter.encodeTypeName(`name-${i}`);
     metaStringWriter.writeBytes(writeContext.writer, owner);
   }
-  const owners = metaStringWriter.disposeMetaStringBytes;
+  const owners = metaStringWriter.metaStringOwners;
 
   writeContext.reset();
   if (ownerCount === 8192) {
-    expect(metaStringWriter.disposeMetaStringBytes).toBe(owners);
+    expect(metaStringWriter.metaStringOwners).toBe(owners);
   } else {
-    expect(metaStringWriter.disposeMetaStringBytes).not.toBe(owners);
-    expect(metaStringWriter.disposeMetaStringBytes).toHaveLength(0);
+    expect(metaStringWriter.metaStringOwners).not.toBe(owners);
+    expect(metaStringWriter.metaStringOwners).toHaveLength(0);
   }
   const nextOwner = metaStringWriter.encodeTypeName("next-root");
   metaStringWriter.writeBytes(writeContext.writer, nextOwner);
@@ -216,15 +216,15 @@ test.each([8192, 8193])("bounds %s type metadata owners", (ownerCount) => {
   for (const owner of typeMetaOwners) {
     writeContext.writeTypeMeta(owner, bytes);
   }
-  const owners = writeContext.disposeTypeMetaOwners;
+  const owners = writeContext.typeMetaOwners;
 
   writeContext.reset();
   expect(typeMetaOwners.every((owner) => owner.dynamicTypeId === -1)).toBe(true);
   if (ownerCount === 8192) {
-    expect(writeContext.disposeTypeMetaOwners).toBe(owners);
+    expect(writeContext.typeMetaOwners).toBe(owners);
   } else {
-    expect(writeContext.disposeTypeMetaOwners).not.toBe(owners);
-    expect(writeContext.disposeTypeMetaOwners).toHaveLength(0);
+    expect(writeContext.typeMetaOwners).not.toBe(owners);
+    expect(writeContext.typeMetaOwners).toHaveLength(0);
   }
   const nextOwner = { dynamicTypeId: -1 };
   writeContext.writeTypeMeta(nextOwner, bytes);

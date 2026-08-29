@@ -550,6 +550,9 @@ describe("typemeta", () => {
         generateReadSerializer: () => {
           throw new Error("unused");
         },
+        regenerateReadSerializer: () => {
+          throw new Error("unused");
+        },
       } as any,
       config,
     );
@@ -618,6 +621,29 @@ describe("typemeta", () => {
     expect(() => context.readCompatibleStructSerializer(localMetaA.getHash(), serializerB)).toThrow(
       "Compatible TypeMeta owner mismatch",
     );
+  });
+
+  test("direct TypeMeta generation keeps its public adapters", () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+    const remoteTypeMeta = TypeMeta.fromTypeInfo(
+      Type.struct(7020, { value: Type.string().setId(1) }),
+      (writerFory as any).typeResolver,
+    );
+    const localTypeInfo = Type.struct(7020, { value: Type.int32().setId(1) });
+    const context = (readerFory as any).readContext as ReadContext;
+
+    expect(
+      context.genSerializerByTypeMetaRuntime(remoteTypeMeta, localTypeInfo, 123),
+    ).toBeDefined();
+    expect(context.genSerializerByTypeMetaRuntime(remoteTypeMeta)).toBeDefined();
+    expect((context as any).compatibleReadSerializers.size).toBe(0);
+
+    const localTypeMeta = TypeMeta.fromTypeInfo(localTypeInfo, (readerFory as any).typeResolver);
+    context.reset(typeMetaRecord(remoteTypeMeta));
+    expect(
+      context.readCompatibleStructSerializer(localTypeMeta.getHash(), localTypeInfo),
+    ).toBeDefined();
   });
 
   test("generated named enum validates TypeMeta owner", () => {
@@ -733,6 +759,9 @@ describe("typemeta", () => {
         getSerializerByData: () => undefined,
         isCompatible: () => false,
         generateReadSerializer: () => {
+          throw new Error("unused");
+        },
+        regenerateReadSerializer: () => {
           throw new Error("unused");
         },
       } as any,
@@ -1431,6 +1460,21 @@ describe("typemeta", () => {
     expect(map.get("second").second).toBe("two");
   });
 
+  test("regenerated read serializers keep getTypeInfo", () => {
+    const fory = new Fory({ compatible: true });
+    const serializer = (fory as any).typeResolver.regenerateReadSerializer(
+      Type.struct(
+        { namespace: "example", typeName: "repro_struct" },
+        {
+          value: Type.int32(),
+        },
+      ),
+    );
+
+    expect(typeof serializer.getTypeInfo).toBe("function");
+    expect(serializer.getTypeInfo().named).toBe("example$repro_struct");
+  });
+
   test("caches compatible readers for alternating nested schemas", () => {
     const stringWriterFory = new Fory({ compatible: true });
     const boolWriterFory = new Fory({ compatible: true });
@@ -1512,6 +1556,9 @@ describe("typemeta", () => {
         getSerializerByData: () => undefined,
         isCompatible: () => true,
         generateReadSerializer: () => {
+          throw new Error("unused");
+        },
+        regenerateReadSerializer: () => {
           throw new Error("unused");
         },
       } as any,

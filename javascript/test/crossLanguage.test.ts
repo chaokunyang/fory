@@ -261,28 +261,23 @@ describe("bool", () => {
     }
 
     const bfs = [];
+    const typeResolver = (fory as any).typeResolver;
     // Serialize each deserialized item back
     for (let index = 0; index < deserializedData.length; index++) {
       const item = deserializedData[index];
       let serializedData;
       if (index === 11) {
-        serializedData = fory.serialize(item, fory.typeResolver.getSerializerById(TypeId.FLOAT32));
+        serializedData = fory.serialize(item, typeResolver.getSerializerById(TypeId.FLOAT32));
       } else if (index === 12) {
-        serializedData = fory.serialize(item, fory.typeResolver.getSerializerById(TypeId.FLOAT64));
+        serializedData = fory.serialize(item, typeResolver.getSerializerById(TypeId.FLOAT64));
       } else if (index === 14) {
-        serializedData = fory.serialize(item, fory.typeResolver.getSerializerById(TypeId.DATE));
+        serializedData = fory.serialize(item, typeResolver.getSerializerById(TypeId.DATE));
       } else if (index === 15) {
-        serializedData = fory.serialize(
-          item,
-          fory.typeResolver.getSerializerById(TypeId.TIMESTAMP),
-        );
+        serializedData = fory.serialize(item, typeResolver.getSerializerById(TypeId.TIMESTAMP));
       } else if (index === 16) {
-        serializedData = fory.serialize(
-          item,
-          fory.typeResolver.getSerializerById(TypeId.BOOL_ARRAY),
-        );
+        serializedData = fory.serialize(item, typeResolver.getSerializerById(TypeId.BOOL_ARRAY));
       } else if (index === 17) {
-        serializedData = fory.serialize(item, fory.typeResolver.getSerializerById(TypeId.BINARY));
+        serializedData = fory.serialize(item, typeResolver.getSerializerById(TypeId.BINARY));
       } else if (index === 26) {
         serializedData = colorSerialize(item);
       } else {

@@ -118,7 +118,7 @@ describe("map", () => {
   test.each([
     ["fixed", false, 320],
     ["evolving", true, 321],
-  ])("round-trips nullable %s maps", (_, evolving, itemId) => {
+  ])("round-trips %s map sides beside null", (_, evolving, itemId) => {
     const fory = new Fory({ compatible: true, ref: true });
     const itemType = Type.struct(
       { typeId: itemId, evolving },
@@ -149,7 +149,7 @@ describe("map", () => {
     ]);
   });
 
-  test("keeps compatible map framing", () => {
+  test("preserves compatible struct map framing", () => {
     const serializeMap = (
       compatible: boolean,
       evolving: boolean,
@@ -186,7 +186,7 @@ describe("map", () => {
     expect((native.header >> 3) & 0b100).toBe(0b100);
   });
 
-  test("rejects invalid runtime chunks", () => {
+  test("rejects invalid runtime chunks before type detection", () => {
     const fory = new Fory({ compatible: false, ref: true });
     const MapAnySerializer = CodegenRegistry.getExternal().MapAnySerializer;
     const serializer = new MapAnySerializer(fory.writeContext, fory.readContext, null, null);
@@ -197,7 +197,7 @@ describe("map", () => {
     }
   });
 
-  test("rejects invalid generated chunks", () => {
+  test("rejects invalid generated chunks and reuses the root", () => {
     const fory = new Fory({ compatible: false, ref: true });
     const serializer = fory.register(Type.map(Type.string(), Type.int32()));
     const value = new Map([["key", 1]]);
@@ -209,6 +209,7 @@ describe("map", () => {
       malformed[chunkSizeOffset] = chunkSize;
 
       expect(() => serializer.deserialize(malformed)).toThrow();
+      expect(fory.readContext.depth).toBe(0);
       expect(serializer.deserialize(valid)).toEqual(value);
     }
   });

@@ -96,6 +96,13 @@ describe("fory", () => {
     expect(() => fory.register(Type.struct(8102, {}))).toThrow();
   });
 
+  test("freezes before serializer lookup", () => {
+    const fory = new Fory({ compatible: false });
+
+    expect(() => fory.serialize(1, null as any)).toThrow();
+    expect(() => fory.register(Type.struct(8104, {}))).toThrow();
+  });
+
   test.each(["serialize", "deserialize"] as const)("freezes after %s", (operation) => {
     const fory = new Fory({ compatible: false });
 

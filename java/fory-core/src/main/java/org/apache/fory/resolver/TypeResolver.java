@@ -404,10 +404,11 @@ public abstract class TypeResolver {
   }
 
   private void publishRegistrationSnapshot() {
-    registrationFrozen = true;
     // A root may start through a borrowed child, so the child must close the shared facade
-    // boundary before publishing or adopting the registration snapshot.
+    // boundary before freezing itself or publishing/adopting the registration snapshot. Otherwise
+    // a facade registration already holding that boundary could fail partway through its children.
     sharedRegistry.freezeRegistration();
+    registrationFrozen = true;
     sharedRegistry.setRegistrationIfAbsent(
         extRegistry.registeredClassIdMap, extRegistry.registeredClasses);
     extRegistry.freezeRegistration(

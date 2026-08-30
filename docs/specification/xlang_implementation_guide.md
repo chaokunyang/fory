@@ -260,7 +260,7 @@ The ownership split is:
   allocation
 - `Fory` owns root framing and operation setup/reset
 - `TypeResolver` owns registration mappings, serializer bindings, and dynamic lookup; the natural
-  registry or public facade owner owns the registry freeze flag
+  registry or public facade owner owns the authoritative registry lifecycle fact
 
 #### C# generated structural serializers
 

@@ -250,11 +250,6 @@ public class AllowListChecker implements TypeChecker {
   void addListener(TypeResolver resolver) {
     try {
       lock.writeLock().lock();
-      if ((!disallowList.isEmpty() || !disallowListPrefix.isEmpty())
-          && resolver.isRegistrationFrozen()) {
-        throw new IllegalStateException(
-            "A checker with disallow entries cannot be installed after registration.");
-      }
       listeners.put(resolver, true);
     } finally {
       lock.writeLock().unlock();

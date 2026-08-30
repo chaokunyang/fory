@@ -87,9 +87,9 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - Each natural Java registry or public facade boundary owns one authoritative frozen flag. The
   facade flag is not a mirror of a child resolver flag. The first root serialization or
   deserialization sets the owning flag before codec work and never clears it, including after
-  failure. Every explicit type, serializer, module, name, ID, or type-checker policy change checks
-  that flag before mutation. Do not add another lifecycle state or a parallel registration-commit
-  path.
+  failure. Every explicit type, serializer, module, name, ID, or type-checker binding checks that
+  flag before mutation. Disallow-list changes use the bound checker's resolver listeners. Do not
+  add another lifecycle state or a parallel registration-commit path.
 - Direct and thread-safe facades expose module registration before their first root. Kotlin and
   Scala registration extensions target `BaseFory`; do not narrow them to concrete `Fory` or make
   builder installation the only thread-safe path. Before the first root, a thread-safe facade

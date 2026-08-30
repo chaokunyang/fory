@@ -263,13 +263,13 @@ else:
     class TypeInfo:
         __slots__ = (
             "cls",
-            "dynamic_type",
-            "namespace_bytes",
-            "serializer",
-            "type_def",
             "type_id",
-            "typename_bytes",
             "user_type_id",
+            "serializer",
+            "namespace_bytes",
+            "typename_bytes",
+            "dynamic_type",
+            "type_def",
         )
 
         def __init__(
@@ -307,7 +307,7 @@ else:
 
 
 class SharedRegistry:
-    __slots__ = ("_encoded_metastrings", "_metastr_to_bytes")
+    __slots__ = ("_metastr_to_bytes", "_encoded_metastrings")
 
     def __init__(self):
         self._metastr_to_bytes = {}
@@ -356,38 +356,38 @@ class SharedRegistry:
 
 class TypeResolver:
     __slots__ = (
-        "_actual_type_resolver",
+        "xlang",
+        "track_ref",
+        "strict",
+        "compatible",
+        "field_nullable",
+        "policy",
+        "config",
+        "shared_registry",
+        "_type_id_counter",
+        "_types_info",
+        "_python_name_to_type",
+        "_metastr_to_type",
         "_hash_to_type_info",
-        "_internal_py_serializer_map",
+        "_ns_type_to_type_info",
+        "_named_type_to_type_info",
+        "namespace_encoder",
+        "namespace_decoder",
+        "typename_encoder",
+        "typename_decoder",
+        "meta_compressor",
+        "require_registration",
+        "_type_id_to_type_info",
+        "_user_type_id_to_type_info",
+        "_used_user_type_ids",
         "_local_type_info_by_hash",
         "_meta_shared_type_info",
-        "_metastr_to_type",
-        "_named_type_to_type_info",
-        "_ns_type_to_type_info",
-        "_python_name_to_type",
-        "_registry_frozen",
         "_remote_schema_versions_by_type",
         "_total_accepted_schema_versions",
-        "_type_id_counter",
-        "_type_id_to_type_info",
-        "_types_info",
-        "_used_user_type_ids",
-        "_user_type_id_to_type_info",
-        "compatible",
-        "config",
-        "field_nullable",
-        "meta_compressor",
         "meta_share",
-        "namespace_decoder",
-        "namespace_encoder",
-        "policy",
-        "require_registration",
-        "shared_registry",
-        "strict",
-        "track_ref",
-        "typename_decoder",
-        "typename_encoder",
-        "xlang",
+        "_internal_py_serializer_map",
+        "_actual_type_resolver",
+        "_registry_frozen",
     )
 
     def __init__(self, config, *, shared_registry):

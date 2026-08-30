@@ -131,6 +131,20 @@ public class ForyTest extends ForyTestBase {
     assertRegistrationFrozen(reader);
   }
 
+  @Test
+  public void testOutOfBandSetupFailureCleanup() {
+    Fory fory = newNativeFory();
+    byte[] bytes = fory.serialize(7, bufferObject -> true);
+    Iterable<MemoryBuffer> failingBuffers =
+        () -> {
+          throw new IllegalStateException("iterator failed");
+        };
+
+    assertThrows(IllegalStateException.class, () -> fory.deserialize(bytes, failingBuffers));
+    assertNull(fory.getReadContext().getBuffer());
+    assertEquals(fory.deserialize(fory.serialize(8)), 8);
+  }
+
   private static Fory newNativeFory() {
     return Fory.builder()
         .withXlang(false)

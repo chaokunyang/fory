@@ -111,9 +111,13 @@ public final class ReadContext {
    */
   public void prepare(
       MemoryBuffer buffer, Iterable<MemoryBuffer> outOfBandBuffers, boolean peerOutOfBandEnabled) {
+    // Resolve user code before publishing root state so a failing iterator cannot leave a
+    // partially prepared context outside the root cleanup boundary.
+    Iterator<MemoryBuffer> outOfBandIterator =
+        outOfBandBuffers == null ? null : outOfBandBuffers.iterator();
     this.buffer = buffer;
     this.peerOutOfBandEnabled = peerOutOfBandEnabled;
-    this.outOfBandBuffers = outOfBandBuffers == null ? null : outOfBandBuffers.iterator();
+    this.outOfBandBuffers = outOfBandIterator;
     remainingGraphMemoryBytes = config.maxGraphMemoryBytes();
     remainingUnbackedContainerItems = config.maxUnbackedContainerItems();
   }

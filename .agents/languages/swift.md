@@ -41,6 +41,9 @@ Load this file when changing `swift/` or Swift xlang behavior.
   deserialization. Do not add another lifecycle state or cache freeze failure separately. Registered
   TypeInfo owns lazy TypeMeta completion after freeze; do not add an eager whole-registry metadata
   pass.
+- Serializer static properties are application code and can start a root during registration.
+  Recheck the same resolver flag after the last static property access and immediately before
+  returning from an idempotent registration or publishing `TypeInfo` by ID or name.
 - Direct `Any` and `AnyObject` root overloads remain disfavored forwarding facades over
   `DynamicSerializer<Any>` and `DynamicSerializer<AnyObject>`, including their Data-buffer forms.
   Arbitrary protocol roots explicitly select `DynamicSerializer<T>`. Do not add an unconstrained

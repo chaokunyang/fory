@@ -14,6 +14,9 @@ Load this file when changing `javascript/`.
 - JavaScript `Fory` owns the one authoritative registration-frozen flag. The first root
   serialization or deserialization sets it before codec work and leaves it set after failure.
   `TypeResolver` owns registration maps, not a second lifecycle flag.
+- Codegen hooks can start a root while an explicit registration graph is being generated. Recheck
+  the `Fory`-owned flag before every later serializer publication in that graph; do not add a
+  lifecycle flag to `TypeResolver`, stage the graph, or roll registry entries back.
 - A failed root releases its operation-local reference and metadata state before the exception
   escapes. The next root entry releases state retained by the previous successful operation before
   reusing the context. Keep the successful root exit allocation-free and do not copy Java

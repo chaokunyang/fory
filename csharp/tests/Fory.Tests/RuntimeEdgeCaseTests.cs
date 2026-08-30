@@ -60,6 +60,13 @@ public sealed class DecimalEnvelope
 
 public sealed class CustomPayloadSerializer : Serializer<CustomPayload>
 {
+    public static Action? ConstructionAction;
+
+    public CustomPayloadSerializer()
+    {
+        ConstructionAction?.Invoke();
+    }
+
     public override CustomPayload DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in CustomPayload value, bool hasGenerics)
@@ -856,6 +863,26 @@ public sealed class RuntimeEdgeCaseTests
         }
 
         Assert.Equal(0, FrozenPayloadSerializer.Constructions);
+    }
+
+    [Fact]
+    public void CustomSerializerRechecksFreeze()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+        CustomPayloadSerializer.ConstructionAction = () => _ = fory.Serialize(1);
+        try
+        {
+            Assert.Throws<InvalidOperationException>(
+                () => fory.Register<CustomPayload, CustomPayloadSerializer>(721));
+        }
+        finally
+        {
+            CustomPayloadSerializer.ConstructionAction = null;
+        }
+
+        TypeInfo typeInfo = ReadContextFor(fory).TypeResolver.GetTypeInfo(typeof(CustomPayload));
+        Assert.False(typeInfo.IsRegistered);
+        Assert.NotEqual(typeof(CustomPayloadSerializer), typeInfo.SerializerType);
     }
 
     [Fact]

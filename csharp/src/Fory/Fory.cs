@@ -122,7 +122,7 @@ public sealed class Fory
         where TSerializer : Serializer<T>, new()
     {
         EnsureRegistrationOpen();
-        TypeInfo typeInfo = _typeResolver.RegisterSerializer<T, TSerializer>();
+        TypeInfo typeInfo = CreateCustomTypeInfo<T, TSerializer>();
         _typeResolver.Register(typeof(T), typeId, typeInfo);
         return this;
     }
@@ -141,7 +141,7 @@ public sealed class Fory
     {
         EnsureRegistrationOpen();
         (string namespaceName, string typeName) = TypeResolver.SplitTypeName(name);
-        TypeInfo typeInfo = _typeResolver.RegisterSerializer<T, TSerializer>();
+        TypeInfo typeInfo = CreateCustomTypeInfo<T, TSerializer>();
         _typeResolver.Register(typeof(T), namespaceName, typeName, typeInfo);
         return this;
     }
@@ -161,7 +161,7 @@ public sealed class Fory
     {
         EnsureRegistrationOpen();
         TypeResolver.ValidateSplitTypeName(typeNamespace, typeName);
-        TypeInfo typeInfo = _typeResolver.RegisterSerializer<T, TSerializer>();
+        TypeInfo typeInfo = CreateCustomTypeInfo<T, TSerializer>();
         _typeResolver.Register(typeof(T), typeNamespace, typeName, typeInfo);
         return this;
     }
@@ -338,6 +338,16 @@ public sealed class Fory
         {
             ThrowRegistryFrozen();
         }
+    }
+
+    private TypeInfo CreateCustomTypeInfo<T, TSerializer>()
+        where TSerializer : Serializer<T>, new()
+    {
+        TypeInfo typeInfo = TypeInfo.Create(typeof(T), new TSerializer());
+        // Serializer construction and TypeInfo creation can execute application code. Recheck
+        // after both so a reentrant root cannot be followed by resolver publication.
+        EnsureRegistrationOpen();
+        return typeInfo;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

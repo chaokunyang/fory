@@ -485,19 +485,6 @@ public sealed class TypeResolver
         return typeInfo;
     }
 
-    internal TypeInfo RegisterSerializer<T, TSerializer>()
-        where TSerializer : Serializer<T>, new()
-    {
-        TypeInfo typeInfo = TypeInfo.Create(typeof(T), new TSerializer());
-        RegisterSerializer(typeof(T), typeInfo);
-        return typeInfo;
-    }
-
-    internal void RegisterSerializer(Type type, TypeInfo typeInfo)
-    {
-        GetOrCreateTypeInfo(type, typeInfo);
-    }
-
     internal void Register(Type type, uint id, TypeInfo? explicitTypeInfo = null)
     {
         TypeInfo typeInfo = GetOrCreateTypeInfo(type, explicitTypeInfo).WithTypeIdRegistration(id);

@@ -51,6 +51,8 @@ public class ExceptionUtils {
     }
   }
 
+  // Do not attach read-reference tables to the exception. Root cleanup must release the failed
+  // object graph even when application code retains the exception for later inspection.
   public static RuntimeException handleReadFailed(Throwable t) {
     if (t instanceof ForyException) {
       throw (ForyException) t;

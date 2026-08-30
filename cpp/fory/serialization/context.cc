@@ -754,6 +754,8 @@ ReadContext::read_type_meta_owner(const TypeInfo *expected_type_info) {
   cached->concrete_owner = local_type_info;
   if (local_type_info) {
     // Have local type - assign dispatch IDs by comparing schemas.
+    // Extension types have no local TypeMeta; only structs can provide local
+    // field metadata.
     if (local_type_info->type_meta) {
       FORY_RETURN_NOT_OK(TypeMeta::assign_local_dispatch_ids(
           local_type_info->type_meta.get(), parsed_meta->field_infos));

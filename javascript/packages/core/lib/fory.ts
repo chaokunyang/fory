@@ -161,6 +161,9 @@ export default class Fory {
         creator: constructor,
         customSerializer,
       }).generateSerializer(typeInfo);
+      if (this.registrationFrozen) {
+        throw new Error("types and serializers must be registered before the first root operation");
+      }
       this.typeResolver.registerSerializer(typeInfo, serializer);
     } else {
       const typeInfo = constructor;
@@ -168,6 +171,9 @@ export default class Fory {
       serializer = new Gen(this.typeResolver, {
         customSerializer,
       }).generateSerializer(typeInfo);
+      if (this.registrationFrozen) {
+        throw new Error("types and serializers must be registered before the first root operation");
+      }
       this.typeResolver.registerSerializer(typeInfo, serializer);
     }
     return {

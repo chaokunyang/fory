@@ -101,9 +101,6 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - `ThreadSafeFory.execute` exposes one borrowed child only for the callback. Do not retain that
   child or register through it; use the facade registration methods so every current and future
   child receives the same setup.
-- A serializer instance registered on a thread-safe facade must implement `Shareable`. Resolver-
-  local serializers use the class, resolver-factory, or module path so every child runtime owns its
-  instance; never replay one resolver-bound serializer across children.
 - Serializer completion used by lazy, JIT, and generated serializers is an internal resolver-owned
   operation. It remains valid after registration freezes and must not be treated as explicit
   registration.

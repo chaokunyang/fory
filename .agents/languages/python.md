@@ -25,18 +25,12 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
   collisions before publishing resolver maps. Lazy TypeDef completion preserves a configured
   serializer, does not retain partial state, and restores the prior serializer and TypeDef after
   failed completion without adding a lifecycle state.
-- `ThreadSafeFory` accepts serializer classes or factories and constructs a serializer for each
-  child resolver. It must reject resolver-bound serializer instances instead of replaying one
-  instance across pooled children.
 - Registry freeze prohibits explicit type and serializer registration after the first root; it
   does not prohibit native runtime type resolution. Non-strict native writes may discover runtime
   classes or callables, and reads may resolve those authorized by the deserialization policy. Both
   paths may materialize resolver-owned type information or serializer cache entries without
   creating or changing an explicit type, serializer, ID, name, or policy registration. Do not
   describe these operations as late registration.
-- Function serialization writes captured globals as a data-only exact `dict`. Keep the reader's
-  exact-type check before sizing or merging the namespace; a dict subclass or other mapping must not
-  introduce runtime behavior into function reconstruction.
 - Use explicit Cython fields and methods for fixed hot-path shapes. Avoid `__getattr__`, generic `object` fields, public bridge internals, or `Fory` backreferences where ownership can stay explicit.
 - Keep Python and Cython context/ref-tracking branch conditions and stack mutations semantically aligned unless a documented intentional difference exists.
 - Root deserialization graph memory budget state belongs to pure-Python and Cython `ReadContext`.

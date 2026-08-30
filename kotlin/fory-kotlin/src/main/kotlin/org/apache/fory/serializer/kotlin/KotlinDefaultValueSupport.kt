@@ -41,7 +41,7 @@ import org.apache.fory.util.DefaultValueUtils
  * This class uses Kotlin native reflection to analyze data classes and extract default values from
  * their primary constructor parameters.
  */
-internal object KotlinDefaultValueSupport : DefaultValueUtils.DefaultValueSupport() {
+internal class KotlinDefaultValueSupport : DefaultValueUtils.DefaultValueSupport() {
   private val LOG: Logger = LoggerFactory.getLogger(KotlinDefaultValueSupport::class.java)
   private val cachedKotlinDataClassDefaultValues =
     ClassValueCache.newClassKeyCache<Map<String, Any>>(32)

@@ -137,7 +137,6 @@ public sealed class LookupFailureSerializer : Serializer<LookupFailureValue>
     }
 }
 
-[ForyStruct]
 public sealed class FailingWritePayload
 {
     public int Value { get; set; }
@@ -835,15 +834,6 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
-    public void RegistryFreezesAfterSuccessfulRoot()
-    {
-        ForyRuntime fory = ForyRuntime.Builder().Build();
-        Assert.Equal(1, fory.Deserialize<int>(fory.Serialize(1)));
-
-        Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(710));
-    }
-
-    [Fact]
     public void FrozenRegistryRejectsBeforeMutation()
     {
         ForyRuntime fory = ForyRuntime.Builder().Build();
@@ -1041,11 +1031,11 @@ public sealed class RuntimeEdgeCaseTests
 
         if (useSpan)
         {
-            Assert.ThrowsAny<Exception>(() => DeserializeIntSpan(fory, invalidPayload));
+            Assert.Throws<InvalidDataException>(() => DeserializeIntSpan(fory, invalidPayload));
         }
         else
         {
-            Assert.ThrowsAny<Exception>(() => fory.Deserialize<int>(invalidPayload));
+            Assert.Throws<InvalidDataException>(() => fory.Deserialize<int>(invalidPayload));
         }
 
         Assert.True(context.TryGetTypeMetaByHash(firstHash, out _));

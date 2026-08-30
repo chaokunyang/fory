@@ -641,7 +641,6 @@ func schemaLimitTracksStructTypesSeparately() throws {
     let resolver = TypeResolver(config: config)
     try resolver.register(Person.self, id: 901)
     try resolver.register(Address.self, id: 902)
-    resolver.freezeRegistration()
 
     func remoteTypeMeta(userTypeID: UInt32, fieldName: String) throws -> TypeMeta {
         try TypeMeta(
@@ -687,7 +686,6 @@ func nonStructTypeMetaUsesSchemaLimit() throws {
     let config = Config(maxSchemaVersionsPerType: 1)
     let resolver = TypeResolver(config: config)
     try resolver.register(SparseStatus.self, name: "example.SharedEnum")
-    resolver.freezeRegistration()
     let namespace = try MetaStringEncoder.namespace.encode("example")
     let typeName = try MetaStringEncoder.typeName.encode("SharedEnum")
 
@@ -728,7 +726,6 @@ func localNonStructMetaBypassesLimit() throws {
     let config = Config(compatible: true, maxSchemaVersionsPerType: 1)
     let resolver = TypeResolver(config: config)
     try resolver.register(SparseStatus.self, name: "example.SharedEnum")
-    resolver.freezeRegistration()
     let localTypeInfo = try resolver.requireTypeInfo(for: SparseStatus.self)
     try localTypeInfo.ensureTypeMeta(resolver: resolver)
     let namespace = try MetaStringEncoder.namespace.encode("example")
@@ -795,7 +792,6 @@ func failedSchemaDoesNotConsumeLimit() throws {
     let resolver = TypeResolver(config: config)
     try resolver.register(Person.self, id: 901)
     try resolver.register(Address.self, id: 902)
-    resolver.freezeRegistration()
 
     func remoteTypeMeta(fieldName: String, fieldType: TypeMeta.FieldType) throws -> TypeMeta {
         try TypeMeta(
@@ -856,7 +852,6 @@ func staticTypeRejectsWrongMetaOwner() throws {
     let resolver = TypeResolver(config: config)
     try resolver.register(Person.self, id: 901)
     try resolver.register(Address.self, id: 902)
-    resolver.freezeRegistration()
     let wrongTypeMeta = try TypeMeta(
         typeID: TypeId.compatibleStruct.rawValue,
         userTypeID: 901,
@@ -896,7 +891,6 @@ func cachedMetaChecksConcreteOwner() throws {
     let resolver = TypeResolver(config: config)
     try resolver.register(Person.self, id: 901)
     try resolver.register(Address.self, id: 902)
-    resolver.freezeRegistration()
     let remote = try TypeMeta(
         typeID: TypeId.compatibleStruct.rawValue,
         userTypeID: 901,
@@ -944,7 +938,6 @@ func failedStaticMetaDoesNotCount() throws {
     let resolver = TypeResolver(config: config)
     try resolver.register(Person.self, id: 901)
     try resolver.register(Address.self, id: 902)
-    resolver.freezeRegistration()
 
     func typeMeta(userTypeID: UInt32, fieldName: String) throws -> TypeMeta {
         try TypeMeta(

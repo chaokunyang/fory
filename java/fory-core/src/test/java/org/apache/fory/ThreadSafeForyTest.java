@@ -21,14 +21,11 @@ package org.apache.fory;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
-import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -36,7 +33,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 import lombok.Data;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.MetaReadContext;
@@ -49,7 +45,6 @@ import org.apache.fory.pool.ThreadPoolFory;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
-import org.apache.fory.serializer.Shareable;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.BeanB;
 import org.testng.Assert;
@@ -509,29 +504,8 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   public static class FooSerializer extends Serializer<Foo> {
-    final TypeResolver typeResolver;
-
     public FooSerializer(TypeResolver typeResolver, Class<Foo> type) {
       super(typeResolver.getConfig(), type);
-      this.typeResolver = typeResolver;
-    }
-
-    @Override
-    public void write(WriteContext writeContext, Foo value) {
-      writeContext.getBuffer().writeInt32(value.f1);
-    }
-
-    @Override
-    public Foo read(ReadContext readContext) {
-      Foo foo = new Foo();
-      foo.f1 = readContext.getBuffer().readInt32();
-      return foo;
-    }
-  }
-
-  public static final class ShareableFooSerializer extends Serializer<Foo> implements Shareable {
-    public ShareableFooSerializer(TypeResolver typeResolver) {
-      super(typeResolver.getConfig(), Foo.class);
     }
 
     @Override
@@ -635,60 +609,6 @@ public class ThreadSafeForyTest extends ForyTestBase {
               fory.getTypeResolver().getSerializer(Foo.class).getClass(), FooSerializer.class);
           return null;
         });
-  }
-
-  @Test
-  public void testSerializerInstanceOwnership() throws InterruptedException {
-    Fory direct =
-        Fory.builder()
-            .withXlang(false)
-            .requireClassRegistration(false)
-            .withCompatible(false)
-            .build();
-    FooSerializer local = new FooSerializer(direct.getTypeResolver(), Foo.class);
-    List<Consumer<ThreadSafeFory>> registrations =
-        Arrays.asList(
-            fory -> fory.registerSerializer(Foo.class, local),
-            fory -> fory.registerSerializerAndType(Foo.class, local),
-            fory -> fory.registerUnion(Foo.class, 101, local),
-            fory -> fory.registerUnion(Foo.class, "test.Foo", local),
-            fory -> fory.registerUnion(Foo.class, "test", "Foo", local));
-    for (Consumer<ThreadSafeFory> registration : registrations) {
-      ThreadSafeFory fory = newThreadSafeRuntimes()[0];
-      Assert.assertThrows(IllegalArgumentException.class, () -> registration.accept(fory));
-    }
-
-    ShareableFooSerializer shareable = new ShareableFooSerializer(direct.getTypeResolver());
-    ThreadSafeFory shared = newThreadSafeRuntimes()[0];
-    shared.registerSerializer(Foo.class, shareable);
-    assertSame(shared.execute(fory -> fory.getTypeResolver().getSerializer(Foo.class)), shareable);
-
-    ThreadSafeFory localFactory = newThreadSafeRuntimes()[0];
-    localFactory.registerSerializer(Foo.class, FooSerializer.class);
-    AtomicReference<FooSerializer> first = new AtomicReference<>();
-    AtomicReference<FooSerializer> second = new AtomicReference<>();
-    AtomicReference<Throwable> error = new AtomicReference<>();
-    Thread firstThread = new Thread(() -> captureSerializer(localFactory, first, error));
-    Thread secondThread = new Thread(() -> captureSerializer(localFactory, second, error));
-    firstThread.start();
-    secondThread.start();
-    firstThread.join();
-    secondThread.join();
-    assertNull(error.get());
-    assertNotSame(first.get(), second.get());
-    assertNotSame(first.get().typeResolver, second.get().typeResolver);
-  }
-
-  private static void captureSerializer(
-      ThreadSafeFory fory,
-      AtomicReference<FooSerializer> serializer,
-      AtomicReference<Throwable> error) {
-    try {
-      serializer.set(
-          fory.execute(child -> (FooSerializer) child.getTypeResolver().getSerializer(Foo.class)));
-    } catch (Throwable t) {
-      error.compareAndSet(null, t);
-    }
   }
 
   @Test

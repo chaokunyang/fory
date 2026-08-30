@@ -318,10 +318,6 @@ public final class ReadContext {
         for localTypeInfo: TypeInfo,
         wireTypeID: TypeId
     ) throws -> TypeInfo? {
-        // Generic type lookup must not prepare metadata; this wire owner does so only on a miss.
-        if localTypeInfo.typeDefBytes == nil {
-            try localTypeInfo.ensureTypeMeta(resolver: typeResolver)
-        }
         let buffer = self.buffer
         let compatibleTypeDefTypeInfos = self.compatibleTypeDefTypeInfos
         if !checkClassVersion,
@@ -457,6 +453,17 @@ public final class ReadContext {
             try buffer.skip(bodySize)
             compatibleTypeDefTypeInfos.push(cached)
             return try requireCompatibleOwner(cached, for: localTypeInfo)
+        }
+
+        // Ref and checked header-cache hits must not complete local metadata. Build it only after
+        // both miss, then compare the received protocol identity before parsing the remote body.
+        if localTypeInfo.typeDefBytes == nil {
+            try localTypeInfo.ensureTypeMeta(resolver: typeResolver)
+        }
+        if headerHash == localTypeInfo.typeDefHeaderHash {
+            try buffer.skip(bodySize)
+            compatibleTypeDefTypeInfos.push(localTypeInfo)
+            return localTypeInfo
         }
 
         let cachedTypeInfo = try readTypeInfoBody(

@@ -41,7 +41,7 @@ data class ClassObjectRequiredWithDefaults(val v: RegularClass, val x: Int = 3)
 
 class DefaultValueTest {
 
-  private val support = KotlinDefaultValueSupport
+  private val support = KotlinDefaultValueSupport()
 
   @Test
   fun testHasDefaultValues() {

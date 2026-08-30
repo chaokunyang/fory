@@ -618,14 +618,14 @@ that case, classify the behavior by concrete impact:
 ## Registry Lifecycle
 
 The first root serialization or deserialization permanently closes explicit type and serializer
-registration, including when that operation fails. Each natural registration owner keeps one
+registration, including when that operation fails. Each natural registration owner keeps exactly
+one
 authoritative lifecycle fact, and every later explicit registration attempt fails before changing
 type, serializer, ID, name, metadata, or policy bindings. A thread-safe facade with its own public
 registration surface may own its boundary fact, but must not mirror a child registry's lifecycle.
-Each natural owner must keep exactly one authoritative lifecycle fact. That fact may be an
-owner-native flag or the presence of an immutable registry snapshot. Do not add another lifecycle
-state, a registration commit or rollback path, or eager whole-registry preparation solely to
-implement freeze.
+That fact may be an owner-native flag or the presence of an immutable registry snapshot. Do not add
+another lifecycle state, a registration commit or rollback path, or eager whole-registry
+preparation solely to implement freeze.
 
 Registry freeze does not disable native runtime type resolution. When a mode supports unregistered
 types, a root may still discover an allowed runtime type and materialize resolver-owned metadata,

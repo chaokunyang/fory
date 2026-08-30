@@ -177,8 +177,8 @@ public sealed class Fory
         _registryFrozen = true;
         ByteWriter writer = _writeContext.Writer;
         writer.Reset();
-        // A previous failed root may leave references behind. Reset before serializer lookup,
-        // because generated or application serializer factories can fail during that lookup.
+        // Serializer lookup is part of the root and may fail before codec entry, so establish the
+        // root's clean context before invoking generated or application serializer factories.
         _writeContext.ResetFor(writer);
         Serializer<T> serializer = _typeResolver.GetSerializer<T>();
         WriteHead(writer);

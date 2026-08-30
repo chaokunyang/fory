@@ -256,7 +256,7 @@ class SanitizeStatePolicy(DeserializationPolicy):
         return None
 
 
-def test_block_class_deserialization():
+def test_block_class_type_deserialization():
     """Test blocking class type (not instance) deserialization."""
 
     class SafeClass:
@@ -372,7 +372,7 @@ def test_reduce_state_sanitizes_state():
     assert result.password == "***REDACTED***"
 
 
-def test_falsey_state_hook_before_bool():
+def test_stateful_intercepts_falsey_state_before_bool():
     """Test stateful path calls intercept_setstate without evaluating state truthiness."""
 
     class BlockSetStatePolicy(DeserializationPolicy):
@@ -536,7 +536,7 @@ def test_policy_with_nested_reduce():
         fory.deserialize(data)
 
 
-def test_stateful_instantiation_policy():
+def test_stateful_authorizes_instantiation():
     """Test authorize_instantiation policy hook for stateful deserialization."""
 
     class StatefulPayload:
@@ -566,7 +566,7 @@ def test_stateful_instantiation_policy():
     assert policy.authorize_instantiation_calls == 1
 
 
-def test_reduce_class_instantiation():
+def test_reduce_class_callable_authorizes_instantiation():
     """Test authorize_instantiation policy hook for reduce class callables."""
 
     class ReduceTarget:
@@ -814,7 +814,7 @@ def test_local_class_return_ignored():
     assert SafeClass.run() == "safe"
 
 
-def test_type_module_policy():
+def test_type_deserialization_validates_module():
     """Test validate_module policy hook for global class deserialization."""
     import subprocess
 
@@ -838,7 +838,7 @@ def test_type_module_policy():
     assert policy.is_local_values == [False]
 
 
-def test_native_method_policy_dispatch():
+def test_native_bound_method_uses_validate_method():
     """Test bound native methods are checked by method policy, not function policy."""
 
     class BlockMethodPolicy(DeserializationPolicy):
@@ -863,7 +863,7 @@ def test_native_method_policy_dispatch():
     assert policy.validate_function_calls == 0
 
 
-def test_bound_method_policy_order():
+def test_bound_method_policy_runs_before_getattribute_side_effect():
     """Test bound method deserialization validates before dynamic attribute lookup."""
 
     class GuardedMethod:
@@ -1603,7 +1603,7 @@ def test_native_function_global_path_reports_main_function_as_local():
         policy_global_function.__module__ = original_module
 
 
-def test_global_function_module_policy():
+def test_global_function_deserialization_validates_module():
     """Test validate_module policy hook for global function deserialization."""
 
     class BlockModulePolicy(DeserializationPolicy):
@@ -1626,7 +1626,7 @@ def test_global_function_module_policy():
     assert policy.is_local_values == [False]
 
 
-def test_local_function_module_policy():
+def test_local_function_deserialization_validates_module():
     """Test local function code does not reclassify its module owner."""
 
     def local_function():
@@ -1677,7 +1677,7 @@ def test_local_code_uses_module_locality():
     assert policy.instantiation_calls == []
 
 
-def test_native_function_module_policy():
+def test_native_function_deserialization_validates_module():
     """Test validate_module policy hook for native function deserialization."""
     import time
 
@@ -1760,7 +1760,7 @@ def test_type_metadata_load_validates_class():
     assert policy.validate_class_calls == 1
 
 
-def test_reduce_global_module_policy():
+def test_reduce_global_name_validates_module():
     """Test validate_module policy hook for reduce global-name deserialization."""
 
     class GlobalNamePayload:
@@ -1787,7 +1787,7 @@ def test_reduce_global_module_policy():
     assert policy.is_local_values == [False]
 
 
-def test_reduce_global_class_policy():
+def test_reduce_global_name_validates_class():
     """Test validate_class policy hook for reduce global-name deserialization."""
 
     class GlobalNamePayload:
@@ -1818,7 +1818,7 @@ def test_reduce_global_class_policy():
     assert policy.validate_class_calls == 1
 
 
-def test_reduce_global_function_policy():
+def test_reduce_global_name_validates_function():
     """Test validate_function policy hook for reduce builtins-name deserialization."""
 
     class GlobalNamePayload:
@@ -1849,7 +1849,7 @@ def test_reduce_global_function_policy():
     assert policy.validate_function_calls == 1
 
 
-def test_reduce_global_method_policy():
+def test_reduce_global_method_resolution_uses_validate_method():
     """Test reduce global-name method deserialization uses validate_method."""
 
     class GlobalNamePayload:

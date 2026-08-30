@@ -57,8 +57,8 @@ class ThreadSafeFory:
     def __init__(self, fory_factory=None, **kwargs)
 ```
 
-Pass either a no-argument `fory_factory` that returns a configured `Fory` instance, or pass normal
-`Fory` construction options through `**kwargs`.
+When supplied, `fory_factory` creates each pooled `Fory` instance. Otherwise, `**kwargs` are passed
+to the normal `Fory` constructor.
 
 ## Parameters
 
@@ -84,7 +84,6 @@ Pass either a no-argument `fory_factory` that returns a configured `Fory` instan
 
 ```python
 fory = pyfory.Fory(xlang=True)
-thread_safe_fory = pyfory.ThreadSafeFory(xlang=True)
 
 # Serialization (serialize/deserialize are identical to dumps/loads)
 data: bytes = fory.serialize(obj)
@@ -94,14 +93,11 @@ obj = fory.deserialize(data)
 data: bytes = fory.dumps(obj)
 obj = fory.loads(data)
 
-# Direct Fory registration by id; serializer instances belong to that Fory.
+# Type registration by id
 fory.register(MyClass, type_id=123)
 fory.register(MyClass, type_id=123, serializer=custom_serializer)
 
-# ThreadSafeFory constructs one serializer per pooled child from a class or factory.
-thread_safe_fory.register(MyClass, type_id=123, serializer=CustomSerializer)
-
-# Direct Fory registration by name
+# Type registration by name
 fory.register(MyClass, name="my.package.MyClass")
 fory.register(MyClass, name="my.package.MyClass", serializer=custom_serializer)
 ```

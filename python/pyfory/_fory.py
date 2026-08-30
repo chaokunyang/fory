@@ -24,9 +24,9 @@ _ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv("ENABLE_TYPE_REGISTRATION_FORCIBL
     "true",
 }
 
-from pyfory.policy import DEFAULT_POLICY, DeserializationPolicy
 from pyfory.resolver import NOT_NULL_VALUE_FLAG
 from pyfory.types import TypeId
+from pyfory.policy import DeserializationPolicy, DEFAULT_POLICY
 
 DYNAMIC_TYPE_ID = -1
 # preserve 0 as flag for type id not set in TypeInfo`
@@ -442,7 +442,7 @@ class Fory:
             self.force_flush()
         finally:
             self.buffer.bind_output_stream(None)
-            self.write_context.reset()
+            self.reset_write()
 
     def loads(
         self,
@@ -499,7 +499,7 @@ class Fory:
                 return write_buffer
             return write_buffer.to_bytes(0, write_buffer.get_writer_index())
         finally:
-            self.write_context.reset()
+            self.reset_write()
 
     def _serialize(
         self,
@@ -568,7 +568,7 @@ class Fory:
         try:
             return self._deserialize(buffer, buffers, unsupported_objects)
         finally:
-            self.read_context.reset()
+            self.reset_read()
 
     def _deserialize(
         self,
@@ -681,8 +681,6 @@ class ThreadSafeFory:
     def __init__(self, fory_factory=None, **kwargs):
         import threading
 
-        if fory_factory is not None and kwargs:
-            raise TypeError("fory_factory and Fory construction options are mutually exclusive")
         self._config = kwargs
         self._fory_factory = fory_factory
         self._callbacks = []
@@ -703,13 +701,13 @@ class ThreadSafeFory:
             self._registry_frozen = True
             if self._pool:
                 return self._pool.pop()
-        if self._fory_factory is not None:
-            fory = self._fory_factory()
-        else:
-            fory = self._fory_class(**self._config)
-        for callback in self._callbacks:
-            callback(fory)
-        return fory
+            if self._fory_factory is not None:
+                fory = self._fory_factory()
+            else:
+                fory = self._fory_class(**self._config)
+            for callback in self._callbacks:
+                callback(fory)
+            return fory
 
     def _return_fory(self, fory):
         with self._lock:
@@ -721,15 +719,6 @@ class ThreadSafeFory:
                 raise RuntimeError("Cannot register types after the first root serialization or deserialization operation has started.")
             self._callbacks.append(callback)
 
-    @staticmethod
-    def _check_serializer_factory(serializer):
-        if serializer is None:
-            return
-        from pyfory.registry import Serializer
-
-        if isinstance(serializer, Serializer) or not callable(serializer):
-            raise TypeError("ThreadSafeFory requires a serializer class or factory")
-
     def register(
         self,
         cls,
@@ -738,7 +727,6 @@ class ThreadSafeFory:
         name: str = None,
         serializer=None,
     ):
-        self._check_serializer_factory(serializer)
         self._register_callback(lambda f: f.register(cls, type_id=type_id, name=name, serializer=serializer))
 
     def register_type(
@@ -749,7 +737,6 @@ class ThreadSafeFory:
         name: str = None,
         serializer=None,
     ):
-        self._check_serializer_factory(serializer)
         self._register_callback(lambda f: f.register_type(cls, type_id=type_id, name=name, serializer=serializer))
 
     def register_union(
@@ -760,21 +747,10 @@ class ThreadSafeFory:
         name: str = None,
         serializer=None,
     ):
-        self._check_serializer_factory(serializer)
         self._register_callback(lambda f: f.register_union(cls, type_id=type_id, name=name, serializer=serializer))
 
-    def register_serializer(self, cls: type, serializer_factory):
-        self._check_serializer_factory(serializer_factory)
-        if serializer_factory is None:
-            raise TypeError("ThreadSafeFory requires a serializer class or factory")
-
-        def register(fory):
-            from pyfory.registry import _construct_serializer
-
-            serializer = _construct_serializer(serializer_factory, fory.type_resolver, cls)
-            fory.register_serializer(cls, serializer)
-
-        self._register_callback(register)
+    def register_serializer(self, cls: type, serializer):
+        self._register_callback(lambda f: f.register_serializer(cls, serializer))
 
     def serialize(
         self,

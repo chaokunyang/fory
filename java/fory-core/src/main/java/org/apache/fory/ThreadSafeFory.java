@@ -31,10 +31,6 @@ import org.apache.fory.resolver.TypeChecker;
  * <p>The runtime class loader is fixed when the thread-safe serializer is built. If you need a
  * different class loader, build a different {@link ThreadSafeFory} instance.
  *
- * <p>Serializer instances registered on this facade must implement {@link
- * org.apache.fory.serializer.Shareable}. Use a serializer class or resolver factory for
- * runtime-local serializers so every underlying {@link Fory} owns its instance.
- *
  * <p>Complete facade registration before concurrent serialization, deserialization, copy, or {@link
  * #execute} calls begin.
  */

@@ -689,8 +689,8 @@ class ThreadSafeFory:
 
 `ThreadSafeFory` provides thread-safe serialization by maintaining a pool of `Fory` instances protected by a lock. When a thread needs to serialize/deserialize, it gets an instance from the pool, uses it, and returns it. Complete explicit type and serializer registration before the first serialization or deserialization attempt.
 
-Pass either a no-argument `fory_factory` that returns a configured `Fory` instance, or pass normal
-`Fory` construction options through `**kwargs`.
+When supplied, `fory_factory` creates each pooled `Fory` instance. Otherwise, `**kwargs` are passed
+to the normal `Fory` constructor.
 
 **Thread Safety Example:**
 
@@ -745,7 +745,6 @@ for t in threads: t.join()
 
 ```python
 fory = pyfory.Fory(xlang=True)
-thread_safe_fory = pyfory.ThreadSafeFory(xlang=True)
 
 # Serialization (serialize/deserialize are identical to dumps/loads)
 data: bytes = fory.serialize(obj)
@@ -755,14 +754,11 @@ obj = fory.deserialize(data)
 data: bytes = fory.dumps(obj)
 obj = fory.loads(data)
 
-# Direct Fory registration by id; serializer instances belong to that Fory.
+# Type registration by id
 fory.register(MyClass, type_id=123)
 fory.register(MyClass, type_id=123, serializer=custom_serializer)
 
-# ThreadSafeFory constructs one serializer per pooled child from a class or factory.
-thread_safe_fory.register(MyClass, type_id=123, serializer=CustomSerializer)
-
-# Direct Fory registration by name
+# Type registration by name
 fory.register(MyClass, name="my.package.MyClass")
 fory.register(MyClass, name="my.package.MyClass", serializer=custom_serializer)
 ```
@@ -898,9 +894,6 @@ except Exception as e:
 ### Custom Serializers
 
 Implement custom serialization logic for specialized types with a single `write/read` API:
-
-Attach custom serializers to application types registered by name or user ID. Serializers for
-built-in framework types cannot be replaced.
 
 ```python
 import pyfory

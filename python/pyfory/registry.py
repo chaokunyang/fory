@@ -89,6 +89,9 @@ from pyfory.serializer import (
     fory_array_serializer_type,
 )
 from pyfory.policy import DEFAULT_POLICY
+from pyfory.serialization import (
+    Serializer as CythonSerializer,
+)
 from pyfory.annotation import (
     BFloat16Array,
     Float32,
@@ -193,7 +196,7 @@ def _accepts_n_positional_args(factory, nargs: int) -> bool:
             signature = inspect.signature(factory.__init__)
             parameters = tuple(signature.parameters.values())[1:]
         except (AttributeError, TypeError, ValueError):
-            if inspect.isclass(factory) and issubclass(factory, Serializer):
+            if inspect.isclass(factory) and issubclass(factory, (Serializer, CythonSerializer)):
                 return nargs == 2
             raise TypeError(f"Unable to inspect serializer constructor for {factory!r}")
     min_args = 0
@@ -217,26 +220,11 @@ def _construct_serializer(serializer_factory, type_resolver, cls):
     for nargs, args in (
         (2, (type_resolver, cls)),
         (1, (type_resolver,)),
+        (0, ()),
     ):
         if _accepts_n_positional_args(serializer_factory, nargs):
-            serializer = serializer_factory(*args)
-            break
-    else:
-        raise TypeError(f"Unsupported serializer constructor for {serializer_factory!r}; expected `(type_resolver, cls)` or `(type_resolver)`.")
-    if not isinstance(serializer, Serializer):
-        raise TypeError("Serializer factory must return a Fory serializer")
-    if serializer.type_resolver is not type_resolver:
-        raise TypeError("Serializer factory returned a serializer for another resolver")
-    return serializer
-
-
-def _check_serializer_owner(serializer, type_resolver, cls):
-    if not isinstance(serializer, Serializer):
-        raise TypeError("Expected a Fory serializer")
-    if serializer.type_resolver is not type_resolver:
-        raise TypeError("Serializer belongs to another resolver")
-    if normalize_fory_type(serializer.type_) != normalize_fory_type(cls):
-        raise TypeError("Serializer belongs to another type")
+            return serializer_factory(*args)
+    raise TypeError(f"Unsupported serializer constructor for {serializer_factory!r}; expected `(type_resolver, cls)`, `(type_resolver)`, or `()`.")
 
 
 def _split_registration_name(name: str):
@@ -636,7 +624,6 @@ class TypeResolver:
                 cls,
             )
             self._check_registry_mutable()
-        _check_serializer_owner(serializer, self._actual_type_resolver, cls)
         if typename is not None and type_id is not None:
             raise TypeError(f"type name {typename} and id {type_id} should not be set at the same time")
         if typename is None and type_id is None:
@@ -685,8 +672,6 @@ class TypeResolver:
             )
             if not internal:
                 self._check_registry_mutable()
-        if serializer is not None and not internal:
-            _check_serializer_owner(serializer, self._actual_type_resolver, cls)
         if (
             cls in self._types_info
             and type_id is None
@@ -883,15 +868,16 @@ class TypeResolver:
         self._check_registry_mutable()
         cls = normalize_fory_type(cls)
         assert isinstance(cls, type) or type(cls) is int, cls
-        _check_serializer_owner(serializer, self._actual_type_resolver, cls)
         if cls not in self._types_info:
             raise TypeUnregisteredError(f"{cls} not registered")
         typeinfo = self._types_info[cls]
-        # Framework type IDs may be shared by multiple Python carriers; only a namespaced or
-        # user-ID TypeInfo has an independent wire owner that can change serializers.
-        if typeinfo.typename_bytes is None and typeinfo.user_type_id in {None, NO_USER_TYPE_ID}:
-            raise TypeError("Cannot replace serializers for framework types")
         self._check_registry_mutable()
+        prev_type_id = typeinfo.type_id
+        prev_user_type_id = typeinfo.user_type_id
+        if needs_user_type_id(prev_type_id) and prev_user_type_id not in {None, NO_USER_TYPE_ID}:
+            self._user_type_id_to_type_info.pop(prev_user_type_id, None)
+        else:
+            self._type_id_to_type_info.pop(prev_type_id, None)
         if typeinfo.serializer is not serializer:
             if typeinfo.typename_bytes is not None:
                 typeinfo.type_id = TypeId.NAMED_EXT
@@ -900,6 +886,10 @@ class TypeResolver:
                 typeinfo.type_id = TypeId.EXT
             typeinfo.serializer = serializer
             typeinfo.type_def = None
+        if needs_user_type_id(typeinfo.type_id) and typeinfo.user_type_id not in {None, NO_USER_TYPE_ID}:
+            self._user_type_id_to_type_info[typeinfo.user_type_id] = typeinfo
+        else:
+            self._type_id_to_type_info[typeinfo.type_id] = typeinfo
 
     def get_serializer(self, cls: type):
         """
@@ -1128,12 +1118,27 @@ class TypeResolver:
         typename = type_metabytes.decode(self.typename_decoder)
         # the hash computed between languages may be different.
         typeinfo = self._named_type_to_type_info.get((ns, typename))
+        if typeinfo is None and typename and not self.strict:
+            alt_typename = typename[0].upper() + typename[1:]
+            typeinfo = self._named_type_to_type_info.get((ns, alt_typename))
         if typeinfo is not None:
             self._cache_wire_type_info(ns_metabytes, type_metabytes, typeinfo)
             return typeinfo
         if self.strict:
             name = ns + "." + typename if ns else typename
             raise TypeUnregisteredError(f"{name} not registered")
+        if not ns and "." in typename:
+            split_ns, split_typename = typename.rsplit(".", 1)
+            typeinfo = self._named_type_to_type_info.get((split_ns, split_typename))
+            if typeinfo is not None:
+                self._cache_wire_type_info(ns_metabytes, type_metabytes, typeinfo)
+                return typeinfo
+            typename = split_typename
+            ns = split_ns
+        if typename:
+            matches = [info for (reg_ns, reg_typename), info in self._named_type_to_type_info.items() if reg_typename == typename]
+            if len(matches) == 1:
+                return matches[0]
         cls = load_class(ns + "#" + typename, policy=self.policy)
         typeinfo = self.get_type_info(cls)
         self._cache_wire_type_info(ns_metabytes, type_metabytes, typeinfo)

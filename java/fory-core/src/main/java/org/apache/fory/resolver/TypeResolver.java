@@ -385,7 +385,6 @@ public abstract class TypeResolver {
    * @param type the class to register
    * @param serializer the serializer to use
    */
-  @Internal
   public abstract void registerInternalSerializer(Class<?> type, Serializer<?> serializer);
 
   /**

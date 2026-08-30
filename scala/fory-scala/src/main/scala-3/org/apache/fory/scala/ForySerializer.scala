@@ -107,6 +107,7 @@ object ForySerializer {
   @Internal
   def registerSerializer[T](fory: Fory, cls: Class[T])(using serializer: ForySerializer[T]): Unit = {
     val resolver = fory.getTypeResolver
+    resolver.checkRegistrationOpen()
     if serializer.isUnion then {
       throw new IllegalArgumentException("Use ForySerializer.register for Scala union serializers")
     }
@@ -129,7 +130,9 @@ object ForySerializer {
     resolver.checkRegistrationOpen()
     serializer match {
       case _ if serializer.isUnion =>
+        resolver.checkRegistrationOpen()
         val runtimeSerializer = serializer.createSerializer(resolver)
+        resolver.checkRegistrationOpen()
         val runtimeClasses = serializer.handledRuntimeClasses(cls)
         if typeId != null then {
           resolver.registerUnion(cls, typeId.longValue(), runtimeSerializer)
@@ -147,6 +150,8 @@ object ForySerializer {
           ScalaSerializers.registerRuntimeTypeAlias(fory, runtimeClass, cls)
         }
       case _ =>
+        // Generated TypeDef construction resolves this registered STRUCT identity. Publish the
+        // identity first, then recheck freeze after construction before installing the serializer.
         registerType(fory, cls, typeId, namespace, typeName)
         val runtimeSerializer = serializer.createSerializer(resolver)
         resolver.checkRegistrationOpen()

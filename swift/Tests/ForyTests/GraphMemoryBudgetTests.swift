@@ -716,7 +716,6 @@ func unknownCaseChargesDynamicHeapBox() throws {
     let config = Config(compatible: false)
     let resolver = TypeResolver(config: config)
     try resolver.register(DynamicBoxBudgetV1.self, id: 9821)
-    resolver.freezeRegistration()
     let value = DynamicBoxBudgetV1(first: 1, second: 2, third: 3, fourth: 4)
     let buffer = ByteBuffer()
     let writeContext = WriteContext(

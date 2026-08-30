@@ -44,7 +44,6 @@ from pyfory._fory import (
 from pyfory.meta.typedef_decoder import decode_typedef
 from pyfory.meta.typedef import is_struct_typedef_kind
 from pyfory.meta.metastring import MetaStringDecoder
-from pyfory.error import TypeUnregisteredError
 from pyfory.policy import DEFAULT_POLICY
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
 from pyfory.type_util import normalize_fory_type
@@ -351,9 +350,7 @@ cdef class TypeResolver:
         cdef uint8_t previous_type_id
         cdef uint32_t previous_user_type_id
         self.resolver._check_registry_mutable()
-        typeinfo = self.resolver.get_type_info(cls, create=False)
-        if typeinfo is None:
-            raise TypeUnregisteredError(f"{cls} not registered")
+        typeinfo = self.resolver.get_type_info(cls)
         previous_type_id = typeinfo.type_id
         previous_user_type_id = typeinfo.user_type_id
         self.resolver.register_serializer(cls, serializer)
@@ -1241,7 +1238,7 @@ cdef class Fory:
             self.force_flush()
         finally:
             self.buffer.bind_output_stream(None)
-            self.write_context.reset()
+            self.reset_write()
 
     def loads(self, buffer, buffers=None, unsupported_objects=None):
         return self.deserialize(
@@ -1266,7 +1263,7 @@ cdef class Fory:
                 return write_buffer
             return write_buffer.to_bytes(0, write_buffer.get_writer_index())
         finally:
-            self.write_context.reset()
+            self.reset_write()
 
     cdef Buffer _serialize(self, obj, Buffer buffer=None, buffer_callback=None, unsupported_callback=None):
         cdef WriteContext write_context = self.write_context
@@ -1279,12 +1276,8 @@ cdef class Fory:
         # so it should not pay an extra method call just to bind the active buffer.
         write_context.buffer = buffer
         write_context.c_buffer = buffer.c_buffer
-        # Root cleanup clears prior callbacks, so the common None path needs no
-        # object assignment or reference-count traffic here.
-        if buffer_callback is not None:
-            write_context.buffer_callback = buffer_callback
-        if unsupported_callback is not None:
-            write_context.unsupported_callback = unsupported_callback
+        write_context.buffer_callback = buffer_callback
+        write_context.unsupported_callback = unsupported_callback
         mask_index = buffer.get_writer_index()
         buffer.grow(1)
         buffer.set_writer_index(mask_index + 1)

@@ -276,7 +276,7 @@ def test_strict_wire_name_no_import():
     ENABLE_FORY_CYTHON_SERIALIZATION,
     reason="pure TypeResolver regression",
 )
-def test_namespace_alias_rejected():
+def test_namespace_alias_not_cached():
     config = Fory(xlang=True, compatible=False, strict=False).config
     resolver = TypeResolver(config, shared_registry=SharedRegistry())
     resolver.initialize()
@@ -297,8 +297,7 @@ def test_namespace_alias_rejected():
         meta_string_reader=MetaStringReader(resolver.shared_registry),
     )
 
-    with pytest.raises(Exception):
-        resolver.read_type_info(read_context)
+    assert resolver.read_type_info(read_context) is typeinfo
     assert (namespace, typename) not in resolver._ns_type_to_type_info
     assert (
         typeinfo.namespace_bytes,
@@ -306,13 +305,16 @@ def test_namespace_alias_rejected():
     ) in resolver._ns_type_to_type_info
 
 
-def test_wire_type_alias_rejected():
+def test_wire_type_alias_cache_is_bounded():
     fory = Fory(xlang=True, compatible=False, strict=False)
     resolver = fory.type_resolver
     typeinfo = resolver.register_type(
         NamespaceAliasType,
         name="trusted.NamespaceAliasType",
     )
+    for i in range(MAX_CACHED_ENCODED_META_STRINGS):
+        resolver._ns_type_to_type_info[(i, i)] = typeinfo
+
     namespace = resolver.shared_registry.get_encoded_meta_string(MetaStringEncoder(".", "_").encode("trusted"))
     typename = resolver.shared_registry.get_encoded_meta_string(MetaStringEncoder("$", "_").encode("namespaceAliasType"))
     buffer = Buffer.allocate(128)
@@ -323,8 +325,7 @@ def test_wire_type_alias_rejected():
     buffer.set_reader_index(0)
     try:
         fory.read_context.prepare(buffer)
-        with pytest.raises(Exception):
-            resolver.read_type_info(fory.read_context)
+        assert resolver.read_type_info(fory.read_context) is typeinfo
         assert (namespace, typename) not in resolver._ns_type_to_type_info
     finally:
         fory.reset_read()

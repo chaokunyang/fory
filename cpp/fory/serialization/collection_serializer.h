@@ -562,9 +562,6 @@ inline bool read_declared_same_type_collection(Container &result,
       auto elem = Serializer<T>::read(ctx, RefMode::None, false);
       collection_insert(result, std::move(elem));
     }
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return false;
-    }
     return true;
   }
 
@@ -586,15 +583,9 @@ inline bool read_declared_same_type_collection(Container &result,
       checkpoint_byte = ctx.buffer().logical_reader_index();
     }
   }
-  if (FORY_PREDICT_FALSE(ctx.has_error())) {
-    return false;
-  }
-  if (checkpoint_item != length &&
-      FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
-          ctx, length - checkpoint_item, checkpoint_byte))) {
-    return false;
-  }
-  return true;
+  return checkpoint_item == length ||
+         detail::settle_unbacked_container_items(ctx, length - checkpoint_item,
+                                                 checkpoint_byte);
 }
 
 template <typename T, typename Alloc>
@@ -625,15 +616,10 @@ read_declared_same_type_collection(std::forward_list<T, Alloc> &result,
       }
     }
   }
-  if (FORY_PREDICT_FALSE(ctx.has_error())) {
-    return false;
-  }
   if constexpr (!read_data_always_advances_v<T>) {
-    if (checkpoint_item != length &&
-        FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
-            ctx, length - checkpoint_item, checkpoint_byte))) {
-      return false;
-    }
+    return checkpoint_item == length ||
+           detail::settle_unbacked_container_items(
+               ctx, length - checkpoint_item, checkpoint_byte);
   }
   return true;
 }
@@ -679,15 +665,10 @@ read_same_type_info_collection_body(Container &result, ReadContext &ctx,
       }
     }
   }
-  if (FORY_PREDICT_FALSE(ctx.has_error())) {
-    return false;
-  }
   if constexpr (MeasureProgress) {
-    if (checkpoint_item != length &&
-        FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
-            ctx, length - checkpoint_item, checkpoint_byte))) {
-      return false;
-    }
+    return checkpoint_item == length ||
+           detail::settle_unbacked_container_items(
+               ctx, length - checkpoint_item, checkpoint_byte);
   }
   return true;
 }
@@ -720,15 +701,10 @@ inline bool read_same_type_info_collection_body(
       }
     }
   }
-  if (FORY_PREDICT_FALSE(ctx.has_error())) {
-    return false;
-  }
   if constexpr (MeasureProgress) {
-    if (checkpoint_item != length &&
-        FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
-            ctx, length - checkpoint_item, checkpoint_byte))) {
-      return false;
-    }
+    return checkpoint_item == length ||
+           detail::settle_unbacked_container_items(
+               ctx, length - checkpoint_item, checkpoint_byte);
   }
   return true;
 }

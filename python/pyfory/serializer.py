@@ -1799,15 +1799,12 @@ class FunctionSerializer(Serializer):
             freevars.append(read_context.read_string())
 
         globals_dict = read_context.read_ref()
-        # The writer defines this as a data-only namespace snapshot. Reject subclasses and other
-        # mappings so their runtime behavior cannot become part of function reconstruction.
-        if type(globals_dict) is not dict:
-            raise ValueError("function globals must be a dict")
 
         # Create a globals dictionary with module's globals as the base
         func_global_entries = len(mod.__dict__) if mod else 0
-        func_global_entries = max(func_global_entries, len(globals_dict))
-        has_builtins = (mod is not None and "__builtins__" in mod.__dict__) or "__builtins__" in globals_dict
+        if isinstance(globals_dict, dict):
+            func_global_entries = max(func_global_entries, len(globals_dict))
+        has_builtins = (mod is not None and "__builtins__" in mod.__dict__) or (isinstance(globals_dict, dict) and "__builtins__" in globals_dict)
         if not has_builtins:
             func_global_entries += 1
         read_context.reserve_graph_memory(_DICT_OWNER_BYTES + func_global_entries * 2 * _REFERENCE_BYTES)

@@ -20,7 +20,6 @@ from dataclasses import dataclass
 
 import pytest
 
-import pyfory
 from pyfory import ThreadSafeFory
 
 
@@ -34,15 +33,6 @@ class Person:
 class Address:
     city: str
     country: str
-
-
-class PersonSerializer(pyfory.Serializer):
-    pass
-
-
-def test_factory_rejects_options():
-    with pytest.raises(TypeError, match="mutually exclusive"):
-        ThreadSafeFory(lambda: pyfory.Fory(), xlang=False)
 
 
 def test_thread_safe_fory_basic_serialization():
@@ -201,54 +191,3 @@ def test_thread_safe_fory_register_after_use():
 
     with pytest.raises(RuntimeError):
         fory.register(Address)
-
-
-def test_child_serializer_owners():
-    fory = ThreadSafeFory(xlang=False, compatible=False)
-    fory.register(Person, serializer=PersonSerializer)
-
-    first = fory._get_fory()
-    second = fory._get_fory()
-    try:
-        first_serializer = first.type_resolver.get_serializer(Person)
-        second_serializer = second.type_resolver.get_serializer(Person)
-        assert first_serializer is not second_serializer
-        assert first_serializer.type_resolver is first.type_resolver
-        assert second_serializer.type_resolver is second.type_resolver
-    finally:
-        fory._return_fory(first)
-        fory._return_fory(second)
-
-
-def test_rejects_serializer_instance():
-    runtime = pyfory.Fory(xlang=False, compatible=False)
-    serializer = PersonSerializer(runtime.type_resolver, Person)
-    fory = ThreadSafeFory(xlang=False, compatible=False)
-
-    with pytest.raises(TypeError, match="serializer class or factory"):
-        fory.register(Person, serializer=serializer)
-
-
-def test_rejects_foreign_factory():
-    runtime = pyfory.Fory(xlang=False, compatible=False)
-    serializer = PersonSerializer(runtime.type_resolver, Person)
-    fory = ThreadSafeFory(xlang=False, compatible=False)
-    fory.register(Person, serializer=lambda _resolver: serializer)
-
-    with pytest.raises(TypeError, match="another resolver"):
-        fory._get_fory()
-
-
-@pytest.mark.parametrize(
-    "serializer_factory, error",
-    [
-        (lambda _resolver: object(), "must return a Fory serializer"),
-        (lambda resolver: PersonSerializer(resolver, Address), "another type"),
-    ],
-)
-def test_validates_serializer_factory(serializer_factory, error):
-    fory = ThreadSafeFory(xlang=False, compatible=False)
-    fory.register(Person, serializer=serializer_factory)
-
-    with pytest.raises(TypeError, match=error):
-        fory._get_fory()

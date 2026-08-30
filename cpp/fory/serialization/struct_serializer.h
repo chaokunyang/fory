@@ -4615,9 +4615,6 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     }
     const TypeInfo *type_info = type_info_res.value();
     ctx.write_struct_type_info(type_info);
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return;
-    }
   }
 
   /// Read and validate type info.

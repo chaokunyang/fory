@@ -103,6 +103,25 @@ describe("fory", () => {
     expect(() => fory.register(Type.struct(8104, {}))).toThrow();
   });
 
+  test("freezes during serializer generation", () => {
+    let armed = false;
+    let fory: Fory;
+    fory = new Fory({
+      compatible: false,
+      hooks: {
+        afterCodeGenerated(code) {
+          if (armed) {
+            fory.serialize(null);
+          }
+          return code;
+        },
+      },
+    });
+    armed = true;
+
+    expect(() => fory.register(Type.struct(8105, {}))).toThrow();
+  });
+
   test.each(["serialize", "deserialize"] as const)("freezes after %s", (operation) => {
     const fory = new Fory({ compatible: false });
 

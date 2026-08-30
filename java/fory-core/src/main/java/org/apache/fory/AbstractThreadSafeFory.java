@@ -24,7 +24,6 @@ import org.apache.fory.resolver.TypeChecker;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
-import org.apache.fory.serializer.Shareable;
 
 public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
   @Override
@@ -74,14 +73,12 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
 
   public void registerUnion(
       Class<?> cls, int id, org.apache.fory.serializer.Serializer<?> serializer) {
-    checkShareable(serializer);
     registerCallback(fory -> fory.registerUnion(cls, id, serializer));
   }
 
   @Override
   public void registerUnion(
       Class<?> cls, String name, org.apache.fory.serializer.Serializer<?> serializer) {
-    checkShareable(serializer);
     registerCallback(fory -> fory.registerUnion(cls, name, serializer));
   }
 
@@ -90,7 +87,6 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
       String namespace,
       String typeName,
       org.apache.fory.serializer.Serializer<?> serializer) {
-    checkShareable(serializer);
     registerCallback(fory -> fory.registerUnion(cls, namespace, typeName, serializer));
   }
 
@@ -101,7 +97,6 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
 
   @Override
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
-    checkShareable(serializer);
     registerCallback(fory -> fory.registerSerializer(type, serializer));
   }
 
@@ -119,7 +114,6 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
 
   @Override
   public void registerSerializerAndType(Class<?> type, Serializer<?> serializer) {
-    checkShareable(serializer);
     registerCallback(fory -> fory.registerSerializerAndType(type, serializer));
   }
 
@@ -146,12 +140,5 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
           fory.ensureSerializersCompiled();
           return null;
         });
-  }
-
-  private static void checkShareable(Serializer<?> serializer) {
-    if (!(serializer instanceof Shareable)) {
-      throw new IllegalArgumentException(
-          "Thread-safe Fory requires serializer instances to implement Shareable");
-    }
   }
 }

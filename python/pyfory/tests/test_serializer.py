@@ -37,7 +37,6 @@ import pytest
 import pyfory
 from pyfory.serialization import Buffer, _bfloat16_from_bits, _bfloat16_to_bits, _float16_from_bits, _float16_to_bits
 from pyfory import Fory, EnumSerializer
-from pyfory.error import TypeUnregisteredError
 from pyfory.serializer import (
     DecimalSerializer,
     TimestampSerializer,
@@ -859,7 +858,6 @@ def test_replace_registered_serializer(registration):
     type_info = fory.type_resolver.get_type_info(Value)
     assert type_info.serializer is replacement
     assert type_info.type_def is None
-    assert TypeId.NAMED_EXT not in fory.type_resolver._type_id_to_type_info
     if registration == "id":
         assert fory.type_resolver._user_type_id_to_type_info[701] is type_info
     else:
@@ -978,29 +976,6 @@ def test_lazy_type_keeps_explicit_name():
 
     assert fory.type_resolver.get_type_info(lazy_type, create=False) is None
     assert fory.type_resolver.get_type_info_by_name("registry_owner", "SharedType") is type_info
-
-
-def test_serializer_type_is_registered():
-    fory = Fory(xlang=False, strict=False, compatible=False)
-    serializer = BarSerializer(fory.type_resolver, RejectedRegistration)
-
-    with pytest.raises(TypeUnregisteredError):
-        fory.register_serializer(RejectedRegistration, serializer)
-
-    assert fory.type_resolver.get_type_info(RejectedRegistration, create=False) is None
-
-
-def test_builtin_serializer_owner():
-    fory = Fory(xlang=True, compatible=False)
-    resolver = fory.type_resolver
-    type_info = resolver.get_type_info(int)
-    wire_owner = resolver._type_id_to_type_info[type_info.type_id]
-
-    with pytest.raises(TypeError, match="framework types"):
-        fory.register_serializer(int, BarSerializer(resolver, int))
-
-    assert resolver.get_type_info(int) is type_info
-    assert resolver._type_id_to_type_info[type_info.type_id] is wire_owner
 
 
 @pytest.mark.parametrize("root", ["serialize", "deserialize", "dump"])

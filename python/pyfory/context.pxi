@@ -126,7 +126,7 @@ cdef class RefWriter:
             return True
         return False
 
-    cpdef inline void reset(self) noexcept:
+    cpdef inline reset(self):
         cdef PyObject *item
         if not self.track_ref:
             return
@@ -328,7 +328,7 @@ cdef class MetaStringWriter:
             return
         buffer.write_var_uint32(((deref(entry).second + 1) << 1) | 1)
 
-    cpdef inline void reset(self) noexcept:
+    cpdef inline reset(self):
         cdef PyObject *item
         self._written_encoded_meta_strings.clear()
         for item in self._written_objects:
@@ -504,7 +504,7 @@ cdef class MetaStringReader:
 cdef class MetaShareWriteContext:
     cdef flat_hash_map[uint64_t, int32_t] class_map
 
-    cpdef inline void reset(self) noexcept:
+    cpdef inline reset(self):
         self.class_map.clear()
 
 
@@ -565,7 +565,7 @@ cdef class WriteContext:
         self.buffer_callback = buffer_callback
         self.unsupported_callback = unsupported_callback
 
-    cpdef inline void reset(self) noexcept:
+    cpdef inline reset(self):
         self.ref_writer.reset()
         self.meta_string_writer.reset()
         if self.meta_share_context is not None:
@@ -574,10 +574,8 @@ cdef class WriteContext:
             self.context_objects.clear()
         self.buffer = None
         self.c_buffer = NULL
-        if self.buffer_callback is not None:
-            self.buffer_callback = None
-        if self.unsupported_callback is not None:
-            self.unsupported_callback = None
+        self.buffer_callback = None
+        self.unsupported_callback = None
 
     cpdef inline add_context_object(self, key, obj):
         self.context_objects[id(key)] = obj

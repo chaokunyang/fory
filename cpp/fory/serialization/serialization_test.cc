@@ -29,7 +29,6 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <forward_list>
 #include <limits>
 #include <map>
 #include <memory>
@@ -982,49 +981,6 @@ TEST(SerializationTest, SkipNoneListConsumesBudget) {
                  {FieldType(static_cast<uint32_t>(TypeId::NONE), false)});
   skip_field_value(ctx, list, RefMode::None);
   ASSERT_TRUE(ctx.has_error());
-}
-
-TEST(SerializationTest, LastElementErrorSafepoints) {
-  Config config;
-
-  std::vector<uint8_t> declared_bytes{2};
-  Buffer declared_buffer(declared_bytes);
-  ReadContext declared_ctx(config, std::make_unique<TypeResolver>());
-  declared_ctx.attach(declared_buffer);
-  std::vector<int32_t> declared_values;
-  EXPECT_FALSE(read_declared_same_type_collection<int32_t>(declared_values,
-                                                           declared_ctx, 2));
-  EXPECT_TRUE(declared_ctx.has_error());
-
-  std::vector<uint8_t> forward_bytes{2};
-  Buffer forward_buffer(forward_bytes);
-  ReadContext forward_ctx(config, std::make_unique<TypeResolver>());
-  forward_ctx.attach(forward_buffer);
-  std::forward_list<int32_t> forward_values;
-  EXPECT_FALSE(read_declared_same_type_collection<int32_t>(forward_values,
-                                                           forward_ctx, 2));
-  EXPECT_TRUE(forward_ctx.has_error());
-
-  std::vector<uint8_t> type_info_bytes{2};
-  Buffer type_info_buffer(type_info_bytes);
-  ReadContext type_info_ctx(config, std::make_unique<TypeResolver>());
-  type_info_ctx.attach(type_info_buffer);
-  TypeInfo type_info;
-  type_info.harness.read_data_always_advances = true;
-  std::vector<int32_t> type_info_values;
-  EXPECT_FALSE(read_same_type_info_collection<int32_t>(
-      type_info_values, type_info_ctx, 2, type_info));
-  EXPECT_TRUE(type_info_ctx.has_error());
-
-  std::vector<uint8_t> measured_bytes{2};
-  Buffer measured_buffer(measured_bytes);
-  ReadContext measured_ctx(config, std::make_unique<TypeResolver>());
-  measured_ctx.attach(measured_buffer);
-  type_info.harness.read_data_always_advances = false;
-  std::vector<int32_t> measured_values;
-  EXPECT_FALSE(read_same_type_info_collection<int32_t>(
-      measured_values, measured_ctx, 2, type_info));
-  EXPECT_TRUE(measured_ctx.has_error());
 }
 
 // ============================================================================

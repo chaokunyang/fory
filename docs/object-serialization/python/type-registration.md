@@ -72,10 +72,6 @@ for model_class in [User, Order, Product, Invoice]:
     type_id += 1
 ```
 
-A direct `Fory` may receive a serializer instance. `ThreadSafeFory` accepts a serializer class or
-factory. The factory must accept `(resolver, type)` or `(resolver)` and return a serializer for that
-resolver and registered type.
-
 ## Strict Mode Relationship
 
 With `strict=True`, Fory loads and instantiates only registered application

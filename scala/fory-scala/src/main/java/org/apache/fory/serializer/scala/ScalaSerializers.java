@@ -19,9 +19,6 @@
 
 package org.apache.fory.serializer.scala;
 
-import static org.apache.fory.serializer.scala.ToFactorySerializers.IterableToFactoryClass;
-import static org.apache.fory.serializer.scala.ToFactorySerializers.MapToFactoryClass;
-
 import java.util.Objects;
 import org.apache.fory.Fory;
 import org.apache.fory.ThreadSafeFory;
@@ -32,6 +29,9 @@ import org.apache.fory.scala.ForyScala$;
 import org.apache.fory.serializer.Serializer;
 import scala.collection.immutable.NumericRange;
 import scala.collection.immutable.Range;
+
+import static org.apache.fory.serializer.scala.ToFactorySerializers.IterableToFactoryClass;
+import static org.apache.fory.serializer.scala.ToFactorySerializers.MapToFactoryClass;
 
 public class ScalaSerializers {
   public static void registerSerializers(ThreadSafeFory fory) {

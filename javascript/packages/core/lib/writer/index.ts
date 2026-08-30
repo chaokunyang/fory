@@ -63,7 +63,7 @@ export class BinaryWriter {
       hps?: Hps;
     } = {},
   ) {
-    this.initPool();
+    this.initPoll();
     this.config = config;
     this.hpsEnable = Boolean(config?.hps);
     this.internalStringDetector = getInternalStringDetector();
@@ -76,7 +76,7 @@ export class BinaryWriter {
     }
   }
 
-  private initPool() {
+  private initPoll() {
     this.byteLength = 1024 * 100;
     this.platformBuffer = alloc(this.byteLength);
     this.dataView = new DataView(this.platformBuffer.buffer, this.platformBuffer.byteOffset);
@@ -100,7 +100,7 @@ export class BinaryWriter {
     this.cursor = 0;
     this.reserved = 0;
     // Successful dumps already release a large buffer; this also covers aborted roots.
-    this.releaseLargeBuffer();
+    this.tryFreePool();
   }
 
   bool(bool: boolean) {
@@ -498,16 +498,16 @@ export class BinaryWriter {
     this.platformBuffer[this.cursor++] = Number(val & 255n);
   }
 
-  private releaseLargeBuffer() {
+  tryFreePool() {
     if (this.byteLength > MAX_POOL_SIZE) {
-      this.initPool();
+      this.initPoll();
     }
   }
 
   dump() {
     const result = alloc(this.cursor);
     this.platformBuffer.copy(result, 0, 0, this.cursor);
-    this.releaseLargeBuffer();
+    this.tryFreePool();
     return result;
   }
 

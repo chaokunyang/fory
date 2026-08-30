@@ -34,6 +34,8 @@ import org.apache.fory.memory.MemoryBuffer;
 public final class MapRefReader implements RefReader {
   private static final int DEFAULT_ARRAY_CAPACITY = 3;
 
+  private long readCounter;
+  private long readTotalObjectSize = 0;
   private final ObjectArray readObjects = new ObjectArray(DEFAULT_ARRAY_CAPACITY);
   private final IntArray readRefIds = new IntArray(DEFAULT_ARRAY_CAPACITY);
   private Object readObject;
@@ -122,15 +124,22 @@ public final class MapRefReader implements RefReader {
     }
   }
 
-  /** Clears the current read state and keeps capacity based on the most recent operation. */
+  /** Clears the current read state and keeps an approximate capacity for the next operation. */
   @Override
   public void reset() {
-    int nextCapacity = Math.max(readObjects.size(), DEFAULT_ARRAY_CAPACITY);
-    if (readObjects.objects.length > (long) nextCapacity * 4) {
-      readObjects.clearApproximate(nextCapacity);
-    } else {
-      readObjects.clear();
+    long totalObjectSize = this.readTotalObjectSize + readObjects.size();
+    long counter = this.readCounter + 1;
+    if (counter < 0 || totalObjectSize < 0) {
+      counter = 1;
+      totalObjectSize = readObjects.size();
     }
+    this.readCounter = counter;
+    this.readTotalObjectSize = totalObjectSize;
+    int avg = (int) (totalObjectSize / counter);
+    if (avg <= DEFAULT_ARRAY_CAPACITY) {
+      avg = DEFAULT_ARRAY_CAPACITY;
+    }
+    readObjects.clearApproximate(avg);
     readRefIds.clear();
     readObject = null;
   }

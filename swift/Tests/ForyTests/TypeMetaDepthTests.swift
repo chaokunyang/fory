@@ -61,7 +61,6 @@ func remoteTypeMetaUsesFixedDepth() throws {
     let config = Config(compatible: true, maxDepth: 2)
     let resolver = TypeResolver(config: config)
     try resolver.register(Address.self, id: 902)
-    resolver.freezeRegistration()
 
     func context(_ encoded: [UInt8]) -> ReadContext {
         let buffer = ByteBuffer()
@@ -129,7 +128,6 @@ func cachedMetaUsesHeaderHash() throws {
     let resolver = TypeResolver(config: config)
     try resolver.register(Person.self, id: 901)
     try resolver.register(Address.self, id: 902)
-    resolver.freezeRegistration()
     let remote = try TypeMeta(
         typeID: TypeId.compatibleStruct.rawValue,
         userTypeID: 901,
@@ -189,7 +187,6 @@ func localMetaUsesHeaderHash() throws {
     let resolver = TypeResolver(config: config)
     try resolver.register(Person.self, id: 901)
     try resolver.register(Address.self, id: 902)
-    resolver.freezeRegistration()
     let firstTypeInfo = try resolver.requireTypeInfo(for: Person.self)
     try firstTypeInfo.ensureTypeMeta(resolver: resolver)
     let firstBytes = try #require(firstTypeInfo.typeDefBytes)

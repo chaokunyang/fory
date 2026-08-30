@@ -121,9 +121,6 @@ value = buffer.read_bool()
 
 ## Registering Custom Serializers
 
-Attach custom serializers to application types registered by name or user ID. Serializers for
-built-in framework types cannot be replaced.
-
 ```python
 fory = pyfory.Fory(xlang=False)
 
@@ -133,19 +130,6 @@ fory.register(MyClass, type_id=100, serializer=MySerializer(fory.type_resolver, 
 # Register with name (for xlang)
 fory.register(MyClass, name="com.example.MyClass", serializer=MySerializer(fory.type_resolver, MyClass))
 ```
-
-### Thread-safe registration
-
-`ThreadSafeFory` accepts a serializer class or factory rather than an already constructed
-serializer:
-
-```python
-thread_safe = pyfory.ThreadSafeFory(xlang=False)
-thread_safe.register(Foo, type_id=100, serializer=FooSerializer)
-```
-
-A serializer factory passed to `ThreadSafeFory.register` must accept `(resolver, type)` or
-`(resolver)` and return a serializer for that resolver and registered type.
 
 ## Related Topics
 

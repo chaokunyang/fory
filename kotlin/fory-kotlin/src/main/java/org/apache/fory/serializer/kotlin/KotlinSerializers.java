@@ -20,17 +20,12 @@
 package org.apache.fory.serializer.kotlin;
 
 import java.util.Objects;
-import kotlin.Result;
+import kotlin.*;
 import kotlin.UByteArray;
 import kotlin.UIntArray;
 import kotlin.ULongArray;
 import kotlin.UShortArray;
-import kotlin.text.CharCategory;
-import kotlin.text.CharDirectionality;
-import kotlin.text.HexFormat;
-import kotlin.text.MatchGroup;
-import kotlin.text.Regex;
-import kotlin.text.RegexOption;
+import kotlin.text.*;
 import kotlin.time.Duration;
 import kotlin.time.DurationUnit;
 import kotlin.time.TimedValue;
@@ -64,7 +59,7 @@ public class KotlinSerializers {
 
   @Internal
   public static void installSerializers(Fory fory) {
-    DefaultValueUtils.setKotlinDefaultValueSupport(KotlinDefaultValueSupport.INSTANCE);
+    DefaultValueUtils.setKotlinDefaultValueSupport(new KotlinDefaultValueSupport());
     TypeResolver resolver = fory.getTypeResolver();
     if (resolver.isCrossLanguage()) {
       return;
@@ -209,39 +204,26 @@ public class KotlinSerializers {
     fory.getTypeResolver().register(cls, namespace, typeName);
   }
 
-  // Combined generated registration preserves the STRUCT TypeInfo created first;
-  // registerSerializer would reclassify that wire identity as EXT.
   public static void register(Fory fory, Class<?> cls) {
-    TypeResolver resolver = fory.getTypeResolver();
-    resolver.register(cls);
-    Serializer serializer = newGeneratedSerializer(resolver, cls);
-    resolver.checkRegistrationOpen();
-    resolver.setSerializer(cls, serializer);
+    // Generated construction resolves the registered STRUCT TypeInfo. Publish that identity first;
+    // registerSerializer rechecks freeze after construction before installing the serializer.
+    fory.register(cls);
+    registerSerializer(fory, cls);
   }
 
   public static void register(Fory fory, Class<?> cls, long typeId) {
-    TypeResolver resolver = fory.getTypeResolver();
-    resolver.register(cls, typeId);
-    Serializer serializer = newGeneratedSerializer(resolver, cls);
-    resolver.checkRegistrationOpen();
-    resolver.setSerializer(cls, serializer);
+    registerType(fory, cls, typeId);
+    registerSerializer(fory, cls);
   }
 
   public static void register(Fory fory, Class<?> cls, String name) {
-    TypeResolver resolver = fory.getTypeResolver();
-    fory.register(cls, name);
-    Serializer serializer = newGeneratedSerializer(resolver, cls);
-    resolver.checkRegistrationOpen();
-    resolver.setSerializer(cls, serializer);
+    registerType(fory, cls, name);
+    registerSerializer(fory, cls);
   }
 
   public static void register(Fory fory, Class<?> cls, String namespace, String typeName) {
-    checkTypeName(typeName);
-    TypeResolver resolver = fory.getTypeResolver();
-    resolver.register(cls, namespace, typeName);
-    Serializer serializer = newGeneratedSerializer(resolver, cls);
-    resolver.checkRegistrationOpen();
-    resolver.setSerializer(cls, serializer);
+    registerType(fory, cls, namespace, typeName);
+    registerSerializer(fory, cls);
   }
 
   public static void registerSerializer(Fory fory, Class<?> cls) {
@@ -249,7 +231,12 @@ public class KotlinSerializers {
     resolver.checkRegistrationOpen();
     Serializer serializer = newGeneratedSerializer(resolver, cls);
     resolver.checkRegistrationOpen();
-    resolver.setSerializer(cls, serializer);
+    if (resolver.isRegistered(cls)) {
+      // Preserve the registered STRUCT TypeInfo; registerSerializer would reclassify it as EXT.
+      resolver.setSerializer(cls, serializer);
+    } else {
+      resolver.registerSerializer(cls, serializer);
+    }
   }
 
   public static void registerEnum(Fory fory, Class<?> cls, long typeId) {
@@ -279,9 +266,8 @@ public class KotlinSerializers {
     TypeResolver resolver = fory.getTypeResolver();
     resolver.checkRegistrationOpen();
     Serializer serializer = newGeneratedSerializer(resolver, cls);
-    Class<?>[] caseClasses = cls.getDeclaredClasses();
     resolver.registerUnion(cls, typeId, serializer);
-    registerCaseAliases(fory, cls, caseClasses);
+    registerCaseAliases(fory, cls);
   }
 
   public static void registerUnion(Fory fory, Class<?> cls, String namespace, String typeName) {
@@ -289,9 +275,8 @@ public class KotlinSerializers {
     TypeResolver resolver = fory.getTypeResolver();
     resolver.checkRegistrationOpen();
     Serializer serializer = newGeneratedSerializer(resolver, cls);
-    Class<?>[] caseClasses = cls.getDeclaredClasses();
     resolver.registerUnion(cls, namespace, typeName, serializer);
-    registerCaseAliases(fory, cls, caseClasses);
+    registerCaseAliases(fory, cls);
   }
 
   public static void registerUnion(Fory fory, Class<?> cls, String name) {
@@ -299,9 +284,8 @@ public class KotlinSerializers {
     resolver.checkRegistrationOpen();
     String[] parts = splitName(name);
     Serializer serializer = newGeneratedSerializer(resolver, cls);
-    Class<?>[] caseClasses = cls.getDeclaredClasses();
     resolver.registerUnion(cls, parts[0], parts[1], serializer);
-    registerCaseAliases(fory, cls, caseClasses);
+    registerCaseAliases(fory, cls);
   }
 
   private static Serializer<?> newGeneratedSerializer(TypeResolver resolver, Class<?> cls) {
@@ -348,9 +332,8 @@ public class KotlinSerializers {
     return (Class<Enum>) cls;
   }
 
-  private static void registerCaseAliases(
-      Fory fory, Class<?> canonicalClass, Class<?>[] caseClasses) {
-    for (Class<?> nestedClass : caseClasses) {
+  private static void registerCaseAliases(Fory fory, Class<?> canonicalClass) {
+    for (Class<?> nestedClass : canonicalClass.getDeclaredClasses()) {
       if (canonicalClass.isAssignableFrom(nestedClass)) {
         fory.getTypeResolver().registerRuntimeTypeAlias(nestedClass, canonicalClass);
       }

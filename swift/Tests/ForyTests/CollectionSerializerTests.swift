@@ -792,7 +792,6 @@ func generatedReadProgress() throws {
 
     let fory = Fory(config: Config(trackRef: false, compatible: true))
     try fory.register(AdvancingReadStruct.self, id: 9705)
-    fory.typeResolver.freezeRegistration()
     let local = try fory.typeResolver.requireTypeInfo(for: AdvancingReadStruct.self)
     let emptyMeta = try TypeMeta(
         typeID: TypeId.compatibleStruct.rawValue,

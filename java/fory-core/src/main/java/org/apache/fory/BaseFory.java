@@ -95,24 +95,16 @@ public interface BaseFory {
    */
   void register(ForyModule module);
 
-  /**
-   * Register a union by ID. A serializer instance passed to {@link ThreadSafeFory} must implement
-   * {@link org.apache.fory.serializer.Shareable}.
-   */
+  /** Register a union by ID. */
   void registerUnion(Class<?> cls, int id, Serializer<?> serializer);
 
   /**
    * Register a union with a name used for cross-language serialization. Names with `.` are split by
-   * the last `.` into namespace and type name. A serializer instance passed to {@link
-   * ThreadSafeFory} must implement {@link org.apache.fory.serializer.Shareable}.
+   * the last `.` into namespace and type name.
    */
   void registerUnion(Class<?> cls, String name, Serializer<?> serializer);
 
-  /**
-   * Register a union with explicit namespace and type name. The type name must not contain `.`. A
-   * serializer instance passed to {@link ThreadSafeFory} must implement {@link
-   * org.apache.fory.serializer.Shareable}.
-   */
+  /** Register a union with explicit namespace and type name. The type name must not contain `.`. */
   void registerUnion(Class<?> cls, String namespace, String typeName, Serializer<?> serializer);
 
   /**
@@ -134,10 +126,6 @@ public interface BaseFory {
    *
    * <p><b>NOTE</b>: The registration order is important. If registration order is inconsistent, the
    * allocated ID will be different, and the deserialization will failed !!!
-   *
-   * <p>A serializer instance passed to {@link ThreadSafeFory} must implement {@link
-   * org.apache.fory.serializer.Shareable}. Use the class or resolver-factory overload for a
-   * runtime-local serializer.
    */
   void registerSerializer(Class<?> type, Serializer<?> serializer);
 
@@ -170,10 +158,6 @@ public interface BaseFory {
    *
    * <p><b>NOTE</b>: The registration order is important. If registration order is inconsistent, the
    * allocated ID will be different, and the deserialization will failed !!!
-   *
-   * <p>A serializer instance passed to {@link ThreadSafeFory} must implement {@link
-   * org.apache.fory.serializer.Shareable}. Use the class or resolver-factory overload for a
-   * runtime-local serializer.
    */
   void registerSerializerAndType(Class<?> type, Serializer<?> serializer);
 

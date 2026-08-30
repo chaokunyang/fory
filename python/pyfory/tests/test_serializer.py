@@ -919,7 +919,7 @@ def test_register_type_name_exclusive():
         fory.register_type(A, type_id=100, name="example.A")
 
 
-def test_duplicate_id_keeps_registry_clean():
+def test_duplicate_id_is_atomic():
     fory = Fory(xlang=True, compatible=False)
     fory.register_type(A, type_id=100)
 
@@ -929,7 +929,7 @@ def test_duplicate_id_keeps_registry_clean():
     assert fory.type_resolver.get_type_info(RejectedRegistration, create=False) is None
 
 
-def test_serializer_requires_registered_type():
+def test_serializer_type_is_registered():
     fory = Fory(xlang=False, strict=False, compatible=False)
     serializer = BarSerializer(fory.type_resolver, RejectedRegistration)
 

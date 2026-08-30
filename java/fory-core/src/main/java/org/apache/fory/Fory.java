@@ -328,6 +328,18 @@ public final class Fory implements BaseFory {
     return serializeRoot(buffer, obj, callback);
   }
 
+  @Override
+  public void serialize(OutputStream outputStream, Object obj) {
+    typeResolver.freezeRegistration();
+    serializeToStream(outputStream, buf -> serializeRoot(buf, obj, null));
+  }
+
+  @Override
+  public void serialize(OutputStream outputStream, Object obj, BufferCallback callback) {
+    typeResolver.freezeRegistration();
+    serializeToStream(outputStream, buf -> serializeRoot(buf, obj, callback));
+  }
+
   private MemoryBuffer serializeRoot(MemoryBuffer buffer, Object obj, BufferCallback callback) {
     writeContext.prepare(buffer, callback);
     try {
@@ -351,18 +363,6 @@ public final class Fory implements BaseFory {
     } finally {
       writeContext.reset();
     }
-  }
-
-  @Override
-  public void serialize(OutputStream outputStream, Object obj) {
-    typeResolver.freezeRegistration();
-    serializeToStream(outputStream, buf -> serializeRoot(buf, obj, null));
-  }
-
-  @Override
-  public void serialize(OutputStream outputStream, Object obj, BufferCallback callback) {
-    typeResolver.freezeRegistration();
-    serializeToStream(outputStream, buf -> serializeRoot(buf, obj, callback));
   }
 
   private ForyException processSerializationError(Throwable e) {

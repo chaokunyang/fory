@@ -746,6 +746,12 @@ for t in threads: t.join()
 ```python
 fory = pyfory.ThreadSafeFory(xlang=True)
 
+# Complete registration before the first root operation. Choose one form:
+fory.register(MyClass, type_id=123)
+# fory.register(MyClass, name="my.package.MyClass")
+# fory.register(MyClass, type_id=123, serializer=MySerializer)
+# fory.register(MyClass, name="my.package.MyClass", serializer=MySerializer)
+
 # Serialization (serialize/deserialize are identical to dumps/loads)
 data: bytes = fory.serialize(obj)
 obj = fory.deserialize(data)
@@ -753,14 +759,6 @@ obj = fory.deserialize(data)
 # Alternative API (aliases)
 data: bytes = fory.dumps(obj)
 obj = fory.loads(data)
-
-# Type registration by id
-fory.register(MyClass, type_id=123)
-fory.register(MyClass, type_id=123, serializer=custom_serializer)
-
-# Type registration by name
-fory.register(MyClass, name="my.package.MyClass")
-fory.register(MyClass, name="my.package.MyClass", serializer=custom_serializer)
 ```
 
 ### Xlang And Native Mode Comparison

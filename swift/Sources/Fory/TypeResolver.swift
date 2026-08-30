@@ -841,6 +841,9 @@ final class TypeResolver {
 
     @inline(__always)
     func freezeRegistration() {
+        if registryFrozen {
+            return
+        }
         registryFrozen = true
     }
 

@@ -251,6 +251,11 @@ public final class Fory implements BaseFory {
     getTypeResolver().registerSerializer(type, serializerClass);
   }
 
+  void registerSerializer(
+      Class<?> type, Class<? extends Serializer> serializerClass, Runnable checkBeforePublication) {
+    getTypeResolver().registerSerializer(type, serializerClass, checkBeforePublication);
+  }
+
   @Override
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
     getTypeResolver().registerSerializer(type, serializer);
@@ -259,14 +264,30 @@ public final class Fory implements BaseFory {
   @Override
   public void registerSerializer(
       Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator) {
+    registerSerializer(type, serializerCreator, typeResolver::checkRegistrationOpen);
+  }
+
+  void registerSerializer(
+      Class<?> type,
+      Function<TypeResolver, Serializer<?>> serializerCreator,
+      Runnable checkBeforePublication) {
     typeResolver.checkRegistrationOpen();
-    getTypeResolver().registerSerializer(type, serializerCreator.apply(typeResolver));
+    Serializer<?> serializer = serializerCreator.apply(typeResolver);
+    // A facade root may freeze a different child while application construction is running. The
+    // facade owner must be rechecked before this child publishes the prepared serializer.
+    checkBeforePublication.run();
+    getTypeResolver().registerSerializer(type, serializer);
   }
 
   @Override
   public <T> void registerSerializerAndType(
       Class<T> type, Class<? extends Serializer> serializerClass) {
     getTypeResolver().registerSerializerAndType(type, serializerClass);
+  }
+
+  void registerSerializerAndType(
+      Class<?> type, Class<? extends Serializer> serializerClass, Runnable checkBeforePublication) {
+    getTypeResolver().registerSerializerAndType(type, serializerClass, checkBeforePublication);
   }
 
   @Override
@@ -277,8 +298,17 @@ public final class Fory implements BaseFory {
   @Override
   public void registerSerializerAndType(
       Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator) {
+    registerSerializerAndType(type, serializerCreator, typeResolver::checkRegistrationOpen);
+  }
+
+  void registerSerializerAndType(
+      Class<?> type,
+      Function<TypeResolver, Serializer<?>> serializerCreator,
+      Runnable checkBeforePublication) {
     typeResolver.checkRegistrationOpen();
-    getTypeResolver().registerSerializerAndType(type, serializerCreator.apply(typeResolver));
+    Serializer<?> serializer = serializerCreator.apply(typeResolver);
+    checkBeforePublication.run();
+    getTypeResolver().registerSerializerAndType(type, serializer);
   }
 
   @Override

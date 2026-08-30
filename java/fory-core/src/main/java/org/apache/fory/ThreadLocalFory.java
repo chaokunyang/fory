@@ -24,7 +24,7 @@ import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.annotation.concurrent.ThreadSafe;
@@ -45,14 +45,14 @@ import org.apache.fory.serializer.BufferCallback;
 public class ThreadLocalFory extends AbstractThreadSafeFory {
   private final Supplier<Fory> foryFactory;
   private final ThreadLocal<Fory> foryThreadLocal;
-  private Consumer<Fory> factoryCallback;
+  private BiConsumer<Fory, Runnable> factoryCallback;
   private final Map<Fory, Object> allFory;
   private final SharedRegistry sharedRegistry;
 
   public ThreadLocalFory(Function<ForyBuilder, Fory> factory) {
     sharedRegistry = new SharedRegistry();
     foryFactory = () -> factory.apply(Fory.builder().withSharedRegistry(sharedRegistry));
-    factoryCallback = f -> {};
+    factoryCallback = (fory, checkBeforePublication) -> {};
     allFory = Collections.synchronizedMap(new WeakHashMap<>());
     foryThreadLocal = ThreadLocal.withInitial(this::newFory);
     // 1. init and warm for current thread.
@@ -65,7 +65,9 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   private Fory newFory() {
     synchronized (sharedRegistry) {
       Fory fory = foryFactory.get();
-      factoryCallback.accept(fory);
+      // The facade may already be frozen, but this child is not exposed yet. Replay uses its local
+      // owner, then freezeRegistration adopts the facade's published snapshot before exposure.
+      factoryCallback.accept(fory, fory.getTypeResolver()::checkRegistrationOpen);
       if (sharedRegistry.isRegistrationFrozen()) {
         fory.getTypeResolver().freezeRegistration();
       }
@@ -81,11 +83,15 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
 
   @Internal
   @Override
-  public void registerCallback(Consumer<Fory> callback) {
+  public void registerCallback(BiConsumer<Fory, Runnable> callback) {
     synchronized (sharedRegistry) {
       sharedRegistry.checkRegistrationOpen();
+      Runnable publicationCheck = sharedRegistry::checkRegistrationOpen;
       synchronized (allFory) {
-        allFory.keySet().forEach(callback);
+        for (Fory fory : allFory.keySet()) {
+          callback.accept(fory, publicationCheck);
+          sharedRegistry.checkRegistrationOpen();
+        }
       }
       factoryCallback = factoryCallback.andThen(callback);
     }

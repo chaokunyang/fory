@@ -121,7 +121,11 @@ public final class CompressedArraySerializers {
    * @param fory the ThreadSafeFory instance to register serializers with
    */
   public static void registerIfEnabled(ThreadSafeFory fory) {
-    fory.registerCallback(CompressedArraySerializers::registerIfEnabled);
+    fory.registerCallback(
+        (child, checkBeforePublication) -> {
+          checkBeforePublication.run();
+          registerIfEnabled(child);
+        });
   }
 
   /**
@@ -141,7 +145,11 @@ public final class CompressedArraySerializers {
 
   /** Register compressed array serializers with the given Fory instance. */
   public static void register(ThreadSafeFory fory) {
-    fory.registerCallback(CompressedArraySerializers::register);
+    fory.registerCallback(
+        (child, checkBeforePublication) -> {
+          checkBeforePublication.run();
+          register(child);
+        });
   }
 
   public static final class CompressedIntArraySerializer extends PrimitiveArraySerializer<int[]> {

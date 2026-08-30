@@ -93,6 +93,13 @@ after the last such callback and immediately before explicit registry publicatio
 another lifecycle state, a registration commit or rollback path, or eager whole-registry
 preparation solely to implement freeze.
 
+For a Java thread-safe facade, live child registration carries the facade's existing shared-registry
+check through application-controlled preparation and runs it immediately before publishing into the
+child. Replaying already accepted setup into a new, unexposed thread-local child uses the child's
+local resolver check; the child then adopts the shared frozen snapshot before exposure. The child
+resolver must not mirror or directly enforce the facade flag because these owners govern different
+boundaries.
+
 In JavaScript, `Fory` owns this flag. `TypeResolver` owns the registration maps but must not carry a
 second lifecycle flag.
 
@@ -111,6 +118,10 @@ Java module registration remains available through `BaseFory` before the first r
 Scala registration extensions target `BaseFory`, so direct and thread-safe facades share the same
 pre-root API. Copy operations and facade execution callbacks do not freeze registration unless they
 start a root serialization or deserialization.
+
+`ForyModule.install` is registration-only setup. It may register nested modules and construct
+serializers for the supplied child, but it must not start root serialization or deserialization
+through that child or the direct or thread-safe facade installing the module.
 
 Nested serializers must not call back into root `serialize(...)` or
 `deserialize(...)` entry points.

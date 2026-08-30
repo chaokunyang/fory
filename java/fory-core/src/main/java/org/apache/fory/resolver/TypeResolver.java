@@ -379,6 +379,16 @@ public abstract class TypeResolver {
       Class<T> type, Class<? extends Serializer> serializerClass);
 
   /**
+   * Registers a serializer class after the registration owner confirms publication is still open.
+   *
+   * <p>The check runs after serializer construction because constructors may execute application
+   * code which starts a root operation.
+   */
+  @Internal
+  public abstract <T> void registerSerializer(
+      Class<T> type, Class<? extends Serializer> serializerClass, Runnable checkBeforePublication);
+
+  /**
    * Registers a serializer for internal types (those with fixed IDs in the type system). This
    * method is used for built-in types like ArrayList, HashMap, etc.
    *
@@ -423,12 +433,12 @@ public abstract class TypeResolver {
    */
   public <T> void registerSerializerAndType(
       Class<T> type, Class<? extends Serializer> serializerClass) {
-    checkRegistrationOpen();
-    if (!isRegistered(type)) {
-      register(type);
-    }
-    registerSerializer(type, serializerClass);
+    registerSerializerAndType(type, serializerClass, this::checkRegistrationOpen);
   }
+
+  @Internal
+  public abstract <T> void registerSerializerAndType(
+      Class<T> type, Class<? extends Serializer> serializerClass, Runnable checkBeforePublication);
 
   /**
    * Registers a type (if not already registered) and then registers the serializer instance.

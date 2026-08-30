@@ -14,9 +14,10 @@ Load this file when changing `csharp/` or C# xlang behavior.
   set after failure. Explicit registration checks that flag before mutation. `ThreadSafeFory` keeps
   its existing registration callbacks only to configure newly created child runtimes; do not
   turn that list into another registry lifecycle state.
-- Custom serializer construction and `TypeInfo` creation can execute application code. Complete
-  both before resolver mutation, then recheck the same `Fory` flag immediately before publishing
-  the custom binding. Do not publish an intermediate unregistered `TypeInfo`.
+- Generated or custom serializer construction and `TypeInfo` creation can execute application
+  code. Complete them before explicit ID or name publication, then recheck the same `Fory` flag
+  immediately before publishing that registration. Do not publish an intermediate unregistered
+  `TypeInfo` for a custom binding.
 - Generated C# gRPC service companions are compiler-owned files that depend on application-provided gRPC packages, not `csharp/src/Fory`. Keep gRPC package references out of the Fory runtime package.
 - C# generated schema modules are source-file owners. Service companions must use that module's `ThreadSafeFory` and must not introduce namespace-owned aliases or duplicate serializer registration paths.
 - C# external-type serialization is target-keyed. A local

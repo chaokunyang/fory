@@ -92,6 +92,8 @@ public final class Animal extends Union {
 
 Each JVM schema generates a `ForyModule`. Imported schema modules are installed
 through `fory.register(...)`, so shared imports are deduplicated by the Fory instance.
+Module installation is registration-only setup and must not start a root serialization or
+deserialization operation on the runtime being configured.
 
 ```java
 public final class AddressbookForyModule implements org.apache.fory.ForyModule {

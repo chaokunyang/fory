@@ -73,7 +73,8 @@ public sealed class Fory
     public Fory Register<T>(uint typeId)
     {
         EnsureRegistrationOpen();
-        _typeResolver.Register(typeof(T), typeId);
+        TypeInfo typeInfo = ResolveRegistrationTypeInfo<T>();
+        _typeResolver.Register(typeof(T), typeId, typeInfo);
         return this;
     }
 
@@ -89,7 +90,8 @@ public sealed class Fory
     {
         EnsureRegistrationOpen();
         (string namespaceName, string typeName) = TypeResolver.SplitTypeName(name);
-        _typeResolver.Register(typeof(T), namespaceName, typeName);
+        TypeInfo typeInfo = ResolveRegistrationTypeInfo<T>();
+        _typeResolver.Register(typeof(T), namespaceName, typeName, typeInfo);
         return this;
     }
 
@@ -105,7 +107,9 @@ public sealed class Fory
     public Fory Register<T>(string typeNamespace, string typeName)
     {
         EnsureRegistrationOpen();
-        _typeResolver.Register(typeof(T), typeNamespace, typeName);
+        TypeResolver.ValidateSplitTypeName(typeNamespace, typeName);
+        TypeInfo typeInfo = ResolveRegistrationTypeInfo<T>();
+        _typeResolver.Register(typeof(T), typeNamespace, typeName, typeInfo);
         return this;
     }
 
@@ -346,6 +350,15 @@ public sealed class Fory
         TypeInfo typeInfo = TypeInfo.Create(typeof(T), new TSerializer());
         // Serializer construction and TypeInfo creation can execute application code. Recheck
         // after both so a reentrant root cannot be followed by resolver publication.
+        EnsureRegistrationOpen();
+        return typeInfo;
+    }
+
+    private TypeInfo ResolveRegistrationTypeInfo<T>()
+    {
+        TypeInfo typeInfo = _typeResolver.ResolveRegistrationTypeInfo(typeof(T));
+        // Construction may start a root. Keep the candidate unpublished until the Fory-owned
+        // check succeeds; Register then publishes the binding and explicit ID or name together.
         EnsureRegistrationOpen();
         return typeInfo;
     }

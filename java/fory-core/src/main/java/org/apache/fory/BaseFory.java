@@ -92,6 +92,8 @@ public interface BaseFory {
   /**
    * Register a runtime module. Direct {@link Fory} instances install the module immediately;
    * thread-safe runtimes install it into every current and future underlying runtime instance.
+   * Module installation is registration-only setup and must not start root serialization or
+   * deserialization through the runtime or facade being configured.
    */
   void register(ForyModule module);
 

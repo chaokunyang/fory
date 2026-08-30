@@ -517,8 +517,16 @@ public class XtypeResolver extends TypeResolver {
   }
 
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
+    registerSerializer(type, serializerClass, this::checkRegistrationOpen);
+  }
+
+  @Override
+  public <T> void registerSerializer(
+      Class<T> type, Class<? extends Serializer> serializerClass, Runnable checkBeforePublication) {
     checkRegistrationOpen();
-    registerSerializer(type, newSerializer(type, serializerClass));
+    Serializer<?> serializer = newSerializer(type, serializerClass);
+    checkBeforePublication.run();
+    registerSerializer(type, serializer);
   }
 
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
@@ -548,6 +556,15 @@ public class XtypeResolver extends TypeResolver {
       TypeNameBytes typeNameBytes = new TypeNameBytes(typeInfo.namespace, typeInfo.typeName);
       compositeClassNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
     }
+  }
+
+  @Override
+  public <T> void registerSerializerAndType(
+      Class<T> type, Class<? extends Serializer> serializerClass, Runnable checkBeforePublication) {
+    checkRegistrationOpen();
+    Serializer<?> serializer = newSerializer(type, serializerClass);
+    checkBeforePublication.run();
+    registerSerializerAndType(type, serializer);
   }
 
   private void checkSerializerRegistration(Class<?> type, Class<?> serializerClass) {

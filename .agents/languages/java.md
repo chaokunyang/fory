@@ -98,6 +98,16 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   mutate another child. Non-root `execute` and copy operations remain concurrent and do not freeze
   registration. Complete facade registration before concurrent serialization, deserialization,
   copy, or `execute` calls begin; do not serialize those operations behind a registration lock.
+- `ForyModule.install` is registration-only setup. It may install nested modules and construct
+  child-specific serializers, but must not start a root through the supplied child or a captured
+  direct or thread-safe facade. Do not propagate the facade lifecycle owner into raw child
+  registration to support this invalid reentrancy; frozen-facade replay needs the unexposed child
+  to remain governed by its local resolver until it adopts the shared snapshot.
+- Live thread-safe facade registration carries the existing `SharedRegistry` check through
+  application-controlled serializer preparation and runs it immediately before child publication.
+  Replay into a new, unexposed thread-local child instead uses that child's local resolver check,
+  then freezes the child onto the shared snapshot before exposure. Do not make every child resolver
+  consult the shared frozen flag: that would reject the required frozen-facade setup replay.
 - `ThreadSafeFory.execute` exposes one borrowed child only for the callback. Do not retain that
   child or register through it; use the facade registration methods so every current and future
   child receives the same setup.

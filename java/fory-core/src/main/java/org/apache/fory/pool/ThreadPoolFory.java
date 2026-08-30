@@ -24,7 +24,7 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReferenceArray;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.annotation.concurrent.ThreadSafe;
@@ -151,11 +151,13 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
 
   @Internal
   @Override
-  public void registerCallback(Consumer<Fory> callback) {
+  public void registerCallback(BiConsumer<Fory, Runnable> callback) {
     synchronized (sharedRegistry) {
       sharedRegistry.checkRegistrationOpen();
+      Runnable publicationCheck = sharedRegistry::checkRegistrationOpen;
       for (Fory fory : pooledFory) {
-        callback.accept(fory);
+        callback.accept(fory, publicationCheck);
+        sharedRegistry.checkRegistrationOpen();
       }
     }
   }

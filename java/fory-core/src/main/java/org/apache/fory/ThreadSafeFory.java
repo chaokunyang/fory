@@ -19,7 +19,7 @@
 
 package org.apache.fory;
 
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.resolver.TypeChecker;
@@ -50,6 +50,7 @@ public interface ThreadSafeFory extends BaseFory {
    */
   void setTypeChecker(TypeChecker typeChecker);
 
+  /** Applies registration to current and future children using the supplied owner check. */
   @Internal
-  void registerCallback(Consumer<Fory> callback);
+  void registerCallback(BiConsumer<Fory, Runnable> callback);
 }

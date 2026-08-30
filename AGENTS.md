@@ -210,7 +210,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   Java `Fory.register(ForyModule)` and the corresponding `BaseFory` operation remain available on
   direct and thread-safe facades before the first root. Kotlin and Scala registration extensions
   target `BaseFory` so the same API works with `Fory`, `ThreadLocalFory`, and pooled
-  `ThreadSafeFory` implementations.
+  `ThreadSafeFory` implementations. Module installation is registration-only setup: it may install
+  nested modules and child-specific serializers, but must not start a root through the supplied
+  child or the direct or thread-safe facade installing the module.
 - Use semantic naming only. Name things after protocol or domain concepts, not history, runtime origin, or workaround style; avoid vague names such as `Internal`, `java_style_*`, `Runtime`, `Session`, `Plan`, `Payload`, or `Binding` when they do not name the real concept. Keep class, method, function, and variable names concise; do not encode the whole scenario or implementation history into one identifier. Never name a class or method with a `Plan` suffix; use the real domain concept instead. For Fory codec/read APIs, do not use generic `payload` naming; name the exact owner and data shape, such as bytes, body, frame, field, string, list, map, compressed bytes, or primitive-array encoding.
 - Keep one implementation path. Do not keep parallel helpers, serializers, harnesses, wrappers, or registration flows for the same concept; extend the existing owner path instead of inventing another one.
 - Follow current scope exactly. The latest explicit user instruction overrides earlier plans, and when scope narrows, remove leaked out-of-scope edits immediately.

@@ -1224,9 +1224,17 @@ public class ClassResolver extends TypeResolver {
    * @param <T> type of class
    */
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
+    registerSerializer(type, serializerClass, this::checkRegistrationOpen);
+  }
+
+  @Override
+  public <T> void registerSerializer(
+      Class<T> type, Class<? extends Serializer> serializerClass, Runnable checkBeforePublication) {
     checkRegistrationOpen();
     checkSerializerRegistration(type, serializerClass);
-    registerSerializerImpl(type, Serializers.newSerializer(this, type, serializerClass));
+    Serializer<?> serializer = Serializers.newSerializer(this, type, serializerClass);
+    checkBeforePublication.run();
+    registerSerializerImpl(type, serializer);
   }
 
   @Override
@@ -1234,6 +1242,16 @@ public class ClassResolver extends TypeResolver {
     checkRegistrationOpen();
     checkSerializerRegistration(type, serializer.getClass());
     registerSerializerImpl(type, serializer);
+  }
+
+  @Override
+  public <T> void registerSerializerAndType(
+      Class<T> type, Class<? extends Serializer> serializerClass, Runnable checkBeforePublication) {
+    checkRegistrationOpen();
+    checkSerializerRegistration(type, serializerClass);
+    Serializer<?> serializer = Serializers.newSerializer(this, type, serializerClass);
+    checkBeforePublication.run();
+    registerSerializerAndType(type, serializer);
   }
 
   /**

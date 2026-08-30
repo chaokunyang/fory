@@ -144,6 +144,38 @@ public sealed class LookupFailureSerializer : Serializer<LookupFailureValue>
     }
 }
 
+public enum RegistrationValue
+{
+    Zero,
+}
+
+public sealed class RegistrationValueSerializer : Serializer<RegistrationValue>
+{
+    public static Action? ConstructionAction;
+    public static int ConstructionCount;
+
+    public RegistrationValueSerializer()
+    {
+        ConstructionCount++;
+        ConstructionAction?.Invoke();
+    }
+
+    public override RegistrationValue DefaultValue => RegistrationValue.Zero;
+
+    public override void WriteData(WriteContext context, in RegistrationValue value, bool hasGenerics)
+    {
+        _ = context;
+        _ = value;
+        _ = hasGenerics;
+    }
+
+    public override RegistrationValue ReadData(ReadContext context)
+    {
+        _ = context;
+        return RegistrationValue.Zero;
+    }
+}
+
 public sealed class FailingWritePayload
 {
     public int Value { get; set; }
@@ -883,6 +915,40 @@ public sealed class RuntimeEdgeCaseTests
         TypeInfo typeInfo = ReadContextFor(fory).TypeResolver.GetTypeInfo(typeof(CustomPayload));
         Assert.False(typeInfo.IsRegistered);
         Assert.NotEqual(typeof(CustomPayloadSerializer), typeInfo.SerializerType);
+    }
+
+    [Fact]
+    public void GeneratedRegistrationRechecksFreeze()
+    {
+        TypeResolver.RegisterGenerated<RegistrationValue, RegistrationValueSerializer>();
+        foreach (bool registerByName in new[] { false, true })
+        {
+            ForyRuntime fory = ForyRuntime.Builder().Build();
+            RegistrationValueSerializer.ConstructionCount = 0;
+            RegistrationValueSerializer.ConstructionAction = () => _ = fory.Serialize(1);
+            try
+            {
+                Assert.Throws<InvalidOperationException>(() =>
+                {
+                    if (registerByName)
+                    {
+                        fory.Register<RegistrationValue>("test.registration_value");
+                    }
+                    else
+                    {
+                        fory.Register<RegistrationValue>(722);
+                    }
+                });
+            }
+            finally
+            {
+                RegistrationValueSerializer.ConstructionAction = null;
+            }
+
+            TypeInfo typeInfo = ReadContextFor(fory).TypeResolver.GetTypeInfo(typeof(RegistrationValue));
+            Assert.False(typeInfo.IsRegistered);
+            Assert.Equal(2, RegistrationValueSerializer.ConstructionCount);
+        }
     }
 
     [Fact]

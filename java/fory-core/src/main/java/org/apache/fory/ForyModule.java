@@ -22,6 +22,11 @@ package org.apache.fory;
 /** A reusable Fory runtime module installed during or after runtime construction. */
 @FunctionalInterface
 public interface ForyModule {
-  /** Install this module into the concrete runtime. */
+  /**
+   * Installs registration setup into the concrete runtime.
+   *
+   * <p>An installation may register nested modules and child-specific serializers, but it must not
+   * start a root through {@code fory} or the direct or thread-safe facade installing the module.
+   */
   void install(Fory fory);
 }

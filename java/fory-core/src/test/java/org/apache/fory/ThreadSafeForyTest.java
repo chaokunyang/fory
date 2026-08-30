@@ -33,6 +33,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import lombok.Data;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.MetaReadContext;
@@ -521,6 +522,17 @@ public class ThreadSafeForyTest extends ForyTestBase {
     }
   }
 
+  public static class ReentrantFooSerializer extends FooSerializer {
+    private static Consumer<TypeResolver> constructionAction;
+
+    public ReentrantFooSerializer(TypeResolver typeResolver, Class<Foo> type) {
+      super(typeResolver, type);
+      if (constructionAction != null) {
+        constructionAction.accept(typeResolver);
+      }
+    }
+  }
+
   private static final class BlockingCopyValue {}
 
   private static final class BlockingCopySerializer extends Serializer<BlockingCopyValue> {
@@ -762,7 +774,10 @@ public class ThreadSafeForyTest extends ForyTestBase {
       AtomicInteger callbacks = new AtomicInteger();
 
       Assert.assertThrows(
-          ForyException.class, () -> fory.registerCallback(child -> callbacks.incrementAndGet()));
+          ForyException.class,
+          () ->
+              fory.registerCallback(
+                  (child, checkBeforePublication) -> callbacks.incrementAndGet()));
       assertEquals(callbacks.get(), 0);
     }
   }
@@ -796,7 +811,8 @@ public class ThreadSafeForyTest extends ForyTestBase {
               () -> {
                 try {
                   registrationStarted.countDown();
-                  fory.registerCallback(child -> callbacks.incrementAndGet());
+                  fory.registerCallback(
+                      (child, checkBeforePublication) -> callbacks.incrementAndGet());
                 } catch (Throwable t) {
                   registrationError.set(t);
                 }
@@ -813,6 +829,94 @@ public class ThreadSafeForyTest extends ForyTestBase {
       assertNull(rootError.get());
       assertTrue(registrationError.get() instanceof ForyException);
       assertEquals(callbacks.get(), 0);
+    }
+  }
+
+  @Test
+  public void testReentrantRootStopsRegistration() throws InterruptedException {
+    for (int registrationKind = 0; registrationKind < 3; registrationKind++) {
+      for (ThreadSafeFory fory : newThreadSafeRuntimes()) {
+        AtomicReference<Fory> otherChild = new AtomicReference<>();
+        Thread childThread =
+            new Thread(
+                () ->
+                    fory.execute(
+                        child -> {
+                          otherChild.set(child);
+                          return null;
+                        }));
+        childThread.start();
+        childThread.join();
+
+        TypeResolver rootResolver = fory.execute(Fory::getTypeResolver);
+        if (fory instanceof ThreadLocalFory) {
+          Assert.assertNotSame(otherChild.get().getTypeResolver(), rootResolver);
+        }
+        AtomicReference<TypeResolver> lateResolver = new AtomicReference<>();
+        AtomicInteger roots = new AtomicInteger();
+        Consumer<TypeResolver> startRoot =
+            resolver -> {
+              if (resolver != rootResolver && roots.compareAndSet(0, 1)) {
+                lateResolver.set(resolver);
+                fory.serialize("freeze");
+              }
+            };
+        Class<?> registeredSerializer;
+
+        if (registrationKind == 1) {
+          registeredSerializer = ReentrantFooSerializer.class;
+          ReentrantFooSerializer.constructionAction = startRoot;
+          try {
+            Assert.assertThrows(
+                ForyException.class,
+                () -> fory.registerSerializer(Foo.class, ReentrantFooSerializer.class));
+          } finally {
+            ReentrantFooSerializer.constructionAction = null;
+          }
+        } else if (registrationKind == 2) {
+          registeredSerializer = ReentrantFooSerializer.class;
+          ReentrantFooSerializer.constructionAction = startRoot;
+          try {
+            Assert.assertThrows(
+                ForyException.class,
+                () -> fory.registerSerializerAndType(Foo.class, ReentrantFooSerializer.class));
+          } finally {
+            ReentrantFooSerializer.constructionAction = null;
+          }
+        } else {
+          registeredSerializer = FooSerializer.class;
+          Assert.assertThrows(
+              ForyException.class,
+              () ->
+                  fory.registerSerializer(
+                      Foo.class,
+                      resolver -> {
+                        startRoot.accept(resolver);
+                        return new FooSerializer(resolver, Foo.class);
+                      }));
+        }
+
+        assertEquals(roots.get(), 1);
+        Assert.assertFalse(lateResolver.get().isRegistered(Foo.class));
+        Assert.assertNotEquals(
+            lateResolver.get().getSerializer(Foo.class).getClass(), registeredSerializer);
+        Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
+
+        if (fory instanceof ThreadLocalFory) {
+          AtomicReference<Class<?>> serializerType = new AtomicReference<>();
+          Thread futureChild =
+              new Thread(
+                  () ->
+                      fory.execute(
+                          child -> {
+                            serializerType.set(child.getSerializer(Foo.class).getClass());
+                            return null;
+                          }));
+          futureChild.start();
+          futureChild.join();
+          Assert.assertNotEquals(serializerType.get(), registeredSerializer);
+        }
+      }
     }
   }
 

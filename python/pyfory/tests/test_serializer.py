@@ -845,17 +845,27 @@ def test_replace_registered_serializer(registration):
             self.read_count += 1
             return Value(read_context.read_int32() - 17)
 
-    fory = Fory(xlang=True, ref=False, compatible=False)
+    fory = Fory(xlang=True, ref=False, compatible=True)
     if registration == "id":
         fory.register_type(Value, type_id=701)
     else:
         fory.register_type(Value, name="test.ReplacedValue")
+        assert fory.type_resolver.get_serializer(Value) is not None
+        assert fory.type_resolver.get_type_info(Value).type_def is not None
     replacement = ReplacementSerializer(fory.type_resolver)
 
     fory.register_serializer(Value, replacement)
 
-    assert fory.type_resolver.get_serializer(Value) is replacement
+    type_info = fory.type_resolver.get_type_info(Value)
+    assert type_info.serializer is replacement
+    assert type_info.type_def is None
+    assert TypeId.NAMED_EXT not in fory.type_resolver._type_id_to_type_info
+    if registration == "id":
+        assert fory.type_resolver._user_type_id_to_type_info[701] is type_info
+    else:
+        assert fory.type_resolver.get_type_info_by_name("test", "ReplacedValue") is type_info
     assert fory.deserialize(fory.serialize(Value(25))) == Value(25)
+    assert type_info.serializer is replacement
     assert (replacement.write_count, replacement.read_count) == (1, 1)
 
 
@@ -919,14 +929,55 @@ def test_register_type_name_exclusive():
         fory.register_type(A, type_id=100, name="example.A")
 
 
-def test_duplicate_id_is_atomic():
+@pytest.mark.parametrize("identity", ["id", "name"])
+def test_registration_identity_atomic(identity):
     fory = Fory(xlang=True, compatible=False)
-    fory.register_type(A, type_id=100)
+    options = {"type_id": 100} if identity == "id" else {"name": "test.SharedName"}
+    type_info = fory.register_type(A, **options)
 
-    with pytest.raises(TypeError, match="user_type_id 100"):
-        fory.register_type(RejectedRegistration, type_id=100)
+    with pytest.raises(TypeError):
+        fory.register_type(RejectedRegistration, **options)
 
     assert fory.type_resolver.get_type_info(RejectedRegistration, create=False) is None
+    if identity == "id":
+        assert fory.type_resolver.get_type_info_by_id(type_info.type_id, 100) is type_info
+    else:
+        assert fory.type_resolver.get_type_info_by_name("test", "SharedName") is type_info
+
+
+def test_union_registration_atomic():
+    fory = Fory(xlang=True, compatible=True)
+    serializer = BarSerializer(fory.type_resolver, RejectedRegistration)
+    type_info = fory.register_union(
+        RejectedRegistration,
+        name="test.FirstUnion",
+        serializer=serializer,
+    )
+
+    with pytest.raises(TypeError, match="registered already"):
+        fory.register_union(
+            RejectedRegistration,
+            name="test.SecondUnion",
+            serializer=serializer,
+        )
+
+    assert fory.type_resolver.get_type_info(RejectedRegistration) is type_info
+    assert fory.type_resolver.get_type_info_by_name("test", "FirstUnion") is type_info
+    assert fory.type_resolver.get_type_info_by_name("test", "SecondUnion") is None
+
+
+def test_lazy_type_keeps_explicit_name():
+    explicit_type = type("SharedType", (), {"__module__": "registry_owner"})
+    lazy_type = type("SharedType", (), {"__module__": "registry_owner"})
+    fory = Fory(xlang=False, strict=False, compatible=False)
+    type_info = fory.register_type(explicit_type, name="registry_owner.SharedType")
+    fory.serialize(None)
+
+    with pytest.raises(TypeError, match="type name"):
+        fory.serialize(lazy_type())
+
+    assert fory.type_resolver.get_type_info(lazy_type, create=False) is None
+    assert fory.type_resolver.get_type_info_by_name("registry_owner", "SharedType") is type_info
 
 
 def test_serializer_type_is_registered():
@@ -937,6 +988,19 @@ def test_serializer_type_is_registered():
         fory.register_serializer(RejectedRegistration, serializer)
 
     assert fory.type_resolver.get_type_info(RejectedRegistration, create=False) is None
+
+
+def test_builtin_serializer_owner():
+    fory = Fory(xlang=True, compatible=False)
+    resolver = fory.type_resolver
+    type_info = resolver.get_type_info(int)
+    wire_owner = resolver._type_id_to_type_info[type_info.type_id]
+
+    with pytest.raises(TypeError, match="framework types"):
+        fory.register_serializer(int, BarSerializer(resolver, int))
+
+    assert resolver.get_type_info(int) is type_info
+    assert resolver._type_id_to_type_info[type_info.type_id] is wire_owner
 
 
 @pytest.mark.parametrize("root", ["serialize", "deserialize", "dump"])
@@ -1053,6 +1117,27 @@ def test_registered_types_build_lazily():
     assert parent_info.type_def is not None
     assert child_info.type_def is not None
     assert fory.deserialize(data) == value
+
+
+def test_lazy_completion_is_atomic(monkeypatch):
+    from pyfory import registry
+
+    fory = Fory(xlang=True, compatible=True)
+    type_info = fory.register_type(FrozenChild, name="test.AtomicChild")
+    encode_typedef = registry.encode_typedef
+
+    def fail_typedef(*_args, **_kwargs):
+        raise ValueError("TypeDef failure")
+
+    monkeypatch.setattr(registry, "encode_typedef", fail_typedef)
+    with pytest.raises(ValueError, match="TypeDef failure"):
+        fory.serialize(FrozenChild(7))
+    assert type_info.serializer is None
+    assert type_info.type_def is None
+
+    monkeypatch.setattr(registry, "encode_typedef", encode_typedef)
+    value = FrozenChild(7)
+    assert fory.deserialize(fory.serialize(value)) == value
 
 
 def test_lazy_dataclass_serializer():

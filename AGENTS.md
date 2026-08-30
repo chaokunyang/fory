@@ -201,6 +201,10 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   generated serializer completion for an existing binding is likewise allowed
   after freeze. These runtime cache operations must not create or change an
   explicit type, serializer, ID, name, or policy registration.
+  Each explicit name and ID has one type-information owner. Native discovery
+  must reject an identity collision instead of replacing that owner. Lazy
+  metadata or serializer completion preserves the selected explicit serializer
+  and does not retain partial state; failure leaves the prior valid state.
   Java `Fory.register(ForyModule)` and the corresponding `BaseFory` operation remain available on
   direct and thread-safe facades before the first root. Kotlin and Scala registration extensions
   target `BaseFory` so the same API works with `Fory`, `ThreadLocalFory`, and pooled

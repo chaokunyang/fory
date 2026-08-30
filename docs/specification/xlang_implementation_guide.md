@@ -101,6 +101,11 @@ serializer, or generated code. Lazy serializer completion for an existing bindin
 These operations must not create or change an explicit type, serializer, ID, name, or policy
 registration.
 
+Each explicit name and ID identifies one type-information owner. Native discovery must reject an
+identity collision instead of replacing that owner. Lazy metadata or serializer completion must
+preserve an explicitly selected serializer and must not retain partial state; failure leaves the
+previous valid state.
+
 Java module registration remains available through `BaseFory` before the first root. Kotlin and
 Scala registration extensions target `BaseFory`, so direct and thread-safe facades share the same
 pre-root API. Copy operations and facade execution callbacks do not freeze registration unless they

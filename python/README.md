@@ -899,6 +899,9 @@ except Exception as e:
 
 Implement custom serialization logic for specialized types with a single `write/read` API:
 
+Attach custom serializers to application types registered by name or user ID. Serializers for
+built-in framework types cannot be replaced.
+
 ```python
 import pyfory
 from pyfory.serializer import Serializer

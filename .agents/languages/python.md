@@ -21,6 +21,10 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
 - Explicit type, serializer, name, and ID registration checks the frozen flag before mutation.
   Automatic IDs remain registration-owned and must not turn native runtime discovery into explicit
   registration.
+- A Python wire name or user ID identifies one `TypeInfo`. Reject explicit or native-discovery
+  collisions before publishing resolver maps. Lazy TypeDef completion preserves a configured
+  serializer, does not retain partial state, and restores the prior serializer and TypeDef after
+  failed completion without adding a lifecycle state.
 - `ThreadSafeFory` accepts serializer classes or factories and constructs a serializer for each
   child resolver. It must reject resolver-bound serializer instances instead of replaying one
   instance across pooled children.

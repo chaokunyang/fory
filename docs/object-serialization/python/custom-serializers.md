@@ -121,6 +121,9 @@ value = buffer.read_bool()
 
 ## Registering Custom Serializers
 
+Attach custom serializers to application types registered by name or user ID. Serializers for
+built-in framework types cannot be replaced.
+
 ```python
 fory = pyfory.Fory(xlang=False)
 

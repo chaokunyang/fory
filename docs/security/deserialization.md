@@ -633,6 +633,11 @@ serializers, or generated code. Lazy completion of an existing binding is also a
 internal cache operations are not explicit registration and must not create or change an explicit
 type or serializer registration, ID, name, or policy binding.
 
+Each explicit name and ID identifies one type-information owner. Native discovery must reject an
+identity collision instead of replacing that owner. Lazy metadata or serializer completion must
+preserve an explicitly selected serializer and must not retain partial state; failure leaves the
+previous valid state.
+
 ## Metadata And Type Resolution
 
 Metadata parsing is security-sensitive when it affects retained read-side state,

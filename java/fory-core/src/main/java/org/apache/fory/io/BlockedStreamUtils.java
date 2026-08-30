@@ -47,11 +47,13 @@ public class BlockedStreamUtils {
   private static final int MAX_CONSECUTIVE_ZERO_READS = 100;
 
   public static void serialize(Fory fory, OutputStream outputStream, Object obj) {
+    fory.getTypeResolver().freezeRegistration();
     serializeToStream(fory, outputStream, buf -> fory.serialize(buf, obj, null));
   }
 
   public static void serialize(
       Fory fory, OutputStream outputStream, Object obj, BufferCallback callback) {
+    fory.getTypeResolver().freezeRegistration();
     serializeToStream(fory, outputStream, buf -> fory.serialize(buf, obj, callback));
   }
 
@@ -132,9 +134,9 @@ public class BlockedStreamUtils {
 
   private static void serializeToStream(
       Fory fory, OutputStream outputStream, Consumer<MemoryBuffer> function) {
-    MemoryBuffer buf = fory.getBuffer();
-    buf.writerIndex(0);
     try {
+      MemoryBuffer buf = fory.getBuffer();
+      buf.writerIndex(0);
       buf.writeInt32(-1);
       function.accept(buf);
       buf.putInt32(0, buf.writerIndex() - 4);

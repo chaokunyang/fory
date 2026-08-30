@@ -293,22 +293,28 @@ public final class Fory implements BaseFory {
 
   @Override
   public byte[] serialize(Object obj) {
-    MemoryBuffer buf = getBuffer();
-    buf.writerIndex(0);
-    serialize(buf, obj, null);
-    byte[] bytes = buf.getBytes(0, buf.writerIndex());
-    resetBuffer();
-    return bytes;
+    typeResolver.freezeRegistration();
+    try {
+      MemoryBuffer buf = getBuffer();
+      buf.writerIndex(0);
+      serializeRoot(buf, obj, null);
+      return buf.getBytes(0, buf.writerIndex());
+    } finally {
+      resetBuffer();
+    }
   }
 
   @Override
   public byte[] serialize(Object obj, BufferCallback callback) {
-    MemoryBuffer buf = getBuffer();
-    buf.writerIndex(0);
-    serialize(buf, obj, callback);
-    byte[] bytes = buf.getBytes(0, buf.writerIndex());
-    resetBuffer();
-    return bytes;
+    typeResolver.freezeRegistration();
+    try {
+      MemoryBuffer buf = getBuffer();
+      buf.writerIndex(0);
+      serializeRoot(buf, obj, callback);
+      return buf.getBytes(0, buf.writerIndex());
+    } finally {
+      resetBuffer();
+    }
   }
 
   @Override
@@ -318,9 +324,11 @@ public final class Fory implements BaseFory {
 
   @Override
   public MemoryBuffer serialize(MemoryBuffer buffer, Object obj, BufferCallback callback) {
-    if (!typeResolver.isRegistrationFrozen()) {
-      typeResolver.freezeRegistration();
-    }
+    typeResolver.freezeRegistration();
+    return serializeRoot(buffer, obj, callback);
+  }
+
+  private MemoryBuffer serializeRoot(MemoryBuffer buffer, Object obj, BufferCallback callback) {
     writeContext.prepare(buffer, callback);
     try {
       byte bitmap = headerBitmap;
@@ -347,12 +355,14 @@ public final class Fory implements BaseFory {
 
   @Override
   public void serialize(OutputStream outputStream, Object obj) {
-    serializeToStream(outputStream, buf -> serialize(buf, obj, null));
+    typeResolver.freezeRegistration();
+    serializeToStream(outputStream, buf -> serializeRoot(buf, obj, null));
   }
 
   @Override
   public void serialize(OutputStream outputStream, Object obj, BufferCallback callback) {
-    serializeToStream(outputStream, buf -> serialize(buf, obj, callback));
+    typeResolver.freezeRegistration();
+    serializeToStream(outputStream, buf -> serializeRoot(buf, obj, callback));
   }
 
   private ForyException processSerializationError(Throwable e) {
@@ -635,10 +645,10 @@ public final class Fory implements BaseFory {
   }
 
   private void serializeToStream(OutputStream outputStream, Consumer<MemoryBuffer> function) {
-    MemoryBuffer buf = getBuffer();
-    buf.writerIndex(0);
-    function.accept(buf);
     try {
+      MemoryBuffer buf = getBuffer();
+      buf.writerIndex(0);
+      function.accept(buf);
       byte[] bytes = buf.getHeapMemory();
       if (bytes != null) {
         outputStream.write(bytes, 0, buf.writerIndex());

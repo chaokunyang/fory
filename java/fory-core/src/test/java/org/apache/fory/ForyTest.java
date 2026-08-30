@@ -27,6 +27,7 @@ import static org.testng.Assert.assertTrue;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import java.io.ByteArrayOutputStream;
 import java.io.Serializable;
 import java.lang.invoke.MethodHandles;
 import java.math.BigDecimal;
@@ -809,6 +810,45 @@ public class ForyTest extends ForyTestBase {
 
     fory.deserialize(serializedLarge);
     assertEquals(getDefaultWriteBuffer(fory).size(), limitInBytes);
+  }
+
+  @Test
+  public void testFailedWriteReleasesBuffer() {
+    int limitInBytes = 128;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withBufferSizeLimitBytes(limitInBytes)
+            .build();
+    fory.registerSerializer(FailingWrite.class, new FailingWriteSerializer(fory.getTypeResolver()));
+
+    assertThrows(SerializationException.class, () -> fory.serialize(new FailingWrite()));
+    assertEquals(getDefaultWriteBuffer(fory).size(), limitInBytes);
+
+    assertThrows(
+        SerializationException.class,
+        () -> fory.serialize(new ByteArrayOutputStream(), new FailingWrite()));
+    assertEquals(getDefaultWriteBuffer(fory).size(), limitInBytes);
+  }
+
+  private static final class FailingWrite {}
+
+  private static final class FailingWriteSerializer extends Serializer<FailingWrite> {
+    private FailingWriteSerializer(TypeResolver typeResolver) {
+      super(typeResolver.getConfig(), FailingWrite.class);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, FailingWrite value) {
+      writeContext.getBuffer().ensure(1024);
+      throw new SerializationException("expected failure");
+    }
+
+    @Override
+    public FailingWrite read(ReadContext readContext) {
+      throw new UnsupportedOperationException("unused");
+    }
   }
 
   private static MemoryBuffer getDefaultWriteBuffer(Fory fory) {

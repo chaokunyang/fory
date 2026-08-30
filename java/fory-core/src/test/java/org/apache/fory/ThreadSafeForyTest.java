@@ -27,6 +27,7 @@ import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -647,7 +648,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
             .build();
     FooSerializer local = new FooSerializer(direct.getTypeResolver(), Foo.class);
     List<Consumer<ThreadSafeFory>> registrations =
-        List.of(
+        Arrays.asList(
             fory -> fory.registerSerializer(Foo.class, local),
             fory -> fory.registerSerializerAndType(Foo.class, local),
             fory -> fory.registerUnion(Foo.class, 101, local),

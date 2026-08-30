@@ -270,6 +270,7 @@ cdef class TypeResolver:
     cdef flat_hash_map[uint32_t, PyObject *] _c_user_type_id_to_type_info
     cdef flat_hash_map[uint64_t, PyObject *] _c_types_info
     cdef flat_hash_map[pair[int64_t, int64_t], PyObject *] _c_meta_hash_to_type_info
+
     def __init__(self, Config config, *, shared_registry):
         """
         Build the Cython resolver and its hot caches.

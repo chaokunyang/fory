@@ -134,9 +134,9 @@ public class BlockedStreamUtils {
 
   private static void serializeToStream(
       Fory fory, OutputStream outputStream, Consumer<MemoryBuffer> function) {
+    MemoryBuffer buf = fory.getBuffer();
+    buf.writerIndex(0);
     try {
-      MemoryBuffer buf = fory.getBuffer();
-      buf.writerIndex(0);
       buf.writeInt32(-1);
       function.accept(buf);
       buf.putInt32(0, buf.writerIndex() - 4);

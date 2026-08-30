@@ -86,6 +86,8 @@ assert result.next.next is result  # Circular reference preserved
 ### Schema Evolution Not Working
 
 ```python
+# Keep compatible mode enabled. This is the default.
+
 # Version 1: Writer schema
 @dataclass
 class UserV1:

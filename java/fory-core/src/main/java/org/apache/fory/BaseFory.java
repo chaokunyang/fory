@@ -97,7 +97,6 @@ public interface BaseFory {
    */
   void register(ForyModule module);
 
-  /** Register a union by ID. */
   void registerUnion(Class<?> cls, int id, Serializer<?> serializer);
 
   /**

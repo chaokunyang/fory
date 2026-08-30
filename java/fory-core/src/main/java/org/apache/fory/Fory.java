@@ -646,9 +646,9 @@ public final class Fory implements BaseFory {
   }
 
   private void serializeToStream(OutputStream outputStream, Consumer<MemoryBuffer> function) {
+    MemoryBuffer buf = getBuffer();
+    buf.writerIndex(0);
     try {
-      MemoryBuffer buf = getBuffer();
-      buf.writerIndex(0);
       function.accept(buf);
       byte[] bytes = buf.getHeapMemory();
       if (bytes != null) {

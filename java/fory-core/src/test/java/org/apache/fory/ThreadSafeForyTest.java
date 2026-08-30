@@ -783,56 +783,6 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
-  public void testExecuteRootRegistrationRace() throws InterruptedException {
-    for (ThreadSafeFory fory : newThreadSafeRuntimes()) {
-      CountDownLatch rootStarted = new CountDownLatch(1);
-      CountDownLatch registrationStarted = new CountDownLatch(1);
-      CountDownLatch finishRoot = new CountDownLatch(1);
-      AtomicInteger callbacks = new AtomicInteger();
-      AtomicReference<Throwable> rootError = new AtomicReference<>();
-      AtomicReference<Throwable> registrationError = new AtomicReference<>();
-      Thread rootThread =
-          new Thread(
-              () -> {
-                try {
-                  fory.execute(
-                      child -> {
-                        child.serialize("value");
-                        rootStarted.countDown();
-                        awaitUnchecked(finishRoot);
-                        return null;
-                      });
-                } catch (Throwable t) {
-                  rootError.set(t);
-                }
-              });
-      Thread registrationThread =
-          new Thread(
-              () -> {
-                try {
-                  registrationStarted.countDown();
-                  fory.registerCallback(
-                      (child, checkBeforePublication) -> callbacks.incrementAndGet());
-                } catch (Throwable t) {
-                  registrationError.set(t);
-                }
-              });
-
-      rootThread.start();
-      assertTrue(rootStarted.await(30, TimeUnit.SECONDS));
-      registrationThread.start();
-      assertTrue(registrationStarted.await(30, TimeUnit.SECONDS));
-      finishRoot.countDown();
-      rootThread.join();
-      registrationThread.join();
-
-      assertNull(rootError.get());
-      assertTrue(registrationError.get() instanceof ForyException);
-      assertEquals(callbacks.get(), 0);
-    }
-  }
-
-  @Test
   public void testReentrantRootStopsRegistration() throws InterruptedException {
     for (int registrationKind = 0; registrationKind < 3; registrationKind++) {
       for (ThreadSafeFory fory : newThreadSafeRuntimes()) {

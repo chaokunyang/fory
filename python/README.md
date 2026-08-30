@@ -744,7 +744,7 @@ for t in threads: t.join()
 **Key Methods:**
 
 ```python
-fory = pyfory.Fory(xlang=True)
+fory = pyfory.ThreadSafeFory(xlang=True)
 
 # Serialization (serialize/deserialize are identical to dumps/loads)
 data: bytes = fory.serialize(obj)

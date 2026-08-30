@@ -398,9 +398,12 @@ public abstract class TypeResolver {
    * points can call it defensively.
    */
   public final void freezeRegistration() {
-    if (registrationFrozen) {
-      return;
+    if (!registrationFrozen) {
+      publishRegistrationSnapshot();
     }
+  }
+
+  private void publishRegistrationSnapshot() {
     registrationFrozen = true;
     // A root may start through a borrowed child, so the child must close the shared facade
     // boundary before publishing or adopting the registration snapshot.

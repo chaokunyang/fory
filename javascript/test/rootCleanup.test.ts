@@ -91,6 +91,30 @@ describe.each([
 
     expect(readContext.typeMetaCache.get(headerHash)).toBe(typeMeta);
   });
+
+  test("clears retained state when input binding fails", () => {
+    const fory = new Fory({ compatible: true, ref: true });
+    const registered = fory.register(Type.struct(7615, {}));
+    const readContext = (fory as any).readContext;
+    const typeMeta = TypeMeta.fromTypeInfo(Type.struct(7616, {}));
+
+    registered.serializer.readRef = () => {
+      readContext.refReader.reference({});
+      populateLogicalTables(readContext, typeMeta);
+      return 7;
+    };
+    expect(invoke(fory, registered, new Uint8Array([1]))).toBe(7);
+
+    const invalidInput = new Uint8Array([1]);
+    Object.defineProperty(invalidInput, "buffer", {
+      get() {
+        throw new Error("input binding failed");
+      },
+    });
+    expect(() => invoke(fory, registered, invalidInput)).toThrow("input binding failed");
+    expect(readContext.reader.platformBuffer).toHaveLength(0);
+    expectRootStateCleared(readContext);
+  });
 });
 
 test("restores root write state after failure", () => {

@@ -179,8 +179,8 @@ export default class Fory {
 
   deserialize<T = any>(bytes: Uint8Array, serializer: Serializer = this.anySerializer): T | null {
     this.registrationFrozen = true;
-    this.readContext.reset(bytes);
     try {
+      this.readContext.reset(bytes);
       const reader = this.readContext.reader;
       const bitmap = reader.readUint8();
       if (bitmap !== ConfigFlags.isCrossLanguageFlag) {
@@ -243,8 +243,8 @@ export default class Fory {
     const rootHeader = ConfigFlags.isCrossLanguageFlag;
     rootDeserializer = (bytes: Uint8Array) => {
       this.registrationFrozen = true;
-      readContext.reset(bytes);
       try {
+        readContext.reset(bytes);
         const bitmap = reader.readUint8();
         if (bitmap !== rootHeader) {
           this.throwInvalidRootHeader(bitmap);

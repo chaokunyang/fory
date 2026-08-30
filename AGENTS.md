@@ -161,6 +161,10 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   `Object` quoted values remain strings. Quoted scalar common paths must parse directly from reader
   storage with no intermediate object allocation, reuse the unquoted token parser, and keep larger
   quoted handling in a separate cold method so native token parsing does not regress.
+- Fory JSON Kotlin metadata-version compatibility belongs to
+  `KotlinClassMetadata.readStrict`. Do not add compiler or metadata minor-version allowlists after a
+  successful strict parse. Validate unsupported declaration shapes and mismatched JVM members at
+  the concrete consumer instead.
 - Decoder depth and the generic-type stack paired with that depth use root-operation failure cleanup. Nested decoders decrement depth and pop generic types only after successful child reads; do not add nested `try/finally` to restore them after exceptions. The root operation's `finally`/reset must clear both decoder depth and the generic-type stack.
 - Keep public APIs minimal. Public APIs must match user ownership and mental model, not internal implementation details; generated flows stay type-owned, while custom serializer registration stays explicit.
 - A Fory instance may register types or serializers only before its first root

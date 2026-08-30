@@ -401,45 +401,110 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(byte[] bytes) {
-    MemoryBuffer buffer;
-    try {
-      buffer = MemoryUtils.wrap(bytes);
-    } catch (RuntimeException | Error e) {
-      typeResolver.freezeRegistration();
-      throw e;
-    }
-    return deserialize(buffer, (Iterable<MemoryBuffer>) null);
+    typeResolver.freezeRegistration();
+    return deserializeRoot(MemoryUtils.wrap(bytes), (Iterable<MemoryBuffer>) null);
   }
 
   @Override
   public Object deserialize(ByteBuffer byteBuffer) {
-    MemoryBuffer buffer;
-    try {
-      buffer = MemoryUtils.wrap(byteBuffer);
-    } catch (RuntimeException | Error e) {
-      typeResolver.freezeRegistration();
-      throw e;
-    }
-    return deserialize(buffer);
+    typeResolver.freezeRegistration();
+    return deserializeRoot(MemoryUtils.wrap(byteBuffer), (Iterable<MemoryBuffer>) null);
   }
 
   @Override
   public <T> T deserialize(byte[] bytes, Class<T> type) {
-    MemoryBuffer buffer;
-    try {
-      buffer = MemoryUtils.wrap(bytes);
-    } catch (RuntimeException | Error e) {
-      typeResolver.freezeRegistration();
-      throw e;
-    }
-    return deserialize(buffer, type);
+    typeResolver.freezeRegistration();
+    return deserializeRoot(MemoryUtils.wrap(bytes), type);
   }
 
   @Override
   public <T> T deserialize(MemoryBuffer buffer, Class<T> type) {
-    if (!typeResolver.isRegistrationFrozen()) {
-      typeResolver.freezeRegistration();
+    typeResolver.freezeRegistration();
+    return deserializeRoot(buffer, type);
+  }
+
+  @Override
+  public <T> T deserialize(ForyInputStream inputStream, Class<T> type) {
+    typeResolver.freezeRegistration();
+    try {
+      return deserializeRoot(inputStream.getBuffer(), type);
+    } finally {
+      inputStream.shrinkBuffer();
     }
+  }
+
+  @Override
+  public <T> T deserialize(ForyReadableChannel channel, Class<T> type) {
+    typeResolver.freezeRegistration();
+    try {
+      return deserializeRoot(channel.getBuffer(), type);
+    } finally {
+      channel.compactBuffer();
+    }
+  }
+
+  @Override
+  public Object deserialize(byte[] bytes, Iterable<MemoryBuffer> outOfBandBuffers) {
+    typeResolver.freezeRegistration();
+    return deserializeRoot(MemoryUtils.wrap(bytes), outOfBandBuffers);
+  }
+
+  @Override
+  public Object deserialize(MemoryBuffer buffer) {
+    typeResolver.freezeRegistration();
+    return deserializeRoot(buffer, (Iterable<MemoryBuffer>) null);
+  }
+
+  /**
+   * Deserialize <code>obj</code> from a <code>buffer</code> and <code>outOfBandBuffers</code>.
+   *
+   * @param buffer serialized data. If the provided buffer start address is aligned with 4 bytes,
+   *     the bulk read will be more efficient.
+   * @param outOfBandBuffers If <code>buffers</code> is not None, it should be an iterable of
+   *     buffer-enabled objects that is consumed each time the pickle stream references an
+   *     out-of-band {@link BufferObject}. Such buffers have been given in order to the
+   *     `bufferCallback` of a Fory object. If <code>outOfBandBuffers</code> is null (the default),
+   *     then the buffers are taken from the serialized stream, assuming they are serialized there.
+   *     It is an error for <code>outOfBandBuffers</code> to be null if the serialized stream was
+   *     produced with a non-null `bufferCallback`.
+   */
+  @Override
+  public Object deserialize(MemoryBuffer buffer, Iterable<MemoryBuffer> outOfBandBuffers) {
+    typeResolver.freezeRegistration();
+    return deserializeRoot(buffer, outOfBandBuffers);
+  }
+
+  @Override
+  public Object deserialize(ForyInputStream inputStream) {
+    return deserialize(inputStream, (Iterable<MemoryBuffer>) null);
+  }
+
+  @Override
+  public Object deserialize(ForyInputStream inputStream, Iterable<MemoryBuffer> outOfBandBuffers) {
+    typeResolver.freezeRegistration();
+    try {
+      return deserializeRoot(inputStream.getBuffer(), outOfBandBuffers);
+    } finally {
+      inputStream.shrinkBuffer();
+    }
+  }
+
+  @Override
+  public Object deserialize(ForyReadableChannel channel) {
+    return deserialize(channel, (Iterable<MemoryBuffer>) null);
+  }
+
+  @Override
+  public Object deserialize(ForyReadableChannel channel, Iterable<MemoryBuffer> outOfBandBuffers) {
+    typeResolver.freezeRegistration();
+    try {
+      return deserializeRoot(channel.getBuffer(), outOfBandBuffers);
+    } finally {
+      channel.compactBuffer();
+    }
+  }
+
+  private <T> T deserializeRoot(MemoryBuffer buffer, Class<T> type) {
     byte bitmap = buffer.readByte();
     if (bitmap != headerBitmap) {
       checkHeaderBitmapWithoutOutOfBand(bitmap);
@@ -462,65 +527,7 @@ public final class Fory implements BaseFory {
     }
   }
 
-  @Override
-  public <T> T deserialize(ForyInputStream inputStream, Class<T> type) {
-    if (!typeResolver.isRegistrationFrozen()) {
-      typeResolver.freezeRegistration();
-    }
-    try {
-      return deserialize(inputStream.getBuffer(), type);
-    } finally {
-      inputStream.shrinkBuffer();
-    }
-  }
-
-  @Override
-  public <T> T deserialize(ForyReadableChannel channel, Class<T> type) {
-    if (!typeResolver.isRegistrationFrozen()) {
-      typeResolver.freezeRegistration();
-    }
-    try {
-      return deserialize(channel.getBuffer(), type);
-    } finally {
-      channel.compactBuffer();
-    }
-  }
-
-  @Override
-  public Object deserialize(byte[] bytes, Iterable<MemoryBuffer> outOfBandBuffers) {
-    MemoryBuffer buffer;
-    try {
-      buffer = MemoryUtils.wrap(bytes);
-    } catch (RuntimeException | Error e) {
-      typeResolver.freezeRegistration();
-      throw e;
-    }
-    return deserialize(buffer, outOfBandBuffers);
-  }
-
-  @Override
-  public Object deserialize(MemoryBuffer buffer) {
-    return deserialize(buffer, (Iterable<MemoryBuffer>) null);
-  }
-
-  /**
-   * Deserialize <code>obj</code> from a <code>buffer</code> and <code>outOfBandBuffers</code>.
-   *
-   * @param buffer serialized data. If the provided buffer start address is aligned with 4 bytes,
-   *     the bulk read will be more efficient.
-   * @param outOfBandBuffers If <code>buffers</code> is not None, it should be an iterable of
-   *     buffer-enabled objects that is consumed each time the pickle stream references an
-   *     out-of-band {@link BufferObject}. Such buffers have been given in order to the
-   *     `bufferCallback` of a Fory object. If <code>outOfBandBuffers</code> is null (the default),
-   *     then the buffers are taken from the serialized stream, assuming they are serialized there.
-   *     It is an error for <code>outOfBandBuffers</code> to be null if the serialized stream was
-   *     produced with a non-null `bufferCallback`.
-   */
-  @Override
-  public Object deserialize(MemoryBuffer buffer, Iterable<MemoryBuffer> outOfBandBuffers) {
-    if (!typeResolver.isRegistrationFrozen()) {
-      typeResolver.freezeRegistration();
-    }
+  private Object deserializeRoot(MemoryBuffer buffer, Iterable<MemoryBuffer> outOfBandBuffers) {
     byte bitmap = buffer.readByte();
     boolean peerOutOfBandEnabled = false;
     if (bitmap != headerBitmap) {
@@ -553,42 +560,6 @@ public final class Fory implements BaseFory {
       throw ExceptionUtils.handleReadFailed(t);
     } finally {
       readContext.reset();
-    }
-  }
-
-  @Override
-  public Object deserialize(ForyInputStream inputStream) {
-    return deserialize(inputStream, (Iterable<MemoryBuffer>) null);
-  }
-
-  @Override
-  public Object deserialize(ForyInputStream inputStream, Iterable<MemoryBuffer> outOfBandBuffers) {
-    if (!typeResolver.isRegistrationFrozen()) {
-      typeResolver.freezeRegistration();
-    }
-    try {
-      MemoryBuffer buf = inputStream.getBuffer();
-      return deserialize(buf, outOfBandBuffers);
-    } finally {
-      inputStream.shrinkBuffer();
-    }
-  }
-
-  @Override
-  public Object deserialize(ForyReadableChannel channel) {
-    return deserialize(channel, (Iterable<MemoryBuffer>) null);
-  }
-
-  @Override
-  public Object deserialize(ForyReadableChannel channel, Iterable<MemoryBuffer> outOfBandBuffers) {
-    if (!typeResolver.isRegistrationFrozen()) {
-      typeResolver.freezeRegistration();
-    }
-    try {
-      MemoryBuffer buf = channel.getBuffer();
-      return deserialize(buf, outOfBandBuffers);
-    } finally {
-      channel.compactBuffer();
     }
   }
 

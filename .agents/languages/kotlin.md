@@ -15,7 +15,8 @@ Load this file when changing `kotlin/` or compiler code that generates Kotlin so
   wire format matches the previous serializer family and old-payload/new-runtime compatibility is
   tested.
 - Kotlin registration extensions target `BaseFory` so direct and thread-safe facades share the same
-  pre-root registration API, including module installation.
+  pre-root registration API, including module installation. Complete thread-safe facade
+  registration before concurrent serialization, deserialization, copy, or execution begins.
 - Explicit type, serializer, enum, and union registration checks the receiving `BaseFory` facade or
   natural registry owner's one frozen flag before mutation. Keep generated serializer construction
   on the existing direct resolver path; do not add a parallel registration path or lifecycle state.

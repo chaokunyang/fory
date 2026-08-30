@@ -84,19 +84,20 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   work, dynamic stream bytes-read accounting, or stale narrower-scope formulas.
 - Generated serializers must not retain runtime context fields. `Fory` should stay a root-operation facade rather than accumulating serializer or convenience state.
 - When the serializer class and constructor shape are known at the call site, prefer direct constructor lambdas or direct instantiation over reflective `Serializers.newSerializer(...)`.
-- Each natural Java registry or public facade boundary owns one authoritative frozen flag. The
-  facade flag is not a mirror of a child resolver flag. The first root serialization or
-  deserialization sets the owning flag before codec work and never clears it, including after
-  failure. Every explicit type, serializer, module, name, ID, or type-checker binding checks that
-  flag before mutation. Disallow-list changes use the bound checker's resolver listeners. Do not
-  add another lifecycle state or a parallel registration-commit path.
+- Each natural Java registry or public facade boundary owns one authoritative lifecycle fact. A
+  concrete resolver uses its shared registration snapshot; a thread-safe facade uses the shared
+  registry's one frozen flag. The first root serialization or deserialization establishes the
+  owning fact before codec work and never clears it, including after failure. Every explicit type,
+  serializer, module, name, ID, or type-checker binding checks that fact before mutation.
+  Disallow-list changes use the bound checker's resolver listeners. Do not add another lifecycle
+  state or a parallel registration-commit path.
 - Direct and thread-safe facades expose module registration before their first root. Kotlin and
   Scala registration extensions target `BaseFory`; do not narrow them to concrete `Fory` or make
-  builder installation the only thread-safe path. Before the first root, a thread-safe facade
-  serializes registration, `execute`, and copy through its existing callback monitor and rechecks
-  the frozen flag after entering it. After freeze, `execute` and copy use the monitor-free path.
-  Calling `ThreadSafeFory.execute` or copying a value does not freeze registration unless the
-  callback starts a root serialization or deserialization.
+  builder installation the only thread-safe path. A thread-safe facade's shared registry owns its
+  registration boundary so a root started by any child closes the facade before registration can
+  mutate another child. Non-root `execute` and copy operations remain concurrent and do not freeze
+  registration. Complete facade registration before concurrent serialization, deserialization,
+  copy, or `execute` calls begin; do not serialize those operations behind a registration lock.
 - `ThreadSafeFory.execute` exposes one borrowed child only for the callback. Do not retain that
   child or register through it; use the facade registration methods so every current and future
   child receives the same setup.
@@ -160,9 +161,6 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   unmatched named sender layers as data-only metadata, and does not route layer names through
   `ClassResolver.readClassInternal`. Inverse registration must not turn a missed input name into an
   accepted class.
-- `warnOnce` keys live for the logger lifetime. Read-side resolver warnings selected by remote
-  names must use a fixed message and must not include a remote name or another
-  untrusted-cardinality value in the message arguments.
 - Keep JDK interface names that do not require explicit registration in
   `DefaultJdkClassAllowList`. `TypeResolver.loadClass` and `ClassResolver.isSecure` must both use
   this single owner. Keep custom `TypeChecker` and fixed disallowed-list checks on their existing

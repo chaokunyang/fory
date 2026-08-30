@@ -32,7 +32,6 @@ import org.apache.fory.AbstractThreadSafeFory;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.config.ForyBuilder;
-import org.apache.fory.exception.ForyException;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
@@ -53,15 +52,14 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   private final Fory[] pooledFory;
   private final Semaphore waiterSignal = new Semaphore(0);
   private final AtomicInteger waitingBorrowers = new AtomicInteger();
-  private final Object callbackLock = new Object();
-  private volatile boolean registrationFrozen;
+  private final SharedRegistry sharedRegistry;
 
   public ThreadPoolFory(Function<ForyBuilder, Fory> foryFactory, int poolSize) {
     if (poolSize <= 0) {
       throw new IllegalArgumentException(
           String.format("thread safe fory pool size error, please check it, size:[%s]", poolSize));
     }
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    sharedRegistry = new SharedRegistry();
     Supplier<Fory> factory =
         () -> foryFactory.apply(Fory.builder().withSharedRegistry(sharedRegistry));
     this.poolSize = poolSize;
@@ -75,7 +73,7 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   }
 
   private PooledEntry acquire() {
-    freezeRegistration();
+    sharedRegistry.freezeRegistration();
     return acquireEntry();
   }
 
@@ -154,8 +152,8 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   @Internal
   @Override
   public void registerCallback(Consumer<Fory> callback) {
-    synchronized (callbackLock) {
-      checkRegistrationOpen();
+    synchronized (sharedRegistry) {
+      sharedRegistry.checkRegistrationOpen();
       for (Fory fory : pooledFory) {
         callback.accept(fory);
       }
@@ -164,48 +162,15 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
 
   @Override
   public <R> R execute(Function<Fory, R> action) {
-    if (!registrationFrozen) {
-      synchronized (callbackLock) {
-        if (!registrationFrozen) {
-          PooledEntry entry = acquireEntry();
-          try {
-            return action.apply(entry.fory);
-          } finally {
-            if (entry.fory.getTypeResolver().isRegistrationFrozen()) {
-              registrationFrozen = true;
-            }
-            release(entry);
-          }
-        }
-      }
-    }
     PooledEntry entry = acquireEntry();
     try {
-      if (!entry.fory.getTypeResolver().isRegistrationFrozen()) {
+      if (sharedRegistry.isRegistrationFrozen()
+          && !entry.fory.getTypeResolver().isRegistrationFrozen()) {
         entry.fory.getTypeResolver().freezeRegistration();
       }
       return action.apply(entry.fory);
     } finally {
       release(entry);
-    }
-  }
-
-  private void freezeRegistration() {
-    if (!registrationFrozen) {
-      synchronized (callbackLock) {
-        if (!registrationFrozen) {
-          registrationFrozen = true;
-        }
-      }
-    }
-  }
-
-  private void checkRegistrationOpen() {
-    if (registrationFrozen) {
-      throw new ForyException(
-          "Cannot register class/serializer after registration has been frozen. Please register "
-              + "all classes before invoking top-level `serialize/deserialize` methods of "
-              + "ThreadSafeFory.");
     }
   }
 
@@ -401,18 +366,6 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
 
   @Override
   public <T> T copy(T obj) {
-    if (!registrationFrozen) {
-      synchronized (callbackLock) {
-        if (!registrationFrozen) {
-          PooledEntry entry = acquireEntry();
-          try {
-            return entry.fory.copy(obj);
-          } finally {
-            release(entry);
-          }
-        }
-      }
-    }
     PooledEntry entry = acquireEntry();
     try {
       return entry.fory.copy(obj);

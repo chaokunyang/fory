@@ -49,6 +49,9 @@ call. Starting either operation permanently freezes registration even if the ope
 operations and `ThreadSafeFory#execute` do not freeze registration unless the supplied callback
 starts serialization or deserialization. Later explicit registration attempts are rejected.
 
+For a thread-safe facade, complete registration before concurrent serialization, deserialization,
+copy, or `execute` calls begin.
+
 In native mode with registration disabled, allowed unregistered runtime classes may still be used
 after this boundary. That behavior does not reopen or change explicit registration.
 
@@ -122,7 +125,8 @@ Fory fory = Fory.builder()
 1. Keep class registration enabled for untrusted input.
 2. Prefer explicit numeric IDs when readers and writers can share a stable ID mapping.
 3. Use the same registration order on both sides when IDs are assigned automatically.
-4. Configure all classes, serializers, and disallow rules before the first operation.
+4. Configure all classes, serializers, and disallow rules before the first root serialization or
+   deserialization operation.
 5. Configure `AllowListChecker` when class registration is disabled.
 
 ## Related Topics

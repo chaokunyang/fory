@@ -665,10 +665,6 @@ adding allocation or slot-clearing work to normal roots. Bounded backing may ret
 references when the runtime-specific retention rule permits it. Runtime-specific thresholds and
 reset ownership belong in the implementation guide and language guidance.
 
-One-time warning registries retain their keys beyond the current root. A warning selected by a
-remote class or type name must therefore use a fixed key instead of including that untrusted name or
-another unbounded remote value in the message arguments.
-
 A class-resolution cache reachable from untrusted deserialization may publish
 an entry only from explicit trusted configuration or after the active class
 policy has accepted the resolved class. A cache hit therefore represents an

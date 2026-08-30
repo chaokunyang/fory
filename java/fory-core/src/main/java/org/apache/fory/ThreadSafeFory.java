@@ -34,13 +34,16 @@ import org.apache.fory.resolver.TypeChecker;
  * <p>Serializer instances registered on this facade must implement {@link
  * org.apache.fory.serializer.Shareable}. Use a serializer class or resolver factory for
  * runtime-local serializers so every underlying {@link Fory} owns its instance.
+ *
+ * <p>Complete facade registration before concurrent serialization, deserialization, copy, or {@link
+ * #execute} calls begin.
  */
 public interface ThreadSafeFory extends BaseFory {
 
   /**
    * Provide a context to execution operations on {@link Fory} directly and return the executed
    * result. The action must not retain the runtime or register through it; use this facade's
-   * registration methods so every underlying runtime receives the same registration.
+   * registration methods during setup so every underlying runtime receives the same registration.
    */
   <R> R execute(Function<Fory, R> action);
 

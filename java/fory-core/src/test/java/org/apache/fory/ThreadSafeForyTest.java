@@ -154,7 +154,6 @@ public class ThreadSafeForyTest extends ForyTestBase {
     AtomicReference<SharedRegistry> threadPoolRegistry1 = new AtomicReference<>();
     AtomicReference<SharedRegistry> threadPoolRegistry2 = new AtomicReference<>();
     AtomicReference<Throwable> error = new AtomicReference<>();
-    threadPool.serialize("warm");
     Thread poolThread1 =
         new Thread(
             () -> {
@@ -693,6 +692,103 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
+  public void testExecuteConcurrency() throws InterruptedException {
+    for (ThreadSafeFory fory : newThreadSafeRuntimes()) {
+      CountDownLatch entered = new CountDownLatch(2);
+      CountDownLatch release = new CountDownLatch(1);
+      AtomicReference<Throwable> error = new AtomicReference<>();
+      Thread first = new Thread(() -> runBlockingExecute(fory, entered, release, error));
+      Thread second = new Thread(() -> runBlockingExecute(fory, entered, release, error));
+
+      first.start();
+      second.start();
+      boolean concurrent = entered.await(10, TimeUnit.SECONDS);
+      release.countDown();
+      first.join();
+      second.join();
+
+      assertTrue(concurrent);
+      assertNull(error.get());
+      fory.register(BeanA.class);
+    }
+  }
+
+  private static void runBlockingExecute(
+      ThreadSafeFory fory,
+      CountDownLatch entered,
+      CountDownLatch release,
+      AtomicReference<Throwable> error) {
+    try {
+      fory.execute(
+          child -> {
+            entered.countDown();
+            awaitUnchecked(release);
+            return null;
+          });
+    } catch (Throwable t) {
+      error.compareAndSet(null, t);
+    }
+  }
+
+  @Test
+  public void testCopyConcurrency() throws InterruptedException {
+    for (ThreadSafeFory fory : newThreadSafeRuntimes()) {
+      CountDownLatch entered = new CountDownLatch(2);
+      CountDownLatch release = new CountDownLatch(1);
+      AtomicReference<Throwable> error = new AtomicReference<>();
+      fory.registerSerializer(
+          BlockingCopyValue.class,
+          resolver -> new BlockingCopySerializer(resolver, entered, release));
+      Thread first = new Thread(() -> runBlockingCopy(fory, error));
+      Thread second = new Thread(() -> runBlockingCopy(fory, error));
+
+      first.start();
+      second.start();
+      boolean concurrent = entered.await(10, TimeUnit.SECONDS);
+      release.countDown();
+      first.join();
+      second.join();
+
+      assertTrue(concurrent);
+      assertNull(error.get());
+      fory.register(BeanA.class);
+    }
+  }
+
+  private static void runBlockingCopy(ThreadSafeFory fory, AtomicReference<Throwable> error) {
+    try {
+      fory.copy(new BlockingCopyValue());
+    } catch (Throwable t) {
+      error.compareAndSet(null, t);
+    }
+  }
+
+  @Test
+  public void testFrozenThreadLocalCreatesChild() throws InterruptedException {
+    ThreadSafeFory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .buildThreadLocalFory();
+    fory.register(Foo.class);
+    fory.serialize("freeze");
+    AtomicReference<Throwable> error = new AtomicReference<>();
+    Thread thread =
+        new Thread(
+            () -> {
+              try {
+                fory.serialize(new Foo());
+              } catch (Throwable t) {
+                error.set(t);
+              }
+            });
+    thread.start();
+    thread.join();
+    assertNull(error.get());
+  }
+
+  @Test
   public void testRegisterAfterSerializeThrows() {
     ThreadSafeFory fory =
         Fory.builder()
@@ -797,104 +893,6 @@ public class ThreadSafeForyTest extends ForyTestBase {
       assertNull(rootError.get());
       assertTrue(registrationError.get() instanceof ForyException);
       assertEquals(callbacks.get(), 0);
-    }
-  }
-
-  @Test
-  public void testExecuteChildRegisterRace() throws InterruptedException {
-    for (ThreadSafeFory fory : newThreadSafeRuntimes()) {
-      CountDownLatch rootStarted = new CountDownLatch(1);
-      CountDownLatch finishRoot = new CountDownLatch(1);
-      AtomicReference<Throwable> rootError = new AtomicReference<>();
-      AtomicReference<Throwable> registrationError = new AtomicReference<>();
-      Thread rootThread =
-          new Thread(
-              () -> {
-                try {
-                  fory.execute(
-                      child -> {
-                        child.serialize("value");
-                        rootStarted.countDown();
-                        awaitUnchecked(finishRoot);
-                        return null;
-                      });
-                } catch (Throwable t) {
-                  rootError.set(t);
-                }
-              });
-      Thread registrationThread =
-          new Thread(
-              () -> {
-                try {
-                  fory.execute(
-                      child -> {
-                        child.register(BeanB.class);
-                        return null;
-                      });
-                } catch (Throwable t) {
-                  registrationError.set(t);
-                }
-              });
-
-      rootThread.start();
-      assertTrue(rootStarted.await(30, TimeUnit.SECONDS));
-      registrationThread.start();
-      finishRoot.countDown();
-      rootThread.join();
-      registrationThread.join();
-
-      assertNull(rootError.get());
-      assertTrue(registrationError.get() instanceof ForyException);
-    }
-  }
-
-  @Test
-  public void testCopyRegistrationRace() throws InterruptedException {
-    for (ThreadSafeFory fory : newThreadSafeRuntimes()) {
-      CountDownLatch copyStarted = new CountDownLatch(1);
-      CountDownLatch finishCopy = new CountDownLatch(1);
-      CountDownLatch registrationStarted = new CountDownLatch(1);
-      CountDownLatch registrationDone = new CountDownLatch(1);
-      AtomicInteger callbacks = new AtomicInteger();
-      AtomicReference<Throwable> copyError = new AtomicReference<>();
-      AtomicReference<Throwable> registrationError = new AtomicReference<>();
-      fory.registerSerializer(
-          BlockingCopyValue.class,
-          resolver -> new BlockingCopySerializer(resolver, copyStarted, finishCopy));
-      Thread copyThread =
-          new Thread(
-              () -> {
-                try {
-                  fory.copy(new BlockingCopyValue());
-                } catch (Throwable t) {
-                  copyError.set(t);
-                }
-              });
-      Thread registrationThread =
-          new Thread(
-              () -> {
-                registrationStarted.countDown();
-                try {
-                  fory.registerCallback(child -> callbacks.incrementAndGet());
-                } catch (Throwable t) {
-                  registrationError.set(t);
-                } finally {
-                  registrationDone.countDown();
-                }
-              });
-
-      copyThread.start();
-      assertTrue(copyStarted.await(30, TimeUnit.SECONDS));
-      registrationThread.start();
-      assertTrue(registrationStarted.await(30, TimeUnit.SECONDS));
-      Assert.assertFalse(registrationDone.await(100, TimeUnit.MILLISECONDS));
-      finishCopy.countDown();
-      copyThread.join();
-      registrationThread.join();
-
-      assertNull(copyError.get());
-      assertNull(registrationError.get());
-      assertTrue(callbacks.get() > 0);
     }
   }
 

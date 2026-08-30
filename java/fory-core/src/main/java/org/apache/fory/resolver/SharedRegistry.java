@@ -102,6 +102,10 @@ public final class SharedRegistry {
   final StaticGeneratedSerializerRegistry staticGeneratedSerializerRegistry =
       new StaticGeneratedSerializerRegistry();
   private final Object metaStringCacheLock = new Object();
+  // Thread-safe facades share this boundary across their children. A new thread-local child first
+  // receives the facade's fixed setup, then switches to the shared registration snapshot before it
+  // is exposed.
+  private volatile boolean registrationFrozen;
   private volatile int maxSchemaVersionsPerType = -1;
   private volatile int maxAverageSchemaVersionsPerType = -1;
   private final HashMap<Object, Integer> remoteTypeDefVersionsByType = new HashMap<>();
@@ -110,6 +114,27 @@ public final class SharedRegistry {
   volatile BiMap<String, Class<?>> registeredClasses;
 
   public SharedRegistry() {}
+
+  public boolean isRegistrationFrozen() {
+    return registrationFrozen;
+  }
+
+  public void freezeRegistration() {
+    if (!registrationFrozen) {
+      synchronized (this) {
+        registrationFrozen = true;
+      }
+    }
+  }
+
+  public void checkRegistrationOpen() {
+    if (registrationFrozen) {
+      throw new ForyException(
+          "Cannot register class/serializer after registration has been frozen. Please register "
+              + "all classes before invoking top-level `serialize/deserialize` methods of "
+              + "ThreadSafeFory.");
+    }
+  }
 
   public synchronized void setRemoteSchemaLimits(
       int maxSchemaVersionsPerType, int maxAverageSchemaVersionsPerType) {

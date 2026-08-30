@@ -306,21 +306,27 @@ public class ClassResolverTest extends ForyTestBase {
   public void testSuppressXtypeWarnings() throws Exception {
     String suppressed =
         captureOutput(
-            () -> {
-              Fory fory = newUnknownClassFory(true);
-              resolveMissingXtype(fory, "FirstType");
-              resolveMissingXtype(fory, "SecondType");
-            });
-    assertEquals(count(suppressed, " WARN  XtypeResolver:"), 0);
+            () ->
+                resolveMissingXtype(
+                    Fory.builder()
+                        .withXlang(true)
+                        .withMetaShare(true)
+                        .withDeserializeUnknownClass(true)
+                        .suppressClassRegistrationWarnings(true)
+                        .build()));
+    assertEquals(count(suppressed, "Class missing.pkg.MissingType not registered"), 0);
 
     String unsuppressed =
         captureOutput(
-            () -> {
-              Fory fory = newUnknownClassFory(false);
-              resolveMissingXtype(fory, "ThirdType");
-              resolveMissingXtype(fory, "FourthType");
-            });
-    assertEquals(count(unsuppressed, " WARN  XtypeResolver:"), 1);
+            () ->
+                resolveMissingXtype(
+                    Fory.builder()
+                        .withXlang(true)
+                        .withMetaShare(true)
+                        .withDeserializeUnknownClass(true)
+                        .suppressClassRegistrationWarnings(false)
+                        .build()));
+    assertEquals(count(unsuppressed, "Class missing.pkg.MissingType not registered"), 1);
   }
 
   @Test
@@ -962,7 +968,7 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
-  public void testFinishRegisterPublishesAndAdoptsSharedRegistration() {
+  public void testFreezePublishesRegistration() {
     ForyBuilder builder =
         Fory.builder().withXlang(false).requireClassRegistration(true).withCompatible(false);
     finishBuilder(builder);
@@ -1936,15 +1942,6 @@ public class ClassResolverTest extends ForyTestBase {
     }
   }
 
-  private static Fory newUnknownClassFory(boolean suppressWarnings) {
-    return Fory.builder()
-        .withXlang(true)
-        .withMetaShare(true)
-        .withDeserializeUnknownClass(true)
-        .suppressClassRegistrationWarnings(suppressWarnings)
-        .build();
-  }
-
   private static String captureOutput(Runnable action) throws Exception {
     int previousLogLevel = LoggerFactory.getLogLevel();
     PrintStream previousOut = System.out;
@@ -1960,7 +1957,7 @@ public class ClassResolverTest extends ForyTestBase {
     return out.toString(StandardCharsets.UTF_8.name());
   }
 
-  private static void resolveMissingXtype(Fory fory, String typeName) {
+  private static void resolveMissingXtype(Fory fory) {
     try {
       Method method =
           XtypeResolver.class.getDeclaredMethod(
@@ -1973,10 +1970,12 @@ public class ClassResolverTest extends ForyTestBase {
           fory.getTypeResolver(),
           Types.NAMED_STRUCT,
           Encoders.PACKAGE_ENCODER.encodeBinary("missing.pkg"),
-          Encoders.TYPE_NAME_ENCODER.encodeBinary(typeName));
+          Encoders.TYPE_NAME_ENCODER.encodeBinary("MissingType"));
     } catch (InvocationTargetException e) {
-      if (!(e.getCause() instanceof IllegalStateException)) {
-        throw new AssertionError(e.getCause());
+      Throwable cause = e.getCause();
+      if (!(cause instanceof IllegalStateException)
+          || !cause.getMessage().contains("missing.pkg.MissingType")) {
+        throw new AssertionError(e);
       }
     } catch (ReflectiveOperationException e) {
       throw new AssertionError(e);

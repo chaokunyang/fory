@@ -155,7 +155,6 @@ public abstract class TypeResolver {
   // Caches for readTypeInfo(ReadContext) - persist between calls to avoid reloading
   // dynamically created classes that can't be found by Class.forName
   private final TypeInfo[] typeInfoCache;
-  private boolean registrationFrozen;
 
   protected TypeResolver(
       Config config,
@@ -195,7 +194,8 @@ public abstract class TypeResolver {
 
   @Internal
   public final boolean isRegistrationFrozen() {
-    return registrationFrozen;
+    IdentityHashMap<Class<?>, Integer> registeredClassIdMap = sharedRegistry.registeredClassIdMap;
+    return registeredClassIdMap != null && extRegistry.registeredClassIdMap == registeredClassIdMap;
   }
 
   public final boolean isCrossLanguage() {
@@ -228,7 +228,7 @@ public abstract class TypeResolver {
 
   @Internal
   public final void checkRegistrationOpen() {
-    if (registrationFrozen) {
+    if (isRegistrationFrozen()) {
       throw new ForyException(
           "Cannot register class/serializer after registration has been frozen. Please register "
               + "all classes before invoking top-level `serialize/deserialize` methods of Fory.");
@@ -398,10 +398,12 @@ public abstract class TypeResolver {
    * points can call it defensively.
    */
   public final void freezeRegistration() {
-    if (registrationFrozen) {
+    if (isRegistrationFrozen()) {
       return;
     }
-    registrationFrozen = true;
+    // A root may start through a borrowed child, so the child must close the shared facade
+    // boundary before publishing or adopting the registration snapshot.
+    sharedRegistry.freezeRegistration();
     sharedRegistry.setRegistrationIfAbsent(
         extRegistry.registeredClassIdMap, extRegistry.registeredClasses);
     extRegistry.freezeRegistration(

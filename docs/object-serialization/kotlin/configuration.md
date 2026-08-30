@@ -85,7 +85,7 @@ object ForyHolder {
 
 `ForyModule` registration and Kotlin reified registration extensions target `BaseFory`, so they are
 available on both direct and thread-safe facades. Complete registration before the facade's first
-root serialization or deserialization.
+root serialization or deserialization, and before concurrent use of a thread-safe facade begins.
 
 ### Using Builder Methods
 

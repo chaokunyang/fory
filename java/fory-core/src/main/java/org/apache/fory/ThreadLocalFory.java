@@ -30,7 +30,6 @@ import java.util.function.Supplier;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.config.ForyBuilder;
-import org.apache.fory.exception.ForyException;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
@@ -48,11 +47,10 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   private final ThreadLocal<Fory> foryThreadLocal;
   private Consumer<Fory> factoryCallback;
   private final Map<Fory, Object> allFory;
-  private final Object callbackLock = new Object();
-  private volatile boolean registrationFrozen;
+  private final SharedRegistry sharedRegistry;
 
   public ThreadLocalFory(Function<ForyBuilder, Fory> factory) {
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    sharedRegistry = new SharedRegistry();
     foryFactory = () -> factory.apply(Fory.builder().withSharedRegistry(sharedRegistry));
     factoryCallback = f -> {};
     allFory = Collections.synchronizedMap(new WeakHashMap<>());
@@ -65,10 +63,10 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   }
 
   private Fory newFory() {
-    synchronized (callbackLock) {
+    synchronized (sharedRegistry) {
       Fory fory = foryFactory.get();
       factoryCallback.accept(fory);
-      if (registrationFrozen) {
+      if (sharedRegistry.isRegistrationFrozen()) {
         fory.getTypeResolver().freezeRegistration();
       }
       allFory.put(fory, null);
@@ -77,25 +75,15 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   }
 
   private Fory currentFory() {
-    freezeRegistration();
+    sharedRegistry.freezeRegistration();
     return foryThreadLocal.get();
-  }
-
-  private void freezeRegistration() {
-    if (!registrationFrozen) {
-      synchronized (callbackLock) {
-        if (!registrationFrozen) {
-          registrationFrozen = true;
-        }
-      }
-    }
   }
 
   @Internal
   @Override
   public void registerCallback(Consumer<Fory> callback) {
-    synchronized (callbackLock) {
-      checkRegistrationOpen();
+    synchronized (sharedRegistry) {
+      sharedRegistry.checkRegistrationOpen();
       synchronized (allFory) {
         allFory.keySet().forEach(callback);
       }
@@ -106,32 +94,10 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   @Override
   public <R> R execute(Function<Fory, R> action) {
     Fory fory = foryThreadLocal.get();
-    if (!registrationFrozen) {
-      synchronized (callbackLock) {
-        if (!registrationFrozen) {
-          try {
-            return action.apply(fory);
-          } finally {
-            if (fory.getTypeResolver().isRegistrationFrozen()) {
-              registrationFrozen = true;
-            }
-          }
-        }
-      }
-    }
-    if (!fory.getTypeResolver().isRegistrationFrozen()) {
+    if (sharedRegistry.isRegistrationFrozen() && !fory.getTypeResolver().isRegistrationFrozen()) {
       fory.getTypeResolver().freezeRegistration();
     }
     return action.apply(fory);
-  }
-
-  private void checkRegistrationOpen() {
-    if (registrationFrozen) {
-      throw new ForyException(
-          "Cannot register class/serializer after registration has been frozen. Please register "
-              + "all classes before invoking top-level `serialize/deserialize` methods of "
-              + "ThreadSafeFory.");
-    }
   }
 
   @Override
@@ -231,13 +197,6 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
 
   @Override
   public <T> T copy(T obj) {
-    if (!registrationFrozen) {
-      synchronized (callbackLock) {
-        if (!registrationFrozen) {
-          return foryThreadLocal.get().copy(obj);
-        }
-      }
-    }
     return foryThreadLocal.get().copy(obj);
   }
 }

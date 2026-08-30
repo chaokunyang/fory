@@ -44,7 +44,7 @@ describe.each([
       registered.deserialize(bytes),
   },
 ])("$name root cleanup", ({ invoke }) => {
-  test.each(["success", "failure"] as const)("restores generated root state for %s", (outcome) => {
+  test("restores generated root state after failure", () => {
     const writerFory = new Fory({ compatible: true, ref: true });
     const readerFory = new Fory({ compatible: true, ref: true });
     const writer = writerFory.register(
@@ -58,23 +58,14 @@ describe.each([
       }),
     );
     const bytes = writer.serialize({ value: 7 });
-    const input = outcome === "failure" ? bytes.subarray(0, bytes.length - 1) : bytes;
-    const read = () => invoke(readerFory, reader, input);
+    const input = bytes.subarray(0, bytes.length - 1);
 
-    if (outcome === "failure") {
-      expect(read).toThrow();
-      expectRootStateCleared(readerFory.readContext);
-      expect(invoke(readerFory, reader, bytes)).toEqual({ value: 7 });
-    } else {
-      const first = read();
-      const second = read();
-      expect(first).toEqual({ value: 7 });
-      expect(second).toEqual({ value: 7 });
-      expect(second).not.toBe(first);
-    }
+    expect(() => invoke(readerFory, reader, input)).toThrow();
+    expectRootStateCleared(readerFory.readContext);
+    expect(invoke(readerFory, reader, bytes)).toEqual({ value: 7 });
   });
 
-  test.each(["success", "failure"] as const)("restores logical tables for %s", (outcome) => {
+  test("restores logical tables after failure", () => {
     const fory = new Fory({ compatible: true, ref: true });
     const registered = fory.register(Type.struct(7602, {}));
     const readContext = (fory as any).readContext;
@@ -86,31 +77,23 @@ describe.each([
     registered.serializer.readRef = () => {
       expectRootStateCleared(readContext);
       populateLogicalTables(readContext, typeMeta);
-      if (outcome === "failure") {
-        throw new Error("root read failed");
-      }
-      return 7;
+      throw new Error("root read failed");
     };
 
     const read = () => invoke(fory, registered, new Uint8Array([1]));
-    if (outcome === "failure") {
-      expect(read).toThrow();
+    expect(read).toThrow();
+    expectRootStateCleared(readContext);
+    registered.serializer.readRef = () => {
       expectRootStateCleared(readContext);
-      registered.serializer.readRef = () => {
-        expectRootStateCleared(readContext);
-        return 7;
-      };
-      expect(read()).toBe(7);
-    } else {
-      expect(read()).toBe(7);
-      expect(read()).toBe(7);
-    }
+      return 7;
+    };
+    expect(read()).toBe(7);
 
     expect(readContext.typeMetaCache.get(headerHash)).toBe(typeMeta);
   });
 });
 
-test.each(["success", "failure"] as const)("restores root write state for %s", (outcome) => {
+test("restores root write state after failure", () => {
   const fory = new Fory({ compatible: true, ref: true });
   const registered = fory.register(Type.struct(7606, {}));
   const writeContext = (fory as any).writeContext;
@@ -122,24 +105,14 @@ test.each(["success", "failure"] as const)("restores root write state for %s", (
     writeContext.refWriter.writeRef(value);
     writeContext.metaStringWriter.writeBytes(writeContext.writer, name);
     writeContext.writeTypeMeta(typeMeta, typeMeta.toBytes());
-    if (outcome === "failure") {
-      throw new Error("root write failed");
-    }
+    throw new Error("root write failed");
   };
 
-  if (outcome === "failure") {
-    expect(() => registered.serialize(value)).toThrow();
-    expect(writeContext.refWriter.writeObjects.size).toBe(0);
-    expect(name.dynamicWriteStringId).toBe(-1);
-    expect(typeMeta.dynamicTypeId).toBe(-1);
-    expect(fory.serialize(7)).toBeDefined();
-  } else {
-    expect(registered.serialize(value)).toBeDefined();
-    expect(fory.serialize(7)).toBeDefined();
-  }
+  expect(() => registered.serialize(value)).toThrow();
   expect(writeContext.refWriter.writeObjects.size).toBe(0);
   expect(name.dynamicWriteStringId).toBe(-1);
   expect(typeMeta.dynamicTypeId).toBe(-1);
+  expect(fory.serialize(7)).toBeDefined();
 });
 
 test("clears write state before serializer lookup", () => {

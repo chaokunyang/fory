@@ -897,67 +897,34 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
-  public void testRegistryFreezeWaitsForSetup() throws InterruptedException {
-    ThreadSafeFory fory =
+  public void testChildFreezeWaitsForFacade() throws InterruptedException {
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory child =
         Fory.builder()
             .withXlang(false)
             .requireClassRegistration(true)
             .withCompatible(false)
-            .buildThreadLocalFory();
-    CountDownLatch childReady = new CountDownLatch(1);
-    CountDownLatch setupOwnsBoundary = new CountDownLatch(1);
-    CountDownLatch startRoot = new CountDownLatch(1);
-    CountDownLatch finishSetup = new CountDownLatch(1);
-    AtomicReference<Fory> rootChild = new AtomicReference<>();
+            .withSharedRegistry(sharedRegistry)
+            .build();
     AtomicReference<Throwable> rootError = new AtomicReference<>();
-    AtomicReference<Throwable> setupError = new AtomicReference<>();
     Thread rootThread =
         new Thread(
             () -> {
               try {
-                fory.execute(
-                    child -> {
-                      rootChild.set(child);
-                      childReady.countDown();
-                      awaitUnchecked(startRoot);
-                      child.serialize("value");
-                      return null;
-                    });
+                child.serialize("value");
               } catch (Throwable t) {
                 rootError.set(t);
               }
             });
-    rootThread.start();
-    assertTrue(childReady.await(30, TimeUnit.SECONDS));
 
-    Thread setupThread =
-        new Thread(
-            () -> {
-              try {
-                fory.registerCallback(
-                    child -> {
-                      if (child == rootChild.get()) {
-                        setupOwnsBoundary.countDown();
-                        awaitUnchecked(finishSetup);
-                      }
-                      child.register(BeanA.class);
-                    });
-              } catch (Throwable t) {
-                setupError.set(t);
-              }
-            });
-    setupThread.start();
-    assertTrue(setupOwnsBoundary.await(30, TimeUnit.SECONDS));
-    startRoot.countDown();
-    awaitThreadBlocked(rootThread);
-    Assert.assertFalse(rootChild.get().getTypeResolver().isRegistrationFrozen());
-
-    finishSetup.countDown();
+    synchronized (sharedRegistry) {
+      rootThread.start();
+      awaitThreadBlocked(rootThread);
+      Assert.assertFalse(child.getTypeResolver().isRegistrationFrozen());
+    }
     rootThread.join();
-    setupThread.join();
     assertNull(rootError.get());
-    assertNull(setupError.get());
-    assertTrue(fory.execute(child -> child.getTypeResolver().isRegistered(BeanA.class)));
+    assertTrue(child.getTypeResolver().isRegistrationFrozen());
   }
 
   private static void awaitThreadBlocked(Thread thread) throws InterruptedException {

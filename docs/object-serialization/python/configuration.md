@@ -54,10 +54,11 @@ Thread-safe serialization interface using a pooled wrapper:
 
 ```python
 class ThreadSafeFory:
-    def __init__(
-        self, fory_factory=None, **kwargs
-    )
+    def __init__(self, fory_factory=None, **kwargs)
 ```
+
+Pass either a no-argument `fory_factory` that returns a configured `Fory` instance, or pass normal
+`Fory` construction options through `**kwargs`.
 
 ## Parameters
 
@@ -82,6 +83,9 @@ class ThreadSafeFory:
 ## Key Methods
 
 ```python
+fory = pyfory.Fory(xlang=True)
+thread_safe_fory = pyfory.ThreadSafeFory(xlang=True)
+
 # Serialization (serialize/deserialize are identical to dumps/loads)
 data: bytes = fory.serialize(obj)
 obj = fory.deserialize(data)

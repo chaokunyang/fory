@@ -299,8 +299,8 @@ public:
   /// Fastest path for writing struct type info when TypeInfo is already known.
   /// Avoids type_index creation and lookup overhead.
   ///
-  /// @param type_info Pointer to a valid TypeInfo whose metadata is ready when
-  /// the configured wire mode needs it
+  /// @param type_info Pointer to a valid TypeInfo. This method completes its
+  /// metadata lazily when the configured wire mode needs it.
   void write_struct_type_info(const TypeInfo *type_info);
 
   /// Fastest path - write struct type_id directly without any lookups.

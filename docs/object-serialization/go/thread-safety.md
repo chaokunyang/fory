@@ -72,20 +72,21 @@ The thread-safe wrapper uses `sync.Pool`:
 
 1. **Acquire**: Gets a Fory instance from the pool
 2. **Use**: Performs serialization/deserialization
-3. **Copy**: Copies result data because the buffer will be reused
-4. **Release**: Returns the instance to the pool
+3. **Copy**: Copies result data (buffer will be reused)
+4. **Release**: Returns instance to pool
 
 ```go
 // Simplified implementation
 func (f *Fory) Serialize(v any) ([]byte, error) {
-    inner := f.pool.Get().(*fory.Fory)
-    defer f.pool.Put(inner)
+    fory := f.pool.Get().(*fory.Fory)
+    defer f.pool.Put(fory)
 
-    data, err := inner.Serialize(v)
+    data, err := fory.Serialize(v)
     if err != nil {
         return nil, err
     }
 
+    // Copy because underlying buffer will be reused
     result := make([]byte, len(data))
     copy(result, data)
     return result, nil
@@ -196,9 +197,7 @@ This is safer but has allocation overhead.
 ```go
 func BenchmarkNonThreadSafe(b *testing.B) {
     f := fory.New(fory.WithXlang(true))
-    if err := f.RegisterStruct(User{}, 1); err != nil {
-        b.Fatal(err)
-    }
+    f.RegisterStruct(User{}, 1)
     user := &User{ID: 1, Name: "Alice"}
 
     for i := 0; i < b.N; i++ {
@@ -234,9 +233,7 @@ For maximum performance with known goroutine count:
 func worker(id int) {
     // Each worker has its own Fory instance
     f := fory.New(fory.WithXlang(true))
-    if err := f.RegisterStruct(User{}, 1); err != nil {
-        panic(err)
-    }
+    f.RegisterStruct(User{}, 1)
 
     for task := range tasks {
         data, _ := f.Serialize(task)

@@ -49,9 +49,8 @@ call. Starting either operation permanently freezes registration even if the ope
 operations and `ThreadSafeFory#execute` do not freeze registration unless the supplied callback
 starts serialization or deserialization. Later explicit registration attempts are rejected.
 
-In native mode with registration disabled, Fory may still resolve allowed runtime classes and cache
-their descriptors or serializers after this boundary. That lazy resolution is not explicit
-registration and does not reopen or change the configured registry.
+In native mode with registration disabled, allowed unregistered runtime classes may still be used
+after this boundary. That behavior does not reopen or change explicit registration.
 
 `registerSerializer(Foo.class, ...)` is sufficient to use `Foo` when class registration is enabled.
 Use `registerSerializerAndType(Foo.class, ...)` when you also want Fory to assign a numeric type ID.

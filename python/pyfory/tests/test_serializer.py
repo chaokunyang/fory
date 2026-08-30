@@ -967,7 +967,7 @@ def test_factory_root_freeze():
     assert fory.type_resolver.get_type_info(FrozenRegistration, create=False) is None
 
 
-def test_inferred_registration_freeze():
+def test_type_setup_freeze():
     fory = Fory(xlang=False, strict=False, compatible=False)
     fory.register_type(FrozenRegistration)
     armed = False

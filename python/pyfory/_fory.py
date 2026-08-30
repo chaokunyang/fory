@@ -643,13 +643,9 @@ class ThreadSafeFory:
     remains closed even when that first operation fails.
 
     Args:
-        xlang (bool): Whether to enable xlang mode. Defaults to True.
-        ref (bool): Whether to enable reference tracking. Defaults to False.
-        strict (bool): Whether to require type registration. Defaults to True.
-        compatible (bool): Whether to enable compatible mode. Defaults to compatible mode
-            in both xlang and Python native mode. Set False only when every reader and
-            writer always uses the same Python class schema and smaller payloads matter.
-        max_depth (int): Maximum depth for deserialization. Defaults to 50.
+        fory_factory: Optional no-argument factory that returns a configured Fory
+            instance.
+        **kwargs: Fory construction options used when fory_factory is not supplied.
     Example:
         >>> import pyfory
         >>> import threading

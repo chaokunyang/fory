@@ -83,12 +83,14 @@ not the place where nested serializers do their work.
 - resetting operation-local context state at the top-level root boundary
 
 Explicit type and serializer registration is open only before the first root serialization or
-deserialization. Starting either root sets one authoritative frozen flag for the natural
-registration owner before codec work and never clears it, including when the root fails. Every
-explicit registration path checks that flag before mutation. A thread-safe facade with its own
-public registration surface may own its boundary flag, but must not mirror a child registry's flag.
-Implementations must use one boolean flag without another lifecycle state, a registration commit
-path, or eager whole-registry preparation.
+deserialization. Starting either root establishes one authoritative frozen lifecycle fact for the
+natural registration owner before codec work and never clears it, including when the root fails.
+Every explicit registration path checks that fact before mutation. A thread-safe facade with its own
+public registration surface may own its boundary fact, but must not mirror a child registry's
+lifecycle. Each natural owner must keep exactly one authoritative lifecycle fact. That fact may be
+an owner-native flag or the presence of an immutable registry snapshot. Do not add another
+lifecycle state, a registration commit or rollback path, or eager whole-registry preparation solely
+to implement freeze.
 
 In JavaScript, `Fory` owns this flag. `TypeResolver` owns the registration maps but must not carry a
 second lifecycle flag.

@@ -109,21 +109,14 @@ every reader and writer always uses the same Go struct schema.
 Register structs before serializing them. Prefer explicit numeric IDs for long-lived payloads:
 
 ```go
-f := fory.New(fory.WithXlang(false))
-if err := f.RegisterStruct(Order{}, 100); err != nil {
-    panic(err)
-}
-if err := f.RegisterStruct(LineItem{}, 101); err != nil {
-    panic(err)
-}
+_ = f.RegisterStruct(Order{}, 100)
+_ = f.RegisterStruct(LineItem{}, 101)
 ```
 
 Name-based registration is useful when ID coordination is harder:
 
 ```go
-if err := f.RegisterStructByName(Order{}, "example.Order"); err != nil {
-    panic(err)
-}
+_ = f.RegisterStructByName(Order{}, "example.Order")
 ```
 
 If you register without stable IDs, every writer and reader must make the same registration choices.

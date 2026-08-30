@@ -81,10 +81,9 @@ fory = pyfory.Fory(
 The first root attempt permanently freezes registration, including when that attempt fails.
 `strict=False` does not permit type or serializer registration after that boundary, but its policy
 may authorize module-global classes and callables resolved while reading a trusted native payload.
-That resolution may populate resolver-owned caches but does not add or change an explicit
-registration. If a strict-mode failure requires adding a missing registration, create and configure
-a new instance. An already configured reader can process a later root after a malformed-data
-failure.
+That resolution does not add or change an explicit registration. If a strict-mode failure requires
+adding a missing registration, create and configure a new instance. An already configured reader
+can process a later root after a malformed-data failure.
 
 Received remote metadata is also limited:
 

@@ -684,14 +684,13 @@ Thread-safe serialization interface using an instance pool:
 
 ```python
 class ThreadSafeFory:
-    def __init__(
-        self,
-        fory_factory=None,
-        **kwargs
-    )
+    def __init__(self, fory_factory=None, **kwargs)
 ```
 
 `ThreadSafeFory` provides thread-safe serialization by maintaining a pool of `Fory` instances protected by a lock. When a thread needs to serialize/deserialize, it gets an instance from the pool, uses it, and returns it. Complete explicit type and serializer registration before the first serialization or deserialization attempt.
+
+Pass either a no-argument `fory_factory` that returns a configured `Fory` instance, or pass normal
+`Fory` construction options through `**kwargs`.
 
 **Thread Safety Example:**
 
@@ -738,15 +737,16 @@ for t in threads: t.join()
 
 **Parameters:**
 
-- **`xlang`** (`bool`, default=`True`): Use xlang mode. Set `False` for Python native mode supporting Python-specific objects.
-- **`ref`** (`bool`, default=`False`): Enable reference tracking for shared/circular references. Disable for better performance if your data has no shared references.
-- **`strict`** (`bool`, default=`True`): Require type registration for security. **Highly recommended** for production. Only disable in trusted environments.
-- **`compatible`** (`bool | None`, default `None`): Enable schema evolution. `None` enables compatible mode in both xlang and native mode. Set `False` only when every reader and writer always uses the same Python class schema and you want faster serialization and smaller size.
-- **`max_depth`** (`int`, default=`50`): Maximum deserialization depth for security, preventing stack overflow attacks.
+- **`fory_factory`** (`Callable | None`, default=`None`): No-argument factory for configured `Fory`
+  instances.
+- **`**kwargs`**: Normal `Fory` construction options, used when `fory_factory` is not supplied.
 
 **Key Methods:**
 
 ```python
+fory = pyfory.Fory(xlang=True)
+thread_safe_fory = pyfory.ThreadSafeFory(xlang=True)
+
 # Serialization (serialize/deserialize are identical to dumps/loads)
 data: bytes = fory.serialize(obj)
 obj = fory.deserialize(data)

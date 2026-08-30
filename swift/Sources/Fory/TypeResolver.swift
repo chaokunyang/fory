@@ -900,6 +900,8 @@ final class TypeResolver {
             bodyReader: registeredBodyReader(for: T.self)
         )
 
+        // Static serializer witnesses above are application code and may start a root. Recheck
+        // after the last witness and before either returning or publishing the TypeInfo.
         if let existing = bySerializerType.value(
             for: UInt64(UInt(bitPattern: serializerTypeID))),
             existing.matches(
@@ -910,9 +912,11 @@ final class TypeResolver {
                 typeName: (namespace: "", name: "")
             )
         {
+            try ensureRegistrationAllowed()
             return
         }
 
+        try ensureRegistrationAllowed()
         store(typeInfo, userTypeID: id)
     }
 
@@ -972,6 +976,8 @@ final class TypeResolver {
             bodyReader: registeredBodyReader(for: T.self)
         )
 
+        // Static serializer witnesses above are application code and may start a root. Recheck
+        // after the last witness and before either returning or publishing the TypeInfo.
         if let existing = bySerializerType.value(
             for: UInt64(UInt(bitPattern: serializerTypeID))),
             existing.matches(
@@ -982,9 +988,11 @@ final class TypeResolver {
                 typeName: (namespace: namespace, name: typeName)
             )
         {
+            try ensureRegistrationAllowed()
             return
         }
 
+        try ensureRegistrationAllowed()
         store(typeInfo, typeNameKey: TypeNameKey(namespace: namespace, typeName: typeName))
     }
 

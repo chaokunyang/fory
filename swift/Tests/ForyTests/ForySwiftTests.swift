@@ -26,6 +26,40 @@ struct Address: Equatable {
     var zip: Int32
 }
 
+private enum IDRegistrationProbe: Serializer {
+    case value
+
+    nonisolated(unsafe) static let resolver = TypeResolver(config: Config())
+
+    static var staticTypeId: TypeId {
+        resolver.freezeRegistration()
+        return .ext
+    }
+
+    static func defaultValue(_: ReadContext) throws -> IDRegistrationProbe { .value }
+
+    static func writeData(_: IDRegistrationProbe, _: WriteContext) throws {}
+
+    static func readData(_: ReadContext) throws -> IDRegistrationProbe { .value }
+}
+
+private enum NameRegistrationProbe: Serializer {
+    case value
+
+    nonisolated(unsafe) static let resolver = TypeResolver(config: Config())
+
+    static var staticTypeId: TypeId {
+        resolver.freezeRegistration()
+        return .ext
+    }
+
+    static func defaultValue(_: ReadContext) throws -> NameRegistrationProbe { .value }
+
+    static func writeData(_: NameRegistrationProbe, _: WriteContext) throws {}
+
+    static func readData(_: ReadContext) throws -> NameRegistrationProbe { .value }
+}
+
 @ForyStruct
 struct Person: Equatable {
     var id: Int64
@@ -1173,6 +1207,25 @@ func registrationIsRejectedAfterFirstTopLevelUse() throws {
         #expect(Bool(false))
     } catch {
         #expect("\(error)".contains("cannot register more types"))
+    }
+}
+
+@Test
+func registrationRechecksBeforeStore() throws {
+    let idResolver = IDRegistrationProbe.resolver
+    #expect(throws: ForyError.self) {
+        try idResolver.register(IDRegistrationProbe.self, id: 901)
+    }
+    #expect(throws: ForyError.self) {
+        _ = try idResolver.requireTypeInfo(for: IDRegistrationProbe.self)
+    }
+
+    let nameResolver = NameRegistrationProbe.resolver
+    #expect(throws: ForyError.self) {
+        try nameResolver.register(NameRegistrationProbe.self, name: "probe.name")
+    }
+    #expect(throws: ForyError.self) {
+        _ = try nameResolver.requireTypeInfo(for: NameRegistrationProbe.self)
     }
 }
 

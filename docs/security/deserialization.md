@@ -619,12 +619,11 @@ that case, classify the behavior by concrete impact:
 
 The first root serialization or deserialization permanently closes explicit type and serializer
 registration, including when that operation fails. Each natural registration owner keeps exactly
-one
-authoritative lifecycle fact, and every later explicit registration attempt fails before changing
+one authoritative frozen flag, and every later explicit registration attempt fails before changing
 type, serializer, ID, name, metadata, or policy bindings. A thread-safe facade with its own public
-registration surface may own its boundary fact, but must not mirror a child registry's lifecycle.
-That fact may be an owner-native flag or the presence of an immutable registry snapshot. Do not add
-another lifecycle state, a registration commit or rollback path, or eager whole-registry
+registration surface may own its boundary flag, but must not mirror a child registry's lifecycle.
+An immutable registry snapshot remains registry data and must not replace the frozen flag. Do not
+add another lifecycle state, a registration commit or rollback path, or eager whole-registry
 preparation solely to implement freeze.
 
 Registry freeze does not disable native runtime type resolution. When a mode supports unregistered

@@ -234,7 +234,8 @@ fory.register_by_name::<User>("example.User")?;
 
 ## Best Practices
 
-1. **Register early**: Register all types at application startup before any serialization
+1. **Register early**: Register all types at application startup before any serialization or
+   deserialization
 2. **Be consistent**: Use the same ID or name across all languages and all instances
 3. **Register all types**: Include nested struct types, not just top-level types
 4. **Prefer IDs for performance**: Numeric IDs have lower serialization overhead than names

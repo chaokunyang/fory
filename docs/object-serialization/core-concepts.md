@@ -55,8 +55,9 @@ model should read this value_; a field schema describes _what data that model co
 
 A statically known field can use its declared type directly. A dynamic field also carries the
 concrete type needed for interfaces, abstract classes, trait objects, broad object types,
-or heterogeneous values. Dynamic typing is more flexible but requires every possible concrete type
-to be registered and supported by the selected mode.
+or heterogeneous values. Every concrete type must be supported by the selected mode and explicitly
+registered unless that language's native-mode guide documents lazy discovery. Xlang mode and
+registration-required configurations require explicit registration.
 
 In xlang mode, peers must coordinate the same portable type identity and mapping. Native mode may
 use implementation-specific identities and language-specific types. See

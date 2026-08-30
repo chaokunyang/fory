@@ -106,6 +106,7 @@ describe("fory", () => {
   test("freezes during serializer generation", () => {
     let armed = false;
     let fory: Fory;
+    const typeInfo = Type.struct(8105, { value: Type.int32() });
     fory = new Fory({
       compatible: false,
       hooks: {
@@ -119,7 +120,9 @@ describe("fory", () => {
     });
     armed = true;
 
-    expect(() => fory.register(Type.struct(8105, {}))).toThrow();
+    expect(() => fory.register(typeInfo)).toThrow();
+    const serializer = (fory as any).typeResolver.getSerializerByTypeInfo(typeInfo);
+    expect(serializer._initialized).toBe(false);
   });
 
   test.each(["serialize", "deserialize"] as const)("freezes after %s", (operation) => {

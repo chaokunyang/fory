@@ -65,6 +65,7 @@ export class Gen {
   constructor(
     private typeResolver: TypeResolver,
     private regOptions: { [key: string]: any } = {},
+    private ensureRegistrationOpen?: () => void,
   ) {}
 
   private generate(typeInfo: TypeInfo): Serializer {
@@ -104,6 +105,7 @@ export class Gen {
   }
 
   private register(typeInfo: TypeInfo, serializer?: Serializer) {
+    this.ensureRegistrationOpen?.();
     this.typeResolver.registerSerializer(typeInfo, serializer);
   }
 

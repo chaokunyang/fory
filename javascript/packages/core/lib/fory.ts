@@ -149,31 +149,36 @@ export default class Fory {
     deserialize(bytes: Uint8Array): InstanceType<T> | null;
   };
   register(constructor: any, customSerializer?: CustomSerializer<any>) {
-    if (this.registrationFrozen) {
-      throw new Error("types and serializers must be registered before the first root operation");
-    }
+    this.ensureRegistrationOpen();
+    // Codegen hooks can start a root operation. Recheck the facade-owned flag before every
+    // serializer publication performed by this explicit registration graph.
+    const ensureRegistrationOpen = () => this.ensureRegistrationOpen();
     let serializer: Serializer;
     if (constructor.prototype?.[ForyTypeInfoSymbol]) {
       const typeInfo: TypeInfo = (constructor.prototype[ForyTypeInfoSymbol] as WithForyClsInfo)
         .structTypeInfo;
       typeInfo.freeze();
-      serializer = new Gen(this.typeResolver, {
-        creator: constructor,
-        customSerializer,
-      }).generateSerializer(typeInfo);
-      if (this.registrationFrozen) {
-        throw new Error("types and serializers must be registered before the first root operation");
-      }
+      serializer = new Gen(
+        this.typeResolver,
+        {
+          creator: constructor,
+          customSerializer,
+        },
+        ensureRegistrationOpen,
+      ).generateSerializer(typeInfo);
+      this.ensureRegistrationOpen();
       this.typeResolver.registerSerializer(typeInfo, serializer);
     } else {
       const typeInfo = constructor;
       typeInfo.freeze();
-      serializer = new Gen(this.typeResolver, {
-        customSerializer,
-      }).generateSerializer(typeInfo);
-      if (this.registrationFrozen) {
-        throw new Error("types and serializers must be registered before the first root operation");
-      }
+      serializer = new Gen(
+        this.typeResolver,
+        {
+          customSerializer,
+        },
+        ensureRegistrationOpen,
+      ).generateSerializer(typeInfo);
+      this.ensureRegistrationOpen();
       this.typeResolver.registerSerializer(typeInfo, serializer);
     }
     return {
@@ -181,6 +186,12 @@ export default class Fory {
       serialize: this.getRootSerializer(serializer),
       deserialize: this.getRootDeserializer(serializer),
     };
+  }
+
+  private ensureRegistrationOpen() {
+    if (this.registrationFrozen) {
+      throw new Error("types and serializers must be registered before the first root operation");
+    }
   }
 
   deserialize<T = any>(bytes: Uint8Array, serializer: Serializer = this.anySerializer): T | null {

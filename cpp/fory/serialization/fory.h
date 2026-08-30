@@ -705,14 +705,15 @@ private:
       : BaseFory(config, std::move(resolver)),
         precomputed_header_(compute_header(config.xlang)) {}
 
-  /// Constructor for ThreadSafeFory pool - registration is already frozen.
-  struct FrozenResolver {};
-  explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver,
-                FrozenResolver)
-      : BaseFory(config, std::move(resolver)),
-        precomputed_header_(compute_header(config.xlang)) {
-    write_ctx_.emplace(config_, type_resolver_->clone());
-    read_ctx_.emplace(config_, type_resolver_->clone());
+  /// Create a runtime whose operation contexts clone an already prepared
+  /// resolver.
+  static std::unique_ptr<Fory>
+  create_with_contexts(const Config &config,
+                       std::shared_ptr<TypeResolver> resolver) {
+    auto fory = std::unique_ptr<Fory>(new Fory(config, std::move(resolver)));
+    fory->write_ctx_.emplace(config, fory->type_resolver_->clone());
+    fory->read_ctx_.emplace(config, fory->type_resolver_->clone());
+    return fory;
   }
 
   /// Freeze registration and initialize operation contexts.
@@ -1019,10 +1020,9 @@ private:
                           std::shared_ptr<TypeResolver> resolver)
       : BaseFory(config, std::move(resolver)), shared_resolver_(),
         resolver_once_flag_(), fory_pool_([this]() {
-          // Every public root freezes the resolver before pool acquisition.
-          // The pooled Fory constructor owns its context clones.
-          return std::unique_ptr<Fory>(
-              new Fory(config_, shared_resolver_, Fory::FrozenResolver{}));
+          // Every public root prepares the shared resolver before pool
+          // acquisition. Fory owns the per-runtime context clones.
+          return Fory::create_with_contexts(config_, shared_resolver_);
         }) {}
 
   void ensure_resolver_initialized() const {

@@ -185,11 +185,13 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   maps, generated descriptors, metadata, serializers, or caches. Do not support
   post-use registration through cache invalidation, descriptor refresh,
   serializer rebinding, metadata rebuilding, or other late-registration
-  machinery. Keep one authoritative frozen flag for each natural registration
-  owner or public facade boundary. A thread-safe facade with its own public
-  registration surface may own that boundary flag, but must not mirror a child
-  registry's flag. Do not add another lifecycle state, a registration commit
-  path, or eager whole-registry preparation. Copy operations and
+  machinery. Keep one authoritative lifecycle fact for each natural registration
+  owner or public facade boundary. That fact may be an owner-native flag or the
+  presence of an immutable registry snapshot. A thread-safe facade with its own
+  public registration surface may own that boundary fact, but must not mirror a
+  child registry's lifecycle. Do not add another lifecycle state, a registration
+  commit or rollback path, or eager whole-registry preparation solely to implement
+  freeze. Copy operations and
   facade execution callbacks do not freeze registration unless they start a
   root serialization or deserialization operation.
   Registry freeze does not make native runtime type resolution immutable. When

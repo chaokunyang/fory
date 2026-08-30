@@ -2310,7 +2310,9 @@ public abstract class TypeResolver {
     }
   }
 
+  /** Sets the deserialization type policy before the first root operation. */
   public void setTypeChecker(TypeChecker typeChecker) {
+    checkRegistrationOpen();
     TypeChecker newChecker = typeChecker == null ? DEFAULT_TYPE_CHECKER : typeChecker;
     if (newChecker instanceof AllowListChecker) {
       ((AllowListChecker) newChecker).addListener(this);

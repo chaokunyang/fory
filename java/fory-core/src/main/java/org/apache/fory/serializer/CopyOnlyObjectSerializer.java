@@ -25,7 +25,7 @@ import org.apache.fory.exception.InsecureException;
 import org.apache.fory.resolver.TypeResolver;
 
 /**
- * Serializer used only for copy after registration has been frozen.
+ * Serializer used to copy an unregistered object type that is not allowed on wire read or write.
  *
  * <p>Read/write keep the same security failure semantics as the normal insecure path, while copy
  * reuses {@link AbstractObjectSerializer}'s field-copy implementation.

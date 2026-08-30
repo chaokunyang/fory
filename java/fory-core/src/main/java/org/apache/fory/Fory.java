@@ -169,13 +169,11 @@ public final class Fory implements BaseFory {
 
   @Override
   public void register(Class<?> cls) {
-    typeResolver.checkRegistrationOpen();
     getTypeResolver().register(cls);
   }
 
   @Override
   public void register(Class<?> cls, int id) {
-    typeResolver.checkRegistrationOpen();
     getTypeResolver().register(cls, Integer.toUnsignedLong(id));
   }
 
@@ -185,38 +183,32 @@ public final class Fory implements BaseFory {
    */
   @Override
   public void register(Class<?> cls, String name) {
-    typeResolver.checkRegistrationOpen();
     String[] parts = splitRegistrationName(name);
     register(cls, parts[0], parts[1]);
   }
 
   public void register(Class<?> cls, String namespace, String typeName) {
-    typeResolver.checkRegistrationOpen();
     getTypeResolver().register(cls, namespace, typeName);
   }
 
   @Override
   public void register(String className) {
-    typeResolver.checkRegistrationOpen();
     getTypeResolver().register(className);
   }
 
   @Override
   public void register(String className, int classId) {
-    typeResolver.checkRegistrationOpen();
     getTypeResolver().register(className, Integer.toUnsignedLong(classId));
   }
 
   @Override
   public void register(String className, String name) {
-    typeResolver.checkRegistrationOpen();
     String[] parts = splitRegistrationName(name);
     getTypeResolver().register(className, parts[0], parts[1]);
   }
 
   @Override
   public void register(String className, String namespace, String typeName) {
-    typeResolver.checkRegistrationOpen();
     getTypeResolver().register(className, namespace, typeName);
   }
 
@@ -239,13 +231,11 @@ public final class Fory implements BaseFory {
 
   @Override
   public void registerUnion(Class<?> cls, int id, Serializer<?> serializer) {
-    typeResolver.checkRegistrationOpen();
     getTypeResolver().registerUnion(cls, Integer.toUnsignedLong(id), serializer);
   }
 
   @Override
   public void registerUnion(Class<?> cls, String name, Serializer<?> serializer) {
-    typeResolver.checkRegistrationOpen();
     String[] parts = splitRegistrationName(name);
     getTypeResolver().registerUnion(cls, parts[0], parts[1], serializer);
   }
@@ -253,19 +243,16 @@ public final class Fory implements BaseFory {
   @Override
   public void registerUnion(
       Class<?> cls, String namespace, String typeName, Serializer<?> serializer) {
-    typeResolver.checkRegistrationOpen();
     getTypeResolver().registerUnion(cls, namespace, typeName, serializer);
   }
 
   @Override
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
-    typeResolver.checkRegistrationOpen();
     getTypeResolver().registerSerializer(type, serializerClass);
   }
 
   @Override
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
-    typeResolver.checkRegistrationOpen();
     getTypeResolver().registerSerializer(type, serializer);
   }
 
@@ -279,13 +266,11 @@ public final class Fory implements BaseFory {
   @Override
   public <T> void registerSerializerAndType(
       Class<T> type, Class<? extends Serializer> serializerClass) {
-    typeResolver.checkRegistrationOpen();
     getTypeResolver().registerSerializerAndType(type, serializerClass);
   }
 
   @Override
   public void registerSerializerAndType(Class<?> type, Serializer<?> serializer) {
-    typeResolver.checkRegistrationOpen();
     getTypeResolver().registerSerializerAndType(type, serializer);
   }
 
@@ -298,7 +283,6 @@ public final class Fory implements BaseFory {
 
   @Override
   public void registerSerializerFactory(SerializerFactory serializerFactory) {
-    typeResolver.checkRegistrationOpen();
     typeResolver.registerSerializerFactory(serializerFactory);
   }
 
@@ -407,17 +391,38 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(byte[] bytes) {
-    return deserialize(MemoryUtils.wrap(bytes), (Iterable<MemoryBuffer>) null);
+    MemoryBuffer buffer;
+    try {
+      buffer = MemoryUtils.wrap(bytes);
+    } catch (RuntimeException | Error e) {
+      typeResolver.freezeRegistration();
+      throw e;
+    }
+    return deserialize(buffer, (Iterable<MemoryBuffer>) null);
   }
 
   @Override
   public Object deserialize(ByteBuffer byteBuffer) {
-    return deserialize(MemoryUtils.wrap(byteBuffer));
+    MemoryBuffer buffer;
+    try {
+      buffer = MemoryUtils.wrap(byteBuffer);
+    } catch (RuntimeException | Error e) {
+      typeResolver.freezeRegistration();
+      throw e;
+    }
+    return deserialize(buffer);
   }
 
   @Override
   public <T> T deserialize(byte[] bytes, Class<T> type) {
-    return deserialize(MemoryUtils.wrap(bytes), type);
+    MemoryBuffer buffer;
+    try {
+      buffer = MemoryUtils.wrap(bytes);
+    } catch (RuntimeException | Error e) {
+      typeResolver.freezeRegistration();
+      throw e;
+    }
+    return deserialize(buffer, type);
   }
 
   @Override
@@ -473,7 +478,14 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(byte[] bytes, Iterable<MemoryBuffer> outOfBandBuffers) {
-    return deserialize(MemoryUtils.wrap(bytes), outOfBandBuffers);
+    MemoryBuffer buffer;
+    try {
+      buffer = MemoryUtils.wrap(bytes);
+    } catch (RuntimeException | Error e) {
+      typeResolver.freezeRegistration();
+      throw e;
+    }
+    return deserialize(buffer, outOfBandBuffers);
   }
 
   @Override

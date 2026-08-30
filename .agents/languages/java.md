@@ -87,8 +87,9 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - Each natural Java registry or public facade boundary owns one authoritative frozen flag. The
   facade flag is not a mirror of a child resolver flag. The first root serialization or
   deserialization sets the owning flag before codec work and never clears it, including after
-  failure. Every explicit type, serializer, module, name, or ID registration checks that flag
-  before mutation. Do not add another lifecycle state or a parallel registration-commit path.
+  failure. Every explicit type, serializer, module, name, ID, or type-checker policy change checks
+  that flag before mutation. Do not add another lifecycle state or a parallel registration-commit
+  path.
 - Direct and thread-safe facades expose module registration before their first root. Kotlin and
   Scala registration extensions target `BaseFory`; do not narrow them to concrete `Fory` or make
   builder installation the only thread-safe path. Before the first root, a thread-safe facade
@@ -96,6 +97,9 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   the frozen flag after entering it. After freeze, `execute` and copy use the monitor-free path.
   Calling `ThreadSafeFory.execute` or copying a value does not freeze registration unless the
   callback starts a root serialization or deserialization.
+- `ThreadSafeFory.execute` exposes one borrowed child only for the callback. Do not retain that
+  child or register through it; use the facade registration methods so every current and future
+  child receives the same setup.
 - A serializer instance registered on a thread-safe facade must implement `Shareable`. Resolver-
   local serializers use the class, resolver-factory, or module path so every child runtime owns its
   instance; never replay one resolver-bound serializer across children.

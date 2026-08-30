@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.Fory;
 import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.config.Language;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.logging.LogLevel;
 import org.apache.fory.logging.LoggerFactory;
@@ -193,8 +194,7 @@ public class AllowListCheckerTest {
 
     AllowListChecker lateChecker = new AllowListChecker(AllowListChecker.CheckLevel.WARN);
     lateChecker.disallowClass("org.apache.fory.missing.Type");
-    assertThrows(
-        IllegalStateException.class, () -> fory.getTypeResolver().setTypeChecker(lateChecker));
+    assertThrows(ForyException.class, () -> fory.getTypeResolver().setTypeChecker(lateChecker));
 
     AllowListChecker disabledChecker = new AllowListChecker(AllowListChecker.CheckLevel.DISABLE);
     disabledChecker.disallowClass("org.apache.fory.missing.Type");
@@ -230,9 +230,13 @@ public class AllowListCheckerTest {
             .requireClassRegistration(false)
             .withTypeChecker(oldChecker)
             .build();
-    fory.serialize("value");
-
     fory.getTypeResolver().setTypeChecker(new AllowListChecker(AllowListChecker.CheckLevel.WARN));
+    fory.serialize("value");
+    assertThrows(
+        ForyException.class,
+        () ->
+            fory.getTypeResolver()
+                .setTypeChecker(new AllowListChecker(AllowListChecker.CheckLevel.WARN)));
     oldChecker.disallowClass(missingClass);
     assertThrows(InsecureException.class, () -> oldChecker.checkType(null, missingClass));
   }

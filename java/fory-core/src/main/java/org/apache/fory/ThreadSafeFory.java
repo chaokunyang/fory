@@ -39,12 +39,13 @@ public interface ThreadSafeFory extends BaseFory {
 
   /**
    * Provide a context to execution operations on {@link Fory} directly and return the executed
-   * result.
+   * result. The action must not retain the runtime or register through it; use this facade's
+   * registration methods so every underlying runtime receives the same registration.
    */
   <R> R execute(Function<Fory, R> action);
 
   /**
-   * Set TypeChecker of serializer for current thread only.
+   * Set the TypeChecker for all current and future underlying runtimes before the first root.
    *
    * @param typeChecker {@link TypeChecker} for type checking
    */

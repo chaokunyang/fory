@@ -20,7 +20,10 @@
 package org.apache.fory.serializer;
 
 import java.io.ByteArrayInputStream;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyModule;
 import org.apache.fory.ForyTestBase;
@@ -220,6 +223,20 @@ public class RegisterTest extends ForyTestBase {
 
     Assert.assertEquals(reader.deserialize(inputStream, String.class), "value");
     Assert.assertTrue(registrationRejected.get());
+  }
+
+  @Test
+  public void testInvalidRootFreezes() {
+    for (Consumer<Fory> root :
+        Arrays.<Consumer<Fory>>asList(
+            fory -> fory.deserialize((byte[]) null),
+            fory -> fory.deserialize((ByteBuffer) null),
+            fory -> fory.deserialize((byte[]) null, Object.class),
+            fory -> fory.deserialize((byte[]) null, (Iterable<MemoryBuffer>) null))) {
+      Fory fory = Fory.builder().build();
+      Assert.assertThrows(NullPointerException.class, () -> root.accept(fory));
+      Assert.assertThrows(ForyException.class, () -> fory.register(MyExt.class));
+    }
   }
 
   public static class MyExtSerializer extends Serializer<MyExt> {

@@ -84,9 +84,9 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   work, dynamic stream bytes-read accounting, or stale narrower-scope formulas.
 - Generated serializers must not retain runtime context fields. `Fory` should stay a root-operation facade rather than accumulating serializer or convenience state.
 - When the serializer class and constructor shape are known at the call site, prefer direct constructor lambdas or direct instantiation over reflective `Serializers.newSerializer(...)`.
-- Each natural Java registry or public facade boundary owns one authoritative lifecycle fact. A
-  concrete resolver uses its shared registration snapshot; a thread-safe facade uses the shared
-  registry's one frozen flag. The first root serialization or deserialization establishes the
+- Each natural Java registry or public facade boundary owns one authoritative lifecycle flag. A
+  concrete resolver owns its local frozen flag; a thread-safe facade uses the shared registry's
+  frozen flag for the facade-wide boundary. The first root serialization or deserialization sets the
   owning fact before codec work and never clears it, including after failure. Every explicit type,
   serializer, module, name, ID, or type-checker binding checks that fact before mutation.
   Disallow-list changes use the bound checker's resolver listeners. Do not add another lifecycle

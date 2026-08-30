@@ -423,12 +423,14 @@ public final class ForyBuilder {
   /**
    * Installs a runtime module into every Fory instance created by this builder.
    *
-   * <p>Each created Fory instance ignores repeated registration of the same module object. Dedupe
-   * uses identity, not {@link Object#equals(Object)}, so distinct module instances are installed
-   * independently.
+   * <p>Repeated registration of the same module object is ignored. Dedupe uses identity, not {@link
+   * Object#equals(Object)}, so distinct module instances are installed independently.
    */
   public ForyBuilder withModule(ForyModule module) {
     ForyModule checkedModule = Objects.requireNonNull(module);
+    if (containsModule(checkedModule)) {
+      return this;
+    }
     modules.add(checkedModule);
     recordAction(b -> b.withModule(checkedModule));
     return this;
@@ -639,6 +641,15 @@ public final class ForyBuilder {
     if (!replayingActions) {
       actions.add(action);
     }
+  }
+
+  private boolean containsModule(ForyModule module) {
+    for (int i = 0; i < modules.size(); i++) {
+      if (modules.get(i) == module) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private void install(Fory fory) {

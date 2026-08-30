@@ -1228,8 +1228,7 @@ cdef class Fory:
         )
 
     def dump(self, obj, stream):
-        if not self.type_resolver._registry_frozen:
-            self.type_resolver._registry_frozen = True
+        self.type_resolver._registry_frozen = True
         try:
             self.buffer.set_writer_index(0)
             self.buffer.bind_output_stream(Buffer.wrap_output_stream(stream))
@@ -1253,8 +1252,7 @@ cdef class Fory:
 
     def serialize(self, obj, Buffer buffer=None, buffer_callback=None, unsupported_callback=None):
         cdef Buffer write_buffer
-        if not self.type_resolver._registry_frozen:
-            self.type_resolver._registry_frozen = True
+        self.type_resolver._registry_frozen = True
         try:
             write_buffer = self._serialize(
                 obj,
@@ -1298,8 +1296,7 @@ cdef class Fory:
         return buffer
 
     def deserialize(self, buffer, buffers=None, unsupported_objects=None):
-        if not self.type_resolver._registry_frozen:
-            self.type_resolver._registry_frozen = True
+        self.type_resolver._registry_frozen = True
         try:
             return self._deserialize(
                 buffer,

@@ -37,6 +37,7 @@ import pytest
 import pyfory
 from pyfory.serialization import Buffer, _bfloat16_from_bits, _bfloat16_to_bits, _float16_from_bits, _float16_to_bits
 from pyfory import Fory, EnumSerializer
+from pyfory.error import TypeUnregisteredError
 from pyfory.serializer import (
     DecimalSerializer,
     TimestampSerializer,
@@ -916,6 +917,26 @@ def test_register_type_name_exclusive():
     fory = Fory(xlang=True, compatible=True)
     with pytest.raises(TypeError, match="type name"):
         fory.register_type(A, type_id=100, name="example.A")
+
+
+def test_duplicate_id_keeps_registry_clean():
+    fory = Fory(xlang=True, compatible=False)
+    fory.register_type(A, type_id=100)
+
+    with pytest.raises(TypeError, match="user_type_id 100"):
+        fory.register_type(RejectedRegistration, type_id=100)
+
+    assert fory.type_resolver.get_type_info(RejectedRegistration, create=False) is None
+
+
+def test_serializer_requires_registered_type():
+    fory = Fory(xlang=False, strict=False, compatible=False)
+    serializer = BarSerializer(fory.type_resolver, RejectedRegistration)
+
+    with pytest.raises(TypeUnregisteredError):
+        fory.register_serializer(RejectedRegistration, serializer)
+
+    assert fory.type_resolver.get_type_info(RejectedRegistration, create=False) is None
 
 
 @pytest.mark.parametrize("root", ["serialize", "deserialize", "dump"])

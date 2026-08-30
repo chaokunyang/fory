@@ -40,6 +40,11 @@ class PersonSerializer(pyfory.Serializer):
     pass
 
 
+def test_factory_rejects_options():
+    with pytest.raises(TypeError, match="mutually exclusive"):
+        ThreadSafeFory(lambda: pyfory.Fory(), xlang=False)
+
+
 def test_thread_safe_fory_basic_serialization():
     fory = ThreadSafeFory(
         xlang=False,

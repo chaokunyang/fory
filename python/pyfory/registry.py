@@ -89,9 +89,6 @@ from pyfory.serializer import (
     fory_array_serializer_type,
 )
 from pyfory.policy import DEFAULT_POLICY
-from pyfory.serialization import (
-    Serializer as CythonSerializer,
-)
 from pyfory.annotation import (
     BFloat16Array,
     Float32,
@@ -196,7 +193,7 @@ def _accepts_n_positional_args(factory, nargs: int) -> bool:
             signature = inspect.signature(factory.__init__)
             parameters = tuple(signature.parameters.values())[1:]
         except (AttributeError, TypeError, ValueError):
-            if inspect.isclass(factory) and issubclass(factory, (Serializer, CythonSerializer)):
+            if inspect.isclass(factory) and issubclass(factory, Serializer):
                 return nargs == 2
             raise TypeError(f"Unable to inspect serializer constructor for {factory!r}")
     min_args = 0
@@ -226,7 +223,7 @@ def _construct_serializer(serializer_factory, type_resolver, cls):
             break
     else:
         raise TypeError(f"Unsupported serializer constructor for {serializer_factory!r}; expected `(type_resolver, cls)` or `(type_resolver)`.")
-    if not isinstance(serializer, (Serializer, CythonSerializer)):
+    if not isinstance(serializer, Serializer):
         raise TypeError("Serializer factory must return a Fory serializer")
     if serializer.type_resolver is not type_resolver:
         raise TypeError("Serializer factory returned a serializer for another resolver")
@@ -234,7 +231,7 @@ def _construct_serializer(serializer_factory, type_resolver, cls):
 
 
 def _check_serializer_owner(serializer, type_resolver, cls):
-    if not isinstance(serializer, (Serializer, CythonSerializer)):
+    if not isinstance(serializer, Serializer):
         raise TypeError("Expected a Fory serializer")
     if serializer.type_resolver is not type_resolver:
         raise TypeError("Serializer belongs to another resolver")
@@ -431,14 +428,7 @@ class TypeResolver:
         self._registry_frozen = False
 
     def _check_registry_mutable(self):
-        registry_owner = self._actual_type_resolver
-        if registry_owner is self:
-            registry_frozen = self._registry_frozen
-        else:
-            # The compiled resolver is the active registry owner. Read its one
-            # lifecycle flag instead of mirroring that state in both resolvers.
-            registry_frozen = registry_owner._registry_frozen
-        if registry_frozen:
+        if self._actual_type_resolver._registry_frozen:
             raise RuntimeError("Cannot register types or serializers after the first root operation has started")
 
     def _freeze_registry(self):
@@ -631,7 +621,7 @@ class TypeResolver:
         namespace, typename = _split_registration_name(name)
         if serializer is None:
             raise TypeError("register_union requires a serializer")
-        if serializer is not None and not isinstance(serializer, (Serializer, CythonSerializer)):
+        if serializer is not None and not isinstance(serializer, Serializer):
             serializer = _construct_serializer(
                 serializer,
                 self._actual_type_resolver,
@@ -679,7 +669,7 @@ class TypeResolver:
         else:
             if user_type_id not in {None, NO_USER_TYPE_ID} and (user_type_id < 0 or user_type_id > 0xFFFFFFFE):
                 raise ValueError(f"user_type_id must be in range [0, 0xfffffffe], got {user_type_id}")
-        if serializer is not None and not isinstance(serializer, (Serializer, CythonSerializer)):
+        if serializer is not None and not isinstance(serializer, Serializer):
             serializer = _construct_serializer(
                 serializer,
                 self._actual_type_resolver,
@@ -785,6 +775,10 @@ class TypeResolver:
         internal: bool = False,
     ):
         dynamic_type = type_id is not None and type_id < 0
+        if type_id is not None and type_id != 0 and needs_user_type_id(type_id) and user_type_id not in {None, NO_USER_TYPE_ID}:
+            existing = self._user_type_id_to_type_info.get(user_type_id)
+            if existing is not None and existing.cls is not cls:
+                raise TypeError(f"user_type_id {user_type_id} already registered for {existing.cls}")
         # In metashare mode, for struct types, we want to keep serializer=None
         # so that _set_type_info will be called to create the TypeDef-based serializer
         # This applies to both types registered by name and by ID
@@ -817,10 +811,6 @@ class TypeResolver:
             self._ns_type_to_type_info[(ns_meta_bytes, type_meta_bytes)] = typeinfo
         self._types_info[cls] = typeinfo
         if type_id is not None and type_id != 0:
-            if needs_user_type_id(type_id) and user_type_id not in {None, NO_USER_TYPE_ID}:
-                existing = self._user_type_id_to_type_info.get(user_type_id)
-                if existing is not None and existing.cls is not cls:
-                    raise TypeError(f"user_type_id {user_type_id} already registered for {existing.cls}")
             if needs_user_type_id(type_id) and user_type_id not in {None, NO_USER_TYPE_ID}:
                 if user_type_id not in self._user_type_id_to_type_info or not internal:
                     self._user_type_id_to_type_info[user_type_id] = typeinfo
@@ -904,9 +894,9 @@ class TypeResolver:
         if self.require_registration and not issubclass(cls, Enum):
             raise TypeUnregisteredError(f"{cls} not registered")
         logger.info("Type %s not registered", cls)
-        return self._register_inferred_type(cls)
+        return self._create_inferred_type_info(cls)
 
-    def _register_inferred_type(self, cls):
+    def _create_inferred_type_info(self, cls):
         serializer = self._create_serializer(cls)
         native_registration = self._internal_py_serializer_map.get(type(serializer))
         if native_registration is not None:

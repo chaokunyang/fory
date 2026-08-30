@@ -681,6 +681,8 @@ class ThreadSafeFory:
     def __init__(self, fory_factory=None, **kwargs):
         import threading
 
+        if fory_factory is not None and kwargs:
+            raise TypeError("fory_factory and Fory construction options are mutually exclusive")
         self._config = kwargs
         self._fory_factory = fory_factory
         self._callbacks = []
@@ -723,9 +725,9 @@ class ThreadSafeFory:
     def _check_serializer_factory(serializer):
         if serializer is None:
             return
-        from pyfory.registry import CythonSerializer, Serializer
+        from pyfory.registry import Serializer
 
-        if isinstance(serializer, (Serializer, CythonSerializer)) or not callable(serializer):
+        if isinstance(serializer, Serializer) or not callable(serializer):
             raise TypeError("ThreadSafeFory requires a serializer class or factory")
 
     def register(

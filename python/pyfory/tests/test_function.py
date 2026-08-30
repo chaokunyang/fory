@@ -137,8 +137,6 @@ def test_regular_function_roundtrip():
     deserialized = fory.deserialize(serialized)
     assert add_one(test_input) == deserialized(test_input)
 
-    # dict is already registered by default with MapSerializer
-
     # Test complex function
     serialized = fory.serialize(complex_function)
     deserialized = fory.deserialize(serialized)

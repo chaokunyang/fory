@@ -44,6 +44,7 @@ from pyfory._fory import (
 from pyfory.meta.typedef_decoder import decode_typedef
 from pyfory.meta.typedef import is_struct_typedef_kind
 from pyfory.meta.metastring import MetaStringDecoder
+from pyfory.error import TypeUnregisteredError
 from pyfory.policy import DEFAULT_POLICY
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
 from pyfory.type_util import normalize_fory_type
@@ -350,7 +351,9 @@ cdef class TypeResolver:
         cdef uint8_t previous_type_id
         cdef uint32_t previous_user_type_id
         self.resolver._check_registry_mutable()
-        typeinfo = self.resolver.get_type_info(cls)
+        typeinfo = self.resolver.get_type_info(cls, create=False)
+        if typeinfo is None:
+            raise TypeUnregisteredError(f"{cls} not registered")
         previous_type_id = typeinfo.type_id
         previous_user_type_id = typeinfo.user_type_id
         self.resolver.register_serializer(cls, serializer)

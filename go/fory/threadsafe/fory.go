@@ -24,8 +24,7 @@ import (
 	"github.com/apache/fory/go/fory"
 )
 
-// Fory is a thread-safe wrapper around fory.Fory using sync.Pool.
-// It provides the same API as fory.Fory but is safe for concurrent use.
+// Fory is a thread-safe serialization wrapper using a pool of fory.Fory instances.
 type Fory struct {
 	pool sync.Pool
 }

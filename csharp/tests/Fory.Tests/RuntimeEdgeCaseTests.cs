@@ -900,10 +900,10 @@ public sealed class RuntimeEdgeCaseTests
     {
         TypeResolver.RegisterGenerated<LookupFailureValue, LookupFailureSerializer>();
         ForyRuntime fory = ForyRuntime.Builder().TrackRef(true).Build();
-        fory.Register<FailingWritePayload, FailingWriteSerializer>(736);
-
-        Assert.Throws<InvalidOperationException>(
-            () => fory.Serialize(new FailingWritePayload { Value = 1 }));
+        WriteContext context = WriteContextFor(fory);
+        _ = context.RefWriter.ReserveRefId();
+        Assert.True(context.AssignTypeMetaIndexIfAbsent(typeof(FrozenPayload)).IsNew);
+        Assert.True(context.AssignMetaStringIndexIfAbsent(MetaString.Empty('_', '_')).IsNew);
         bool lookupStarted = false;
         LookupFailureSerializer.ConstructionAction = () =>
         {
@@ -920,7 +920,9 @@ public sealed class RuntimeEdgeCaseTests
             LookupFailureSerializer.ConstructionAction = null;
         }
 
-        Assert.Equal(0u, WriteContextFor(fory).RefWriter.ReserveRefId());
+        Assert.Equal(0u, context.RefWriter.ReserveRefId());
+        Assert.True(context.AssignTypeMetaIndexIfAbsent(typeof(FrozenPayload)).IsNew);
+        Assert.True(context.AssignMetaStringIndexIfAbsent(MetaString.Empty('_', '_')).IsNew);
     }
 
     [Fact]
@@ -1015,8 +1017,9 @@ public sealed class RuntimeEdgeCaseTests
         byte[] invalidPayload = [.. payload, 0x7F];
 
         _ = useSpan
-            ? Assert.ThrowsAny<Exception>(() => DeserializeSpan(reader, invalidPayload))
-            : Assert.ThrowsAny<Exception>(() => reader.Deserialize<TimeEnvelope>(invalidPayload));
+            ? Assert.Throws<InvalidDataException>(() => DeserializeSpan(reader, invalidPayload))
+            : Assert.Throws<InvalidDataException>(
+                () => reader.Deserialize<TimeEnvelope>(invalidPayload));
         ReadContext context = ReadContextFor(reader);
         Assert.Null(context.GetTypeMetaRef(0));
         Assert.Null(context.GetReadMetaString(0));

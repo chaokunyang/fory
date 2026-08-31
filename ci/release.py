@@ -159,7 +159,7 @@ def prepare(v: str):
         raise
 
 
-def build(v: str):
+def build(v: str, skip_sign: bool = False):
     """version format: 0.5.1"""
     logger.info("Start to prepare release artifacts for version %s", v)
     _check_release_version(v)
@@ -184,8 +184,21 @@ def build(v: str):
     src_tar = f"apache-fory-{v}-src.tar.gz"
     _check_all_committed()
     _strip_unnecessary_license()
+    # git archive includes the commit ID and time. Keep this temporary commit
+    # identical for CI and keyless local rebuilds, and never sign the commit.
+    commit_time = subprocess.check_output(
+        ["git", "show", "-s", "--format=%cI", "HEAD"], text=True
+    ).strip()
+    commit_env = os.environ.copy()
+    for role in ("AUTHOR", "COMMITTER"):
+        commit_env[f"GIT_{role}_NAME"] = "Apache Fory Release Automation"
+        commit_env[f"GIT_{role}_EMAIL"] = "dev@fory.apache.org"
+        commit_env[f"GIT_{role}_DATE"] = commit_time
     subprocess.check_call(
-        "git add LICENSE && git commit -m 'remove benchmark from license'", shell=True
+        "git add LICENSE && git -c commit.gpgsign=false commit "
+        "-m 'remove benchmark from license'",
+        shell=True,
+        env=commit_env,
     )
     subprocess.check_call(
         f"git archive --format=tar.gz "
@@ -195,12 +208,13 @@ def build(v: str):
     )
     subprocess.check_call("git reset --hard HEAD~", shell=True)
     os.chdir("dist")
-    logger.info("Start to generate signature")
-    subprocess.check_call(
-        f"gpg --armor --output {src_tar}.asc --detach-sig {src_tar}", shell=True
-    )
+    if not skip_sign:
+        logger.info("Start to generate signature")
+        subprocess.check_call(
+            f"gpg --armor --output {src_tar}.asc --detach-sig {src_tar}", shell=True
+        )
     subprocess.check_call(f"sha512sum {src_tar} >{src_tar}.sha512", shell=True)
-    verify(v)
+    verify(v, signature=not skip_sign)
 
 
 def _check_release_version(v: str):
@@ -242,10 +256,11 @@ def _strip_unnecessary_license():
             f.write(text)
 
 
-def verify(v):
+def verify(v, signature=True):
     src_tar = f"apache-fory-{v}-src.tar.gz"
-    subprocess.check_call(f"gpg --verify {src_tar}.asc {src_tar}", shell=True)
-    logger.info("Verified signature")
+    if signature:
+        subprocess.check_call(f"gpg --verify {src_tar}.asc {src_tar}", shell=True)
+        logger.info("Verified signature")
     subprocess.check_call(f"sha512sum --check {src_tar}.sha512", shell=True)
     logger.info("Verified checksum successfully")
 
@@ -2134,6 +2149,11 @@ def _parse_args():
         description="Build release artifacts",
     )
     release_parser.add_argument("-v", type=str, help="new version")
+    release_parser.add_argument(
+        "--skip-sign",
+        action="store_true",
+        help="build and checksum the source archive without invoking GPG",
+    )
     release_parser.set_defaults(func=build)
 
     verify_parser = subparsers.add_parser(

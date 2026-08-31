@@ -20,6 +20,7 @@
 package org.apache.fory.json.scala
 
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.annotation.{JsonIgnore, JsonProperty, JsonUnwrapped}
@@ -96,6 +97,16 @@ case class NullableRequired(value: String)
 
 case class UserId(value: Int) extends AnyVal
 
+case class LongId(value: Long) extends AnyVal
+
+case class LongStringValues(
+    aFirst: Long,
+    boxed: java.lang.Long,
+    values: Array[Long],
+    id: LongId,
+    atomic: AtomicLong
+)
+
 case class UnitValue(value: Unit)
 
 case class ExplicitNullable(
@@ -144,6 +155,53 @@ case class CodecSlots(
 )
 
 class ScalaJsonSuite extends AnyFunSuite {
+  test("long as string") {
+    val value =
+      LongStringValues(
+        Long.MinValue,
+        Long.MaxValue,
+        Array(-1L, 0L, Long.MaxValue),
+        LongId(7L),
+        new AtomicLong(Long.MaxValue)
+      )
+    val list = List(1L, 9007199254740992L)
+    val map = Map("max" -> Long.MaxValue)
+    val optional = Some(9007199254740992L): Option[Long]
+    val listType = ScalaTypeRef[List[Long]]
+    val mapType = ScalaTypeRef[Map[String, Long]]
+    val optionType = ScalaTypeRef[Option[Long]]
+    for (json <- Seq(
+        ForyJsonScala.builder().writeLongAsString(true).withCodegen(false).build(),
+        ForyJsonScala.builder().writeLongAsString(true).withAsyncCompilation(false).build()
+      )) {
+      val encoded = json.toJson(value)
+      assert(encoded.contains("\"aFirst\":\"-9223372036854775808\""), encoded)
+      assert(encoded.contains("\"boxed\":\"9223372036854775807\""), encoded)
+      assert(
+        encoded.contains("\"values\":[\"-1\",\"0\",\"9223372036854775807\"]"),
+        encoded
+      )
+      assert(encoded.contains("\"id\":\"7\""), encoded)
+      assert(encoded.contains("\"atomic\":\"9223372036854775807\""), encoded)
+      assert(new String(json.toJsonBytes(value), UTF_8) == encoded)
+      assert(json.toJson(list, listType) == "[\"1\",\"9007199254740992\"]")
+      assert(json.toJson(map, mapType) == "{\"max\":\"9223372036854775807\"}")
+      assert(json.toJson(optional, optionType) == "\"9007199254740992\"")
+      assert(json.fromJson("[\"1\",9007199254740992]", listType) == list)
+      assert(json.fromJson("{\"max\":\"9223372036854775807\"}", mapType) == map)
+      assert(json.fromJson("\"9007199254740992\"", optionType) == optional)
+
+      val decoded = json.fromJson(encoded, classOf[LongStringValues])
+      assert(decoded.aFirst == value.aFirst)
+      assert(decoded.boxed == value.boxed)
+      assert(decoded.values.sameElements(value.values))
+      assert(decoded.id == value.id)
+      assert(decoded.atomic.get() == value.atomic.get())
+      assert(json.fromJson("\"9223372036854775807\"", classOf[Long]) == Long.MaxValue)
+      assert(json.fromJson("9223372036854775807", classOf[Long]) == Long.MaxValue)
+    }
+  }
+
   test("case class collections and recursive option") {
     val json = ForyJsonScala.builder().withCodegen(false).build()
     val node = Node(1, Some(Node(2, None)))

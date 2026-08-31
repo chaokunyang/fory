@@ -215,6 +215,21 @@ describe("array", () => {
     expect(Array.from(result.a6 as Iterable<number>)[2]).toBeCloseTo(-4.5, 1);
   });
 
+  test("rounds float16 arrays to nearest even", () => {
+    const values = [4e-8, 1 + 2 ** -11, 1 + 3 * 2 ** -11, 1 + 2 ** -11 + 2 ** -52, -65520];
+    const expected = [2 ** -24, 1, 1 + 2 ** -9, 1 + 2 ** -10, -Infinity];
+    const array = new ForyFloat16Array(values);
+    expect(Array.from(array)).toEqual(expected);
+
+    const fory = new Fory({ compatible: false, ref: true });
+    const { serialize, deserialize } = fory.register(
+      Type.struct({ typeName: "example.f16round" }, { values: Type.float16Array() }),
+    );
+    for (const input of [values, array]) {
+      expect(Array.from(deserialize(serialize({ values: input })).values)).toEqual(expected);
+    }
+  });
+
   test("should bfloat16Array work", () => {
     const typeinfo = Type.struct(
       {

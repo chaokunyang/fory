@@ -128,9 +128,10 @@ public class JsonContainerTest extends ForyJsonTestModels {
   @Test
   public void unsignedArrayOverflow() {
     byte[] input = "[4294967295]".getBytes(StandardCharsets.UTF_8);
-    ArrayCodec<byte[]> uint8 = ArrayCodec.createUnsignedPrimitive(byte[].class, Types.UINT8_ARRAY);
+    ArrayCodec<byte[]> uint8 =
+        ArrayCodec.createUnsignedPrimitive(byte[].class, Types.UINT8_ARRAY, false);
     ArrayCodec<short[]> uint16 =
-        ArrayCodec.createUnsignedPrimitive(short[].class, Types.UINT16_ARRAY);
+        ArrayCodec.createUnsignedPrimitive(short[].class, Types.UINT16_ARRAY, false);
 
     assertThrows(ForyJsonException.class, () -> uint8.readUtf8(newUtf8Reader(input)));
     assertThrows(ForyJsonException.class, () -> uint8.readLatin1(newLatin1Reader(input)));

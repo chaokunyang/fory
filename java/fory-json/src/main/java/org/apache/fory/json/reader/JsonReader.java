@@ -892,6 +892,13 @@ public abstract class JsonReader {
   /** Reads one canonical unsigned 64-bit JSON integer and returns its raw bits. */
   public final long readUnsignedLong() {
     skipWhitespace();
+    if (position < length() && charAt(position) == '"') {
+      beginQuotedScalar();
+      long value = readUnsignedDigits();
+      rejectFractionOrExponent();
+      finishQuotedScalar();
+      return value;
+    }
     long value = readUnsignedDigits();
     rejectFractionOrExponent();
     return value;

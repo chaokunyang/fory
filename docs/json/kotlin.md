@@ -87,6 +87,12 @@ val text = json.toJson(Account(7u, "Alice"), accountType)
 val decoded = json.fromJson(text, accountType)
 ```
 
+Use `ForyJsonKotlin.builder().writeLongAsString(true)` when signed `Long` and unsigned `ULong`
+values must be emitted as quoted decimal strings. The setting also applies to their declared
+collection and map values, nullable values, Kotlin value classes backed by them, `ULongArray`, and
+the Java Long-like wrappers supported by the core JSON runtime. Readers accept both quoted and
+unquoted integer tokens.
+
 `jsonTypeRef<T>()` is a type token, not a codec lookup. Construct it once and reuse it. A Java
 `Class` or ordinary Java `TypeRef` cannot express distinctions such as `List<Account?>`, `UInt`, or
 a logical value class lowered to a primitive carrier.

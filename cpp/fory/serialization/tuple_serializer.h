@@ -193,6 +193,37 @@ inline T read_tuple_homogeneous_value(ReadContext &ctx,
   return Serializer<T>::read_data(ctx);
 }
 
+template <bool MeasureProgress, bool HasTypeInfo, RefMode Mode, typename T>
+inline void read_tuple_extra_elements(ReadContext &ctx, uint32_t count,
+                                      const TypeInfo *type_info) {
+  uint32_t completed = 0;
+  uint64_t checkpoint_byte = 0;
+  if constexpr (MeasureProgress) {
+    checkpoint_byte = ctx.buffer().logical_reader_index();
+  }
+  while (completed < count && !ctx.has_error()) {
+    (void)read_tuple_homogeneous_value<HasTypeInfo, Mode, T>(ctx, type_info);
+    ++completed;
+    if constexpr (MeasureProgress) {
+      // Count only extras so the loop index also identifies each settlement
+      // window without a second item counter or per-item subtraction.
+      if (FORY_PREDICT_FALSE((completed & 1023U) == 0)) {
+        if (FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+                ctx, 1024, checkpoint_byte))) {
+          return;
+        }
+        checkpoint_byte = ctx.buffer().logical_reader_index();
+      }
+    }
+  }
+  if constexpr (MeasureProgress) {
+    if (!ctx.has_error() && (completed & 1023U) != 0) {
+      (void)detail::settle_unbacked_container_items(ctx, completed & 1023U,
+                                                    checkpoint_byte);
+    }
+  }
+}
+
 template <bool HasTypeInfo, RefMode Mode, typename Tuple, size_t... Is>
 inline Tuple read_tuple_elements_homogeneous(ReadContext &ctx, uint32_t length,
                                              const TypeInfo *type_info,
@@ -216,17 +247,34 @@ inline Tuple read_tuple_elements_homogeneous(ReadContext &ctx, uint32_t length,
       }(),
       ...);
 
-  // skip any extra elements beyond tuple size
+  // Skip any extra elements beyond tuple size. Compatible remote structs may
+  // have no fields, so their repeated read can consume no bytes even when the
+  // local element type normally advances. Charge only that uncertain work to
+  // the root-shared unbacked-container allowance.
   using ElemType = tuple_first_type_t<Tuple>;
   if constexpr (Serializer<ElemType>::type_id == TypeId::NONE) {
     return result;
   }
-  while (index < length && !ctx.has_error()) {
-    (void)read_tuple_homogeneous_value<HasTypeInfo, Mode, ElemType>(ctx,
-                                                                    type_info);
-    ++index;
+  if (index == length) {
+    return result;
   }
-
+  constexpr bool element_read_always_advances =
+      Mode != RefMode::None ||
+      (!HasTypeInfo && read_data_always_advances_v<ElemType>);
+  if constexpr (element_read_always_advances) {
+    read_tuple_extra_elements<false, HasTypeInfo, Mode, ElemType>(
+        ctx, length - index, type_info);
+    return result;
+  }
+  if constexpr (HasTypeInfo) {
+    if (type_info->harness.read_data_always_advances) {
+      read_tuple_extra_elements<false, HasTypeInfo, Mode, ElemType>(
+          ctx, length - index, type_info);
+      return result;
+    }
+  }
+  read_tuple_extra_elements<true, HasTypeInfo, Mode, ElemType>(
+      ctx, length - index, type_info);
   return result;
 }
 

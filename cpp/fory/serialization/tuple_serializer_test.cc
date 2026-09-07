@@ -105,6 +105,16 @@ struct TupleRemoteV2 {
   FORY_STRUCT(TupleRemoteV2, value);
 };
 
+struct TupleEmptyValue {
+  inline static uint32_t constructions = 0;
+
+  TupleEmptyValue() { ++constructions; }
+
+  FORY_STRUCT(TupleEmptyValue);
+};
+
+static_assert(!read_data_always_advances_v<TupleEmptyValue>);
+
 struct TuplePolyBase {
   virtual ~TuplePolyBase() = default;
   int32_t base_value{};
@@ -349,6 +359,77 @@ TEST(TupleSerializerTest, SameTypeUsesRemoteReadBinding) {
   EXPECT_EQ(std::get<1>(inner).value, 9);
   EXPECT_EQ(std::get<2>(inner).value, 13);
   EXPECT_EQ(std::get<1>(*decoded), 11);
+}
+
+TEST(TupleSerializerTest, ExtraElementsUseUnbackedBudget) {
+  constexpr size_t element_count = 2051;
+  constexpr int64_t extra_elements = element_count - 2;
+  auto writer =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(
+      writer.register_struct<TupleEmptyValue>("test", "TupleEmptyValue").ok());
+  auto bytes = writer.serialize(std::vector<TupleEmptyValue>(element_count));
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+
+  using Tuple = std::tuple<TupleEmptyValue, TupleEmptyValue>;
+  auto allowed = Fory::builder()
+                     .xlang(true)
+                     .compatible(true)
+                     .track_ref(false)
+                     .max_unbacked_container_items(extra_elements)
+                     .build();
+  ASSERT_TRUE(
+      allowed.register_struct<TupleEmptyValue>("test", "TupleEmptyValue").ok());
+  auto allowed_result = allowed.deserialize<Tuple>(*bytes);
+  ASSERT_TRUE(allowed_result.ok()) << allowed_result.error().to_string();
+
+  auto limited = Fory::builder()
+                     .xlang(true)
+                     .compatible(true)
+                     .track_ref(false)
+                     .max_unbacked_container_items(0)
+                     .build();
+  ASSERT_TRUE(
+      limited.register_struct<TupleEmptyValue>("test", "TupleEmptyValue").ok());
+  TupleEmptyValue::constructions = 0;
+  auto limited_result = limited.deserialize<Tuple>(*bytes);
+  ASSERT_FALSE(limited_result.ok());
+  EXPECT_EQ(limited_result.error().code(), ErrorCode::InvalidData);
+  // The zero allowance fails at the first 1024-item checkpoint instead of
+  // traversing the complete attacker-controlled count.
+  EXPECT_LT(TupleEmptyValue::constructions, element_count);
+}
+
+TEST(TupleSerializerTest, RemoteEmptyUsesUnbackedBudget) {
+  static_assert(read_data_always_advances_v<TupleRemoteV2>);
+  auto writer =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(
+      writer.register_struct<TupleEmptyValue>("test", "TupleValue").ok());
+  auto bytes = writer.serialize(std::vector<TupleEmptyValue>(3));
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+
+  using Tuple = std::tuple<TupleRemoteV2, TupleRemoteV2>;
+  for (int64_t allowance : {0, 1}) {
+    auto reader = Fory::builder()
+                      .xlang(true)
+                      .compatible(true)
+                      .track_ref(false)
+                      .max_unbacked_container_items(allowance)
+                      .build();
+    ASSERT_TRUE(
+        reader.register_struct<TupleRemoteV2>("test", "TupleValue").ok());
+    auto result = reader.deserialize<Tuple>(*bytes);
+    // The remote body is empty even though the local struct normally advances.
+    // Its single extra element must be settled at the tail, below a full batch.
+    if (allowance == 0) {
+      ASSERT_FALSE(result.ok());
+    } else {
+      ASSERT_TRUE(result.ok()) << result.error().to_string();
+      EXPECT_EQ(std::get<0>(*result).value, 0);
+      EXPECT_EQ(std::get<1>(*result).value, 0);
+    }
+  }
 }
 
 TEST(TupleSerializerTest, PolymorphicSameTypeBinding) {

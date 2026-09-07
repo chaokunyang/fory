@@ -18,11 +18,130 @@
 package threadsafe
 
 import (
+	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/apache/fory/go/fory"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRegistrationAfterGC(t *testing.T) {
+	type Item struct {
+		Value int32
+	}
+	f := New()
+	require.NoError(t, f.RegisterStructByName(Item{}, "threadsafe.Item"))
+	value := Item{Value: 42}
+	data, err := f.Serialize(&value)
+	require.NoError(t, err)
+
+	// Two collections discard both the pool's primary and victim caches.
+	runtime.GC()
+	runtime.GC()
+	var result Item
+	require.NoError(t, f.Deserialize(data, &result))
+	require.Equal(t, value, result)
+
+	runtime.GC()
+	runtime.GC()
+	data, err = Serialize(f, &value)
+	require.NoError(t, err)
+	require.NoError(t, Deserialize(f, data, &result))
+	require.Equal(t, value, result)
+}
+
+func TestRegistrationInstances(t *testing.T) {
+	type Item struct{ Value int32 }
+	type Order struct{ ID int64 }
+	type FactoryItem struct{ Name string }
+	f := NewWithFactory(func() *fory.Fory {
+		inner := fory.New()
+		if err := inner.RegisterStruct(FactoryItem{}, 1); err != nil {
+			panic(err)
+		}
+		return inner
+	})
+	require.Error(t, f.RegisterStructByName(int32(0), "threadsafe.Invalid"))
+	require.NoError(t, f.RegisterStructByName(&Item{}, "threadsafe.Item"))
+	require.Error(t, f.RegisterStructByName(Item{}, "threadsafe.Duplicate"))
+	require.NoError(t, f.RegisterStructByName(Order{}, "threadsafe.Order"))
+
+	// Hold both acquisitions so the second must create an independent instance.
+	first := f.acquire()
+	second := f.acquire()
+	require.NotSame(t, first, second)
+	for _, inner := range []*fory.Fory{first, second} {
+		for _, value := range []any{&Item{42}, &Order{7}, &FactoryItem{"factory"}} {
+			data, err := inner.Serialize(value)
+			require.NoError(t, err)
+			var result any
+			require.NoError(t, inner.Deserialize(data, &result))
+			require.Equal(t, value, result)
+		}
+	}
+	f.release(first)
+	f.release(second)
+
+	var workers sync.WaitGroup
+	for range 8 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			value := Item{42}
+			for range 20 {
+				data, err := Serialize(f, &value)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				var result Item
+				if err := Deserialize(f, data, &result); err != nil {
+					t.Error(err)
+					return
+				}
+				if result != value {
+					t.Errorf("got %v, want %v", result, value)
+					return
+				}
+			}
+		}()
+	}
+	workers.Wait()
+}
+
+func TestRegistrationFreeze(t *testing.T) {
+	type Item struct{ Value int32 }
+	value := int32(42)
+	data, err := fory.New().Serialize(value)
+	require.NoError(t, err)
+	tests := []struct {
+		name string
+		fail bool
+		call func(*Fory) error
+	}{
+		{"Serialize", false, func(f *Fory) error { _, err := f.Serialize(value); return err }},
+		{"SerializeError", true, func(f *Fory) error { _, err := f.Serialize(Item{}); return err }},
+		{"GenericSerialize", false, func(f *Fory) error { _, err := Serialize(f, &value); return err }},
+		{"GenericSerializeError", true, func(f *Fory) error { _, err := Serialize(f, &Item{}); return err }},
+		{"Deserialize", false, func(f *Fory) error { return f.Deserialize(data, new(int32)) }},
+		{"DeserializeError", true, func(f *Fory) error { return f.Deserialize(nil, new(int32)) }},
+		{"GenericDeserialize", false, func(f *Fory) error { return Deserialize(f, data, new(int32)) }},
+		{"GenericDeserializeError", true, func(f *Fory) error { return Deserialize(f, nil, new(int32)) }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			f := New()
+			err := test.call(f)
+			if test.fail {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Error(t, f.RegisterStructByName(Item{}, "threadsafe.Item"))
+		})
+	}
+}
 
 // TestFory tests the thread-safe Fory wrapper
 func TestFory(t *testing.T) {
@@ -140,6 +259,7 @@ func TestDeserialize(t *testing.T) {
 	})
 
 	t.Run("Slice", func(t *testing.T) {
+		f := New(fory.WithXlang(false), fory.WithRefTracking(true), fory.WithCompatible(false))
 		// Serialize a struct containing the slice since *[]T is not supported
 		type SliceWrapper struct {
 			Items []int32

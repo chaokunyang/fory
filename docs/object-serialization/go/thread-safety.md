@@ -114,32 +114,47 @@ err = threadsafe.Unmarshal(data, &target)
 
 ## Type Registration
 
-Type registration should be done before concurrent use:
+Register all types before the first serialization or deserialization operation. The
+first operation permanently freezes the wrapper's registrations, even if that
+operation fails. A later registration attempt returns an error.
 
 ```go
 f := threadsafe.New()
 
-// Register types BEFORE concurrent access
-f.RegisterStruct(User{}, 1)
-f.RegisterStruct(Order{}, 2)
+if err := f.RegisterStructByName(User{}, "example.User"); err != nil {
+    panic(err)
+}
+if err := f.RegisterStructByName(Order{}, "example.Order"); err != nil {
+    panic(err)
+}
 
-// Now safe to use concurrently
+// All concurrent operations use the registered types.
 go func() {
-    f.Serialize(&User{ID: 1})
+    data, err := f.Serialize(&User{ID: 1})
+    // Use data and handle err.
+    _, _ = data, err
 }()
 ```
 
-### Thread-Safe Registration
-
-The thread-safe wrapper handles registration safely:
+For numeric type IDs, enums, or custom serializers, use `NewWithFactory` and
+register them on each instance returned by the factory:
 
 ```go
-// Safe: Registration is synchronized
-f := threadsafe.New()
-f.RegisterStruct(User{}, 1)  // Thread-safe
+f := threadsafe.NewWithFactory(func() *fory.Fory {
+    inner := fory.New()
+    if err := inner.RegisterStruct(User{}, 1); err != nil {
+        panic(err)
+    }
+    if err := inner.RegisterStruct(Order{}, 2); err != nil {
+        panic(err)
+    }
+    return inner
+})
 ```
 
-However, for best performance, register all types at startup before concurrent use.
+The factory must return a fresh, identically configured instance on every call
+and support concurrent calls. Complete its registrations before returning the
+instance.
 
 ## Zero-Copy Considerations
 
@@ -331,11 +346,11 @@ go func() {
 }()
 ```
 
-**Fix**: Register all types before concurrent use.
+**Fix**: Register all types before the first serialization or deserialization.
 
 ## Best Practices
 
-1. **Register types at startup**: Before any concurrent operations
+1. **Register types at startup**: Before the first serialization or deserialization
 2. **Clone data if keeping references**: With non-thread-safe instance
 3. **Use per-worker instances for hot paths**: Eliminates pool contention
 4. **Profile before optimizing**: Thread-safe overhead may be negligible

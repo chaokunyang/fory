@@ -19,7 +19,10 @@
 package threadsafe
 
 import (
+	"fmt"
+	"reflect"
 	"sync"
+	"sync/atomic"
 
 	"github.com/apache/fory/go/fory"
 )
@@ -27,7 +30,15 @@ import (
 // Fory is a thread-safe wrapper around fory.Fory using sync.Pool.
 // It provides the same API as fory.Fory but is safe for concurrent use.
 type Fory struct {
-	pool sync.Pool
+	pool           sync.Pool
+	registrationMu sync.Mutex
+	started        atomic.Bool
+	registrations  []structRegistration
+}
+
+type structRegistration struct {
+	typ  reflect.Type
+	name string
 }
 
 // New creates a new thread-safe Fory instance.
@@ -38,6 +49,9 @@ func New(opts ...fory.Option) *Fory {
 }
 
 // NewWithFactory creates a new thread-safe Fory instance using a custom factory.
+// The factory must return a fresh, identically configured Fory instance on every
+// call, with any custom registrations completed before returning. It may be
+// called concurrently.
 func NewWithFactory(factory func() *fory.Fory) *Fory {
 	if factory == nil {
 		panic("threadsafe.NewWithFactory requires a non-nil factory")
@@ -49,6 +63,13 @@ func NewWithFactory(factory func() *fory.Fory) *Fory {
 			if inner == nil {
 				panic("threadsafe.NewWithFactory factory returned nil")
 			}
+			// Pool entries are disposable. Registrations belong to the wrapper and
+			// must initialize every replacement or concurrently acquired instance.
+			for _, registration := range f.registrations {
+				if err := inner.RegisterStructByName(registration.typ, registration.name); err != nil {
+					panic(fmt.Errorf("threadsafe factory cannot restore registration: %w", err))
+				}
+			}
 			return inner
 		},
 	}
@@ -56,7 +77,19 @@ func NewWithFactory(factory func() *fory.Fory) *Fory {
 }
 
 func (f *Fory) acquire() *fory.Fory {
+	if !f.started.Load() {
+		f.freezeRegistrations()
+	}
 	return f.pool.Get().(*fory.Fory)
+}
+
+//go:noinline
+func (f *Fory) freezeRegistrations() {
+	f.registrationMu.Lock()
+	defer f.registrationMu.Unlock()
+	// Freeze before acquiring an instance, including when the root operation
+	// fails. The factory can then read immutable registrations without locking.
+	f.started.Store(true)
 }
 
 func (f *Fory) release(inner *fory.Fory) {
@@ -91,10 +124,29 @@ func (f *Fory) Deserialize(data []byte, v any) error {
 }
 
 // RegisterStructByName registers a struct type by name for cross-language serialization.
+// Registration must complete before the first serialization or deserialization,
+// including a failed operation. Every pooled instance receives the registration.
 func (f *Fory) RegisterStructByName(type_ any, name string) error {
-	inner := f.acquire()
-	defer f.release(inner)
-	return inner.RegisterStructByName(type_, name)
+	f.registrationMu.Lock()
+	defer f.registrationMu.Unlock()
+	if f.started.Load() {
+		return fmt.Errorf("types must be registered before the first serialization or deserialization")
+	}
+	// Validate against the factory and all accepted registrations without
+	// publishing a partially configured instance or retaining a failed change.
+	inner := f.pool.New().(*fory.Fory)
+	if err := inner.RegisterStructByName(type_, name); err != nil {
+		return err
+	}
+	typ, ok := type_.(reflect.Type)
+	if !ok {
+		typ = reflect.TypeOf(type_)
+		if typ.Kind() == reflect.Ptr {
+			typ = typ.Elem()
+		}
+	}
+	f.registrations = append(f.registrations, structRegistration{typ: typ, name: name})
+	return nil
 }
 
 // ============================================================================

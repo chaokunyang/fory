@@ -31,7 +31,6 @@ const build = () => {
         if (typeof v !== "string") {
           throw new Error(`isLatin1 requires string but got ${typeof v}`);
         }
-        // todo boundary check
         return _serializeString(dist, v, offset, 0);
       },
     };

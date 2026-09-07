@@ -18,6 +18,7 @@
  */
 
 #include "v8-fast-api-calls.h"
+#include <limits>
 #include <nan.h>
 using v8::Local;
 using v8::String;
@@ -32,7 +33,23 @@ template <typename T, typename U> constexpr T *AlignUp(T *ptr, U alignment) {
       RoundUp(reinterpret_cast<uintptr_t>(ptr), alignment));
 }
 
-uint32_t writeVarUint32(uint8_t *dst, uint32_t offset, int32_t value) {
+uint32_t varUint32Size(uint32_t value) {
+  if (value >> 7 == 0) {
+    return 1;
+  }
+  if (value >> 14 == 0) {
+    return 2;
+  }
+  if (value >> 21 == 0) {
+    return 3;
+  }
+  if (value >> 28 == 0) {
+    return 4;
+  }
+  return 5;
+}
+
+uint32_t writeVarUint32(uint8_t *dst, uint32_t offset, uint32_t value) {
   if (value >> 7 == 0) {
     dst[offset] = (uint8_t)value;
     return 1;
@@ -65,6 +82,33 @@ uint32_t writeVarUint32(uint8_t *dst, uint32_t offset, int32_t value) {
 
 enum Encoding { LATIN1, UTF16, UTF8 };
 
+struct StringLayout {
+  uint32_t header;
+  size_t body_size;
+  size_t total_size;
+};
+
+bool getStringLayout(size_t length, bool is_one_byte, StringLayout *layout) {
+  const size_t char_width = is_one_byte ? 1 : 2;
+  const size_t max_body_size = std::numeric_limits<uint32_t>::max() >> 2;
+  if (length > max_body_size / char_width) {
+    return false;
+  }
+  const size_t body_size = length * char_width;
+  const auto encoding = is_one_byte ? Encoding::LATIN1 : Encoding::UTF16;
+  const uint32_t header = (static_cast<uint32_t>(body_size) << 2) | encoding;
+  layout->header = header;
+  layout->body_size = body_size;
+  layout->total_size = varUint32Size(header) + body_size;
+  return true;
+}
+
+bool hasStringCapacity(size_t capacity, uint32_t offset,
+                       const StringLayout &layout) {
+  return offset <= capacity && layout.total_size <= capacity - offset &&
+         layout.total_size <= std::numeric_limits<uint32_t>::max() - offset;
+}
+
 uint32_t writeUCS2(v8::Isolate *isolate, uint8_t *buf, Local<String> str,
                    int flags) {
   uint16_t *const dst = reinterpret_cast<uint16_t *>(buf);
@@ -96,12 +140,21 @@ static void serializeString(const v8::FunctionCallbackInfo<v8::Value> &args) {
   uint32_t offset = args[2].As<v8::Number>()->Uint32Value(context).ToChecked();
 
   bool is_one_byte = str->IsOneByte();
+  StringLayout layout;
+  if (!getStringLayout(str->Length(), is_one_byte, &layout) ||
+      !hasStringCapacity(dst->ByteLength(), offset, layout)) {
+    Nan::ThrowRangeError(
+        "serializeString: string does not fit into the destination buffer");
+    return;
+  }
+  // The local ArrayBuffer handle keeps its data alive through the synchronous
+  // string writes.
+  const auto buffer = dst->Buffer();
   uint8_t *dst_data =
-      reinterpret_cast<uint8_t *>(dst->Buffer()->GetBackingStore()->Data());
+      reinterpret_cast<uint8_t *>(buffer->Data()) + dst->ByteOffset();
 
   if (is_one_byte && str->IsExternalOneByte()) {
-    offset += writeVarUint32(dst_data, offset,
-                             (str->Length() << 2) | Encoding::LATIN1); // length
+    offset += writeVarUint32(dst_data, offset, layout.header);
     const auto src = str->GetExternalOneByteStringResource()->data();
     memcpy(dst_data + offset, src, str->Length());
     offset += str->Length();
@@ -110,15 +163,11 @@ static void serializeString(const v8::FunctionCallbackInfo<v8::Value> &args) {
     int flags = String::HINT_MANY_WRITES_EXPECTED |
                 String::NO_NULL_TERMINATION | String::REPLACE_INVALID_UTF8;
     if (is_one_byte) {
-      offset +=
-          writeVarUint32(dst_data, offset,
-                         (str->Length() << 2) | Encoding::LATIN1); // length
+      offset += writeVarUint32(dst_data, offset, layout.header);
       offset += str->WriteOneByte(isolate, dst_data + offset, 0, str->Length(),
                                   flags);
     } else {
-      offset += writeVarUint32(dst_data, offset,
-                               ((str->Length() * 2) << 2) |
-                                   Encoding::UTF16); // length
+      offset += writeVarUint32(dst_data, offset, layout.header);
       offset += writeUCS2(isolate, dst_data + offset, str, flags);
     }
   }
@@ -129,13 +178,19 @@ static void serializeString(const v8::FunctionCallbackInfo<v8::Value> &args) {
 static uint32_t serializeStringFast(Local<Value> receiver,
                                     const v8::FastApiTypedArray<uint8_t> &dst,
                                     const v8::FastOneByteString &src,
-                                    uint32_t offset, uint32_t max_length) {
+                                    uint32_t offset, uint32_t /* max_length */,
+                                    v8::FastApiCallbackOptions &options) {
+  StringLayout layout;
   uint8_t *dst_data;
-  dst.getStorageIfAligned(&dst_data);
-  offset += writeVarUint32(dst_data, offset,
-                           (src.length << 2 | Encoding::LATIN1)); // length
+  if (!getStringLayout(src.length, true, &layout) ||
+      !hasStringCapacity(dst.length(), offset, layout) ||
+      !dst.getStorageIfAligned(&dst_data)) {
+    options.fallback = true;
+    return 0;
+  }
+  offset += writeVarUint32(dst_data, offset, layout.header);
   memcpy(dst_data + offset, src.data, src.length);
-  return offset + src.length;
+  return offset + layout.body_size;
 }
 
 v8::CFunction fast_serialize_string(v8::CFunction::Make(serializeStringFast));

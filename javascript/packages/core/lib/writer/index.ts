@@ -85,12 +85,24 @@ export class BinaryWriter {
   reserve(len: number) {
     this.reserved += len;
     if (this.byteLength - this.cursor <= this.reserved) {
+      if (this.cursor > this.byteLength) {
+        this.throwUnderReservation();
+      }
       const newAb = alloc(this.byteLength * 2 + len);
       this.platformBuffer.copy(newAb, 0);
       this.platformBuffer = newAb;
       this.byteLength = this.platformBuffer.byteLength;
       this.dataView = new DataView(this.platformBuffer.buffer, this.platformBuffer.byteOffset);
     }
+  }
+
+  private throwUnderReservation(): never {
+    // Uint8Array stores past the end are silently dropped while the cursor
+    // advances, so growing or dumping afterward would expose unwritten bytes.
+    throw new Error(
+      `BinaryWriter cursor ${this.cursor} exceeds buffer capacity ${this.byteLength}; ` +
+        "serialized output would contain unwritten bytes",
+    );
   }
 
   reset() {
@@ -297,6 +309,9 @@ export class BinaryWriter {
 
   stringWithHeaderFast(v: string) {
     const { serializeString } = this.config.hps!;
+    // The native owner checks the exact representation-dependent size before
+    // writing. Reserve its maximum possible encoding size so that check passes.
+    this.reserve(5 + v.length * 2);
     this.cursor = serializeString(v, this.platformBuffer, this.cursor);
   }
 
@@ -503,6 +518,9 @@ export class BinaryWriter {
   }
 
   dump() {
+    if (this.cursor > this.byteLength) {
+      this.throwUnderReservation();
+    }
     const result = alloc(this.cursor);
     this.platformBuffer.copy(result, 0, 0, this.cursor);
     this.tryFreePool();

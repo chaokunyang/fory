@@ -60,6 +60,7 @@ type PreparedField = {
 type PreparedStruct = {
   fields: PreparedField[];
   graphBytes: number;
+  reserveBytes: number;
 };
 
 type PreparedOwners = WeakMap<UnknownStructSerializer, PreparedStruct>;
@@ -191,9 +192,16 @@ export class UnknownStructSerializer implements Serializer {
       return prepared;
     }
     const fields = typeMeta.getFieldInfo().map((field) => this.prepareField(field));
+    let reserveBytes = 0;
+    for (const field of fields) {
+      // Field serializers own variable-size reservations. This aggregate covers
+      // every fixed write and ref/null flag before any nested reservation runs.
+      reserveBytes += field.serializer.fixedSize + 1;
+    }
     prepared = {
       fields,
       graphBytes: JS_STRUCT_OWNER_BYTES + fields.length * REFERENCE_BYTES,
+      reserveBytes,
     };
     owners.set(this, prepared);
     return prepared;
@@ -216,6 +224,7 @@ export class UnknownStructSerializer implements Serializer {
   write = (value: any) => {
     const typeMeta = this.validateValue(value);
     const prepared = this.prepare(typeMeta);
+    this.writeContext.writer.reserve(prepared.reserveBytes);
     for (const field of prepared.fields) {
       this.writeField(field, value[field.name]);
     }

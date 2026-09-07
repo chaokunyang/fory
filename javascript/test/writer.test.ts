@@ -20,6 +20,7 @@
 import { OwnershipError } from "../packages/core/lib/error";
 import { BinaryReader } from "../packages/core/lib/reader";
 import { BinaryWriter } from "../packages/core/lib/writer";
+import Fory, { Type } from "../packages/core/index";
 import { describe, expect, test } from "@jest/globals";
 
 describe("writer", () => {
@@ -93,5 +94,36 @@ describe("writer", () => {
     const reader = new BinaryReader({});
     reader.reset(writer.dump());
     expect(reader.readSliInt64()).toBe(-(2n ** 52n + 1n));
+  });
+
+  test("rejects materializing unwritten bytes", () => {
+    const overrunWriter = () => {
+      const writer = new BinaryWriter({});
+      for (let i = 0; i < 110 * 1024; i++) {
+        writer.writeVarUInt32(1);
+      }
+      return writer;
+    };
+
+    expect(() => overrunWriter().reserve(1)).toThrow();
+    expect(() => overrunWriter().dump()).toThrow();
+  });
+
+  test("reserializes homogeneous unknown structs beyond the initial pool", () => {
+    const fields: Record<string, any> = {};
+    const value: Record<string, number> = {};
+    for (let i = 0; i < 512; i++) {
+      fields[`f${i}`] = Type.int32();
+      value[`f${i}`] = 1;
+    }
+    const typedFory = new Fory({ compatible: true });
+    const dynamicFory = new Fory({ compatible: true });
+    const typed = typedFory.register(Type.struct(7920, fields));
+    const unknown = dynamicFory.deserialize(typed.serialize(value));
+    const values = new Array(256).fill(unknown);
+
+    const bytes = dynamicFory.serialize(values);
+    expect(bytes.byteLength).toBeGreaterThan(100 * 1024);
+    expect(typedFory.deserialize(bytes)).toEqual(new Array(256).fill(value));
   });
 });

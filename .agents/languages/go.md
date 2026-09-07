@@ -7,6 +7,13 @@ Load this file when changing `go/fory/` or Go xlang behavior.
 - Run Go commands from within `go/fory/`.
 - Changes under `go/` must pass formatting and tests.
 - The Go implementation focuses on fast serializers.
+- The `threadsafe.Fory` wrapper must preserve direct struct and enum registration
+  by ID or name. Do not replace ordinary registration examples with factories to
+  accommodate a missing wrapper method. Registration belongs to the wrapper's
+  configuration, not a disposable pooled instance. Follow Java `ThreadPoolFory`:
+  retain the pool instances and forward each registration to every instance
+  through the ordinary Fory API before the first root operation. Do not add a
+  separate validation instance, registration records, or replay machinery.
 - Go `ReadContext` intentionally defers codec errors to existing `HasError` or `CheckError`
   boundaries. After an error, work may continue only while it remains panic- and bounds-safe and
   cannot cause disproportionate work or allocation, publish state that survives root cleanup, or

@@ -15,86 +15,137 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// Package threadsafe provides a thread-safe wrapper around Fory using sync.Pool.
+// Package threadsafe provides a thread-safe wrapper around Fory.
 package threadsafe
 
 import (
 	"fmt"
-	"reflect"
+	"math/rand/v2"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
 	"github.com/apache/fory/go/fory"
 )
 
-// Fory is a thread-safe wrapper around fory.Fory using sync.Pool.
-// It provides the same API as fory.Fory but is safe for concurrent use.
+// Fory is a thread-safe wrapper around fory.Fory backed by a fixed-size pool.
+// Struct and enum registration use the same API as fory.Fory and must finish
+// before the first serialization or deserialization operation.
 type Fory struct {
-	pool           sync.Pool
+	slots          []poolSlot
+	instances      []poolEntry
+	available      chan struct{}
+	waiters        atomic.Int32
 	registrationMu sync.Mutex
 	started        atomic.Bool
-	registrations  []structRegistration
 }
 
-type structRegistration struct {
-	typ  reflect.Type
-	name string
+type poolSlot struct {
+	entry atomic.Pointer[poolEntry]
+	// Separate the atomics so borrowing unrelated slots does not invalidate
+	// the same cache line across processors.
+	_ [128]byte
 }
 
-// New creates a new thread-safe Fory instance.
+type poolEntry struct {
+	fory  *fory.Fory
+	index int
+}
+
+// New creates a thread-safe Fory with 4 * runtime.GOMAXPROCS(0) pooled instances.
 func New(opts ...fory.Option) *Fory {
 	return NewWithFactory(func() *fory.Fory {
 		return fory.New(opts...)
 	})
 }
 
-// NewWithFactory creates a new thread-safe Fory instance using a custom factory.
+// NewWithFactory creates a thread-safe Fory with 4 * runtime.GOMAXPROCS(0)
+// pooled instances. It calls the factory sequentially during construction.
 // The factory must return a fresh, identically configured Fory instance on every
-// call, with any custom registrations completed before returning. It may be
-// called concurrently.
+// call, with any custom registrations completed before returning.
 func NewWithFactory(factory func() *fory.Fory) *Fory {
 	if factory == nil {
 		panic("threadsafe.NewWithFactory requires a non-nil factory")
 	}
-	f := &Fory{}
-	f.pool = sync.Pool{
-		New: func() any {
-			inner := factory()
-			if inner == nil {
-				panic("threadsafe.NewWithFactory factory returned nil")
-			}
-			// Pool entries are disposable. Registrations belong to the wrapper and
-			// must initialize every replacement or concurrently acquired instance.
-			for _, registration := range f.registrations {
-				if err := inner.RegisterStructByName(registration.typ, registration.name); err != nil {
-					panic(fmt.Errorf("threadsafe factory cannot restore registration: %w", err))
-				}
-			}
-			return inner
-		},
+	poolSize := 4 * runtime.GOMAXPROCS(0)
+	f := &Fory{
+		slots:     make([]poolSlot, poolSize),
+		instances: make([]poolEntry, poolSize),
+		available: make(chan struct{}, poolSize),
+	}
+	for i := range f.instances {
+		inner := factory()
+		if inner == nil {
+			panic("threadsafe.NewWithFactory factory returned nil")
+		}
+		f.instances[i] = poolEntry{fory: inner, index: i}
+		f.slots[i].entry.Store(&f.instances[i])
 	}
 	return f
 }
 
-func (f *Fory) acquire() *fory.Fory {
+func (f *Fory) acquire() *poolEntry {
 	if !f.started.Load() {
 		f.freezeRegistrations()
 	}
-	return f.pool.Get().(*fory.Fory)
+	// Go has no goroutine-local slot hint. Spread borrowers across the slots
+	// without a shared counter on the acquisition path.
+	start := rand.IntN(len(f.slots))
+	if entry := f.tryAcquire(start); entry != nil {
+		return entry
+	}
+	return f.waitForEntry(start)
+}
+
+func (f *Fory) tryAcquire(start int) *poolEntry {
+	index := start
+	for range f.slots {
+		if f.slots[index].entry.Load() != nil {
+			if entry := f.slots[index].entry.Swap(nil); entry != nil {
+				return entry
+			}
+		}
+		index++
+		if index == len(f.slots) {
+			index = 0
+		}
+	}
+	return nil
+}
+
+//go:noinline
+func (f *Fory) waitForEntry(start int) *poolEntry {
+	f.waiters.Add(1)
+	defer f.waiters.Add(-1)
+	for {
+		// Rescan after announcing the waiter so a release cannot be missed
+		// between the initial scan and blocking for a notification.
+		if entry := f.tryAcquire(start); entry != nil {
+			return entry
+		}
+		<-f.available
+	}
 }
 
 //go:noinline
 func (f *Fory) freezeRegistrations() {
 	f.registrationMu.Lock()
 	defer f.registrationMu.Unlock()
-	// Freeze before acquiring an instance, including when the root operation
-	// fails. The factory can then read immutable registrations without locking.
+	// Freeze before borrowing, even if the first root operation fails.
 	f.started.Store(true)
 }
 
-func (f *Fory) release(inner *fory.Fory) {
-	inner.Reset()
-	f.pool.Put(inner)
+func (f *Fory) release(entry *poolEntry) {
+	entry.fory.Reset()
+	f.slots[entry.index].entry.Store(entry)
+	if f.waiters.Load() > 0 {
+		// At most len(slots) free entries need notifications. A borrower always
+		// rescans the slots; stale notifications only cause another scan.
+		select {
+		case f.available <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // ============================================================================
@@ -103,50 +154,76 @@ func (f *Fory) release(inner *fory.Fory) {
 
 // Serialize serializes a value using a pooled Fory instance
 func (f *Fory) Serialize(v any) ([]byte, error) {
-	inner := f.acquire()
-	data, err := inner.Serialize(v)
+	entry := f.acquire()
+	defer f.release(entry)
+	data, err := entry.fory.Serialize(v)
 	if err != nil {
-		f.release(inner)
 		return nil, err
 	}
 	// Copy the data before releasing since the buffer will be reused
 	result := make([]byte, len(data))
 	copy(result, data)
-	f.release(inner)
 	return result, nil
 }
 
 // Deserialize deserializes data into the provided value using a pooled Fory instance
 func (f *Fory) Deserialize(data []byte, v any) error {
-	inner := f.acquire()
-	defer f.release(inner)
-	return inner.Deserialize(data, v)
+	entry := f.acquire()
+	defer f.release(entry)
+	return entry.fory.Deserialize(data, v)
 }
 
-// RegisterStructByName registers a struct type by name for cross-language serialization.
-// Registration must complete before the first serialization or deserialization,
-// including a failed operation. Every pooled instance receives the registration.
-func (f *Fory) RegisterStructByName(type_ any, name string) error {
+func (f *Fory) registerCallback(registration func(*fory.Fory) error) error {
 	f.registrationMu.Lock()
 	defer f.registrationMu.Unlock()
 	if f.started.Load() {
 		return fmt.Errorf("types must be registered before the first serialization or deserialization")
 	}
-	// Validate against the factory and all accepted registrations without
-	// publishing a partially configured instance or retaining a failed change.
-	inner := f.pool.New().(*fory.Fory)
-	if err := inner.RegisterStructByName(type_, name); err != nil {
-		return err
-	}
-	typ, ok := type_.(reflect.Type)
-	if !ok {
-		typ = reflect.TypeOf(type_)
-		if typ.Kind() == reflect.Ptr {
-			typ = typ.Elem()
+	// Like Java ThreadPoolFory, configure every retained instance through the
+	// ordinary registration API. GC must never replace a configured instance
+	// with an unregistered one, and registration must not borrow just one entry.
+	for i := range f.instances {
+		if err := registration(f.instances[i].fory); err != nil {
+			return err
 		}
 	}
-	f.registrations = append(f.registrations, structRegistration{typ: typ, name: name})
 	return nil
+}
+
+// RegisterStruct registers a struct type with a numeric ID in every pooled instance.
+// Registration must complete before the first serialization or deserialization,
+// including a failed operation. Arguments follow fory.Fory.RegisterStruct.
+func (f *Fory) RegisterStruct(type_ any, typeID uint32) error {
+	return f.registerCallback(func(inner *fory.Fory) error {
+		return inner.RegisterStruct(type_, typeID)
+	})
+}
+
+// RegisterStructByName registers a struct type by name in every pooled instance.
+// Registration must complete before the first serialization or deserialization,
+// including a failed operation. Arguments follow fory.Fory.RegisterStructByName.
+func (f *Fory) RegisterStructByName(type_ any, name string) error {
+	return f.registerCallback(func(inner *fory.Fory) error {
+		return inner.RegisterStructByName(type_, name)
+	})
+}
+
+// RegisterEnum registers an enum type with a numeric ID in every pooled instance.
+// Registration must complete before the first serialization or deserialization,
+// including a failed operation. Arguments follow fory.Fory.RegisterEnum.
+func (f *Fory) RegisterEnum(type_ any, typeID uint32) error {
+	return f.registerCallback(func(inner *fory.Fory) error {
+		return inner.RegisterEnum(type_, typeID)
+	})
+}
+
+// RegisterEnumByName registers an enum type by name in every pooled instance.
+// Registration must complete before the first serialization or deserialization,
+// including a failed operation. Arguments follow fory.Fory.RegisterEnumByName.
+func (f *Fory) RegisterEnumByName(type_ any, name string) error {
+	return f.registerCallback(func(inner *fory.Fory) error {
+		return inner.RegisterEnumByName(type_, name)
+	})
 }
 
 // ============================================================================
@@ -156,25 +233,24 @@ func (f *Fory) RegisterStructByName(type_ any, name string) error {
 // Serialize serializes a value with type T inferred, thread-safe.
 // Takes pointer to avoid interface heap allocation and struct copy.
 func Serialize[T any](f *Fory, value *T) ([]byte, error) {
-	inner := f.acquire()
-	data, err := fory.Serialize(inner, value)
+	entry := f.acquire()
+	defer f.release(entry)
+	data, err := fory.Serialize(entry.fory, value)
 	if err != nil {
-		f.release(inner)
 		return nil, err
 	}
 	// Copy the data before releasing since the buffer will be reused
 	result := make([]byte, len(data))
 	copy(result, data)
-	f.release(inner)
 	return result, nil
 }
 
 // Deserialize deserializes data directly into the provided target, thread-safe.
 // Takes pointer to avoid interface heap allocation and enable direct writes.
 func Deserialize[T any](f *Fory, data []byte, target *T) error {
-	inner := f.acquire()
-	defer f.release(inner)
-	return fory.Deserialize(inner, data, target)
+	entry := f.acquire()
+	defer f.release(entry)
+	return fory.Deserialize(entry.fory, data, target)
 }
 
 // ============================================================================

@@ -66,32 +66,11 @@ go func() {
 }()
 ```
 
-### How It Works
-
-The thread-safe wrapper uses `sync.Pool`:
-
-1. **Acquire**: Gets a Fory instance from the pool
-2. **Use**: Performs serialization/deserialization
-3. **Copy**: Copies result data (buffer will be reused)
-4. **Release**: Returns instance to pool
-
-```go
-// Simplified implementation
-func (f *Fory) Serialize(v any) ([]byte, error) {
-    fory := f.pool.Get().(*fory.Fory)
-    defer f.pool.Put(fory)
-
-    data, err := fory.Serialize(v)
-    if err != nil {
-        return nil, err
-    }
-
-    // Copy because underlying buffer will be reused
-    result := make([]byte, len(data))
-    copy(result, data)
-    return result, nil
-}
-```
+The wrapper creates `4 * runtime.GOMAXPROCS(0)` instances during construction
+and reuses them across goroutines. Each operation exclusively borrows one
+instance and returns it afterward. When all instances are busy, additional
+operations wait for an instance to become available. Serialized output is
+copied before returning, so callers can retain it safely.
 
 ### API
 
@@ -121,10 +100,10 @@ operation fails. A later registration attempt returns an error.
 ```go
 f := threadsafe.New()
 
-if err := f.RegisterStructByName(User{}, "example.User"); err != nil {
+if err := f.RegisterStruct(User{}, 1); err != nil {
     panic(err)
 }
-if err := f.RegisterStructByName(Order{}, "example.Order"); err != nil {
+if err := f.RegisterStruct(Order{}, 2); err != nil {
     panic(err)
 }
 
@@ -136,24 +115,25 @@ go func() {
 }()
 ```
 
-For numeric type IDs, enums, or custom serializers, use `NewWithFactory` and
-register them on each instance returned by the factory:
+`RegisterStructByName`, `RegisterEnum`, and `RegisterEnumByName` are also
+available directly on the wrapper. Every registered type is available to all
+concurrent operations and remains registered across garbage collections.
+
+For custom per-instance initialization, use `NewWithFactory`:
 
 ```go
 f := threadsafe.NewWithFactory(func() *fory.Fory {
     inner := fory.New()
-    if err := inner.RegisterStruct(User{}, 1); err != nil {
-        panic(err)
-    }
-    if err := inner.RegisterStruct(Order{}, 2); err != nil {
+    if err := inner.RegisterExtension(CustomType{}, 100, newCustomSerializer()); err != nil {
         panic(err)
     }
     return inner
 })
 ```
 
-The factory must return a fresh, identically configured instance on every call
-and support concurrent calls. Complete its registrations before returning the
+The factory is called sequentially during construction. It must return a fresh,
+identically configured instance on every call, with registrations completed
+before returning. Create stateful custom serializers separately for each
 instance.
 
 ## Zero-Copy Considerations

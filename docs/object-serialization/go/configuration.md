@@ -241,7 +241,7 @@ go func() {
 
 The thread-safe wrapper:
 
-- Reuses a fixed pool of instances; operations wait when all instances are busy
+- Creates instances as needed and reuses them across goroutines
 - Automatically copies serialized data before returning
 - Accepts the same configuration options as `fory.New()`
 

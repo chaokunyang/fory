@@ -23,7 +23,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/apache/fory/go/fory"
 	"github.com/stretchr/testify/require"
@@ -37,27 +36,38 @@ func TestRegistrationAfterGC(t *testing.T) {
 			name = "Name"
 		}
 		t.Run(name, func(t *testing.T) {
-			f := New()
+			var created atomic.Int32
+			f := NewWithFactory(func() *fory.Fory {
+				created.Add(1)
+				return fory.New()
+			})
 			if byName {
 				require.NoError(t, f.RegisterStructByName(Item{}, "threadsafe.Item"))
 			} else {
 				require.NoError(t, f.RegisterStruct(Item{}, 1))
 			}
+			runtime.GC()
+			runtime.GC()
 			value := Item{Value: 42}
 			data, err := f.Serialize(&value)
 			require.NoError(t, err)
+			// The configured instance serves the first root, even after setup GC.
+			require.Equal(t, int32(1), created.Load())
 
-			// Registrations must survive collections between root operations.
+			// Two collections discard the sync.Pool primary and victim caches.
 			runtime.GC()
 			runtime.GC()
 			var result Item
 			require.NoError(t, f.Deserialize(data, &result))
 			require.Equal(t, value, result)
+			require.Greater(t, created.Load(), int32(1))
 
+			before := created.Load()
 			runtime.GC()
 			runtime.GC()
 			data, err = Serialize(f, &value)
 			require.NoError(t, err)
+			require.Greater(t, created.Load(), before)
 			require.NoError(t, Deserialize(f, data, &result))
 			require.Equal(t, value, result)
 		})
@@ -65,45 +75,50 @@ func TestRegistrationAfterGC(t *testing.T) {
 }
 
 func TestRegistrationInstances(t *testing.T) {
-	type Item struct{ Value int32 }
 	type Order struct{ ID int64 }
+	type User struct {
+		ID    int32
+		Order *Order
+	}
 	type NamedItem struct{ Name string }
 	type FactoryItem struct{ Name string }
 	type State int32
 	type Color int32
 	var factoryCalls atomic.Int32
+	var firstCreated *fory.Fory
 	f := NewWithFactory(func() *fory.Fory {
-		factoryCalls.Add(1)
 		inner := fory.New()
+		if factoryCalls.Add(1) == 1 {
+			firstCreated = inner
+		}
 		if err := inner.RegisterStruct(FactoryItem{}, 100); err != nil {
 			panic(err)
 		}
 		return inner
 	})
-	created := factoryCalls.Load()
-	require.Equal(t, int32(len(f.instances)), created)
+	require.Zero(t, factoryCalls.Load())
 	require.Error(t, f.RegisterStructByName(int32(0), "threadsafe.Invalid"))
-	require.NoError(t, f.RegisterStruct(&Item{}, 1))
-	require.NoError(t, f.RegisterStruct(Item{}, 1))
+	require.NoError(t, f.RegisterStruct(&User{}, 1))
+	runtime.GC()
+	runtime.GC()
+	require.NoError(t, f.RegisterStruct(reflect.TypeOf(User{}), 1))
 	require.Error(t, f.RegisterStruct(Order{}, 1))
-	require.Error(t, f.RegisterStructByName(Item{}, "threadsafe.Duplicate"))
+	require.Error(t, f.RegisterStructByName(User{}, "threadsafe.Duplicate"))
 	require.NoError(t, f.RegisterStruct(Order{}, 2))
 	require.NoError(t, f.RegisterStructByName(NamedItem{}, "threadsafe.NamedItem"))
 	require.NoError(t, f.RegisterEnum(State(0), 3))
-	require.NoError(t, f.RegisterEnumByName(Color(0), "threadsafe.Color"))
-	// Registration configures existing instances without constructing more.
-	require.Equal(t, created, factoryCalls.Load())
+	require.NoError(t, f.RegisterEnumByName(reflect.TypeOf(Color(0)), "threadsafe.Color"))
+	// Ordinary registration does not rebuild the factory's instances each time.
+	require.Equal(t, int32(1), factoryCalls.Load())
 
-	// Borrow every instance to verify registration fan-out and independent state.
-	borrowed := make([]*poolEntry, len(f.instances))
-	seen := make(map[*fory.Fory]bool)
-	for i := range borrowed {
-		entry := f.acquire()
-		borrowed[i] = entry
-		inner := entry.fory
-		require.False(t, seen[inner])
-		seen[inner] = true
-		for _, value := range []any{&Item{42}, &Order{7}, &NamedItem{"name"}, &FactoryItem{"factory"}, State(1), Color(2)} {
+	// Hold both borrows to force an additional, independently configured instance.
+	first := f.acquire()
+	second := f.acquire()
+	require.Same(t, firstCreated, first)
+	require.NotSame(t, first, second)
+	require.Equal(t, int32(2), factoryCalls.Load())
+	for _, inner := range []*fory.Fory{first, second} {
+		for _, value := range []any{&User{42, &Order{7}}, &Order{7}, &NamedItem{"name"}, &FactoryItem{"factory"}, State(1), Color(2)} {
 			data, err := inner.Serialize(value)
 			require.NoError(t, err)
 			var result any
@@ -111,28 +126,27 @@ func TestRegistrationInstances(t *testing.T) {
 			require.Equal(t, value, result)
 		}
 	}
-	for _, inner := range borrowed {
-		f.release(inner)
-	}
+	f.release(first)
+	f.release(second)
 
 	var workers sync.WaitGroup
-	for range len(f.instances) + 1 {
+	for range 8 {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			value := Item{42}
+			value := User{42, &Order{7}}
 			for range 20 {
 				data, err := Serialize(f, &value)
 				if err != nil {
 					t.Error(err)
 					return
 				}
-				var result Item
+				var result User
 				if err := Deserialize(f, data, &result); err != nil {
 					t.Error(err)
 					return
 				}
-				if result != value {
+				if result.ID != value.ID || result.Order == nil || *result.Order != *value.Order {
 					t.Errorf("got %v, want %v", result, value)
 					return
 				}
@@ -140,70 +154,84 @@ func TestRegistrationInstances(t *testing.T) {
 		}()
 	}
 	workers.Wait()
-	require.Equal(t, created, factoryCalls.Load())
 }
 
-func TestPoolExhaustion(t *testing.T) {
-	f := New()
-	borrowed := make([]*poolEntry, len(f.instances))
-	for i := range borrowed {
-		borrowed[i] = f.acquire()
-	}
-	acquired := make(chan *poolEntry, len(borrowed))
-	for range borrowed {
-		go func() { acquired <- f.acquire() }()
-	}
-	require.Eventually(t, func() bool {
-		return f.waiters.Load() == int32(len(borrowed))
-	}, 5*time.Second, time.Millisecond)
-	for _, entry := range borrowed {
-		f.release(entry)
-	}
-	seen := make(map[*poolEntry]bool)
-	for range borrowed {
-		select {
-		case entry := <-acquired:
-			require.False(t, seen[entry])
-			seen[entry] = true
-		case <-time.After(5 * time.Second):
-			t.Fatal("pool waiter was not woken after instances were returned")
-		}
-	}
-	for entry := range seen {
-		f.release(entry)
-	}
-}
-
-type panicValue struct{}
-type panicSerializer struct{}
-
-func (*panicSerializer) WriteData(*fory.WriteContext, reflect.Value) {
-	panic("custom serializer failed")
-}
-
-func (*panicSerializer) ReadData(*fory.ReadContext, reflect.Value) {
-	panic("custom serializer failed")
-}
-
-func TestPoolRecovery(t *testing.T) {
+func TestConcurrentRegistration(t *testing.T) {
+	type User struct{ ID int32 }
+	type Order struct{ ID int64 }
+	type State int32
+	type Color int32
+	var created atomic.Int32
 	f := NewWithFactory(func() *fory.Fory {
-		inner := fory.New()
-		require.NoError(t, inner.RegisterExtension(panicValue{}, 100, &panicSerializer{}))
-		return inner
+		created.Add(1)
+		return fory.New()
 	})
-	for _, serialize := range []func(){
-		func() { _, _ = f.Serialize(&panicValue{}) },
-		func() { _, _ = Serialize(f, &panicValue{}) },
-	} {
-		require.Panics(t, serialize)
-		for i := range f.slots {
-			require.NotNil(t, f.slots[i].entry.Load(), "panic must not lose a pooled instance")
+	register := []func() error{
+		func() error { return f.RegisterStruct(User{}, 1) },
+		func() error { return f.RegisterStructByName(Order{}, "threadsafe.Order") },
+		func() error { return f.RegisterEnum(State(0), 2) },
+		func() error { return f.RegisterEnumByName(Color(0), "threadsafe.Color") },
+	}
+	var workers sync.WaitGroup
+	for _, call := range register {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			if err := call(); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	workers.Wait()
+	require.Equal(t, int32(1), created.Load())
+	first := f.acquire()
+	second := f.acquire()
+	for _, inner := range []*fory.Fory{first, second} {
+		for _, value := range []any{&User{42}, &Order{7}, State(1), Color(2)} {
+			data, err := inner.Serialize(value)
+			require.NoError(t, err)
+			var result any
+			require.NoError(t, inner.Deserialize(data, &result))
+			require.Equal(t, value, result)
 		}
-		data, err := f.Serialize(int32(42))
-		require.NoError(t, err)
-		var result int32
-		require.NoError(t, f.Deserialize(data, &result))
-		require.Equal(t, int32(42), result)
+	}
+	f.release(first)
+	f.release(second)
+}
+
+func TestRegistrationAtFirstRoot(t *testing.T) {
+	type User struct{ ID int32 }
+	type Order struct{ ID int64 }
+	for range 20 {
+		f := New()
+		require.NoError(t, f.RegisterStruct(User{}, 1))
+		start := make(chan struct{})
+		registered := make(chan error, 1)
+		serialized := make(chan error, 1)
+		go func() {
+			<-start
+			registered <- f.RegisterStruct(Order{}, 2)
+		}()
+		go func() {
+			<-start
+			_, err := f.Serialize(&User{42})
+			serialized <- err
+		}()
+		close(start)
+		registrationErr := <-registered
+		require.NoError(t, <-serialized)
+		first := f.acquire()
+		second := f.acquire()
+		for _, inner := range []*fory.Fory{first, second} {
+			_, err := inner.Serialize(&Order{7})
+			if registrationErr == nil {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		}
+		f.release(first)
+		f.release(second)
 	}
 }
 

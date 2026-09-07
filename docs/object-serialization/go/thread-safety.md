@@ -66,11 +66,11 @@ go func() {
 }()
 ```
 
-The wrapper creates `4 * runtime.GOMAXPROCS(0)` instances during construction
-and reuses them across goroutines. Each operation exclusively borrows one
-instance and returns it afterward. When all instances are busy, additional
-operations wait for an instance to become available. Serialized output is
-copied before returning, so callers can retain it safely.
+The wrapper creates instances as needed and reuses them across goroutines.
+Each operation exclusively borrows one instance and returns it afterward.
+Registered types remain available when garbage collection reclaims cached
+instances. Serialized output is copied before returning, so callers can retain
+it safely.
 
 ### API
 
@@ -131,10 +131,10 @@ f := threadsafe.NewWithFactory(func() *fory.Fory {
 })
 ```
 
-The factory is called sequentially during construction. It must return a fresh,
-identically configured instance on every call, with registrations completed
-before returning. Create stateful custom serializers separately for each
-instance.
+The factory may be called concurrently as additional instances are needed. It
+must return a fresh, identically configured instance on every call, with
+registrations completed before returning. Create stateful custom serializers
+separately for each instance.
 
 ## Zero-Copy Considerations
 

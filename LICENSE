@@ -242,10 +242,6 @@ The text of each license is the standard Apache 2.0 license.
     Files:
       ci/format.sh
 
-* mars (https://github.com/mars-project/mars)
-    Files:
-      python/pyfory/utils.py (lazy_import and ModulePlaceholder)
-
 * grpc (https://github.com/grpc/grpc)
     Files:
       bazel/cython_library.bzl

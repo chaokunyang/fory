@@ -33,7 +33,6 @@ excludes = [
 
     # Derived
     "ci/format.sh",
-    "python/pyfory/utils.py",
     "benchmarks/java/src/main/java/org/apache/fory/benchmark/Identity2IdMap.java",
     "benchmarks/java/src/main/java/org/apache/fory/benchmark/data/Data.java",
     "benchmarks/java/src/main/java/org/apache/fory/benchmark/data/Image.java",

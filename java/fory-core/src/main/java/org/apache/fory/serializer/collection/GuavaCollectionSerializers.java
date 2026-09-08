@@ -513,6 +513,11 @@ public class GuavaCollectionSerializers {
   }
 
   public static final class ImmutableIntArraySerializer extends Serializer<ImmutableIntArray> {
+    // For nonempty values, the builder's exact-capacity int[] becomes the returned value's backing.
+    private static final int RETAINED_OWNER_BYTES =
+        Math.addExact(
+            GraphMemoryEstimates.shallowObjectBytes(ImmutableIntArray.class),
+            GraphMemoryEstimates.objectArrayBytes());
 
     public ImmutableIntArraySerializer(TypeResolver typeResolver, Class<ImmutableIntArray> cls) {
       super(typeResolver.getConfig(), cls);
@@ -532,14 +537,18 @@ public class GuavaCollectionSerializers {
     public ImmutableIntArray read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       int length = buffer.readVarUInt32Small7();
-      if (length != 0) {
-        buffer.checkReadableBytes(length);
+      // Budget/builder validation rejects negative capacity before backing allocation; failed-root
+      // cleanup resets any temporary budget reservation.
+      if (length == 0) {
+        return ImmutableIntArray.of();
       }
-      int[] values = new int[length];
+      buffer.checkReadableBytes(length);
+      readContext.reserveGraphMemory(RETAINED_OWNER_BYTES + (long) length * Integer.BYTES);
+      ImmutableIntArray.Builder builder = ImmutableIntArray.builder(length);
       for (int i = 0; i < length; i++) {
-        values[i] = buffer.readVarInt32();
+        builder.add(buffer.readVarInt32());
       }
-      return ImmutableIntArray.copyOf(values);
+      return builder.build();
     }
 
     @Override

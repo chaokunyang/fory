@@ -25,10 +25,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.primitives.ImmutableIntArray;
 import java.util.List;
 import java.util.Objects;
 import org.apache.fory.Fory;
 import org.apache.fory.TestBase;
+import org.apache.fory.exception.InsecureException;
+import org.apache.fory.serializer.GraphMemoryEstimates;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
@@ -191,6 +194,26 @@ public class GuavaCollectionSerializersTest extends TestBase {
         fory.getTypeResolver()
             .getSerializerClass(ImmutableSortedMap.of("k1", 1, "k2", 2).getClass()),
         GuavaCollectionSerializers.ImmutableSortedMapSerializer.class);
+  }
+
+  @Test
+  public void testImmutableIntArrayBudget() {
+    ImmutableIntArray value = ImmutableIntArray.of(1, 2, 3, 4);
+    byte[] bytes = newJavaFory(false, false).serialize(value);
+    long required =
+        GraphMemoryEstimates.shallowObjectBytes(ImmutableIntArray.class)
+            + GraphMemoryEstimates.objectArrayBytes()
+            + (long) value.length() * Integer.BYTES;
+    Fory narrow = builder().withMaxGraphMemoryBytes(required - 1).build();
+    Fory exact = builder().withMaxGraphMemoryBytes(required).build();
+
+    Assert.assertThrows(InsecureException.class, () -> narrow.deserialize(bytes));
+    Assert.assertEquals(exact.deserialize(bytes), value);
+
+    ImmutableIntArray empty = ImmutableIntArray.of();
+    byte[] emptyBytes = newJavaFory(false, false).serialize(empty);
+    Fory smallestBudget = builder().withMaxGraphMemoryBytes(1).build();
+    Assert.assertSame(smallestBudget.deserialize(emptyBytes), empty);
   }
 
   @Test

@@ -161,13 +161,13 @@ pub fn read_unknown_case_body(
             } else {
                 None
             };
-            // The unknown-case serializer owns only the union body envelope. It must
-            // not add a depth frame here: the decoded Any value is not a new nesting
-            // boundary by itself, and real nested value serializers perform their
-            // own depth checks.
+            // Wire metadata can select the enclosing union again, so this dynamic dispatch is
+            // itself a recursive boundary even when the selected serializer adds no depth frame.
+            context.inc_depth()?;
             let type_info = context.read_any_type_info()?;
             check_erased_target_type(&type_info)?;
             let value = type_info.get_harness().read_arc_any(context, &type_info)?;
+            context.dec_depth();
             if let Some(ref_id) = ref_id {
                 context.ref_reader.store_arc_ref_at(ref_id, value.clone());
             }
@@ -182,6 +182,9 @@ pub fn read_unknown_case_body(
 
 impl Serializer for UnknownCase {
     type Target = Self;
+
+    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
 
     fn write(
         value: &Self,

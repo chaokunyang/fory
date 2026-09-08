@@ -265,6 +265,16 @@ fn decimal_guardrails() {
         value: String,
     }
 
+    #[derive(ForyStruct, Debug)]
+    struct F32Value {
+        value: f32,
+    }
+
+    #[derive(ForyStruct, Debug)]
+    struct F64Value {
+        value: f64,
+    }
+
     let digits_256 = "1".repeat(256);
     let decoded: DecimalValue = convert(
         12_071,
@@ -355,6 +365,30 @@ fn decimal_guardrails() {
         ),
         "{err}"
     );
+
+    for (index, value) in [
+        Decimal::new(BigInt::from(1), -300),
+        Decimal::new(
+            BigInt::parse_bytes("1".repeat(300).as_bytes(), 10).unwrap(),
+            0,
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let err = convert::<DecimalValue, F32Value>(
+            12_082 + index as u32,
+            &DecimalValue {
+                value: value.clone(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::InvalidData(_)), "{err}");
+
+        let err = convert::<DecimalValue, F64Value>(12_084 + index as u32, &DecimalValue { value })
+            .unwrap_err();
+        assert!(matches!(err, Error::InvalidData(_)), "{err}");
+    }
 }
 
 #[test]

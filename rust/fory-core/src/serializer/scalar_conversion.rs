@@ -734,7 +734,7 @@ fn read_string_cold(
         }
         type_id::DECIMAL => {
             let value = canonical_decimal(<Decimal as Serializer>::read_data(context)?)?;
-            Ok(decimal_to_string(&value))
+            Ok(canonical_decimal_to_string(&value))
         }
         _ => Err(Error::invalid_data("invalid compatible scalar remote type")),
     }
@@ -1195,7 +1195,7 @@ fn value_to_string(value: ScalarValue, remote_type: u32, local_type: u32) -> Res
         ScalarValue::String(value) => Ok(value),
         ScalarValue::Int(value) => Ok(value.to_string()),
         ScalarValue::Float(value) => float_to_string(value, remote_type, local_type),
-        ScalarValue::Decimal(value) => Ok(decimal_to_string(&canonical_decimal(value)?)),
+        ScalarValue::Decimal(value) => Ok(canonical_decimal_to_string(&canonical_decimal(value)?)),
     }
 }
 
@@ -1489,10 +1489,13 @@ fn decimal_to_f32(
     remote_type: u32,
     local_type: u32,
 ) -> Result<f32, Error> {
+    // Binary Decimal has a wider valid range than compatible scalar conversion. Validate that
+    // narrower conversion range before string conversion relies on a canonical value.
+    let decimal = canonical_decimal(decimal.clone())?;
     let value = if decimal.unscaled.is_zero() && negative_zero {
         -0.0
     } else {
-        decimal_to_string(decimal)
+        canonical_decimal_to_string(&decimal)
             .parse::<f32>()
             .map_err(|_| conversion_error(remote_type, local_type, "float value is out of range"))?
     };
@@ -1504,7 +1507,7 @@ fn decimal_to_f32(
         ));
     }
     let actual = canonical_float_decimal(FloatValue::F32(value), local_type, local_type)?;
-    if decimal_eq(&actual, decimal) {
+    if decimal_eq(&actual, &decimal) {
         Ok(value)
     } else {
         Err(conversion_error(
@@ -1531,10 +1534,11 @@ fn decimal_to_f64(
     remote_type: u32,
     local_type: u32,
 ) -> Result<f64, Error> {
+    let decimal = canonical_decimal(decimal.clone())?;
     let value = if decimal.unscaled.is_zero() && negative_zero {
         -0.0
     } else {
-        decimal_to_string(decimal)
+        canonical_decimal_to_string(&decimal)
             .parse::<f64>()
             .map_err(|_| conversion_error(remote_type, local_type, "float value is out of range"))?
     };
@@ -1546,7 +1550,7 @@ fn decimal_to_f64(
         ));
     }
     let actual = canonical_float_decimal(FloatValue::F64(value), local_type, local_type)?;
-    if decimal_eq(&actual, decimal) {
+    if decimal_eq(&actual, &decimal) {
         Ok(value)
     } else {
         Err(conversion_error(
@@ -1766,7 +1770,7 @@ fn float_to_string(value: FloatValue, remote_type: u32, local_type: u32) -> Resu
         });
     }
     let decimal = canonical_float_decimal(value, remote_type, local_type)?;
-    let mut text = decimal_to_string(&decimal);
+    let mut text = canonical_decimal_to_string(&decimal);
     if !text.contains('.') {
         text.push_str(".0");
     }
@@ -2103,8 +2107,7 @@ fn decimal_eq(left: &Decimal, right: &Decimal) -> bool {
     }
 }
 
-fn decimal_to_string(decimal: &Decimal) -> String {
-    let decimal = canonical_decimal(decimal.clone()).expect("canonical decimal");
+fn canonical_decimal_to_string(decimal: &Decimal) -> String {
     if decimal.unscaled.is_zero() {
         return "0".to_string();
     }

@@ -656,6 +656,17 @@ fn skip_ext(
     Ok(())
 }
 
+#[inline(always)]
+fn skip_union(context: &mut ReadContext) -> Result<(), Error> {
+    let _ordinal = context.reader.read_var_u32()?;
+    // A UNION body contains another complete value. Crafted UNION values can therefore
+    // re-enter this function without passing through any other depth owner.
+    context.inc_depth()?;
+    skip_any_value(context, true)?;
+    context.dec_depth();
+    Ok(())
+}
+
 // call when is_field && is_compatible_mode
 #[cold]
 #[inline(never)]
@@ -692,8 +703,7 @@ fn skip_value(
             || type_id_num == types::TYPED_UNION
             || type_id_num == types::NAMED_UNION
         {
-            let _ordinal = context.reader.read_var_u32()?;
-            return skip_any_value(context, true);
+            return skip_union(context);
         } else if type_id_num == types::EXT || type_id_num == types::NAMED_EXT {
             return skip_ext(context, type_id_num, type_info);
         } else {
@@ -866,20 +876,17 @@ fn skip_value(
 
         // ============ UNION ============
         types::UNION => {
-            let _ = context.reader.read_var_u32()?;
-            return skip_any_value(context, true);
+            return skip_union(context);
         }
 
         // ============ TYPED_UNION ============
         types::TYPED_UNION => {
-            let _ = context.reader.read_var_u32()?;
-            return skip_any_value(context, true);
+            return skip_union(context);
         }
 
         // ============ NAMED_UNION ============
         types::NAMED_UNION => {
-            let _ = context.reader.read_var_u32()?;
-            return skip_any_value(context, true);
+            return skip_union(context);
         }
 
         // ============ NONE ============

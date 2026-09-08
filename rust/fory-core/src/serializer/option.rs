@@ -32,6 +32,9 @@ type RootSerializer<S> = OptionCodec<<S as Serializer>::Target, S, false>;
 impl<S: Serializer> Serializer for OptionSerializer<S> {
     type Target = Option<S::Target>;
 
+    const READ_REQUIRES_STRUCT_DEPTH: bool = S::READ_REQUIRES_STRUCT_DEPTH;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+
     #[inline(always)]
     fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
         <RootSerializer<S> as Serializer>::write_data(value, context)
@@ -149,6 +152,9 @@ where
     T: Serializer<Target = T>,
 {
     type Target = Self;
+
+    const READ_REQUIRES_STRUCT_DEPTH: bool = T::READ_REQUIRES_STRUCT_DEPTH;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
 
     #[inline(always)]
     fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {

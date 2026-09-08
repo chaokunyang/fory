@@ -25,6 +25,9 @@ use std::sync::Arc;
 
 macro_rules! temporal_hooks {
     ($ty:ty, $type_id:expr, $reserved:expr, $default:expr) => {
+        const READ_REQUIRES_STRUCT_DEPTH: bool = false;
+        const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+
         const READ_DATA_ALWAYS_ADVANCES: bool = true;
 
         #[inline(always)]

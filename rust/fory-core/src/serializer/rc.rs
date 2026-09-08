@@ -159,6 +159,9 @@ where
 {
     type Target = Rc<T>;
 
+    const READ_REQUIRES_STRUCT_DEPTH: bool = C::READ_REQUIRES_STRUCT_DEPTH;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = C::DEFAULT_REQUIRES_STRUCT_DEPTH;
+
     #[inline(always)]
     fn reserved_space() -> usize {
         4

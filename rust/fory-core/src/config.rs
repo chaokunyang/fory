@@ -32,8 +32,10 @@ pub struct Config {
     pub compress_string: bool,
     /// Whether UTF-8 string payloads are validated before constructing Rust strings.
     pub check_string_read: bool,
-    /// Maximum depth for nested dynamic object serialization.
+    /// Maximum depth for nested dynamic object deserialization.
     pub max_dyn_depth: u32,
+    /// Maximum read depth for derived structs and enums that contain nested type fields.
+    pub max_struct_depth: u32,
     /// Whether class version checking is enabled.
     pub check_struct_version: bool,
     /// Whether reference tracking is enabled.
@@ -67,6 +69,7 @@ impl Default for Config {
             compress_string: false,
             check_string_read: true,
             max_dyn_depth: 5,
+            max_struct_depth: 256,
             check_struct_version: false,
             track_ref: false,
             max_graph_memory_bytes: 128 * 1024 * 1024,
@@ -115,10 +118,16 @@ impl Config {
         self.check_string_read
     }
 
-    /// Get maximum dynamic depth.
+    /// Get the maximum dynamic-object depth for deserialization.
     #[inline(always)]
     pub fn max_dyn_depth(&self) -> u32 {
         self.max_dyn_depth
+    }
+
+    /// Get the maximum read depth for derived types that contain nested type fields.
+    #[inline(always)]
+    pub fn max_struct_depth(&self) -> u32 {
+        self.max_struct_depth
     }
 
     /// Check if class version checking is enabled.

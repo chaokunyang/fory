@@ -77,8 +77,22 @@ Load this file when changing `rust/` or Rust xlang behavior.
   adapter that delegates its body to a whole-target serializer; every carrier-specific
   implementation owns both value and field behavior.
 - Represent immutable value-serializer properties as the associated constants `IS_OPTIONAL`,
-  `IS_POLYMORPHIC`, `IS_SHARED_REF`, `IS_WRAPPER`, and `REQUIRES_SCOPED_ACCESS`. `Codec` inherits
-  them through `Serializer` and must not redeclare them. Keep `is_none(value)` and
+  `IS_POLYMORPHIC`, `IS_SHARED_REF`, `IS_WRAPPER`, `REQUIRES_SCOPED_ACCESS`, and
+  `READ_REQUIRES_STRUCT_DEPTH` and `DEFAULT_REQUIRES_STRUCT_DEPTH`. `Codec` inherits them through
+  `Serializer` and must not redeclare
+  them. `READ_REQUIRES_STRUCT_DEPTH` describes only whether a generated field read can enter a
+  statically dispatched derived struct or enum body: built-in leaves opt out, transparent carriers
+  propagate the child capability, and dynamic serializers opt out because their dispatch owner
+  charges dynamic depth. A fixed array propagates the child capability only when its compile-time
+  length is nonzero, because `[T; 0]` cannot invoke `T`'s reader. Resolve this through the selected
+  serializer type so aliases and shadowed built-in names remain exact; never infer it from Rust
+  path spelling. Default construction has its own capability: `Option`, collection, and map defaults
+  are empty and do not enter a child, while transparent carriers and nonempty fixed arrays propagate
+  the selected child's default capability. A skipped field invokes its selected default constructor
+  and must use that capability even when it emits no field read. Enum depth gates belong inside the
+  selected read/default arm; a flat arm must not inherit another variant's child capability. Existing
+  skip/default tag mapping decides the generated arm actually entered; a type-mismatch or unknown-tag
+  fallback uses default-construction capability, not ordinary-read capability. Keep `is_none(value)` and
   `dynamic_type_id(value)` as functions because they inspect a concrete value. Weak-target expiry
   is not Option absence. Transparent carriers propagate child constants only where their value
   semantics require it; `RefCell`, `Mutex`, and weak serializers require scoped access, while

@@ -40,6 +40,9 @@ Security-related configuration:
 - Register application structs and trait-object implementations before deserializing untrusted
   payloads.
 - Use `max_dyn_depth(...)` to reject unexpectedly deep dynamic object graphs.
+- Use `max_struct_depth(...)` to bound derived structs and enum paths whose fields can directly, or
+  through a carrier, enter another derived read. Flat derived values and flat selected enum paths
+  do not consume this limit.
 - Keep `max_graph_memory_bytes(...)` at the fixed `128 MiB` default for most inputs, or set a
   positive byte gate for trusted workloads with different legitimate collection/map/struct sizes.
 - Keep `max_unbacked_container_items(...)` at `8192` unless trusted compact codecs require a

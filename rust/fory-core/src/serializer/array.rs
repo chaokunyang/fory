@@ -303,6 +303,11 @@ where
 {
     type Target = [T; N];
 
+    // Every fixed-array serializer below uses this condition: N == 0 never enters the child read
+    // loop, so the array is a compile-time leaf even when its element serializer can recurse.
+    const READ_REQUIRES_STRUCT_DEPTH: bool = N != 0 && S::READ_REQUIRES_STRUCT_DEPTH;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = N != 0 && S::DEFAULT_REQUIRES_STRUCT_DEPTH;
+
     const READ_DATA_ALWAYS_ADVANCES: bool = true;
 
     #[inline(always)]
@@ -484,6 +489,9 @@ pub struct ArraySerializer<S, const N: usize>(PhantomData<fn() -> S>);
 impl<S: Serializer, const N: usize> Serializer for ArraySerializer<S, N> {
     type Target = [S::Target; N];
 
+    const READ_REQUIRES_STRUCT_DEPTH: bool = N != 0 && S::READ_REQUIRES_STRUCT_DEPTH;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = N != 0 && S::DEFAULT_REQUIRES_STRUCT_DEPTH;
+
     const READ_DATA_ALWAYS_ADVANCES: bool = true;
 
     #[inline(always)]
@@ -555,6 +563,9 @@ where
     T: Serializer<Target = T>,
 {
     type Target = Self;
+
+    const READ_REQUIRES_STRUCT_DEPTH: bool = N != 0 && T::READ_REQUIRES_STRUCT_DEPTH;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = N != 0 && T::DEFAULT_REQUIRES_STRUCT_DEPTH;
 
     const READ_DATA_ALWAYS_ADVANCES: bool = true;
 

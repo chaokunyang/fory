@@ -284,6 +284,11 @@ where
 {
     type Target = RcWeak<T>;
 
+    // A newly materialized weak target already charges the existing dynamic
+    // depth owner before it enters the child serializer.
+    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+
     #[inline(always)]
     fn reserved_space() -> usize {
         4
@@ -665,6 +670,9 @@ where
     C: Serializer<Target = T>,
 {
     type Target = ArcWeak<T>;
+
+    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
 
     #[inline(always)]
     fn reserved_space() -> usize {

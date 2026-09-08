@@ -25,6 +25,9 @@ use std::sync::Arc;
 impl Serializer for bool {
     type Target = Self;
 
+    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+
     const READ_DATA_ALWAYS_ADVANCES: bool = true;
 
     #[inline(always)]

@@ -352,10 +352,14 @@ pub fn gen_default_value(data_enum: &DataEnum, target_path: &TokenStream) -> Tok
         };
     };
     let value = variant_default_value(variant, target_path);
-    quote! {
-        let _ = &*context;
-        Ok(#value)
-    }
+    gate_variant_read(
+        variant,
+        quote! {
+            let _ = &*context;
+            Ok(#value)
+        },
+        true,
+    )
 }
 
 /// Generate all variant meta types for an enum with the enum name
@@ -818,6 +822,25 @@ fn xlang_union_case_id(data_enum: &DataEnum, idx: usize, variant: &syn::Variant)
     })
 }
 
+fn gate_variant_read(variant: &syn::Variant, body: TokenStream, defaults: bool) -> TokenStream {
+    let source = source_fields(&variant.fields);
+    let read_requires_depth =
+        match crate::object::field_codec::struct_read_requires_depth(&source, defaults) {
+            Ok(value) => value,
+            Err(error) => return error.to_compile_error(),
+        };
+
+    // Enum depth belongs to the selected variant, including default construction. Gating the whole
+    // enum would charge a flat path merely because a different variant can recurse.
+    let body = super::serializer::gate_struct_read(body, &read_requires_depth);
+    quote! {{ #body }}
+}
+
+fn variant_read_arm(tag: u32, variant: &syn::Variant, body: TokenStream) -> TokenStream {
+    let body = gate_variant_read(variant, body, false);
+    quote! { #tag => #body, }
+}
+
 /// Generate the static TypeId for enum.
 /// For Union-compatible enums with data variants, return UNION TypeId
 /// to ensure correct type info handling in xlang mode struct field read/write.
@@ -863,56 +886,51 @@ fn xlang_variant_read_branches(
 
             match &v.fields {
                 Fields::Unit => {
-                    if is_union_compatible {
+                    let body = if is_union_compatible {
                         // Union-compatible: read null flag (matches Java/C++ Union with null value)
                         quote! {
-                            #tag_value => {
-                                let _ = context.reader.read_i8()?;
-                                Ok(#target_path::#ident)
-                            }
+                            let _ = context.reader.read_i8()?;
+                            Ok(#target_path::#ident)
                         }
                     } else {
-                        quote! {
-                            #tag_value => Ok(#target_path::#ident),
-                        }
-                    }
+                        quote! { Ok(#target_path::#ident) }
+                    };
+                    variant_read_arm(tag_value, v, body)
                 }
                 Fields::Unnamed(fields_unnamed) => {
-                    if is_union_compatible && fields_unnamed.unnamed.len() == 1 {
+                    let body = if is_union_compatible && fields_unnamed.unnamed.len() == 1 {
                         let source_fields = unnamed_source_fields(fields_unnamed);
                         let read_payload = gen_read_single_payload(&source_fields);
                         quote! {
-                            #tag_value => {
-                                let value = #read_payload;
-                                Ok(#target_path::#ident(value))
-                            }
+                            let value = #read_payload;
+                            Ok(#target_path::#ident(value))
                         }
                     } else {
                         let default_value = variant_default_value(v, target_path);
-                        quote! {
-                            #tag_value => Ok(#default_value),
-                        }
-                    }
+                        quote! { Ok(#default_value) }
+                    };
+                    let defaults = !(is_union_compatible && fields_unnamed.unnamed.len() == 1);
+                    let body = gate_variant_read(v, body, defaults);
+                    quote! { #tag_value => #body, }
                 }
                 Fields::Named(fields_named) => {
-                    if is_union_compatible && fields_named.named.len() == 1 {
+                    let body = if is_union_compatible && fields_named.named.len() == 1 {
                         let field = fields_named.named.first().unwrap();
                         let field_ident = field.ident.as_ref().unwrap();
                         let fields_clone = syn::Fields::Named(fields_named.clone());
                         let source_fields = source_fields(&fields_clone);
                         let read_payload = gen_read_single_payload(&source_fields);
                         quote! {
-                            #tag_value => {
-                                let value = #read_payload;
-                                Ok(#target_path::#ident { #field_ident: value })
-                            }
+                            let value = #read_payload;
+                            Ok(#target_path::#ident { #field_ident: value })
                         }
                     } else {
                         let default_value = variant_default_value(v, target_path);
-                        quote! {
-                            #tag_value => Ok(#default_value),
-                        }
-                    }
+                        quote! { Ok(#default_value) }
+                    };
+                    let defaults = !(is_union_compatible && fields_named.named.len() == 1);
+                    let body = gate_variant_read(v, body, defaults);
+                    quote! { #tag_value => #body, }
                 }
             }
         })
@@ -936,21 +954,19 @@ fn rust_variant_read_branches(
             }
 
             match &v.fields {
-                Fields::Unit => {
-                    quote! {
-                        #tag_value => Ok(#target_path::#ident),
-                    }
-                }
+                Fields::Unit => variant_read_arm(tag_value, v, quote! { Ok(#target_path::#ident) }),
                 Fields::Unnamed(fields_unnamed) => {
                     let source_fields = unnamed_source_fields(fields_unnamed);
                     let (read_fields, field_idents) = gen_read_variant_fields(&source_fields);
 
-                    quote! {
-                        #tag_value => {
+                    variant_read_arm(
+                        tag_value,
+                        v,
+                        quote! {
                             #(#read_fields;)*
                             Ok(#target_path::#ident( #(#field_idents),* ))
-                        }
-                    }
+                        },
+                    )
                 }
                 Fields::Named(fields_named) => {
                     let fields_clone = syn::Fields::Named(fields_named.clone());
@@ -966,12 +982,14 @@ fn rust_variant_read_branches(
                         })
                         .collect();
 
-                    quote! {
-                        #tag_value => {
+                    variant_read_arm(
+                        tag_value,
+                        v,
+                        quote! {
                             #(#read_fields;)*
                             Ok(#target_path::#ident { #(#field_inits),* })
-                        }
-                    }
+                        },
+                    )
                 }
             }
         })
@@ -1003,18 +1021,21 @@ fn compatible_variant_reads(
                     // Generate default value for this variant
                     let default_value = quote! { #target_path::#ident };
 
-                    quote! {
-                        #tag_value => {
+                    variant_read_arm(
+                        tag_value,
+                        v,
+                        quote! {
                             // Unit variant should have variant_type == 0b0
                             if variant_type != 0b0 {
                                 // Variant type mismatch: skip the data and use default
                                 use fory_core::serializer::skip::skip_enum_variant;
                                 skip_enum_variant(context, variant_type, &None)?;
-                                return Ok(#default_value);
+                                Ok(#default_value)
+                            } else {
+                                Ok(#target_path::#ident)
                             }
-                            Ok(#target_path::#ident)
-                        }
-                    }
+                        },
+                    )
                 }
                 Fields::Unnamed(fields_unnamed) => {
                     // For unnamed enum variants, read using collection format (same protocol as tuple)
@@ -1024,31 +1045,34 @@ fn compatible_variant_reads(
 
                     let default_value = variant_default_value(v, target_path);
 
-                    quote! {
-                        #tag_value => {
-                            // Unnamed variant should have variant_type == 0b1
-                            if variant_type != 0b1 {
-                                // Variant type mismatch: skip the data and use default
-                                use fory_core::serializer::skip::skip_enum_variant;
-                                skip_enum_variant(context, variant_type, &None)?;
-                                return Ok(#default_value);
-                            }
-                            // Read collection format (same as tuple)
+                    let default_read = gate_variant_read(v, quote! { Ok(#default_value) }, true);
+                    let field_read = gate_variant_read(
+                        v,
+                        quote! {
                             let len = context.reader.read_var_u32()? as usize;
                             let _header = context.reader.read_u8()?;
-
                             #(#read_fields;)*
-
-                            // Skip any extra elements
                             use fory_core::serializer::skip::skip_any_value;
                             for _ in #field_count..len {
                                 skip_any_value(context, true)?;
                             }
-
                             Ok(#target_path::#ident( #(#field_idents),* ))
+                        },
+                        false,
+                    );
+                    quote! {
+                        #tag_value => {
+                            if variant_type != 0b1 {
+                                use fory_core::serializer::skip::skip_enum_variant;
+                                skip_enum_variant(context, variant_type, &None)?;
+                                #default_read
+                            } else {
+                                #field_read
+                            }
                         }
                     }
                 }
+
                 Fields::Named(fields_named) => {
                     use crate::util::source_fields;
 
@@ -1068,24 +1092,29 @@ fn compatible_variant_reads(
                         target_path,
                         Some(ident),
                         Some(&meta_type),
+                        quote! { false },
                     );
 
                     let default_value = variant_default_value(v, target_path);
 
+                    let default_read = gate_variant_read(v, quote! { Ok(#default_value) }, true);
+                    let field_read = gate_variant_read(
+                        v,
+                        quote! {
+                            let type_info = context.read_type_meta()?;
+                            #compatible_read_body
+                        },
+                        false,
+                    );
                     quote! {
                         #tag_value => {
                             if variant_type != 0b10 {
-                                // Variant type mismatch: peer didn't write meta for non-named variant
-                                // Skip the data and use default
                                 use fory_core::serializer::skip::skip_enum_variant;
                                 skip_enum_variant(context, variant_type, &None)?;
-                                return Ok(#default_value);
+                                #default_read
+                            } else {
+                                #field_read
                             }
-                            // Named variant should have variant_type == 0b10
-                            // Read type meta inline using streaming protocol
-                            let type_info = context.read_type_meta()?;
-                            // Use gen_read_compatible logic
-                            #compatible_read_body
                         }
                     }
                 }
@@ -1126,6 +1155,11 @@ pub fn gen_read_data(
         .unwrap();
 
     let default_variant_construction = variant_default_value(default_variant, target_path);
+    let default_variant_read = gate_variant_read(
+        default_variant,
+        quote! { Ok(#default_variant_construction) },
+        true,
+    );
 
     let unknown_xlang_branch = if is_union_compatible && has_data_variants {
         // ForyUnion validation guarantees xlang-compatible ADTs have the
@@ -1151,7 +1185,7 @@ pub fn gen_read_data(
             _ => {
                 // Unknown variant: in compatible mode, return default; otherwise error
                 if context.is_compatible() {
-                    Ok(#default_variant_construction)
+                    #default_variant_read
                 } else {
                     return Err(fory_core::error::Error::unknown_enum("unknown enum value"));
                 }
@@ -1191,7 +1225,7 @@ pub fn gen_read_data(
                         // For named variants, we don't have type_info yet, so pass None
                         // skip_enum_variant will read it from the stream
                         skip_enum_variant(context, variant_type, &None)?;
-                        Ok(#default_variant_construction)
+                        #default_variant_read
                     }
                 }
             } else {

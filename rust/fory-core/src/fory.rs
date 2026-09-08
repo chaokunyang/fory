@@ -49,6 +49,42 @@ thread_local! {
         UnsafeCell::new(ContextCache::new());
 }
 
+struct ReadContextResetGuard<'guard, 'buffer> {
+    context: &'guard mut ReadContext<'buffer>,
+    reader_attached: bool,
+}
+
+impl<'guard, 'buffer> ReadContextResetGuard<'guard, 'buffer> {
+    #[inline(always)]
+    fn new(context: &'guard mut ReadContext<'buffer>) -> Self {
+        Self {
+            context,
+            reader_attached: true,
+        }
+    }
+
+    #[inline(always)]
+    fn context(&mut self) -> &mut ReadContext<'buffer> {
+        self.context
+    }
+
+    #[inline(always)]
+    fn detach_reader(&mut self) -> Reader<'_> {
+        self.reader_attached = false;
+        self.context.detach_reader()
+    }
+}
+
+impl Drop for ReadContextResetGuard<'_, '_> {
+    fn drop(&mut self) {
+        // An unwind can otherwise leave the transmuted caller slice attached to the TLS cache.
+        if self.reader_attached {
+            let _ = self.context.detach_reader();
+        }
+        self.context.reset();
+    }
+}
+
 /// Builder for configuring a [`Fory`] instance before first use.
 ///
 /// `ForyBuilder` owns the configuration phase. Call [`build`](Self::build) to create the
@@ -287,13 +323,13 @@ impl ForyBuilder {
         self
     }
 
-    /// Sets the maximum depth for nested dynamic object serialization.
+    /// Sets the maximum depth for nested dynamic object deserialization.
     ///
     /// # Arguments
     ///
-    /// * `max_dyn_depth` - The maximum nesting depth allowed for dynamically-typed objects
-    ///   (e.g., trait objects, boxed types). This prevents stack overflow from deeply nested
-    ///   structures in dynamic serialization scenarios.
+    /// * `max_dyn_depth` - The maximum nesting depth allowed for dynamically typed `Any` and
+    ///   application-trait objects during reads. This prevents stack overflow from deeply nested
+    ///   dynamic deserialization. Serialization is unaffected.
     ///
     /// # Returns
     ///
@@ -321,6 +357,16 @@ impl ForyBuilder {
     /// ```
     pub fn max_dyn_depth(mut self, max_dyn_depth: u32) -> Self {
         self.config.max_dyn_depth = max_dyn_depth;
+        self
+    }
+
+    /// Sets the maximum read depth for derived structs and enums with nested type fields.
+    ///
+    /// This bounds recursive schemas such as `Option<Box<Node>>`, `Vec<Node>`, and recursive enum
+    /// variants. Flat derived values have no depth check. The default is `256`; raise it for
+    /// intentionally deeper object graphs. Serialization is unaffected.
+    pub fn max_struct_depth(mut self, max_struct_depth: u32) -> Self {
+        self.config.max_struct_depth = max_struct_depth;
         self
     }
 
@@ -403,7 +449,7 @@ impl ForyBuilder {
 /// - **Schema evolution**: Compatible mode by default, with a same-schema optimization available
 /// - **Reference tracking**: Handles shared and circular references
 /// - **Trait object serialization**: Supports serializing polymorphic trait objects
-/// - **Dynamic depth limiting**: Configurable limit for nested dynamic object serialization
+/// - **Dynamic depth limiting**: Configurable limit for nested dynamic object deserialization
 ///
 /// # Examples
 ///
@@ -519,9 +565,14 @@ impl Fory {
         self.config.share_meta
     }
 
-    /// Returns the maximum depth for nested dynamic object serialization.
+    /// Returns the maximum dynamic-object depth for deserialization.
     pub fn get_max_dyn_depth(&self) -> u32 {
         self.config.max_dyn_depth
+    }
+
+    /// Returns the read depth limit for derived types that contain nested type fields.
+    pub fn get_max_struct_depth(&self) -> u32 {
+        self.config.max_struct_depth
     }
 
     /// Returns whether class version checking is enabled.
@@ -1061,10 +1112,12 @@ impl Fory {
         self.with_read_context(|context| {
             let outlive_buffer = unsafe { mem::transmute::<&[u8], &[u8]>(bf) };
             context.attach_reader(Reader::new(outlive_buffer));
-            context.remaining_graph_memory_bytes = self.config.max_graph_memory_bytes;
-            context.remaining_unbacked_container_items = self.config.max_unbacked_container_items;
-            let result = self.deserialize_with_context::<S>(context);
-            context.detach_reader();
+            let mut guard = ReadContextResetGuard::new(context);
+            guard.context().remaining_graph_memory_bytes = self.config.max_graph_memory_bytes;
+            guard.context().remaining_unbacked_container_items =
+                self.config.max_unbacked_container_items;
+            let result = self.deserialize_with_context::<S>(guard.context());
+            guard.detach_reader();
             result
         })
     }
@@ -1136,10 +1189,12 @@ impl Fory {
             let mut new_reader = Reader::new(outlive_buffer);
             new_reader.set_cursor(reader.cursor);
             context.attach_reader(new_reader);
-            context.remaining_graph_memory_bytes = self.config.max_graph_memory_bytes;
-            context.remaining_unbacked_container_items = self.config.max_unbacked_container_items;
-            let result = self.deserialize_with_context::<S>(context);
-            let end = context.detach_reader().get_cursor();
+            let mut guard = ReadContextResetGuard::new(context);
+            guard.context().remaining_graph_memory_bytes = self.config.max_graph_memory_bytes;
+            guard.context().remaining_unbacked_container_items =
+                self.config.max_unbacked_container_items;
+            let result = self.deserialize_with_context::<S>(guard.context());
+            let end = guard.detach_reader().get_cursor();
             reader.set_cursor(end);
             result
         })
@@ -1174,16 +1229,6 @@ impl Fory {
 
     #[inline(always)]
     fn deserialize_with_context<S: Serializer>(
-        &self,
-        context: &mut ReadContext,
-    ) -> Result<S::Target, Error> {
-        let result = self.deserialize_with_context_inner::<S>(context);
-        context.reset();
-        result
-    }
-
-    #[inline(always)]
-    fn deserialize_with_context_inner<S: Serializer>(
         &self,
         context: &mut ReadContext,
     ) -> Result<S::Target, Error> {
@@ -1234,6 +1279,68 @@ impl Fory {
 #[cfg(test)]
 mod tests {
     use super::Fory;
+    use crate::{Error, ReadContext, Reader, RefMode, Serializer, TypeId, WriteContext};
+    use std::rc::Rc;
+
+    struct PanicRead;
+
+    impl Serializer for PanicRead {
+        type Target = ();
+
+        fn write_data(_value: &Self::Target, _context: &mut WriteContext) -> Result<(), Error> {
+            Ok(())
+        }
+
+        fn read_data(_context: &mut ReadContext) -> Result<Self::Target, Error> {
+            unreachable!("test overrides the complete read")
+        }
+
+        fn read(
+            context: &mut ReadContext,
+            _ref_mode: RefMode,
+            _read_type_info: bool,
+        ) -> Result<Self::Target, Error> {
+            context.ref_reader.store_rc_ref(Rc::new(7_u32));
+            let type_info = context
+                .get_type_resolver()
+                .get_type_info_by_id(TypeId::STRING as u32)
+                .expect("string type info");
+            context.meta_resolver.reading_type_infos.push(type_info);
+            context.inc_depth()?;
+            if context.inc_struct_depth() == 0 {
+                return ReadContext::struct_depth_exceeded();
+            }
+            panic!("intentional read panic")
+        }
+    }
+
+    struct ProbeRead;
+
+    impl Serializer for ProbeRead {
+        type Target = bool;
+
+        fn write_data(_value: &Self::Target, _context: &mut WriteContext) -> Result<(), Error> {
+            Ok(())
+        }
+
+        fn read_data(_context: &mut ReadContext) -> Result<Self::Target, Error> {
+            unreachable!("test overrides the complete read")
+        }
+
+        fn read(
+            context: &mut ReadContext,
+            _ref_mode: RefMode,
+            _read_type_info: bool,
+        ) -> Result<Self::Target, Error> {
+            let stale_ref = context.ref_reader.get_rc_ref::<u32>(0).is_some();
+            let stale_meta = context.meta_resolver.get(0).is_some();
+            context.inc_depth()?;
+            if context.inc_struct_depth() == 0 {
+                return ReadContext::struct_depth_exceeded();
+            }
+            Ok(stale_ref || stale_meta)
+        }
+    }
 
     #[test]
     fn compatible_defaults_and_overrides() {
@@ -1261,5 +1368,29 @@ mod tests {
         assert!(!explicit_same_schema_reverse_order.compatible);
         assert!(!explicit_same_schema_reverse_order.share_meta);
         assert!(explicit_same_schema_reverse_order.check_struct_version);
+    }
+
+    #[test]
+    fn panic_resets_read_context() {
+        let fory = Fory::builder()
+            .xlang(false)
+            .max_dyn_depth(1)
+            .max_struct_depth(1)
+            .build();
+        let panic = {
+            let bytes = vec![0];
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = fory.deserialize_with::<PanicRead>(&bytes);
+            }))
+        };
+        assert!(panic.is_err());
+
+        let bytes = [0];
+        let mut reader = Reader::new(&bytes);
+        let stale_state = fory
+            .deserialize_from_with::<ProbeRead>(&mut reader)
+            .unwrap();
+        assert!(!stale_state);
+        assert_eq!(reader.get_cursor(), 1);
     }
 }

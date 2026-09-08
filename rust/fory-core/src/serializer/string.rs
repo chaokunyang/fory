@@ -49,6 +49,9 @@ fn string_len_overflow(len: u64) -> Error {
 impl Serializer for String {
     type Target = Self;
 
+    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+
     const READ_DATA_ALWAYS_ADVANCES: bool = true;
 
     #[inline(always)]

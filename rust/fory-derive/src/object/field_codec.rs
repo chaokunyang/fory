@@ -307,6 +307,28 @@ pub(crate) fn struct_read_data_always_advances(
     Ok(quote! { false #(|| #fields)* })
 }
 
+pub(crate) fn struct_read_requires_depth(
+    source_fields: &[SourceField<'_>],
+    defaults: bool,
+) -> syn::Result<TokenStream> {
+    let bindings = build_bindings(source_fields)?;
+    // Classify the emitted operation, not just the field type: skipped fields construct defaults,
+    // and an empty Option/collection default does not enter its ordinary child reader.
+    // The selected codec keeps aliases and shadowed built-in names exact.
+    let fields = bindings.iter().map(|binding| {
+        let (codec_ty, default_value) = match binding {
+            FieldBinding::Codec(field) => (&field.codec_ty, defaults),
+            FieldBinding::Skipped(field) => (&field.codec_ty, true),
+        };
+        if default_value {
+            quote! { <#codec_ty as fory_core::Serializer>::DEFAULT_REQUIRES_STRUCT_DEPTH }
+        } else {
+            quote! { <#codec_ty as fory_core::Serializer>::READ_REQUIRES_STRUCT_DEPTH }
+        }
+    });
+    Ok(quote! { false #(|| #fields)* })
+}
+
 fn codec_body_is_known(ty: &Type) -> bool {
     if matches!(ty, Type::Array(_) | Type::Tuple(_)) {
         return true;

@@ -258,6 +258,19 @@ macro_rules! impl_single_carrier_serializer {
                     false,
                 > as $crate::serializer::Serializer>::REQUIRES_SCOPED_ACCESS;
 
+            const READ_REQUIRES_STRUCT_DEPTH: bool = <$codec<
+                    S::Target,
+                    S,
+                    false,
+                    false,
+                > as $crate::serializer::Serializer>::READ_REQUIRES_STRUCT_DEPTH;
+            const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = <$codec<
+                    S::Target,
+                    S,
+                    false,
+                    false,
+                > as $crate::serializer::Serializer>::DEFAULT_REQUIRES_STRUCT_DEPTH;
+
             #[inline(always)]
             fn metadata_target_type_id() -> std::any::TypeId {
                 if $wrapper {
@@ -427,6 +440,11 @@ macro_rules! impl_single_carrier_serializer {
             const REQUIRES_SCOPED_ACCESS: bool =
                 <$provider<T> as $crate::serializer::Serializer>::REQUIRES_SCOPED_ACCESS;
 
+            const READ_REQUIRES_STRUCT_DEPTH: bool =
+                <$provider<T> as $crate::serializer::Serializer>::READ_REQUIRES_STRUCT_DEPTH;
+            const DEFAULT_REQUIRES_STRUCT_DEPTH: bool =
+                <$provider<T> as $crate::serializer::Serializer>::DEFAULT_REQUIRES_STRUCT_DEPTH;
+
             #[inline(always)]
             fn metadata_target_type_id() -> std::any::TypeId {
                 <$provider<T> as $crate::serializer::Serializer>::metadata_target_type_id()
@@ -470,6 +488,10 @@ macro_rules! impl_collection_carrier_codec {
                 ExactSizeIterator + Clone,
         {
             type Target = $container<T>;
+
+            const READ_REQUIRES_STRUCT_DEPTH: bool = S::READ_REQUIRES_STRUCT_DEPTH;
+            // These collections default to an empty owner without invoking an element default.
+            const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
 
             #[inline(always)]
             fn reserved_space() -> usize {

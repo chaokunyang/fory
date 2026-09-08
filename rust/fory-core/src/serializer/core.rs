@@ -192,6 +192,23 @@ pub trait Serializer: Sized + 'static {
     #[doc(hidden)]
     const REQUIRES_SCOPED_ACCESS: bool = false;
 
+    /// Whether reading this serializer from a generated field can enter a
+    /// statically dispatched derived struct or enum body.
+    ///
+    /// Custom serializers are conservative by default. Built-in leaves opt
+    /// out, carrier serializers propagate their child capability, and dynamic
+    /// or weak-reference serializers opt out when their existing read owner
+    /// already charges the dynamic-depth budget.
+    #[doc(hidden)]
+    const READ_REQUIRES_STRUCT_DEPTH: bool = true;
+
+    /// Whether default construction can enter a statically dispatched derived value.
+    ///
+    /// This differs from reading: empty Option and collection defaults do not read their child,
+    /// while a skipped field still invokes its selected serializer's default constructor.
+    #[doc(hidden)]
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = true;
+
     /// Return the concrete registered owner represented by this serializer's wire metadata.
     #[doc(hidden)]
     #[inline(always)]

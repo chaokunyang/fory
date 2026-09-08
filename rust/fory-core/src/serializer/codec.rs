@@ -722,6 +722,9 @@ where
 
     const REQUIRES_SCOPED_ACCESS: bool = S::REQUIRES_SCOPED_ACCESS;
 
+    const READ_REQUIRES_STRUCT_DEPTH: bool = S::READ_REQUIRES_STRUCT_DEPTH;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = S::DEFAULT_REQUIRES_STRUCT_DEPTH;
+
     const READ_DATA_ALWAYS_ADVANCES: bool = S::READ_DATA_ALWAYS_ADVANCES;
 
     #[inline(always)]
@@ -889,6 +892,9 @@ where
     C: Serializer<Target = T>,
 {
     type Target = Option<T>;
+
+    const READ_REQUIRES_STRUCT_DEPTH: bool = C::READ_REQUIRES_STRUCT_DEPTH;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
 
     const READ_DATA_ALWAYS_ADVANCES: bool = C::READ_DATA_ALWAYS_ADVANCES;
 
@@ -1292,6 +1298,9 @@ macro_rules! signed_int_codec {
         {
             type Target = $ty;
 
+            const READ_REQUIRES_STRUCT_DEPTH: bool = false;
+            const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+
             #[inline(always)]
             fn write_data(value: &$ty, context: &mut WriteContext) -> Result<(), Error> {
                 match WIRE_TYPE_ID as u32 {
@@ -1617,6 +1626,9 @@ where
 {
     type Target = Vec<T>;
 
+    const READ_REQUIRES_STRUCT_DEPTH: bool = S::READ_REQUIRES_STRUCT_DEPTH;
+    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+
     const READ_DATA_ALWAYS_ADVANCES: bool = true;
 
     #[inline(always)]
@@ -1873,6 +1885,11 @@ macro_rules! any_codec {
             for $name<NULLABLE, TRACK_REF>
         {
             type Target = $ty;
+
+            // Dynamic dispatch owns its recursion accounting in the concrete
+            // Any/application-trait reader.
+            const READ_REQUIRES_STRUCT_DEPTH: bool = false;
+            const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
 
             #[inline(always)]
             fn write_data(value: &$ty, context: &mut WriteContext) -> Result<(), Error> {

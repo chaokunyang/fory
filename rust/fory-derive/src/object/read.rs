@@ -298,8 +298,16 @@ pub fn gen_read_compatible(
     fields: &Fields,
     source_fields: &[SourceField<'_>],
     target_path: &TokenStream,
+    read_requires_struct_depth: TokenStream,
 ) -> TokenStream {
-    gen_read_compatible_target(fields, source_fields, target_path, None, None)
+    gen_read_compatible_target(
+        fields,
+        source_fields,
+        target_path,
+        None,
+        None,
+        read_requires_struct_depth,
+    )
 }
 
 pub(crate) fn gen_read_compatible_target(
@@ -308,6 +316,7 @@ pub(crate) fn gen_read_compatible_target(
     target_path: &TokenStream,
     variant_ident: Option<&Ident>,
     variant_meta_type: Option<&TokenStream>,
+    read_requires_struct_depth: TokenStream,
 ) -> TokenStream {
     let bindings = match build_bindings(source_fields) {
         Ok(bindings) => bindings,
@@ -494,37 +503,7 @@ pub(crate) fn gen_read_compatible_target(
             let fields = remote_meta.get_field_infos();
         }
     };
-    let schema_setup = if variant_ident.is_some() {
-        quote! {
-            let remote_meta = type_info.get_type_meta_ref();
-            let remote_type_hash = remote_meta.get_hash();
-            #fields_binding
-            if remote_type_hash == local_variant_type_meta.get_hash() {
-                // The payload is still only the variant fields. Reading the whole enum data here
-                // would consume field bytes as a fresh enum tag, so exact variant schemas use the
-                // local sorted field reader directly.
-                #(#same_schema_read_ts)*
-                return #same_schema_construction;
-            }
-        }
-    } else {
-        quote! {
-            let remote_meta = type_info.get_type_meta_ref();
-            // Metadata resolution selects the local schema by the validated 52-bit TypeMeta hash.
-            // Reusing that result avoids another local metadata lookup or body comparison.
-            if type_info.has_exact_local_schema() {
-                return <Self as fory_core::Serializer>::read_data(context);
-            }
-            let meta = context.get_type_resolver().get_type_meta_by_index_ref(
-                &::std::any::TypeId::of::<Self>(),
-                <Self as fory_core::StructSerializer>::type_index(),
-            )?;
-            #fields_binding
-        }
-    };
-
-    quote! {
-        #schema_setup
+    let compatible_body = quote! {
         #(#declare_ts)*
         for _field in fields.iter() {
             match _field.matched_field_id {
@@ -534,5 +513,40 @@ pub(crate) fn gen_read_compatible_target(
             }
         }
         #construction
+    };
+    if variant_ident.is_some() {
+        return quote! {
+            let remote_meta = type_info.get_type_meta_ref();
+            let remote_type_hash = remote_meta.get_hash();
+            #fields_binding
+            if remote_type_hash == local_variant_type_meta.get_hash() {
+                // The body is still only the variant fields. Reading the whole enum data here
+                // would consume field bytes as a fresh enum tag, so exact variant schemas use the
+                // local sorted field reader directly.
+                #(#same_schema_read_ts)*
+                #same_schema_construction
+            } else {
+                #compatible_body
+            }
+        };
+    }
+
+    // Exact schemas return through read_data, which owns their depth frame. Named enum variants
+    // returned above because the selected enum arm already owns their frame.
+    let compatible_body =
+        super::serializer::gate_struct_read(compatible_body, &read_requires_struct_depth);
+    quote! {
+        let remote_meta = type_info.get_type_meta_ref();
+        // Metadata resolution selects the local schema by the validated 52-bit TypeMeta hash.
+        // Reusing that result avoids another local metadata lookup or body comparison.
+        if type_info.has_exact_local_schema() {
+            return <Self as fory_core::Serializer>::read_data(context);
+        }
+        let meta = context.get_type_resolver().get_type_meta_by_index_ref(
+            &::std::any::TypeId::of::<Self>(),
+            <Self as fory_core::StructSerializer>::type_index(),
+        )?;
+        #fields_binding
+        #compatible_body
     }
 }

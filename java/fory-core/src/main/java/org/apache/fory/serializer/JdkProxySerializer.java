@@ -23,9 +23,14 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.FieldAccessor;
@@ -36,6 +41,8 @@ import org.apache.fory.util.Preconditions;
 /** Serializer for jdk {@link Proxy}. */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class JdkProxySerializer extends Serializer {
+  private static final int MAX_REMOTE_PROXY_SHAPES = 256;
+
   private static class StubInvocationHandler implements InvocationHandler {
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -59,9 +66,9 @@ public class JdkProxySerializer extends Serializer {
       InvocationHandler handler = delegate;
       if (handler == null) {
         throw new IllegalStateException(
-            "Proxy handler not yet initialized. "
-                + "Cannot call methods on proxy during deserialization or logging. "
-                + "On Android, proxy must not be used as Map/Set key or printed before handler is ready.");
+            "Proxy handler not yet initialized. Cannot call methods on proxy during deserialization"
+                + " or logging. On Android, proxy must not be used as Map/Set key or printed before"
+                + " handler is ready.");
       }
       return handler;
     }
@@ -87,6 +94,9 @@ public class JdkProxySerializer extends Serializer {
           Serializer.class.getClassLoader(), new Class[] {StubInterface.class}, STUB_HANDLER);
 
   private final TypeResolver typeResolver;
+  private final Map<List<Class<?>>, Class<?>[]> acceptedProxyShapes = new HashMap<>();
+  private Class<?>[] lastAcceptedProxyShape;
+  private Class<?> lastSingleProxyInterface;
 
   public JdkProxySerializer(TypeResolver typeResolver, Class cls) {
     super(typeResolver.getConfig(), cls);
@@ -141,23 +151,54 @@ public class JdkProxySerializer extends Serializer {
     if (!needToWriteRef) {
       InvocationHandler invocationHandler =
           unwrapInvocationHandler((InvocationHandler) readContext.readRef());
-      return Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, invocationHandler);
+      return newReadProxy(interfaces, invocationHandler);
     }
     if (!MemoryUtils.JDK_PROXY_FIELD_ACCESS) {
       DeferredInvocationHandler deferredHandler = new DeferredInvocationHandler();
-      Object proxy =
-          Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, deferredHandler);
+      Object proxy = newReadProxy(interfaces, deferredHandler);
       readContext.setReadRef(refId, proxy);
       InvocationHandler invocationHandler =
           unwrapInvocationHandler((InvocationHandler) readContext.readRef());
       deferredHandler.setDelegate(invocationHandler);
       return proxy;
     }
-    Object proxy = Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, STUB_HANDLER);
+    Object proxy = newReadProxy(interfaces, STUB_HANDLER);
     readContext.setReadRef(refId, proxy);
     InvocationHandler invocationHandler =
         unwrapInvocationHandler((InvocationHandler) readContext.readRef());
     ProxyHandlerField.ACCESSOR.putObject(proxy, invocationHandler);
+    return proxy;
+  }
+
+  private Object newReadProxy(Class<?>[] interfaces, InvocationHandler handler) {
+    int numInterfaces = interfaces.length;
+    if (numInterfaces == 1) {
+      if (interfaces[0] == lastSingleProxyInterface) {
+        return Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, handler);
+      }
+    } else if (Arrays.equals(interfaces, lastAcceptedProxyShape)) {
+      return Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, handler);
+    }
+    return newProxyShape(interfaces, handler);
+  }
+
+  private Object newProxyShape(Class<?>[] interfaces, InvocationHandler handler) {
+    Class<?>[] acceptedShape = acceptedProxyShapes.get(Arrays.asList(interfaces));
+    if (acceptedShape == null && acceptedProxyShapes.size() >= MAX_REMOTE_PROXY_SHAPES) {
+      throw new DeserializationException(
+          "Remote proxy shape limit exceeded: " + MAX_REMOTE_PROXY_SHAPES);
+    }
+    Object proxy = Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, handler);
+    // Record immediately after class creation. A later handler failure must still consume the
+    // bounded slot because the generated class remains pinned by the classloader.
+    if (acceptedShape == null) {
+      // The decoded array can escape through references. Keep one private snapshot per shape,
+      // and reuse it on cache hits instead of copying every time the input switches shapes.
+      acceptedShape = interfaces.clone();
+      acceptedProxyShapes.put(Arrays.asList(acceptedShape), acceptedShape);
+    }
+    lastAcceptedProxyShape = acceptedShape;
+    lastSingleProxyInterface = interfaces.length == 1 ? interfaces[0] : null;
     return proxy;
   }
 

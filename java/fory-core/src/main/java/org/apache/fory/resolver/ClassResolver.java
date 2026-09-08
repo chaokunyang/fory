@@ -241,11 +241,13 @@ public class ClassResolver extends TypeResolver {
   public static final short JDK_PROXY_STUB_ID = INTERNAL_TYPE_START_ID + 27;
   public static final short REPLACE_STUB_ID = INTERNAL_TYPE_START_ID + 28;
   public static final int NONEXISTENT_META_SHARED_ID = REPLACE_STUB_ID + 1;
+  private static final int MAX_CACHED_UNKNOWN_TYPE_NAMES = 8192;
 
   private final TypeInfo[] typeInfoCache;
   // Every deserialization for unregistered class will query it, performance is important.
   private final ObjectMap<TypeNameBytes, TypeInfo> compositeNameBytes2TypeInfo =
       new ObjectMap<>(16, foryMapLoadFactor);
+  private int cachedUnknownTypeNames;
   private final ShimDispatcher shimDispatcher;
 
   public ClassResolver(
@@ -2176,6 +2178,16 @@ public class ClassResolver extends TypeResolver {
     if (unknownClass) {
       typeInfo.serializer =
           UnknownClassSerializers.getSerializer(this, classSpec.entireClassName, cls);
+      // Both the count and retained name bytes must be bounded: MetaStringReader does not cache
+      // oversized names, but this TypeInfo and its key also retain their encoded byte arrays.
+      // Large names remain readable without publishing them to this persistent cache.
+      if (cachedUnknownTypeNames >= MAX_CACHED_UNKNOWN_TYPE_NAMES
+          || packageBytes.bytes.length > SharedRegistry.MAX_CACHED_ENCODED_META_STRING_LENGTH
+          || simpleClassNameBytes.bytes.length
+              > SharedRegistry.MAX_CACHED_ENCODED_META_STRING_LENGTH) {
+        return typeInfo;
+      }
+      cachedUnknownTypeNames++;
     } else {
       // don't create serializer here, if the class is an interface,
       // there won't be serializer since interface has no instance.

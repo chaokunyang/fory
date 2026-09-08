@@ -149,11 +149,13 @@ public class XtypeResolver extends TypeResolver {
   private static final float loadFactor = 0.5f;
   // Most systems won't have so many types for serialization.
   private static final int MAX_TYPE_ID = 4096;
+  private static final int MAX_CACHED_UNKNOWN_TYPE_NAMES = 8192;
 
   private final TypeInfoHolder classInfoCache = new TypeInfoHolder(NIL_TYPE_INFO);
   // Every deserialization for unregistered class will query it, performance is important.
   private final ObjectMap<TypeNameBytes, TypeInfo> compositeClassNameBytes2TypeInfo =
       new ObjectMap<>(16, loadFactor);
+  private int cachedUnknownTypeNames;
   // typeDefMap is inherited from TypeResolver
   private final boolean shareMeta;
   private int xtypeIdGenerator = 64;
@@ -1346,7 +1348,8 @@ public class XtypeResolver extends TypeResolver {
     Class<?> type = null;
     if (config.deserializeUnknownClass()) {
       if (!config.suppressClassRegistrationWarnings()) {
-        LOG.warnOnce(msg);
+        // Wire-controlled names must not enter process-wide warnOnce deduplication state.
+        LOG.warn(msg);
       }
       switch (typeId) {
         case Types.NAMED_ENUM:
@@ -1374,6 +1377,16 @@ public class XtypeResolver extends TypeResolver {
             INVALID_USER_TYPE_ID);
     if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(type))) {
       typeInfo.serializer = UnknownClassSerializers.getSerializer(this, qualifiedName, type);
+      // Both the count and retained name bytes must be bounded: MetaStringReader does not cache
+      // oversized names, but this TypeInfo and its key also retain their encoded byte arrays.
+      // Large names remain readable without publishing them to this persistent cache.
+      if (cachedUnknownTypeNames >= MAX_CACHED_UNKNOWN_TYPE_NAMES
+          || packageBytes.bytes.length > SharedRegistry.MAX_CACHED_ENCODED_META_STRING_LENGTH
+          || simpleClassNameBytes.bytes.length
+              > SharedRegistry.MAX_CACHED_ENCODED_META_STRING_LENGTH) {
+        return typeInfo;
+      }
+      cachedUnknownTypeNames++;
     }
     compositeClassNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
     return typeInfo;

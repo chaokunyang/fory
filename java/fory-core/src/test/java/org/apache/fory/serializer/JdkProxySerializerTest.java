@@ -21,18 +21,25 @@ package org.apache.fory.serializer;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotSame;
+import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.expectThrows;
 
 import java.io.ObjectStreamException;
 import java.io.Serializable;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.testng.annotations.Test;
@@ -47,6 +54,8 @@ public class JdkProxySerializerTest extends ForyTestBase {
       return 1;
     }
   }
+
+  private static class NotAHandler implements Serializable {}
 
   @Test(dataProvider = "referenceTrackingConfig")
   public void testJdkProxy(boolean referenceTracking) {
@@ -63,6 +72,161 @@ public class JdkProxySerializerTest extends ForyTestBase {
                 fory.getClassLoader(), new Class[] {Function.class}, new TestInvocationHandler());
     Function deserializedFunction = (Function) fory.deserialize(fory.serialize(function));
     assertEquals(deserializedFunction.apply(null), 1);
+  }
+
+  @Test
+  public void testRemoteProxyShapeLimit() throws Exception {
+    Fory writer =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
+    Function function =
+        (Function)
+            Proxy.newProxyInstance(
+                writer.getClassLoader(), new Class[] {Function.class}, new TestInvocationHandler());
+    Runnable runnable =
+        (Runnable)
+            Proxy.newProxyInstance(
+                writer.getClassLoader(), new Class[] {Runnable.class}, new TestInvocationHandler());
+    byte[] functionBytes = writer.serialize(function);
+    byte[] runnableBytes = writer.serialize(runnable);
+
+    Fory reader =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
+    assertEquals(((Function) reader.deserialize(functionBytes)).apply(null), 1);
+
+    JdkProxySerializer serializer =
+        (JdkProxySerializer)
+            reader
+                .getTypeResolver()
+                .getTypeInfo(JdkProxySerializer.ReplaceStub.class)
+                .getSerializer();
+    Field shapesField = JdkProxySerializer.class.getDeclaredField("acceptedProxyShapes");
+    shapesField.setAccessible(true);
+    Map<List<Class<?>>, Class<?>[]> shapes =
+        (Map<List<Class<?>>, Class<?>[]>) shapesField.get(serializer);
+    Field limitField = JdkProxySerializer.class.getDeclaredField("MAX_REMOTE_PROXY_SHAPES");
+    limitField.setAccessible(true);
+    int limit = limitField.getInt(null);
+    for (int bits = 0; shapes.size() < limit; bits++) {
+      Class<?>[] shape = new Class<?>[16];
+      for (int i = 0; i < shape.length; i++) {
+        shape[i] = (bits & (1 << i)) == 0 ? int.class : long.class;
+      }
+      shapes.put(Arrays.asList(shape), shape);
+    }
+
+    assertEquals(((Function) reader.deserialize(functionBytes)).apply(null), 1);
+    DeserializationException exception =
+        expectThrows(DeserializationException.class, () -> reader.deserialize(runnableBytes));
+    assertTrue(exception.getMessage().contains("proxy shape limit"), exception.getMessage());
+    assertEquals(shapes.size(), limit);
+  }
+
+  @Test
+  public void testProxyShapeReuse() throws Exception {
+    Fory writer =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .build();
+    writer.register(TestInvocationHandler.class);
+    Class<?>[] firstShape = {Function.class, Runnable.class};
+    Class<?>[] secondShape = {Runnable.class, Function.class};
+    byte[][] bytes = new byte[2][];
+    Class<?>[][] interfaces = {firstShape, secondShape};
+    for (int i = 0; i < interfaces.length; i++) {
+      Object proxy =
+          Proxy.newProxyInstance(
+              writer.getClassLoader(), interfaces[i], new TestInvocationHandler());
+      bytes[i] = writer.serialize(proxy);
+    }
+
+    Fory reader =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .build();
+    reader.register(TestInvocationHandler.class);
+    JdkProxySerializer serializer =
+        (JdkProxySerializer)
+            reader
+                .getTypeResolver()
+                .getTypeInfo(JdkProxySerializer.ReplaceStub.class)
+                .getSerializer();
+    Field shapesField = JdkProxySerializer.class.getDeclaredField("acceptedProxyShapes");
+    shapesField.setAccessible(true);
+    Map<List<Class<?>>, Class<?>[]> shapes =
+        (Map<List<Class<?>>, Class<?>[]>) shapesField.get(serializer);
+    Field lastShapeField = JdkProxySerializer.class.getDeclaredField("lastAcceptedProxyShape");
+    lastShapeField.setAccessible(true);
+    Class<?>[][] accepted = new Class<?>[2][];
+    for (int i = 0; i < interfaces.length; i++) {
+      Object proxy = reader.deserialize(bytes[i]);
+      assertEquals(proxy.getClass().getInterfaces(), interfaces[i]);
+      accepted[i] = shapes.get(Arrays.asList(interfaces[i]));
+    }
+    for (int round = 0; round < 3; round++) {
+      for (int i = 0; i < interfaces.length; i++) {
+        Object proxy = reader.deserialize(bytes[i]);
+        assertEquals(proxy.getClass().getInterfaces(), interfaces[i]);
+        assertSame(lastShapeField.get(serializer), accepted[i]);
+      }
+    }
+    assertEquals(shapes.size(), 2);
+  }
+
+  @Test
+  public void testFailedHandlerRecordsProxyShape() throws Exception {
+    Fory writer =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .build();
+    writer.register(TestInvocationHandler.class, "test.ProxyHandler");
+    Function function =
+        (Function)
+            Proxy.newProxyInstance(
+                writer.getClassLoader(), new Class[] {Function.class}, new TestInvocationHandler());
+    byte[] bytes = writer.serialize(function);
+
+    Fory reader =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .build();
+    reader.register(NotAHandler.class, "test.ProxyHandler");
+    JdkProxySerializer serializer =
+        (JdkProxySerializer)
+            reader
+                .getTypeResolver()
+                .getTypeInfo(JdkProxySerializer.ReplaceStub.class)
+                .getSerializer();
+    Field shapesField = JdkProxySerializer.class.getDeclaredField("acceptedProxyShapes");
+    shapesField.setAccessible(true);
+    Map<List<Class<?>>, Class<?>[]> shapes =
+        (Map<List<Class<?>>, Class<?>[]>) shapesField.get(serializer);
+
+    expectThrows(DeserializationException.class, () -> reader.deserialize(bytes));
+    assertEquals(shapes.size(), 1);
+    expectThrows(DeserializationException.class, () -> reader.deserialize(bytes));
+    assertEquals(shapes.size(), 1);
   }
 
   @Test

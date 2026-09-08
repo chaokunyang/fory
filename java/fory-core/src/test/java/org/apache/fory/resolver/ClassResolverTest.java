@@ -32,6 +32,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.io.Serializable;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
@@ -58,6 +59,8 @@ import lombok.ToString;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.builder.Generated;
+import org.apache.fory.codegen.JaninoUtils;
+import org.apache.fory.collection.ObjectMap;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.ReadContext;
@@ -327,6 +330,198 @@ public class ClassResolverTest extends ForyTestBase {
                         .suppressClassRegistrationWarnings(false)
                         .build()));
     assertEquals(count(unsuppressed, "Class missing.pkg.MissingType not registered"), 1);
+  }
+
+  @Test
+  public void testUnknownTypeNameCacheBounded() throws Exception {
+    ForyBuilder builder =
+        Fory.builder()
+            .withXlang(false)
+            .withCompatible(true)
+            .withMetaShare(false)
+            .requireClassRegistration(false)
+            .withCodegen(false)
+            .withDeserializeUnknownClass(true)
+            .suppressClassRegistrationWarnings(false);
+    Fory writer = builder.build();
+    Class<?> enumA =
+        JaninoUtils.compileClass(
+            getClass().getClassLoader(),
+            "",
+            "TestUnknownNameCacheEnumA",
+            "enum TestUnknownNameCacheEnumA { A, B }");
+    Class<?> enumB =
+        JaninoUtils.compileClass(
+            getClass().getClassLoader(),
+            "",
+            "TestUnknownNameCacheEnumB",
+            "enum TestUnknownNameCacheEnumB { A, B }");
+    byte[] bytesA = writer.serialize(enumA.getEnumConstants()[1]);
+    byte[] bytesB = writer.serialize(enumB.getEnumConstants()[1]);
+    byte[] knownClassBytes = writer.serialize(ClassResolverTest.class);
+
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    AllowListChecker checker = new AllowListChecker(AllowListChecker.CheckLevel.WARN);
+    checker.allowClass(ClassResolverTest.class.getName());
+    Fory reader = builder.withSharedRegistry(sharedRegistry).withTypeChecker(checker).build();
+    ClassResolver resolver = (ClassResolver) reader.getTypeResolver();
+    Field mapField = ClassResolver.class.getDeclaredField("compositeNameBytes2TypeInfo");
+    mapField.setAccessible(true);
+    ObjectMap<?, ?> nameCache = (ObjectMap<?, ?>) mapField.get(resolver);
+    Field counterField = ClassResolver.class.getDeclaredField("cachedUnknownTypeNames");
+    counterField.setAccessible(true);
+    Field capField = ClassResolver.class.getDeclaredField("MAX_CACHED_UNKNOWN_TYPE_NAMES");
+    capField.setAccessible(true);
+
+    captureOutput(() -> assertEquals(reader.deserialize(bytesA), UnknownClass.UnknownEnum.V1));
+    assertEquals(counterField.getInt(resolver), 1);
+    for (int i = 0; i < 8192; i++) {
+      sharedRegistry.markTypeAccepted("test.WarningCacheFiller" + i);
+    }
+
+    counterField.setInt(resolver, capField.getInt(null));
+    int cachedEntries = nameCache.size;
+    String uncachedWarnings =
+        captureOutput(
+            () -> {
+              assertEquals(reader.deserialize(bytesB), UnknownClass.UnknownEnum.V1);
+              assertEquals(nameCache.size, cachedEntries);
+              assertEquals(reader.deserialize(bytesA), UnknownClass.UnknownEnum.V1);
+              assertEquals(nameCache.size, cachedEntries);
+              assertEquals(reader.deserialize(bytesB), UnknownClass.UnknownEnum.V1);
+              assertEquals(nameCache.size, cachedEntries);
+            });
+    assertEquals(count(uncachedWarnings, "Class TestUnknownNameCacheEnumB not in allow list"), 2);
+    assertEquals(
+        count(uncachedWarnings, "Class TestUnknownNameCacheEnumB not found from classloaders"), 2);
+
+    assertSame(reader.deserialize(knownClassBytes), ClassResolverTest.class);
+    assertEquals(nameCache.size, cachedEntries + 1);
+  }
+
+  @Test
+  public void testXlangUnknownNameCacheBounded() throws Exception {
+    ForyBuilder builder =
+        Fory.builder()
+            .withXlang(true)
+            .withCompatible(true)
+            .withMetaShare(false)
+            .withCodegen(false)
+            .withDeserializeUnknownClass(true)
+            .suppressClassRegistrationWarnings(false);
+    Class<?> enumA =
+        JaninoUtils.compileClass(
+            getClass().getClassLoader(),
+            "",
+            "TestXlangUnknownNameCacheEnumA",
+            "enum TestXlangUnknownNameCacheEnumA { A, B }");
+    Class<?> enumB =
+        JaninoUtils.compileClass(
+            getClass().getClassLoader(),
+            "",
+            "TestXlangUnknownNameCacheEnumB",
+            "enum TestXlangUnknownNameCacheEnumB { A, B }");
+    Fory writer = builder.build();
+    writer.register(enumA, "missing.xlang", "EnumA");
+    writer.register(enumB, "missing.xlang", "EnumB");
+    writer.register(TestNeedToWriteReferenceClass.class, "test", "KnownEnum");
+    byte[] bytesA = writer.serialize(enumA.getEnumConstants()[1]);
+    byte[] bytesB = writer.serialize(enumB.getEnumConstants()[1]);
+    byte[] knownBytes = writer.serialize(TestNeedToWriteReferenceClass.B);
+
+    Fory reader = builder.build();
+    reader.register(TestNeedToWriteReferenceClass.class, "test", "KnownEnum");
+    XtypeResolver resolver = (XtypeResolver) reader.getTypeResolver();
+    Field mapField = XtypeResolver.class.getDeclaredField("compositeClassNameBytes2TypeInfo");
+    mapField.setAccessible(true);
+    ObjectMap<TypeNameBytes, TypeInfo> nameCache =
+        (ObjectMap<TypeNameBytes, TypeInfo>) mapField.get(resolver);
+    Field counterField = XtypeResolver.class.getDeclaredField("cachedUnknownTypeNames");
+    counterField.setAccessible(true);
+    Field capField = XtypeResolver.class.getDeclaredField("MAX_CACHED_UNKNOWN_TYPE_NAMES");
+    capField.setAccessible(true);
+    TypeInfo registeredInfo = resolver.getTypeInfo(TestNeedToWriteReferenceClass.class);
+    assertNotNull(
+        nameCache.remove(new TypeNameBytes(registeredInfo.namespace, registeredInfo.typeName)));
+
+    assertEquals(reader.deserialize(bytesA), UnknownClass.UnknownEnum.V1);
+    assertEquals(counterField.getInt(resolver), 1);
+
+    counterField.setInt(resolver, capField.getInt(null));
+    int cachedEntries = nameCache.size;
+    String uncachedWarnings =
+        captureOutput(
+            () -> {
+              assertEquals(reader.deserialize(bytesB), UnknownClass.UnknownEnum.V1);
+              assertEquals(nameCache.size, cachedEntries);
+              assertEquals(reader.deserialize(bytesA), UnknownClass.UnknownEnum.V1);
+              assertEquals(nameCache.size, cachedEntries);
+              assertEquals(reader.deserialize(bytesB), UnknownClass.UnknownEnum.V1);
+              assertEquals(nameCache.size, cachedEntries);
+            });
+    assertEquals(count(uncachedWarnings, "Class missing.xlang.EnumB not registered"), 2);
+
+    assertSame(reader.deserialize(knownBytes), TestNeedToWriteReferenceClass.B);
+    assertEquals(nameCache.size, cachedEntries + 1);
+  }
+
+  @Test
+  public void testUnknownNameByteBound() throws Exception {
+    char[] chars = new char[SharedRegistry.MAX_CACHED_ENCODED_META_STRING_LENGTH * 2];
+    Arrays.fill(chars, 'a');
+    String longName = new String(chars);
+    for (boolean xlang : new boolean[] {false, true}) {
+      ForyBuilder builder =
+          Fory.builder()
+              .withXlang(xlang)
+              .withCompatible(true)
+              .withMetaShare(false)
+              .requireClassRegistration(true)
+              .withCodegen(false)
+              .withDeserializeUnknownClass(true)
+              .suppressClassRegistrationWarnings(true);
+      Fory reader = builder.build();
+      TypeResolver resolver = reader.getTypeResolver();
+      Field mapField =
+          resolver
+              .getClass()
+              .getDeclaredField(
+                  xlang ? "compositeClassNameBytes2TypeInfo" : "compositeNameBytes2TypeInfo");
+      mapField.setAccessible(true);
+      ObjectMap<?, ?> nameCache = (ObjectMap<?, ?>) mapField.get(resolver);
+      Field counterField = resolver.getClass().getDeclaredField("cachedUnknownTypeNames");
+      counterField.setAccessible(true);
+      int cachedEntries = nameCache.size;
+
+      for (boolean longNamespace : new boolean[] {false, true}) {
+        Fory writer = builder.build();
+        // Native unknown enums use the enum prefix in their encoded name. The xlang reader also
+        // accepts this name and obtains the enum kind from the type id.
+        String namespace = longNamespace ? longName : "missing";
+        String name = Encoders.ENUM_PREFIX + (longNamespace ? "Unknown" : longName);
+        writer.register(TestNeedToWriteReferenceClass.class, namespace, name);
+        TypeInfo typeInfo =
+            writer.getTypeResolver().getTypeInfo(TestNeedToWriteReferenceClass.class);
+        EncodedMetaString largeName = longNamespace ? typeInfo.namespace : typeInfo.typeName;
+        assertTrue(largeName.bytes.length > SharedRegistry.MAX_CACHED_ENCODED_META_STRING_LENGTH);
+        byte[] bytes = writer.serialize(TestNeedToWriteReferenceClass.B);
+        for (int i = 0; i < 2; i++) {
+          assertEquals(reader.deserialize(bytes), UnknownClass.UnknownEnum.V1);
+          assertEquals(nameCache.size, cachedEntries);
+          assertEquals(counterField.getInt(resolver), 0);
+        }
+        assertEquals(reader.deserialize(writer.serialize(7)), Integer.valueOf(7));
+      }
+
+      Fory writer = builder.build();
+      writer.register(
+          TestNeedToWriteReferenceClass.class, "missing", Encoders.ENUM_PREFIX + "Unknown");
+      assertEquals(
+          reader.deserialize(writer.serialize(TestNeedToWriteReferenceClass.B)),
+          UnknownClass.UnknownEnum.V1);
+      assertEquals(nameCache.size, cachedEntries + 1);
+      assertEquals(counterField.getInt(resolver), 1);
+    }
   }
 
   @Test

@@ -110,6 +110,13 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   published. Do not extend this exception to another cache or retained value.
 - Concrete serializers may opt into sharing only after auditing retained fields. Treat serializers retaining `TypeResolver`, `RefResolver`, mutable scratch buffers, runtime state, or classloader-sensitive state as non-shareable unless that state is externalized.
 - Resolver and serializer hot paths should keep the fast-path/null-slow-path shape obvious. Hoist repeated buffer or cache-state access into locals for multi-step operations and keep rebuild/restoration logic cold.
+- Unknown-name resolver caches must bound both entry count and retained encoded-name bytes. Do not
+  retain an oversized name merely because the MetaString caches chose not to intern it: the
+  resolver key and TypeInfo also retain those arrays. Apply admission limits only to unknown-name
+  cache misses; oversized names remain decodable and trusted registrations are unchanged.
+- Remote proxy-shape caches own one private interface-array snapshot per accepted shape. Cache
+  hits must reuse that snapshot, including when consecutive reads alternate between shapes; do
+  not clone a previously accepted shape again or retain a mutable wire-decoded array as the key.
 - Java compatible metadata hash caches and depth hints retain the source `TypeInfo`, before
   requested-target adaptation. Store target-specific results in the existing `transformedTypeInfo`
   cache, keyed by target `Class` identity with source `Class` and primitive header-hash comparisons

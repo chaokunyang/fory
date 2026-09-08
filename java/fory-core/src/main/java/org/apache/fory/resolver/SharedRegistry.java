@@ -57,7 +57,7 @@ import org.apache.fory.type.DescriptorGrouper;
 @Internal
 public final class SharedRegistry {
   private static final int MAX_CACHED_ENCODED_META_STRINGS = 32768;
-  private static final int MAX_CACHED_ENCODED_META_STRING_LENGTH = 2048;
+  static final int MAX_CACHED_ENCODED_META_STRING_LENGTH = 2048;
   private static final int MAX_CACHED_TYPE_CHECKER_CLASSES = 8192;
   private static final int MIN_REMOTE_TYPE_DEF_LIMIT = 8192;
   private static final int MAX_REMOTE_TYPE_DEF_KEYS = 8192;

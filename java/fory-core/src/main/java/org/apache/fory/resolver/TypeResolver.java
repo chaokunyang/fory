@@ -1337,7 +1337,8 @@ public abstract class TypeResolver {
         sc = CompatibleSerializer.class;
       } else if (sc == null && GraalvmSupport.isGraalRuntime()) {
         sc = CompatibleSerializer.class;
-        LOG.warnOnce(
+        // Wire-controlled metadata must not enter process-wide warnOnce deduplication state.
+        LOG.warn(
             "Can't generate class at runtime in graalvm for class def {}, use {} instead",
             typeDef,
             sc);
@@ -1524,7 +1525,8 @@ public abstract class TypeResolver {
     } catch (IllegalStateException e) {
       if (deserializeUnknownClass) {
         if (!config.suppressClassRegistrationWarnings()) {
-          LOG.warnOnce(e.getMessage());
+          // Wire-controlled names must not enter process-wide warnOnce deduplication state.
+          LOG.warn(e.getMessage());
         }
         return UnknownClass.getUnknowClass(className, isEnum, arrayDims, metaContextShareEnabled);
       }

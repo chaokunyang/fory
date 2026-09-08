@@ -129,7 +129,8 @@ public class AllowListChecker implements TypeChecker {
                   "Class %s is forbidden for serialization or deserialization.", className));
         }
         if (!allowed) {
-          LOG.warnOnce(
+          // Wire-controlled names must not enter process-wide warnOnce deduplication state.
+          LOG.warn(
               "Class {} not in allow list, please check whether objects of this class "
                   + "are allowed for serialization or deserialization.",
               className);

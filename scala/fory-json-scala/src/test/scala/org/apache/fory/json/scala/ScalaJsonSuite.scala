@@ -95,6 +95,16 @@ object MethodLocalHolder {
 
 case class NullableRequired(value: String)
 
+case class EmptyRequired(value: String, items: java.util.List[String], numbers: Array[Int])
+
+case class ExplicitEmptyRequired(
+    @JsonProperty(include = JsonProperty.Include.NON_EMPTY) value: String
+)
+
+case class EmptyDefault(
+    @JsonProperty(include = JsonProperty.Include.NON_EMPTY) value: String = ""
+)
+
 case class UserId(value: Int) extends AnyVal
 
 case class LongId(value: Long) extends AnyVal
@@ -334,6 +344,27 @@ class ScalaJsonSuite extends AnyFunSuite {
       }
       assert(json.toJson(ExplicitNullable(null)) == "{\"value\":null}")
       assert(json.fromJson("{\"value\":null}", classOf[ExplicitNullable]) == ExplicitNullable(null))
+    }
+  }
+
+  test("required constructor values retain empty properties") {
+    for (codegen <- Seq(false, true)) {
+      val json = ForyJsonScala.builder()
+        .withCodegen(codegen)
+        .withAsyncCompilation(false)
+        .defaultPropertyInclusion(JsonProperty.Include.NON_EMPTY)
+        .build()
+      val value = EmptyRequired("", new java.util.ArrayList[String](), Array.emptyIntArray)
+      val text = json.toJson(value)
+      assert(text == "{\"value\":\"\",\"items\":[],\"numbers\":[]}")
+      assert(new String(json.toJsonBytes(value), UTF_8) == text)
+      val decoded = json.fromJson(text, classOf[EmptyRequired])
+      assert(decoded.value == "")
+      assert(decoded.items.isEmpty)
+      assert(decoded.numbers.isEmpty)
+      assertThrows[ForyJsonException](json.toJson(ExplicitEmptyRequired("")))
+      assert(json.toJson(EmptyDefault()) == "{}")
+      assert(json.fromJson("{}", classOf[EmptyDefault]) == EmptyDefault())
     }
   }
 

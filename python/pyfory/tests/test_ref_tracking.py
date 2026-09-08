@@ -323,6 +323,41 @@ def test_invalid_collection_element_ref_id_raises_value_error():
         fory.deserialize(payload)
 
 
+@pytest.mark.skipif(
+    not pyfory.ENABLE_FORY_CYTHON_SERIALIZATION,
+    reason="owned PyObject slots exist only in the Cython reader",
+)
+def test_ref_slot_rebind_rejected():
+    fory = pyfory.Fory(xlang=False, compatible=False, ref=True, strict=True)
+    buffer = pyfory.Buffer.allocate(64)
+    write_context = fory.write_context
+    write_context.prepare(buffer)
+    buffer.write_int8(0)
+    buffer.write_int8(REF_VALUE_FLAG)
+    fory.type_resolver.write_type_info(write_context, fory.type_resolver.get_type_info(list))
+    buffer.write_var_uint32(2)
+    buffer.write_int8(0b1)  # COLL_TRACKING_REF
+    buffer.write_int8(REF_VALUE_FLAG)
+    fory.type_resolver.write_type_info(write_context, fory.type_resolver.get_type_info(tuple))
+    buffer.write_var_uint32(0)
+    set_flag_offset = buffer.get_writer_index()
+    buffer.write_int8(REF_VALUE_FLAG)
+    fory.type_resolver.write_type_info(write_context, fory.type_resolver.get_type_info(set))
+    buffer.write_var_uint32(0)
+    data = buffer.to_bytes(0, buffer.get_writer_index())
+    fory.reset_write()
+    assert fory.deserialize(data) == [(), set()]
+
+    # The tuple fills its slot after returning, leaving its preserved id pending.
+    # A flag that adds no id must not let the set replace that owned tuple slot.
+    malformed = bytearray(data)
+    malformed[set_flag_offset] = 1
+    with pytest.raises(ValueError):
+        fory.deserialize(bytes(malformed))
+    assert not fory.read_context.has_preserved_ref_id()
+    assert fory.deserialize(data) == [(), set()]
+
+
 def test_invalid_reference_publication_id():
     fory = pyfory.Fory(
         xlang=True,

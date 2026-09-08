@@ -13,6 +13,14 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
 - Cython mode owns the hot runtime path. Do not duplicate core runtime types between Python and Cython, tunnel Python facade methods into hidden Cython internals, or keep dead shims unless the user explicitly needs a compatibility module path.
 - Use explicit Cython fields and methods for fixed hot-path shapes. Avoid `__getattr__`, generic `object` fields, public bridge internals, or `Fory` backreferences where ownership can stay explicit.
 - Keep Python and Cython context/ref-tracking branch conditions and stack mutations semantically aligned unless a documented intentional difference exists.
+- A populated Cython reference slot owns its `PyObject` pointer until root reset. Reference
+  publication must not replace it with a different borrowed pointer. Keep this check at publication;
+  do not duplicate it with earlier flag validation when existing owner checks already make the root
+  failure controlled. Bounds-safe graph differences in pure Python do not require that ownership check.
+- Python `typing.Union` annotations choose serializers for ordinary writes and schema composition;
+  they are not a deserialization allow-list. Registration and the active deserialization policy own
+  authorization for a wire-selected alternative. Treat an authorized value outside the annotation
+  as a type/schema correctness issue unless it bypasses another explicit policy.
 - Root deserialization graph memory budget state belongs to pure-Python and Cython `ReadContext`.
   Keep `max_graph_memory_bytes` public on `pyfory.Fory`/`Config`; the default effective limit is
   fixed `128 MiB`, positive explicit values override it, and explicit non-positive values are

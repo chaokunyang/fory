@@ -248,7 +248,11 @@ cdef class RefReader:
         need_inc = self.read_objects[ref_id] == NULL
         if need_inc:
             Py_INCREF(obj)
-        self.read_objects[ref_id] = <PyObject *>obj
+            self.read_objects[ref_id] = <PyObject *>obj
+        elif self.read_objects[ref_id] != <PyObject *>obj:
+            # A populated slot owns its pointer until reset. Replacing it with
+            # a borrowed pointer would make reset over-decrement the new value.
+            raise ValueError(f"Ref id {ref_id} is already bound to a different object")
 
     cdef inline get_read_ref(self, id_=None):
         cdef int32_t ref_id

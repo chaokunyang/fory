@@ -97,7 +97,16 @@ Received remote metadata is also limited:
 These limits do not change `strict`, `policy`, dynamic loading, unknown-class handling, or
 schema-evolution semantics.
 
+Python `typing.Union` annotations choose serializers for normal writes and schema composition; they
+are not a deserialization allow-list. Register only the types accepted by the endpoint, and use the
+active `DeserializationPolicy` when registration alone is broader than the required trust boundary.
+
 ### DeserializationPolicy
+
+A custom policy replaces the default native reconstruction policy even when `strict=True`.
+`strict` still requires registration for wire-selected types. The custom policy owns authorization
+for module imports, global-name resolution, class construction, and callable operations; inherited
+hooks that are not overridden allow their operation.
 
 When `strict=False` is necessary, use `DeserializationPolicy` to restrict the dynamic types and
 hooks accepted during deserialization:

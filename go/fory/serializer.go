@@ -176,7 +176,7 @@ func serializerReadDataAlwaysAdvances(serializer Serializer) bool {
 		return serializerReadDataAlwaysAdvances(s.valueSerializer)
 	case *optionalSerializer:
 		return serializerReadDataAlwaysAdvances(s.valueSerializer)
-	case interfaceScalarSerializer:
+	case interfaceValueSerializer:
 		return serializerReadDataAlwaysAdvances(s.serializer)
 	case *structSerializer:
 		return s.readDataAlwaysAdvances

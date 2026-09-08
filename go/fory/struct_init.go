@@ -663,8 +663,18 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 					if !ok || scalarType == nil || !scalarType.AssignableTo(localType) {
 						return fmt.Errorf("compatible scalar type %d cannot be materialized as %s", defTypeId, localType)
 					}
-					fieldSerializer = interfaceScalarSerializer{
+					fieldSerializer = interfaceValueSerializer{
 						type_:      scalarType,
+						serializer: fieldSerializer,
+					}
+				}
+				if localType.Kind() == reflect.Interface && (defTypeId == SET || defTypeId == MAP) {
+					if typeLookupFailed || remoteType.Kind() == reflect.Interface ||
+						!remoteType.AssignableTo(localType) || fieldSerializer == nil {
+						return fmt.Errorf("compatible container type %d cannot be materialized as %s", defTypeId, localType)
+					}
+					fieldSerializer = interfaceValueSerializer{
+						type_:      remoteType,
 						serializer: fieldSerializer,
 					}
 				}

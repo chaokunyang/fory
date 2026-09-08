@@ -360,6 +360,9 @@ func (t *TypeSpec) goTypeForResolver(resolver *TypeResolver) (reflect.Type, erro
 		if elemType == nil {
 			elemType = reflect.TypeOf((*any)(nil)).Elem()
 		}
+		if !elemType.Comparable() {
+			return nil, fmt.Errorf("SET element type %s is not comparable", elemType)
+		}
 		return reflect.MapOf(elemType, reflect.TypeOf(struct{}{})), nil
 	case TypeSpecMap:
 		if t.Key == nil || t.Value == nil {
@@ -375,6 +378,9 @@ func (t *TypeSpec) goTypeForResolver(resolver *TypeResolver) (reflect.Type, erro
 		}
 		if keyType == nil || valueType == nil {
 			return reflect.TypeOf(map[any]any{}), nil
+		}
+		if !keyType.Comparable() {
+			return nil, fmt.Errorf("MAP key type %s is not comparable", keyType)
 		}
 		return reflect.MapOf(keyType, valueType), nil
 	default:
@@ -1861,6 +1867,9 @@ func serializerForTypeSpec(resolver *TypeResolver, goType reflect.Type, spec *Ty
 		referencable := spec.Element != nil && spec.Element.TrackRef
 		return newDeclaredSliceSerializer(goType, elemSerializer, referencable)
 	case SET:
+		if !isSetReflectType(goType) {
+			return nil, fmt.Errorf("SET type spec requires map-backed set Go type, got %s", goType)
+		}
 		elemType := goType.Key()
 		var elemSerializer Serializer
 		if spec.Element != nil && spec.Element.TypeID != UNKNOWN {
@@ -1894,6 +1903,9 @@ func serializerForTypeSpec(resolver *TypeResolver, goType reflect.Type, spec *Ty
 			maxLength:            maxGraphCount(int(goType.Key().Size()) + int(goType.Elem().Size())),
 		}, nil
 	case MAP:
+		if goType.Kind() != reflect.Map {
+			return nil, fmt.Errorf("MAP type spec requires map Go type, got %s", goType)
+		}
 		// Resolve children independently: a dynamic child does not erase the
 		// declared codec selected by the enclosing schema for its sibling.
 		keyType := goType.Key()

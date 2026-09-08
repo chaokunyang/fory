@@ -60,46 +60,46 @@ func serializerNeedsGenericDispatch(serializer Serializer) bool {
 	}
 }
 
-// interfaceScalarSerializer is a cold compatible adapter for a
-// schema-declared scalar whose matched local field is an interface.
-type interfaceScalarSerializer struct {
+// interfaceValueSerializer is a cold compatible adapter for a
+// schema-declared value whose matched local field is an interface.
+type interfaceValueSerializer struct {
 	type_      reflect.Type
 	serializer Serializer
 }
 
-func (s interfaceScalarSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
-	scalar := s.concreteValue(value)
-	if !scalar.IsValid() {
-		ctx.SetError(SerializationError("schema-declared interface scalar cannot be nil"))
+func (s interfaceValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	concrete := s.concreteValue(value)
+	if !concrete.IsValid() {
+		ctx.SetError(SerializationError("schema-declared interface value cannot be nil"))
 		return
 	}
-	if scalar.Type() != s.type_ {
+	if concrete.Type() != s.type_ {
 		ctx.SetError(SerializationErrorf(
-			"interface scalar type %s does not match schema type %s", scalar.Type(), s.type_))
+			"interface value type %s does not match schema type %s", concrete.Type(), s.type_))
 		return
 	}
-	s.serializer.WriteData(ctx, scalar)
+	s.serializer.WriteData(ctx, concrete)
 }
 
-func (s interfaceScalarSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
-	scalar := s.concreteValue(value)
-	if !scalar.IsValid() {
+func (s interfaceValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	concrete := s.concreteValue(value)
+	if !concrete.IsValid() {
 		if refMode == RefModeNone {
-			ctx.SetError(SerializationError("schema-declared interface scalar cannot be nil"))
+			ctx.SetError(SerializationError("schema-declared interface value cannot be nil"))
 			return
 		}
 		ctx.Buffer().WriteInt8(NullFlag)
 		return
 	}
-	if scalar.Type() != s.type_ {
+	if concrete.Type() != s.type_ {
 		ctx.SetError(SerializationErrorf(
-			"interface scalar type %s does not match schema type %s", scalar.Type(), s.type_))
+			"interface value type %s does not match schema type %s", concrete.Type(), s.type_))
 		return
 	}
-	s.serializer.Write(ctx, refMode, writeType, hasGenerics, scalar)
+	s.serializer.Write(ctx, refMode, writeType, hasGenerics, concrete)
 }
 
-func (s interfaceScalarSerializer) concreteValue(value reflect.Value) reflect.Value {
+func (s interfaceValueSerializer) concreteValue(value reflect.Value) reflect.Value {
 	if value.IsValid() && value.Kind() == reflect.Interface {
 		if value.IsNil() {
 			return reflect.Value{}
@@ -109,17 +109,41 @@ func (s interfaceScalarSerializer) concreteValue(value reflect.Value) reflect.Va
 	return value
 }
 
-func (s interfaceScalarSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
-	scalar := reflect.New(s.type_).Elem()
-	s.serializer.ReadData(ctx, scalar)
+func (s interfaceValueSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	concrete := reflect.New(s.type_).Elem()
+	s.serializer.ReadData(ctx, concrete)
 	if ctx.HasError() {
 		return
 	}
-	value.Set(scalar)
+	value.Set(concrete)
 }
 
-func (s interfaceScalarSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
-	if refMode != RefModeNone {
+func (s interfaceValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	preservedRefID := int32(NotNullValueFlag)
+	switch refMode {
+	case RefModeNone:
+		if !readType {
+			s.ReadData(ctx, value)
+			return
+		}
+	case RefModeTracking:
+		refID, err := ctx.RefResolver().TryPreserveRefId(ctx.Buffer())
+		if err != nil {
+			ctx.SetError(FromError(err))
+			return
+		}
+		if refID < int32(NotNullValueFlag) {
+			if refID == int32(NullFlag) {
+				value.SetZero()
+			} else {
+				assignReadRef(ctx, refID, value)
+			}
+			return
+		}
+		preservedRefID = refID
+		// A new container reference stays pending while ReadData creates and
+		// publishes the concrete map before reading its children.
+	case RefModeNullOnly:
 		flag := ctx.Buffer().ReadInt8(ctx.Err())
 		if ctx.HasError() {
 			return
@@ -129,15 +153,20 @@ func (s interfaceScalarSerializer) Read(ctx *ReadContext, refMode RefMode, readT
 			return
 		}
 	}
-	scalar := reflect.New(s.type_).Elem()
-	s.serializer.Read(ctx, RefModeNone, readType, hasGenerics, scalar)
+	concrete := reflect.New(s.type_).Elem()
+	s.serializer.Read(ctx, RefModeNone, readType, hasGenerics, concrete)
 	if ctx.HasError() {
 		return
 	}
-	value.Set(scalar)
+	// Container readers publish the same owner eagerly for cycles; scalar readers do not. Publish
+	// here as well so every RefValue consumed by this adapter leaves no foreign pending slot.
+	if preservedRefID >= 0 && !publishReadRef(ctx, preservedRefID, concrete) {
+		return
+	}
+	value.Set(concrete)
 }
 
-func (s interfaceScalarSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+func (s interfaceValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
 }
 

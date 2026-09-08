@@ -19,6 +19,7 @@ package fory
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"reflect"
 	"testing"
@@ -105,6 +106,43 @@ type hardeningConcreteSet struct {
 type hardeningDynamicSet struct {
 	Values Set[any]
 }
+
+type hardeningMapIntoAnySource struct {
+	First  map[int32]int32 `fory:"ref"`
+	Second map[int32]int32 `fory:"ref"`
+}
+
+type hardeningSetIntoAnySource struct {
+	First  Set[int32] `fory:"ref"`
+	Second Set[int32] `fory:"ref"`
+}
+
+type hardeningContainersIntoAny struct {
+	First  any `fory:"ref"`
+	Second any `fory:"ref"`
+}
+
+type hardeningMapDataSource struct {
+	Payload map[int32]int32
+}
+
+type hardeningSetDataSource struct {
+	Payload Set[int32]
+}
+
+type hardeningContainerDataTarget struct {
+	Payload any
+}
+
+type hardeningInvalidKeySource struct {
+	Payload map[int32]int32
+}
+
+type hardeningInvalidKeyTarget struct {
+	Payload any
+}
+
+type hardeningEmptyStruct struct{}
 
 type hardeningConcreteScalars struct {
 	Value   int32
@@ -427,6 +465,112 @@ func TestCompatibleInterfaceSet(t *testing.T) {
 	require.Equal(t, int32(7), next)
 }
 
+func TestCompatibleContainersIntoAny(t *testing.T) {
+	for _, trackRef := range []bool{false, true} {
+		t.Run(fmt.Sprintf("map_track_ref_%t", trackRef), func(t *testing.T) {
+			shared := map[int32]int32{1: 2}
+			writer := New(WithXlang(true), WithCompatible(true), WithTrackRef(trackRef))
+			require.NoError(t, writer.RegisterStructByName(
+				hardeningMapIntoAnySource{}, "test.HardeningMapIntoAny"))
+			data, err := writer.Serialize(&hardeningMapIntoAnySource{
+				First: shared, Second: shared,
+			})
+			require.NoError(t, err)
+
+			reader := New(WithXlang(true), WithCompatible(true), WithTrackRef(trackRef))
+			require.NoError(t, reader.RegisterStructByName(
+				hardeningContainersIntoAny{}, "test.HardeningMapIntoAny"))
+			var target hardeningContainersIntoAny
+			var readErr error
+			require.NotPanics(t, func() {
+				readErr = reader.Deserialize(bytes.Clone(data), &target)
+			})
+			require.NoError(t, readErr)
+			first := target.First.(map[int32]int32)
+			second := target.Second.(map[int32]int32)
+			require.Equal(t, map[int32]int32{1: 2}, first)
+			require.Equal(t, map[int32]int32{1: 2}, second)
+			if trackRef {
+				first[3] = 4
+				require.Equal(t, int32(4), second[3])
+			}
+		})
+
+		t.Run(fmt.Sprintf("set_track_ref_%t", trackRef), func(t *testing.T) {
+			shared := Set[int32]{1: {}}
+			writer := New(WithXlang(true), WithCompatible(true), WithTrackRef(trackRef))
+			require.NoError(t, writer.RegisterStructByName(
+				hardeningSetIntoAnySource{}, "test.HardeningSetIntoAny"))
+			data, err := writer.Serialize(&hardeningSetIntoAnySource{
+				First: shared, Second: shared,
+			})
+			require.NoError(t, err)
+
+			reader := New(WithXlang(true), WithCompatible(true), WithTrackRef(trackRef))
+			require.NoError(t, reader.RegisterStructByName(
+				hardeningContainersIntoAny{}, "test.HardeningSetIntoAny"))
+			var target hardeningContainersIntoAny
+			var readErr error
+			require.NotPanics(t, func() {
+				readErr = reader.Deserialize(bytes.Clone(data), &target)
+			})
+			require.NoError(t, readErr)
+			first := target.First.(map[int32]struct{})
+			second := target.Second.(map[int32]struct{})
+			require.Equal(t, map[int32]struct{}{1: {}}, first)
+			require.Equal(t, map[int32]struct{}{1: {}}, second)
+			if trackRef {
+				first[3] = struct{}{}
+				require.Contains(t, second, int32(3))
+			}
+		})
+	}
+}
+
+func TestCompatibleContainerDataIntoAny(t *testing.T) {
+	t.Run("map", func(t *testing.T) {
+		writer := New(WithXlang(true), WithCompatible(true), WithTrackRef(false))
+		require.NoError(t, writer.RegisterStructByName(
+			hardeningMapDataSource{}, "test.HardeningMapDataIntoAny"))
+		data, err := writer.Serialize(&hardeningMapDataSource{
+			Payload: map[int32]int32{1: 2},
+		})
+		require.NoError(t, err)
+
+		reader := New(WithXlang(true), WithCompatible(true), WithTrackRef(false))
+		require.NoError(t, reader.RegisterStructByName(
+			hardeningContainerDataTarget{}, "test.HardeningMapDataIntoAny"))
+		var target hardeningContainerDataTarget
+		var readErr error
+		require.NotPanics(t, func() {
+			readErr = reader.Deserialize(bytes.Clone(data), &target)
+		})
+		require.NoError(t, readErr)
+		require.Equal(t, map[int32]int32{1: 2}, target.Payload)
+	})
+
+	t.Run("set", func(t *testing.T) {
+		writer := New(WithXlang(true), WithCompatible(true), WithTrackRef(false))
+		require.NoError(t, writer.RegisterStructByName(
+			hardeningSetDataSource{}, "test.HardeningSetDataIntoAny"))
+		data, err := writer.Serialize(&hardeningSetDataSource{
+			Payload: Set[int32]{1: {}},
+		})
+		require.NoError(t, err)
+
+		reader := New(WithXlang(true), WithCompatible(true), WithTrackRef(false))
+		require.NoError(t, reader.RegisterStructByName(
+			hardeningContainerDataTarget{}, "test.HardeningSetDataIntoAny"))
+		var target hardeningContainerDataTarget
+		var readErr error
+		require.NotPanics(t, func() {
+			readErr = reader.Deserialize(bytes.Clone(data), &target)
+		})
+		require.NoError(t, readErr)
+		require.Equal(t, map[int32]struct{}{1: {}}, target.Payload)
+	})
+}
+
 func TestCompatibleInterfaceScalar(t *testing.T) {
 	present := int32(3)
 	writer := New(WithXlang(true), WithCompatible(true))
@@ -456,8 +600,8 @@ func TestCompatibleInterfaceScalar(t *testing.T) {
 	require.Equal(t, int32(7), next)
 }
 
-func TestInterfaceScalarSerializer(t *testing.T) {
-	serializer := interfaceScalarSerializer{
+func TestInterfaceValueSerializer(t *testing.T) {
+	serializer := interfaceValueSerializer{
 		type_:      int32Type,
 		serializer: encodedInt32Serializer{typeID: VARINT32},
 	}
@@ -488,6 +632,21 @@ func TestInterfaceScalarSerializer(t *testing.T) {
 	var mismatch any = "value"
 	serializer.Write(writeCtx, RefModeNone, false, false, reflect.ValueOf(&mismatch).Elem())
 	require.Error(t, writeCtx.CheckError())
+
+	tracked := New(WithTrackRef(true)).readCtx
+	tracked.Buffer().WriteInt8(RefValueFlag)
+	tracked.Buffer().WriteVarint32(5)
+	tracked.Buffer().WriteInt8(RefFlag)
+	tracked.Buffer().WriteVarUint32(0)
+	tracked.Buffer().SetReaderIndex(0)
+	var first any
+	serializer.Read(tracked, RefModeTracking, false, false, reflect.ValueOf(&first).Elem())
+	require.NoError(t, tracked.CheckError())
+	require.Equal(t, int32(5), first)
+	var second any
+	serializer.Read(tracked, RefModeTracking, false, false, reflect.ValueOf(&second).Elem())
+	require.NoError(t, tracked.CheckError())
+	require.Equal(t, first, second)
 }
 
 func TestCompatibleInterfaceStruct(t *testing.T) {
@@ -945,4 +1104,68 @@ func TestTypeDefFieldCountIntRange(t *testing.T) {
 	} else {
 		require.Contains(t, err.Error(), "MaxTypeFields")
 	}
+}
+
+func TestRemoteContainerKeyComparable(t *testing.T) {
+	listSpec := NewCollectionTypeSpec(LIST, NewSimpleTypeSpec(INT32))
+	tests := []struct {
+		name string
+		spec *TypeSpec
+	}{
+		{
+			name: "map_list_key",
+			spec: NewMapTypeSpec(MAP, listSpec, NewSimpleTypeSpec(INT32)),
+		},
+		{
+			name: "set_list_element",
+			spec: NewCollectionTypeSpec(SET, listSpec),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			data := malformedContainerRoot(t, tc.spec)
+			skipReader := New(WithXlang(true), WithCompatible(true))
+			require.NoError(t, skipReader.RegisterStructByName(
+				hardeningEmptyStruct{}, "test.HardeningContainerKey"))
+
+			var skipped hardeningEmptyStruct
+			var readErr error
+			require.NotPanics(t, func() {
+				readErr = skipReader.Deserialize(bytes.Clone(data), &skipped)
+			})
+			require.NoError(t, readErr)
+
+			matchedReader := New(WithXlang(true), WithCompatible(true))
+			require.NoError(t, matchedReader.RegisterStructByName(
+				hardeningInvalidKeyTarget{}, "test.HardeningContainerKey"))
+			var matched hardeningInvalidKeyTarget
+			require.NotPanics(t, func() {
+				readErr = matchedReader.Deserialize(bytes.Clone(data), &matched)
+			})
+			require.Error(t, readErr)
+		})
+	}
+}
+
+func malformedContainerRoot(t *testing.T, spec *TypeSpec) []byte {
+	t.Helper()
+	sender := New(WithXlang(true), WithCompatible(true))
+	require.NoError(t, sender.RegisterStructByName(
+		hardeningInvalidKeySource{}, "test.HardeningContainerKey"))
+	typeDef, err := buildTypeDef(sender, reflect.ValueOf(hardeningInvalidKeySource{}))
+	require.NoError(t, err)
+	require.Len(t, typeDef.fieldDefs, 1)
+	typeDef.fieldDefs[0].typeSpec = spec
+	typeDef.encoded, err = encodingTypeDef(sender.typeResolver, typeDef)
+	require.NoError(t, err)
+
+	wire := NewByteBuffer(nil)
+	wire.WriteByte(XLangFlag)
+	wire.WriteInt8(NotNullValueFlag)
+	wire.WriteUint8(uint8(typeDef.typeId))
+	wire.WriteVarUint32(0)
+	typeDef.writeTypeDef(wire, &Error{})
+	wire.WriteVarUint32(0)
+	return bytes.Clone(wire.Bytes())
 }

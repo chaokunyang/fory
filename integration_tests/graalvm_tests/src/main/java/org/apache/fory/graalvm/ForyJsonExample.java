@@ -92,6 +92,7 @@ public final class ForyJsonExample {
     }
     testModels();
     testConfigurations();
+    testInclusion();
     testCodecs();
     testValueAnnotations();
     testSubtypes();
@@ -147,6 +148,28 @@ public final class ForyJsonExample {
     StackTraceElement value = new StackTraceElement("Owner", "method", "Owner.java", 12);
     String encoded = json.toJson(value);
     Preconditions.checkArgument(encoded.contains("Owner") && encoded.contains("method"));
+  }
+
+  private static void testInclusion() {
+    InclusionValue value = new InclusionValue();
+    String defaults = "{\"items\":[],\"name\":\"\"}";
+    Preconditions.checkArgument(DEFAULT_JSON.toJson(value).equals(defaults));
+    Preconditions.checkArgument(
+        new String(DEFAULT_JSON.toJsonBytes(value), StandardCharsets.UTF_8).equals(defaults));
+    ForyJson json =
+        ForyJson.builder().defaultPropertyInclusion(JsonProperty.Include.NON_EMPTY).build();
+    if (GraalvmSupport.isGraalRuntime()) {
+      exerciseCodegenConfiguration(json, true, true);
+    }
+    Preconditions.checkArgument(json.toJson(value).equals("{}"));
+    Preconditions.checkArgument(
+        new String(json.toJsonBytes(value), StandardCharsets.UTF_8).equals("{}"));
+    value.items = List.of("x");
+    value.name = "name";
+    String present = "{\"items\":[\"x\"],\"name\":\"name\"}";
+    Preconditions.checkArgument(json.toJson(value).equals(present));
+    Preconditions.checkArgument(
+        new String(json.toJsonBytes(value), StandardCharsets.UTF_8).equals(present));
   }
 
   private static ForyJson newInterpretedJson() {
@@ -715,6 +738,19 @@ public final class ForyJsonExample {
     default ForyJson duplicateConfiguration() {
       return newProviderJson();
     }
+
+    default ForyJson nonEmptyConfiguration() {
+      return ForyJson.builder().defaultPropertyInclusion(JsonProperty.Include.NON_EMPTY).build();
+    }
+  }
+
+  @JsonType
+  public static final class InclusionValue {
+    public List<String> items = List.of();
+    public String name = "";
+
+    @JsonProperty(include = JsonProperty.Include.NON_EMPTY)
+    public Optional<String> optional = Optional.empty();
   }
 
   @JsonType

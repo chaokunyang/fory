@@ -458,7 +458,9 @@ even when all of its properties are leaves. Primitive arrays decoded from JSON a
 portable array header and actual Java primitive width using the same batch schedule.
 `AtomicReference`, `AtomicReferenceArray`, and generic `Optional<T>` values include wrapper and
 reference storage. `AtomicIntegerArray` and `AtomicLongArray` include their wrapper and retained
-primitive backing array. Primitive optionals and atomic primitive scalar values are leaves.
+primitive backing array. Primitive optionals and atomic primitive scalar values are leaves. A
+non-empty Guava `ImmutableIntArray` likewise includes its wrapper and retained `int[]`; its shared
+empty singleton and temporary construction array are not separate graph owners.
 
 Dedicated Java JSON leaf codecs are excluded from graph accounting: null, strings, characters,
 booleans, numeric values including arbitrary-precision numbers, enums, temporal and other scalar

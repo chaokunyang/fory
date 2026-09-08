@@ -24,6 +24,7 @@ import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
+import com.google.common.primitives.ImmutableIntArray;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -226,6 +227,13 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
     public byte[] bytes;
   }
 
+  public static final class PrimitiveArrayFields {
+    public String text;
+    public AtomicIntegerArray ints;
+    public AtomicLongArray longs;
+    public ImmutableIntArray immutableInts;
+  }
+
   @Test
   public void primitiveArrayBatches() {
     int headerBytes = GraphMemoryEstimates.objectArrayBytes();
@@ -263,6 +271,50 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
         assertClassBudget(intArray(1024), AtomicIntegerArray.class, batchBytes);
     assertEquals(batch.length(), 1024);
     assertEquals(batch.get(1023), 1023);
+  }
+
+  @Test
+  public void guavaPrimitiveArrayOwners() {
+    assertEquals(jsonWithBudget(1).fromJson("[]", ImmutableIntArray.class), ImmutableIntArray.of());
+
+    int headerBytes = GraphMemoryEstimates.objectArrayBytes();
+    long ownerBytes = shallow(ImmutableIntArray.class) + headerBytes + 2L * Integer.BYTES;
+    ImmutableIntArray values = assertClassBudget("[1,2]", ImmutableIntArray.class, ownerBytes);
+    assertEquals(values, ImmutableIntArray.of(1, 2));
+    assertEquals(
+        assertClassBytesBudget(
+            "[1,2]".getBytes(StandardCharsets.UTF_8), ImmutableIntArray.class, ownerBytes),
+        values);
+
+    long batchBytes = shallow(ImmutableIntArray.class) + headerBytes + 1024L * Integer.BYTES;
+    ImmutableIntArray batch =
+        assertClassBudget(intArray(1024), ImmutableIntArray.class, batchBytes);
+    assertEquals(batch.length(), 1024);
+    assertEquals(batch.get(1023), 1023);
+  }
+
+  @Test
+  public void utf16PrimitiveArrayOwners() {
+    int headerBytes = GraphMemoryEstimates.objectArrayBytes();
+    long ownerBytes =
+        shallow(PrimitiveArrayFields.class)
+            + shallow(AtomicIntegerArray.class)
+            + headerBytes
+            + Integer.BYTES
+            + shallow(AtomicLongArray.class)
+            + headerBytes
+            + Long.BYTES
+            + shallow(ImmutableIntArray.class)
+            + headerBytes
+            + Integer.BYTES;
+    PrimitiveArrayFields fields =
+        assertClassBudget(
+            "{\"text\":\"值\",\"ints\":[1],\"longs\":[2],\"immutableInts\":[3]}",
+            PrimitiveArrayFields.class,
+            ownerBytes);
+    assertEquals(fields.ints.get(0), 1);
+    assertEquals(fields.longs.get(0), 2L);
+    assertEquals(fields.immutableInts, ImmutableIntArray.of(3));
   }
 
   @Test

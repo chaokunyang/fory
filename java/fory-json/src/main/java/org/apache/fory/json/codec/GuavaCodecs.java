@@ -285,6 +285,11 @@ public final class GuavaCodecs {
 
   private static final class ImmutableIntArrayCodec implements JsonValueCodec<ImmutableIntArray> {
     private static final ImmutableIntArrayCodec INSTANCE = new ImmutableIntArrayCodec();
+    private static final int SHALLOW_BYTES =
+        GraphMemoryEstimates.shallowObjectBytes(ImmutableIntArray.class);
+    private static final int ARRAY_HEADER_BYTES = GraphMemoryEstimates.objectArrayBytes();
+    private static final int ARRAY_BATCH_SIZE = 1024;
+    private static final int ARRAY_BATCH_MASK = ARRAY_BATCH_SIZE - 1;
 
     private ImmutableIntArrayCodec() {}
 
@@ -352,9 +357,14 @@ public final class GuavaCodecs {
       }
       int[] values = new int[8];
       int size = 0;
+      int nextBatchEnd = ARRAY_BATCH_MASK;
       do {
         if (reader.tryReadNull()) {
           throw new ForyJsonException("Cannot read null into ImmutableIntArray element");
+        }
+        if (size == nextBatchEnd) {
+          reader.reserveGraphMemory(ARRAY_BATCH_SIZE * Integer.BYTES);
+          nextBatchEnd += ARRAY_BATCH_SIZE;
         }
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
@@ -362,7 +372,7 @@ public final class GuavaCodecs {
         values[size++] = reader.readInt();
       } while (reader.consume(','));
       reader.expect(']');
-      reader.exitDepth();
+      finishArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -375,9 +385,14 @@ public final class GuavaCodecs {
       }
       int[] values = new int[8];
       int size = 0;
+      int nextBatchEnd = ARRAY_BATCH_MASK;
       do {
         if (reader.tryReadNull()) {
           throw new ForyJsonException("Cannot read null into ImmutableIntArray element");
+        }
+        if (size == nextBatchEnd) {
+          reader.reserveGraphMemory(ARRAY_BATCH_SIZE * Integer.BYTES);
+          nextBatchEnd += ARRAY_BATCH_SIZE;
         }
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
@@ -385,7 +400,7 @@ public final class GuavaCodecs {
         values[size++] = reader.readInt();
       } while (reader.consume(','));
       reader.expect(']');
-      reader.exitDepth();
+      finishArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -398,9 +413,14 @@ public final class GuavaCodecs {
       }
       int[] values = new int[8];
       int size = 0;
+      int nextBatchEnd = ARRAY_BATCH_MASK;
       do {
         if (reader.tryReadNull()) {
           throw new ForyJsonException("Cannot read null into ImmutableIntArray element");
+        }
+        if (size == nextBatchEnd) {
+          reader.reserveGraphMemory(ARRAY_BATCH_SIZE * Integer.BYTES);
+          nextBatchEnd += ARRAY_BATCH_SIZE;
         }
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
@@ -408,8 +428,14 @@ public final class GuavaCodecs {
         values[size++] = reader.readInt();
       } while (reader.consume(','));
       reader.expect(']');
-      reader.exitDepth();
+      finishArray(reader, size);
       return Arrays.copyOf(values, size);
+    }
+
+    private static void finishArray(JsonReader reader, int size) {
+      int tailSize = size & ARRAY_BATCH_MASK;
+      reader.reserveGraphMemory(SHALLOW_BYTES + ARRAY_HEADER_BYTES + tailSize * Integer.BYTES);
+      reader.exitDepth();
     }
   }
 }

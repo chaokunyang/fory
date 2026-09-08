@@ -67,6 +67,10 @@ Security-related options:
   changing registration, dynamic loading, or schema-evolution semantics.
 - `withDeserializeUnknownClass(false)` avoids materializing unknown classes from metadata.
 - `checkJdkClassSerializable(true)` keeps the JDK serializability check for `java.*` classes.
+- Java object deserialization rejects `java.util.regex.Pattern` values that enable
+  `Pattern.CANON_EQ`; other supported regex flags are unchanged.
+- One reader accepts at most 256 distinct remotely supplied JDK proxy interface combinations.
+  Reusing an accepted combination does not consume another slot.
 - Class registration warnings can be useful during security audits; use
   `suppressClassRegistrationWarnings(false)` when you need to surface unexpected types.
 

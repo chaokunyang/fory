@@ -47,6 +47,7 @@ import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.InsecureException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.TypeDef;
@@ -755,7 +756,15 @@ public class Serializers {
       MemoryBuffer buffer = readContext.getBuffer();
       String regex = readContext.readString();
       int flags = buffer.readInt32();
+      if ((flags & Pattern.CANON_EQ) != 0) {
+        throwUnsupportedRegexFlags(flags);
+      }
       return Pattern.compile(regex, flags);
+    }
+
+    private static void throwUnsupportedRegexFlags(int flags) {
+      throw new InsecureException(
+          "Pattern flags must not include CANON_EQ during deserialization: " + flags);
     }
   }
 

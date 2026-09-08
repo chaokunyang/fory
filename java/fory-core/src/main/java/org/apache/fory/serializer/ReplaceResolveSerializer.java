@@ -251,11 +251,20 @@ public class ReplaceResolveSerializer extends Serializer {
   }
 
   static MethodInfoCache newJDKMethodInfoCache(TypeResolver typeResolver, Class<?> cls) {
+    ClassResolver classResolver = (ClassResolver) typeResolver;
+    Serializer registeredSerializer = classResolver.getSerializer(cls, false);
+    if (registeredSerializer instanceof ReplaceResolveSerializer) {
+      MethodInfoCache registeredCache =
+          ((ReplaceResolveSerializer) registeredSerializer).classTypeInfoHolderMap.get(cls);
+      if (registeredCache != null) {
+        // Replacement stubs must use the registered class's data codec, including any read guard.
+        // During that serializer's constructor its first cache is not published yet.
+        return registeredCache;
+      }
+    }
     ReplaceResolveInfo replaceResolveInfo =
         REPLACE_RESOLVE_INFO_CACHE.get(cls, () -> new ReplaceResolveInfo(cls));
     MethodInfoCache methodInfoCache = new MethodInfoCache(replaceResolveInfo, typeResolver, cls);
-    ClassResolver classResolver = (ClassResolver) typeResolver;
-    Serializer registeredSerializer = classResolver.getSerializer(cls, false);
     if (registeredSerializer != null
         && !(registeredSerializer instanceof ReplaceResolveSerializer)) {
       methodInfoCache.setObjectSerializer(registeredSerializer);

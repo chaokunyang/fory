@@ -21,8 +21,11 @@ package org.apache.fory.serializer.kotlin
 
 import java.math.BigDecimal
 import java.math.BigInteger
+import java.util.Base64
+import java.util.regex.Pattern
 import kotlin.random.Random
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -34,7 +37,11 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import org.apache.fory.Fory
+import org.apache.fory.exception.InsecureException
 import org.apache.fory.kotlin.ForyKotlin
+import org.apache.fory.memory.MemoryUtils
+import org.apache.fory.resolver.ClassResolver
+import org.apache.fory.type.Types
 import org.testng.Assert
 
 class BuiltinClassSerializerTests {
@@ -211,11 +218,71 @@ class BuiltinClassSerializerTests {
         .withXlang(false)
         .requireClassRegistration(true)
         .withRefTracking(true)
+        .withAsyncCompilation(true)
         .build()
 
-    val value = Regex("12345")
-    Assert.assertEquals(value.pattern, fory.deserialize(fory.serialize(value.pattern)))
-    Assert.assertEquals(value.options, fory.deserialize(fory.serialize(value.options)))
+    val value = Regex("12345", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+    val result = fory.deserialize(fory.serialize(value)) as Regex
+    Assert.assertEquals(result.pattern, value.pattern)
+    Assert.assertEquals(result.options, value.options)
+
+    // Emitted by the original ReplaceResolveSerializer family before the read guard was added.
+    val oldPayload = Base64.getDecoder().decode("AAAfHQEAHx4APh6UAf8UMTIzNDU=")
+    val oldResult = fory.deserialize(oldPayload) as Regex
+    Assert.assertEquals(oldResult.pattern, value.pattern)
+    Assert.assertEquals(oldResult.options, value.options)
+    fory.ensureSerializersCompiled()
+
+    val canonEq = Regex("abc", RegexOption.CANON_EQ)
+    val bytes = fory.serialize(canonEq)
+    assertFailsWith<InsecureException> { fory.deserialize(bytes) }
+
+    val serializedClass = Class.forName("kotlin.text.Regex\$Serialized")
+    val constructor =
+      serializedClass.getDeclaredConstructor(String::class.java, Int::class.javaPrimitiveType!!)
+    constructor.isAccessible = true
+    val carrier = constructor.newInstance("abc", Pattern.CANON_EQ)
+    val carrierBytes = fory.serialize(carrier)
+    assertFailsWith<InsecureException> { fory.deserialize(carrierBytes) }
+  }
+
+  @Test
+  fun testRegexCarrierStub() {
+    val serializedClass = Class.forName("kotlin.text.Regex\$Serialized")
+    val constructor =
+      serializedClass.getDeclaredConstructor(String::class.java, Int::class.javaPrimitiveType!!)
+    constructor.isAccessible = true
+    for (codegen in listOf(false, true)) {
+      val fory =
+        ForyKotlin.builder()
+          .withXlang(false)
+          .requireClassRegistration(true)
+          .withRefTracking(true)
+          .withCodegen(codegen)
+          .withAsyncCompilation(true)
+          .build()
+      val canonEq = regexCarrierStub(fory, constructor.newInstance("a", Pattern.CANON_EQ))
+      val ordinary = regexCarrierStub(fory, constructor.newInstance("a", 0))
+
+      assertFailsWith<InsecureException> { fory.deserialize(canonEq) }
+      Assert.assertEquals((fory.deserialize(ordinary) as Regex).pattern, "a")
+      fory.ensureSerializersCompiled()
+      assertFailsWith<InsecureException> { fory.deserialize(canonEq) }
+      Assert.assertEquals((fory.deserialize(ordinary) as Regex).pattern, "a")
+    }
+  }
+
+  private fun regexCarrierStub(fory: Fory, carrier: Any): ByteArray {
+    val bytes = fory.serialize(carrier)
+    val buffer = MemoryUtils.wrap(bytes)
+    buffer.readByte() // Root bitmap.
+    Assert.assertEquals(buffer.readByte(), Fory.REF_VALUE_FLAG)
+    Assert.assertEquals(buffer.readUInt8(), Types.EXT)
+    buffer.readVarUInt32() // Registered carrier user type id.
+    // Preserve the carrier body and its inner class token; only its outer dispatch changes.
+    return bytes.copyOfRange(0, 2) +
+      byteArrayOf(ClassResolver.REPLACE_STUB_ID.toByte()) +
+      bytes.copyOfRange(buffer.readerIndex(), bytes.size)
   }
 
   @Test

@@ -14,6 +14,10 @@ Load this file when changing `kotlin/` or compiler code that generates Kotlin so
   Fory. Do not auto-install a new serializer for an existing type-registered Kotlin class unless the
   wire format matches the previous serializer family and old-payload/new-runtime compatibility is
   tested.
+- Kotlin Regex deserialization rejects `CANON_EQ` at its registered serialized carrier before
+  `readResolve` compiles the pattern. Generic replacement stubs must reuse that carrier's checked
+  method cache; guarding only ordinary Regex dispatch leaves a wire-selected alternate outer type
+  unchecked. Async compilation may replace the carrier's data delegate, never its read guard.
 - When adding Kotlin gRPC service companions, emit Kotlin source only. Reuse the generated schema
   module's `ThreadSafeFory` and KSP-generated schema serializers, and keep grpc-java/grpc-kotlin
   dependencies application-owned instead of adding them as hard `fory-kotlin` dependencies.

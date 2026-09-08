@@ -169,6 +169,9 @@ val regex = Regex("[a-zA-Z]+")
 println(fory.deserialize(fory.serialize(regex)))
 ```
 
+Native object deserialization rejects `RegexOption.CANON_EQ`. Other supported regex options are
+unchanged.
+
 ## UUID (Kotlin 2.0+)
 
 ```kotlin

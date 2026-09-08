@@ -61,6 +61,8 @@ Security-related configuration:
 - Keep `withMaxTypeFields(...)`, `withMaxTypeMetaBytes(...)`, and the remote schema-version limits
   at their defaults unless the data is not malicious and a trusted peer sends larger metadata or
   many schema versions.
+- Kotlin native object deserialization rejects `Regex` values that enable `RegexOption.CANON_EQ`;
+  other supported options are unchanged.
 - Follow [Java Security](../java/security.md) for allow-listing and unknown-class
   controls.
 

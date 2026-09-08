@@ -501,9 +501,14 @@ public class SerializersTest extends ForyTestBase {
 
   @Test
   public void testRegex() {
-    Assert.assertEquals(
-        serDeCheckSerializer(getJavaFory(), Pattern.compile("abc"), "Regex").toString(),
-        Pattern.compile("abc").toString());
+    Fory fory = getJavaFory();
+    Pattern pattern = Pattern.compile("abc", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+    Pattern result = serDeCheckSerializer(fory, pattern, "Regex");
+    Assert.assertEquals(result.pattern(), pattern.pattern());
+    Assert.assertEquals(result.flags(), pattern.flags());
+
+    byte[] bytes = fory.serialize(Pattern.compile("abc", Pattern.CANON_EQ));
+    assertThrows(InsecureException.class, () -> fory.deserialize(bytes));
   }
 
   @Test

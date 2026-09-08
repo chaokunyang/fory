@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.WeakHashMap;
+import java.util.regex.Pattern;
 import kotlin.*;
 import kotlin.UByteArray;
 import kotlin.UIntArray;
@@ -35,12 +36,21 @@ import kotlin.time.TimedValue;
 import kotlin.uuid.Uuid;
 import org.apache.fory.Fory;
 import org.apache.fory.ThreadSafeFory;
+import org.apache.fory.builder.JITContext;
 import org.apache.fory.codegen.GeneratedClassNames;
 import org.apache.fory.config.Config;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.exception.InsecureException;
+import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.EnumSerializer;
+import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
+import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.collection.CollectionSerializers;
 import org.apache.fory.serializer.collection.MapSerializers;
 import org.apache.fory.util.DefaultValueUtils;
@@ -149,8 +159,12 @@ public class KotlinSerializers {
       registerIfAbsent(resolver, KotlinToJavaClass.INSTANCE.getRandomSerializedClass());
 
       // kotlin.text
+      Class regexSerializedClass = KotlinToJavaClass.INSTANCE.getRegexSerializedClass();
+      // Register both types before serializer construction can resolve the carrier's data codec.
       registerIfAbsent(resolver, Regex.class);
-      registerIfAbsent(resolver, KotlinToJavaClass.INSTANCE.getRegexSerializedClass());
+      registerIfAbsent(resolver, regexSerializedClass);
+      resolver.registerSerializer(
+          regexSerializedClass, new KotlinRegexSerializer(resolver, regexSerializedClass));
       registerIfAbsent(resolver, RegexOption.class);
       registerIfAbsent(resolver, CharCategory.class);
       registerIfAbsent(resolver, CharDirectionality.class);
@@ -177,6 +191,103 @@ public class KotlinSerializers {
   private static void registerIfAbsent(TypeResolver resolver, Class<?> cls) {
     if (!resolver.isRegistered(cls)) {
       resolver.register(cls);
+    }
+  }
+
+  private static final class KotlinRegexSerializer extends ReplaceResolveSerializer {
+    private KotlinRegexSerializer(TypeResolver resolver, Class<?> type) {
+      super(resolver, type);
+      // The registered carrier owns this guard. Replacement stubs share its existing cache before
+      // invoking readResolve, so changing the outer wire type cannot select an unguarded data
+      // codec.
+      jdkMethodInfoWriteCache.setObjectSerializer(new KotlinRegexCarrierSerializer(resolver, type));
+    }
+  }
+
+  private static final class KotlinRegexCarrierSerializer extends Serializer<Object> {
+    private final ClassResolver resolver;
+    private final FieldAccessor flagsAccessor;
+    private volatile Serializer<Object> delegate;
+
+    private KotlinRegexCarrierSerializer(TypeResolver resolver, Class<?> type) {
+      super(resolver.getConfig(), (Class<Object>) type);
+      this.resolver = (ClassResolver) resolver;
+      try {
+        flagsAccessor = FieldAccessor.createAccessor(type.getDeclaredField("flags"));
+      } catch (NoSuchFieldException e) {
+        throw new ForyException("Failed to access Kotlin Regex serialized flags", e);
+      }
+    }
+
+    @Override
+    public void write(WriteContext writeContext, Object value) {
+      delegate().write(writeContext, value);
+    }
+
+    @Override
+    public Object read(ReadContext readContext) {
+      Object value = delegate().read(readContext);
+      int flags = flagsAccessor.getInt(value);
+      if ((flags & Pattern.CANON_EQ) != 0) {
+        throwUnsupportedRegexFlags(flags);
+      }
+      return value;
+    }
+
+    @Override
+    public Object copy(CopyContext copyContext, Object value) {
+      return delegate().copy(copyContext, value);
+    }
+
+    private Serializer<Object> delegate() {
+      Serializer<Object> serializer = delegate;
+      return serializer == null ? initializeDelegate() : serializer;
+    }
+
+    private synchronized Serializer<Object> initializeDelegate() {
+      Serializer<Object> serializer = delegate;
+      if (serializer == null) {
+        Class<? extends Serializer> serializerClass =
+            resolver.getObjectSerializerClass(
+                type,
+                new JITContext.SerializerJITCallback<Class<? extends Serializer>>() {
+                  @Override
+                  public void onSuccess(Class<? extends Serializer> result) {
+                    // Keep the guard in MethodInfoCache; compilation may replace only its delegate.
+                    setDelegate(result);
+                  }
+
+                  @Override
+                  public Object id() {
+                    return KotlinRegexCarrierSerializer.this;
+                  }
+                });
+        serializer = newDelegate(serializerClass);
+        if (delegate == null) {
+          delegate = serializer;
+        } else {
+          serializer = delegate;
+        }
+      }
+      return serializer;
+    }
+
+    private synchronized void setDelegate(Class<? extends Serializer> serializerClass) {
+      delegate = newDelegate(serializerClass);
+    }
+
+    private Serializer<Object> newDelegate(Class<? extends Serializer> serializerClass) {
+      Serializer<Object> previous = resolver.getSerializer(type, false);
+      try {
+        return Serializers.newSerializer(resolver, type, serializerClass);
+      } finally {
+        resolver.resetSerializer(type, previous);
+      }
+    }
+
+    private static void throwUnsupportedRegexFlags(int flags) {
+      throw new InsecureException(
+          "Kotlin Regex flags must not include CANON_EQ during deserialization: " + flags);
     }
   }
 

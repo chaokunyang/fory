@@ -462,8 +462,15 @@ final class ObjectCodecBuilder {
       FieldBuilder builder,
       JsonCreatorInfo creatorInfo,
       JsonObjectModel objectModel) {
+    int argumentIndex = builder.creatorArgumentIndex;
+    boolean requiredArgument =
+        objectModel != null
+            && creatorInfo != null
+            && argumentIndex >= 0
+            && !creatorInfo.hasDefault(argumentIndex)
+            && builder.hasWriteSource();
     if (objectModel != null
-        && field.hasOccurrenceNullability()
+        && (field.hasOccurrenceNullability() || requiredArgument)
         && builder.explicitInclude == Include.NON_EMPTY
         && field.mayBeEmpty()) {
       // Validate the logical type even when a value class is lowered to a different JVM carrier.
@@ -498,14 +505,9 @@ final class ObjectCodecBuilder {
       }
       return;
     }
-    int argumentIndex = builder.creatorArgumentIndex;
-    if (objectModel != null
-        && creatorInfo != null
-        && argumentIndex >= 0
-        && !creatorInfo.hasDefault(argumentIndex)
-        && builder.hasWriteSource()
-        && !field.writeNull()
-        && !field.writeRawType().isPrimitive()) {
+    if (requiredArgument && !field.writeNull() && !field.writeRawType().isPrimitive()) {
+      // Language models without occurrence nullability still need every non-defaulted argument.
+      field.includeEmptyWrite();
       field.requireNonNullWrite();
     }
   }

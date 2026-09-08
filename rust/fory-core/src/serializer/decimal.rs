@@ -32,8 +32,8 @@ const MAX_DECIMAL_SCALE: i32 = 10_000;
 impl Serializer for Decimal {
     type Target = Self;
 
-    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
-    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+    const READ_REQUIRES_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_DEPTH: bool = false;
 
     const READ_DATA_ALWAYS_ADVANCES: bool = true;
 

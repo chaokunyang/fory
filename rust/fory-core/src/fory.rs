@@ -323,13 +323,13 @@ impl ForyBuilder {
         self
     }
 
-    /// Sets the maximum depth for nested dynamic object deserialization.
+    /// Sets the shared depth limit for dynamic and nested derived reads.
     ///
     /// # Arguments
     ///
-    /// * `max_dyn_depth` - The maximum nesting depth allowed for dynamically typed `Any` and
-    ///   application-trait objects during reads. This prevents stack overflow from deeply nested
-    ///   dynamic deserialization. Serialization is unaffected.
+    /// * `max_dyn_depth` - The shared limit for dynamic dispatch, nested derived reads,
+    ///   compatible skipping, and recursive default construction. Flat derived paths do not
+    ///   consume depth. Serialization is unaffected.
     ///
     /// # Returns
     ///
@@ -357,16 +357,6 @@ impl ForyBuilder {
     /// ```
     pub fn max_dyn_depth(mut self, max_dyn_depth: u32) -> Self {
         self.config.max_dyn_depth = max_dyn_depth;
-        self
-    }
-
-    /// Sets the maximum read depth for derived structs and enums with nested type fields.
-    ///
-    /// This bounds recursive schemas such as `Option<Box<Node>>`, `Vec<Node>`, and recursive enum
-    /// variants. Flat derived values have no depth check. The default is `256`; raise it for
-    /// intentionally deeper object graphs. Serialization is unaffected.
-    pub fn max_struct_depth(mut self, max_struct_depth: u32) -> Self {
-        self.config.max_struct_depth = max_struct_depth;
         self
     }
 
@@ -449,7 +439,7 @@ impl ForyBuilder {
 /// - **Schema evolution**: Compatible mode by default, with a same-schema optimization available
 /// - **Reference tracking**: Handles shared and circular references
 /// - **Trait object serialization**: Supports serializing polymorphic trait objects
-/// - **Dynamic depth limiting**: Configurable limit for nested dynamic object deserialization
+/// - **Read depth limiting**: One configurable limit for dynamic and nested derived reads
 ///
 /// # Examples
 ///
@@ -565,14 +555,9 @@ impl Fory {
         self.config.share_meta
     }
 
-    /// Returns the maximum dynamic-object depth for deserialization.
+    /// Returns the shared depth limit for dynamic and nested derived reads.
     pub fn get_max_dyn_depth(&self) -> u32 {
         self.config.max_dyn_depth
-    }
-
-    /// Returns the read depth limit for derived types that contain nested type fields.
-    pub fn get_max_struct_depth(&self) -> u32 {
-        self.config.max_struct_depth
     }
 
     /// Returns whether class version checking is enabled.
@@ -1307,9 +1292,6 @@ mod tests {
                 .expect("string type info");
             context.meta_resolver.reading_type_infos.push(type_info);
             context.inc_depth()?;
-            if context.inc_struct_depth() == 0 {
-                return ReadContext::struct_depth_exceeded();
-            }
             panic!("intentional read panic")
         }
     }
@@ -1335,9 +1317,6 @@ mod tests {
             let stale_ref = context.ref_reader.get_rc_ref::<u32>(0).is_some();
             let stale_meta = context.meta_resolver.get(0).is_some();
             context.inc_depth()?;
-            if context.inc_struct_depth() == 0 {
-                return ReadContext::struct_depth_exceeded();
-            }
             Ok(stale_ref || stale_meta)
         }
     }
@@ -1372,11 +1351,7 @@ mod tests {
 
     #[test]
     fn panic_resets_read_context() {
-        let fory = Fory::builder()
-            .xlang(false)
-            .max_dyn_depth(1)
-            .max_struct_depth(1)
-            .build();
+        let fory = Fory::builder().xlang(false).max_dyn_depth(1).build();
         let panic = {
             let bytes = vec![0];
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

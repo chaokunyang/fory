@@ -78,12 +78,12 @@ Load this file when changing `rust/` or Rust xlang behavior.
   implementation owns both value and field behavior.
 - Represent immutable value-serializer properties as the associated constants `IS_OPTIONAL`,
   `IS_POLYMORPHIC`, `IS_SHARED_REF`, `IS_WRAPPER`, `REQUIRES_SCOPED_ACCESS`, and
-  `READ_REQUIRES_STRUCT_DEPTH` and `DEFAULT_REQUIRES_STRUCT_DEPTH`. `Codec` inherits them through
+  `READ_REQUIRES_DEPTH` and `DEFAULT_REQUIRES_DEPTH`. `Codec` inherits them through
   `Serializer` and must not redeclare
-  them. `READ_REQUIRES_STRUCT_DEPTH` describes only whether a generated field read can enter a
+  them. `READ_REQUIRES_DEPTH` describes only whether a generated field read can enter a
   statically dispatched derived struct or enum body: built-in leaves opt out, transparent carriers
   propagate the child capability, and dynamic serializers opt out because their dispatch owner
-  charges dynamic depth. A fixed array propagates the child capability only when its compile-time
+  already charges the shared read-depth counter. A fixed array propagates the child capability only when its compile-time
   length is nonzero, because `[T; 0]` cannot invoke `T`'s reader. Resolve this through the selected
   serializer type so aliases and shadowed built-in names remain exact; never infer it from Rust
   path spelling. Default construction has its own capability: `Option`, collection, and map defaults
@@ -295,6 +295,14 @@ Load this file when changing `rust/` or Rust xlang behavior.
   compile-time selection hooks whose bodies must disappear after monomorphization.
 - If breakage is explicitly acceptable during a Rust module refactor, rewire macros, tests, and sibling crates directly to the new boundaries instead of adding compatibility re-exports.
 - For panic-safety in hot paths, preserve TLS context reuse. Add scoped guards or owned fallbacks rather than per-call context allocation, and reset reused contexts at entry and successful exit.
+- Rust has one read-depth configuration and counter: `max_dyn_depth` and `current_depth`.
+  Generated nested reads/defaults, dynamic dispatch, and compatible skip share that owner and the
+  existing default of 5. Do not add a separate struct/static option, quota, helper family, or reset
+  path. Generated bodies use the existing `inc_depth`/`dec_depth` operations. Dynamic-only fields
+  do not add a generated gate because their dispatch owner already accounts for depth. A mixed
+  dynamic dispatch into a body with static child recursion charges both active read boundaries
+  against the same limit; do not promise one unit per materialized object. Preserve flat/leaf/empty
+  selected-path omission and root-only failure cleanup. Keep failure formatting cold and non-inlined.
 - Read depth and per-root generic/reference state use root reset as their only failure-cleanup
   owner. Nested readers and skippers increment depth before reading children and decrement only
   after every child succeeds; an error must retain the failed path's depth and transient state until

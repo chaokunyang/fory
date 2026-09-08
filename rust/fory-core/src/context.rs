@@ -379,8 +379,8 @@ pub struct ReadContext<'a> {
     pub meta_resolver: MetaReaderResolver,
     meta_string_resolver: MetaStringReaderResolver,
     pub ref_reader: RefReader,
+    // All dynamic, generated and skip reads share this counter; do not add a struct-only quota.
     current_depth: u32,
-    remaining_struct_depth: u32,
 }
 
 impl<'a> ReadContext<'a> {
@@ -401,7 +401,6 @@ impl<'a> ReadContext<'a> {
             meta_string_resolver: MetaStringReaderResolver::default(),
             ref_reader: RefReader::new(),
             current_depth: 0,
-            remaining_struct_depth: config.max_struct_depth,
         }
     }
 
@@ -441,16 +440,10 @@ impl<'a> ReadContext<'a> {
         self.check_string_read
     }
 
-    /// Get the maximum dynamic-object depth for deserialization.
+    /// Get the shared depth limit for dynamic and nested derived reads.
     #[inline(always)]
     pub fn max_dyn_depth(&self) -> u32 {
         self.max_dyn_depth
-    }
-
-    /// Get the maximum read depth for derived types that contain nested type fields.
-    #[inline(always)]
-    pub fn max_struct_depth(&self) -> u32 {
-        self.config.max_struct_depth
     }
 
     #[inline(always)]
@@ -663,19 +656,25 @@ impl<'a> ReadContext<'a> {
         self.meta_string_resolver.read_meta_string(&mut self.reader)
     }
 
+    /// Enter a guarded read or default construction using the root's single depth counter.
     #[inline(always)]
     pub fn inc_depth(&mut self) -> Result<(), Error> {
         self.current_depth += 1;
         if self.current_depth > self.max_dyn_depth() {
-            return Err(Error::depth_exceed(format!(
-                "Maximum dynamic object nesting depth ({}) exceeded. Current depth: {}. \
-                    This may indicate a circular reference or overly deep object graph. \
-                    Consider increasing max_dyn_depth if this is expected.",
-                self.max_dyn_depth(),
-                self.current_depth
-            )));
+            return Err(self.depth_exceeded());
         }
         Ok(())
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn depth_exceeded(&self) -> Error {
+        Error::depth_exceed(format!(
+            "Maximum read nesting depth ({}) exceeded. Current depth: {}. \
+                Consider increasing max_dyn_depth for intentionally deeper object graphs.",
+            self.max_dyn_depth(),
+            self.current_depth
+        ))
     }
 
     #[inline(always)]
@@ -685,45 +684,8 @@ impl<'a> ReadContext<'a> {
         self.current_depth = self.current_depth.saturating_sub(1);
     }
 
-    /// Charge one nested-field derived struct or enum deserialization frame.
-    ///
-    /// Returns the quota before this frame entered, or zero when the root quota is exhausted.
-    /// The generated caller returns the type-specific error from
-    /// [`Self::struct_depth_exceeded`] on that cold path and restores the token only after a
-    /// successful read.
-    #[inline(always)]
-    pub fn inc_struct_depth(&mut self) -> u32 {
-        let previous = self.remaining_struct_depth;
-        if previous == 0 {
-            return 0;
-        }
-        self.remaining_struct_depth = previous - 1;
-        previous
-    }
-
-    #[inline(always)]
-    pub fn dec_struct_depth(&mut self, previous: u32) {
-        // Only a successful increment reaches this path. Failed reads leave the quota consumed
-        // until root cleanup restores it. Restoring the entry token avoids another read-modify-
-        // write after the generated child body has completed.
-        debug_assert_eq!(self.remaining_struct_depth, previous - 1);
-        self.remaining_struct_depth = previous;
-    }
-
-    #[doc(hidden)]
-    #[cold]
-    #[inline(never)]
-    pub fn struct_depth_exceeded<T>() -> Result<T, Error> {
-        Err(Error::depth_exceed(
-            "Maximum struct nesting depth configured by max_struct_depth was exceeded. \
-                This may indicate maliciously deep input for a recursive type. \
-                Consider increasing max_struct_depth if this is expected.",
-        ))
-    }
-
     #[inline(always)]
     pub fn reset(&mut self) {
-        self.remaining_struct_depth = self.config.max_struct_depth;
         self.meta_resolver.reset();
         self.meta_string_resolver.reset();
         self.ref_reader.reset();

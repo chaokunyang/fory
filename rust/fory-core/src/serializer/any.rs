@@ -223,8 +223,8 @@ pub fn deserialize_any_box(context: &mut ReadContext) -> Result<Box<dyn Any>, Er
 impl Serializer for Box<dyn Any> {
     type Target = Self;
 
-    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
-    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+    const READ_REQUIRES_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_DEPTH: bool = false;
 
     #[inline(always)]
     fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
@@ -379,8 +379,8 @@ pub fn read_box_any(
 impl Serializer for Rc<dyn Any> {
     type Target = Self;
 
-    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
-    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+    const READ_REQUIRES_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_DEPTH: bool = false;
 
     #[inline(always)]
     fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
@@ -556,8 +556,8 @@ fn read_new_rc_any(
 impl Serializer for Arc<dyn Any + Send + Sync> {
     type Target = Self;
 
-    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
-    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+    const READ_REQUIRES_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_DEPTH: bool = false;
 
     #[inline(always)]
     fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {

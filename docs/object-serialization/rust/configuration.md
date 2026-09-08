@@ -59,14 +59,15 @@ writer always uses the same Rust schema and you want faster serialization and sm
 
 ### Maximum Read Nesting Depth
 
-Apache Fory™ applies separate read-side limits to dynamic dispatch and nested derived values. The
-defaults allow 5 levels for dynamic objects and 256 levels for derived structs or enums whose
-fields can directly, or through a carrier, enter another derived struct or enum read.
+Apache Fory™ uses `max_dyn_depth` as one shared read-depth limit for dynamic objects, nested
+derived structs and enums, and recursive default construction. The default is `5`. Mixed dynamic
+and statically typed nesting consumes the same limit; raise it when your application intentionally
+reads deeper graphs.
 
 **Default configuration:**
 
 ```rust
-let fory = Fory::builder().build(); // max_dyn_depth = 5, max_struct_depth = 256
+let fory = Fory::builder().build(); // max_dyn_depth = 5
 ```
 
 **Custom depth limit:**
@@ -74,7 +75,6 @@ let fory = Fory::builder().build(); // max_dyn_depth = 5, max_struct_depth = 256
 ```rust
 let fory = Fory::builder()
     .max_dyn_depth(10)
-    .max_struct_depth(128)
     .build();
 ```
 
@@ -91,8 +91,10 @@ let fory = Fory::builder()
 - Collection types (Vec, HashMap, HashSet)
 - Derived structs and enums whose fields can enter another derived read
 
-Depth limits apply only while reading. Serialization does not consume either limit. A derived type
-whose fields cannot enter another derived struct or enum read does not consume `max_struct_depth`.
+The depth limit applies only while reading. Serialization does not consume it. A statically typed
+derived read whose fields cannot enter another derived struct or enum read does not consume the
+limit. Reading the same value through `dyn Any` or an application trait still consumes a dynamic
+level.
 A zero-length fixed array also does not consume this limit. For enums, only the selected variant
 or default path is counted; a flat selected path is unaffected by nested fields on another variant.
 Default construction of `None` or an empty collection does not consume the limit. A skipped field
@@ -172,10 +174,9 @@ let fory = Fory::builder().xlang(false).build();
 // Same-schema optimization for Rust-only payloads
 let fory = Fory::builder().xlang(false).compatible(false).build();
 
-// Custom read depth limits
+// Custom read depth limit
 let fory = Fory::builder()
     .max_dyn_depth(10)
-    .max_struct_depth(128)
     .build();
 
 // Custom graph memory budget
@@ -187,7 +188,6 @@ let fory = Fory::builder()
 let fory = Fory::builder()
     .xlang(false)
     .max_dyn_depth(10)
-    .max_struct_depth(128)
     .build();
 ```
 
@@ -197,8 +197,7 @@ let fory = Fory::builder()
 | --------------------------------------------- | ------------------------------------------------- | --------- |
 | `compatible(bool)`                            | Enable schema evolution                           | `true`    |
 | `xlang(bool)`                                 | Use xlang mode                                    | `true`    |
-| `max_dyn_depth(u32)`                          | Maximum nesting depth for dynamic types           | `5`       |
-| `max_struct_depth(u32)`                       | Maximum depth for nested derived reads            | `256`     |
+| `max_dyn_depth(u32)`                          | Shared limit for dynamic and nested derived reads | `5`       |
 | `max_graph_memory_bytes(usize)`               | Approximate graph-memory gate per root read       | `128 MiB` |
 | `max_unbacked_container_items(usize)`         | Unbacked collection/map work per root read        | `8192`    |
 | `max_type_fields(usize)`                      | Max fields in one received struct metadata body   | `512`     |

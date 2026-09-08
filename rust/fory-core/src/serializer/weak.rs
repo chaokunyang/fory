@@ -286,8 +286,8 @@ where
 
     // A newly materialized weak target already charges the existing dynamic
     // depth owner before it enters the child serializer.
-    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
-    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+    const READ_REQUIRES_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_DEPTH: bool = false;
 
     #[inline(always)]
     fn reserved_space() -> usize {
@@ -671,8 +671,8 @@ where
 {
     type Target = ArcWeak<T>;
 
-    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
-    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+    const READ_REQUIRES_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_DEPTH: bool = false;
 
     #[inline(always)]
     fn reserved_space() -> usize {

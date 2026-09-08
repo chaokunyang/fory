@@ -183,8 +183,8 @@ pub fn read_unknown_case_body(
 impl Serializer for UnknownCase {
     type Target = Self;
 
-    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
-    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+    const READ_REQUIRES_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_DEPTH: bool = false;
 
     fn write(
         value: &Self,

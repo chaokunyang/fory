@@ -298,7 +298,7 @@ pub fn gen_read_compatible(
     fields: &Fields,
     source_fields: &[SourceField<'_>],
     target_path: &TokenStream,
-    read_requires_struct_depth: TokenStream,
+    read_requires_depth: TokenStream,
 ) -> TokenStream {
     gen_read_compatible_target(
         fields,
@@ -306,7 +306,7 @@ pub fn gen_read_compatible(
         target_path,
         None,
         None,
-        read_requires_struct_depth,
+        read_requires_depth,
     )
 }
 
@@ -316,7 +316,7 @@ pub(crate) fn gen_read_compatible_target(
     target_path: &TokenStream,
     variant_ident: Option<&Ident>,
     variant_meta_type: Option<&TokenStream>,
-    read_requires_struct_depth: TokenStream,
+    read_requires_depth: TokenStream,
 ) -> TokenStream {
     let bindings = match build_bindings(source_fields) {
         Ok(bindings) => bindings,
@@ -534,7 +534,7 @@ pub(crate) fn gen_read_compatible_target(
     // Exact schemas return through read_data, which owns their depth frame. Named enum variants
     // returned above because the selected enum arm already owns their frame.
     let compatible_body =
-        super::serializer::gate_struct_read(compatible_body, &read_requires_struct_depth);
+        super::serializer::gate_nested_read(compatible_body, &read_requires_depth);
     quote! {
         let remote_meta = type_info.get_type_meta_ref();
         // Metadata resolution selects the local schema by the validated 52-bit TypeMeta hash.

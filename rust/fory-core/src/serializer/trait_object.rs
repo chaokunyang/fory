@@ -310,8 +310,8 @@ macro_rules! register_trait_type {
             impl $crate::Serializer for Box<dyn $trait_name> {
                 type Target = Self;
 
-                const READ_REQUIRES_STRUCT_DEPTH: bool = false;
-                const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+                const READ_REQUIRES_DEPTH: bool = false;
+                const DEFAULT_REQUIRES_DEPTH: bool = false;
 
                 #[inline(always)]
                 fn write_data(
@@ -509,8 +509,8 @@ macro_rules! register_trait_type {
             impl $crate::Serializer for [<$trait_name RcSerializer>] {
                 type Target = std::rc::Rc<dyn $trait_name>;
 
-                const READ_REQUIRES_STRUCT_DEPTH: bool = false;
-                const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+                const READ_REQUIRES_DEPTH: bool = false;
+                const DEFAULT_REQUIRES_DEPTH: bool = false;
 
                 #[inline(always)]
                 fn write_data(
@@ -804,8 +804,8 @@ macro_rules! register_trait_type {
             impl $crate::Serializer for [<$trait_name ArcSerializer>] {
                 type Target = std::sync::Arc<dyn $trait_name>;
 
-                const READ_REQUIRES_STRUCT_DEPTH: bool = false;
-                const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+                const READ_REQUIRES_DEPTH: bool = false;
+                const DEFAULT_REQUIRES_DEPTH: bool = false;
 
                 #[inline(always)]
                 fn write_data(
@@ -1049,8 +1049,8 @@ macro_rules! register_trait_type {
         {
             type Target = $target;
 
-            const READ_REQUIRES_STRUCT_DEPTH: bool = false;
-            const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+            const READ_REQUIRES_DEPTH: bool = false;
+            const DEFAULT_REQUIRES_DEPTH: bool = false;
 
             #[inline(always)]
             fn write_data(

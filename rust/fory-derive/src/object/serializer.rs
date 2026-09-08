@@ -38,37 +38,33 @@ fn has_derive(ast: &syn::DeriveInput, trait_name: &str) -> bool {
     })
 }
 
-fn struct_depth_requirement(data: &Data, defaults: bool) -> syn::Result<proc_macro2::TokenStream> {
+fn read_depth_requirement(data: &Data, defaults: bool) -> syn::Result<proc_macro2::TokenStream> {
     match data {
         Data::Struct(data) => {
             let source = source_fields(&data.fields);
-            crate::object::field_codec::struct_read_requires_depth(&source, defaults)
+            crate::object::field_codec::field_read_requires_depth(&source, defaults)
         }
         Data::Enum(_) => Ok(quote! { false }),
         Data::Union(_) => Ok(quote! { false }),
     }
 }
 
-pub(super) fn gate_struct_read(
+pub(super) fn gate_nested_read(
     body: proc_macro2::TokenStream,
-    read_requires_struct_depth: &proc_macro2::TokenStream,
+    read_requires_depth: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     quote! {
         // Nested reads and default construction can re-enter a generated body at every input level.
         // The codec capability is a type-level constant, so flat monomorphizations retain no
         // depth branch. Decrement only after success; root reset owns failed-read cleanup.
-        let __fory_struct_depth = if #read_requires_struct_depth {
-            let previous = context.inc_struct_depth();
-            if previous == 0 {
-                return fory_core::ReadContext::struct_depth_exceeded();
-            }
-            previous
-        } else {
-            0
-        };
+        // Dynamic dispatch and generated reads share one root depth budget. A second struct
+        // counter would let alternating dynamic/static recursion consume independent limits.
+        if #read_requires_depth {
+            context.inc_depth()?;
+        }
         let __fory_value: Self::Target = { #body }?;
-        if #read_requires_struct_depth {
-            context.dec_struct_depth(__fory_struct_depth);
+        if #read_requires_depth {
+            context.dec_depth();
         }
         Ok(__fory_value)
     }
@@ -118,7 +114,7 @@ pub fn derive_serializer(
         quote! {}
     };
     let send_sync = generate_send_sync_tokens(ast);
-    let read_requires_struct_depth = match struct_depth_requirement(&ast.data, false) {
+    let read_requires_depth = match read_depth_requirement(&ast.data, false) {
         Ok(value) => value,
         Err(err) => {
             clear_struct_context();
@@ -172,7 +168,7 @@ pub fn derive_serializer(
                     &data.fields,
                     &source,
                     &target_path,
-                    read_requires_struct_depth.clone(),
+                    read_requires_depth.clone(),
                 ),
                 Vec::new(),
                 write::gen_write(),
@@ -225,10 +221,10 @@ pub fn derive_serializer(
     let compatible_arc = send_sync.struct_read_compatible;
     let (read_data, default_value) = if matches!(&ast.data, Data::Struct(_)) {
         (
-            gate_struct_read(read_data, &read_requires_struct_depth),
-            gate_struct_read(
+            gate_nested_read(read_data, &read_requires_depth),
+            gate_nested_read(
                 default_value,
-                &match struct_depth_requirement(&ast.data, true) {
+                &match read_depth_requirement(&ast.data, true) {
                     Ok(value) => value,
                     Err(err) => {
                         clear_struct_context();
@@ -311,7 +307,7 @@ pub fn derive_serializer(
 
             // A derived value is a structural node when another generated
             // serializer reaches it through a field codec.
-            const READ_REQUIRES_STRUCT_DEPTH: bool = true;
+            const READ_REQUIRES_DEPTH: bool = true;
 
             const READ_DATA_ALWAYS_ADVANCES: bool = #read_data_always_advances;
 

@@ -24,8 +24,8 @@ use std::marker::PhantomData;
 impl<T: 'static> Serializer for PhantomData<T> {
     type Target = Self;
 
-    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
-    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+    const READ_REQUIRES_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_DEPTH: bool = false;
 
     #[inline(always)]
     fn write_data(_: &Self, _: &mut WriteContext) -> Result<(), Error> {

@@ -36,8 +36,8 @@ use std::rc::Rc;
 impl Serializer for () {
     type Target = Self;
 
-    const READ_REQUIRES_STRUCT_DEPTH: bool = false;
-    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+    const READ_REQUIRES_DEPTH: bool = false;
+    const DEFAULT_REQUIRES_DEPTH: bool = false;
 
     #[inline(always)]
     fn write_data(_: &Self, _: &mut WriteContext) -> Result<(), Error> {
@@ -459,11 +459,11 @@ macro_rules! impl_tuple_codec {
         {
             type Target = ($($T,)+);
 
-            const READ_REQUIRES_STRUCT_DEPTH: bool = false $(
-                || $C::READ_REQUIRES_STRUCT_DEPTH
+            const READ_REQUIRES_DEPTH: bool = false $(
+                || $C::READ_REQUIRES_DEPTH
             )+;
-            const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false $(
-                || $C::DEFAULT_REQUIRES_STRUCT_DEPTH
+            const DEFAULT_REQUIRES_DEPTH: bool = false $(
+                || $C::DEFAULT_REQUIRES_DEPTH
             )+;
 
             const READ_DATA_ALWAYS_ADVANCES: bool = false $(
@@ -658,11 +658,11 @@ macro_rules! impl_tuple_codec {
         impl<$($S: Serializer,)+> Serializer for $provider<$($S,)+> {
             type Target = ($($S::Target,)+);
 
-            const READ_REQUIRES_STRUCT_DEPTH: bool = false $(
-                || $S::READ_REQUIRES_STRUCT_DEPTH
+            const READ_REQUIRES_DEPTH: bool = false $(
+                || $S::READ_REQUIRES_DEPTH
             )+;
-            const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false $(
-                || $S::DEFAULT_REQUIRES_STRUCT_DEPTH
+            const DEFAULT_REQUIRES_DEPTH: bool = false $(
+                || $S::DEFAULT_REQUIRES_DEPTH
             )+;
 
             const READ_DATA_ALWAYS_ADVANCES: bool = false $(
@@ -726,11 +726,11 @@ macro_rules! impl_tuple_codec {
         {
             type Target = Self;
 
-            const READ_REQUIRES_STRUCT_DEPTH: bool = false $(
-                || $T::READ_REQUIRES_STRUCT_DEPTH
+            const READ_REQUIRES_DEPTH: bool = false $(
+                || $T::READ_REQUIRES_DEPTH
             )+;
-            const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false $(
-                || $T::DEFAULT_REQUIRES_STRUCT_DEPTH
+            const DEFAULT_REQUIRES_DEPTH: bool = false $(
+                || $T::DEFAULT_REQUIRES_DEPTH
             )+;
 
             const READ_DATA_ALWAYS_ADVANCES: bool = false $(

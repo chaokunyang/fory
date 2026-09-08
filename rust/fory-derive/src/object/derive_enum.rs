@@ -825,14 +825,14 @@ fn xlang_union_case_id(data_enum: &DataEnum, idx: usize, variant: &syn::Variant)
 fn gate_variant_read(variant: &syn::Variant, body: TokenStream, defaults: bool) -> TokenStream {
     let source = source_fields(&variant.fields);
     let read_requires_depth =
-        match crate::object::field_codec::struct_read_requires_depth(&source, defaults) {
+        match crate::object::field_codec::field_read_requires_depth(&source, defaults) {
             Ok(value) => value,
             Err(error) => return error.to_compile_error(),
         };
 
     // Enum depth belongs to the selected variant, including default construction. Gating the whole
     // enum would charge a flat path merely because a different variant can recurse.
-    let body = super::serializer::gate_struct_read(body, &read_requires_depth);
+    let body = super::serializer::gate_nested_read(body, &read_requires_depth);
     quote! {{ #body }}
 }
 

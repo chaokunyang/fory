@@ -307,7 +307,7 @@ pub(crate) fn struct_read_data_always_advances(
     Ok(quote! { false #(|| #fields)* })
 }
 
-pub(crate) fn struct_read_requires_depth(
+pub(crate) fn field_read_requires_depth(
     source_fields: &[SourceField<'_>],
     defaults: bool,
 ) -> syn::Result<TokenStream> {
@@ -321,9 +321,9 @@ pub(crate) fn struct_read_requires_depth(
             FieldBinding::Skipped(field) => (&field.codec_ty, true),
         };
         if default_value {
-            quote! { <#codec_ty as fory_core::Serializer>::DEFAULT_REQUIRES_STRUCT_DEPTH }
+            quote! { <#codec_ty as fory_core::Serializer>::DEFAULT_REQUIRES_DEPTH }
         } else {
-            quote! { <#codec_ty as fory_core::Serializer>::READ_REQUIRES_STRUCT_DEPTH }
+            quote! { <#codec_ty as fory_core::Serializer>::READ_REQUIRES_DEPTH }
         }
     });
     Ok(quote! { false #(|| #fields)* })

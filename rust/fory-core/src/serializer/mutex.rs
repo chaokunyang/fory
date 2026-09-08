@@ -58,8 +58,8 @@ where
 {
     type Target = Mutex<T>;
 
-    const READ_REQUIRES_STRUCT_DEPTH: bool = C::READ_REQUIRES_STRUCT_DEPTH;
-    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = C::DEFAULT_REQUIRES_STRUCT_DEPTH;
+    const READ_REQUIRES_DEPTH: bool = C::READ_REQUIRES_DEPTH;
+    const DEFAULT_REQUIRES_DEPTH: bool = C::DEFAULT_REQUIRES_DEPTH;
 
     #[inline(always)]
     fn reserved_space() -> usize {

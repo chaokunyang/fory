@@ -754,9 +754,9 @@ macro_rules! impl_map_codec {
         {
             type Target = $target<K, V>;
 
-            const READ_REQUIRES_STRUCT_DEPTH: bool = KS::READ_REQUIRES_STRUCT_DEPTH
-                || VS::READ_REQUIRES_STRUCT_DEPTH;
-            const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+            const READ_REQUIRES_DEPTH: bool = KS::READ_REQUIRES_DEPTH
+                || VS::READ_REQUIRES_DEPTH;
+            const DEFAULT_REQUIRES_DEPTH: bool = false;
 
             #[inline(always)]
             fn write_data(
@@ -939,9 +939,9 @@ macro_rules! impl_map_serializer {
         {
             type Target = $target<KS::Target, VS::Target>;
 
-            const READ_REQUIRES_STRUCT_DEPTH: bool = KS::READ_REQUIRES_STRUCT_DEPTH
-                || VS::READ_REQUIRES_STRUCT_DEPTH;
-            const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+            const READ_REQUIRES_DEPTH: bool = KS::READ_REQUIRES_DEPTH
+                || VS::READ_REQUIRES_DEPTH;
+            const DEFAULT_REQUIRES_DEPTH: bool = false;
 
             const READ_DATA_ALWAYS_ADVANCES: bool = true;
 
@@ -1085,9 +1085,9 @@ macro_rules! impl_map_serializer {
         {
             type Target = Self;
 
-            const READ_REQUIRES_STRUCT_DEPTH: bool = K::READ_REQUIRES_STRUCT_DEPTH
-                || V::READ_REQUIRES_STRUCT_DEPTH;
-            const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = false;
+            const READ_REQUIRES_DEPTH: bool = K::READ_REQUIRES_DEPTH
+                || V::READ_REQUIRES_DEPTH;
+            const DEFAULT_REQUIRES_DEPTH: bool = false;
 
             const READ_DATA_ALWAYS_ADVANCES: bool = true;
 

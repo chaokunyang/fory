@@ -361,7 +361,7 @@ struct SkippedCustomDefault {
 }
 
 #[test]
-fn test_max_dyn_depth_exceeded_box_dyn_any() {
+fn dynamic_depth_exceeded() {
     if fory_core::error::should_panic_on_error() {
         return;
     }
@@ -389,13 +389,7 @@ fn test_max_dyn_depth_exceeded_box_dyn_any() {
         let outer: Box<dyn Any> = Box::new(level1);
         let bytes = fory.serialize(&outer).unwrap();
         let result: Result<Box<dyn Any>, _> = fory.deserialize(&bytes);
-        assert!(
-            result.is_err(),
-            "Expected deserialization to fail due to max depth"
-        );
-        let err = result.unwrap_err();
-        let err_msg = format!("{:?}", err);
-        assert!(err_msg.contains("Maximum dynamic object nesting depth"));
+        assert!(matches!(result, Err(Error::DepthExceed(_))));
 
         let shallow: Box<dyn Any> = Box::new(Container {
             value: 4,
@@ -408,38 +402,7 @@ fn test_max_dyn_depth_exceeded_box_dyn_any() {
 }
 
 #[test]
-fn test_max_dyn_depth_within_limit_box_dyn_any() {
-    if fory_core::error::should_panic_on_error() {
-        return;
-    }
-    let mut fory = Fory::builder()
-        .xlang(false)
-        .max_dyn_depth(3)
-        .compatible(false)
-        .build();
-    fory.register::<Container>(100).unwrap();
-
-    let level3 = Container {
-        value: 3,
-        nested: None,
-    };
-    let level2 = Container {
-        value: 2,
-        nested: Some(Box::new(level3)),
-    };
-    let level1 = Container {
-        value: 1,
-        nested: Some(Box::new(level2)),
-    };
-
-    let outer: Box<dyn Any> = Box::new(level1);
-    let bytes = fory.serialize(&outer).unwrap();
-    let result: Result<Box<dyn Any>, _> = fory.deserialize(&bytes);
-    assert!(result.is_ok());
-}
-
-#[test]
-fn dynamic_fields_skip_struct_gate() {
+fn dynamic_depth_within_limit() {
     if fory_core::error::should_panic_on_error() {
         return;
     }
@@ -448,7 +411,6 @@ fn dynamic_fields_skip_struct_gate() {
             .xlang(false)
             .compatible(compatible)
             .max_dyn_depth(3)
-            .max_struct_depth(0)
             .build();
         fory.register::<Container>(101).unwrap();
 
@@ -469,7 +431,7 @@ fn dynamic_fields_skip_struct_gate() {
 }
 
 #[test]
-fn test_max_dyn_depth_default_exceeded() {
+fn dynamic_default_exceeded() {
     if fory_core::error::should_panic_on_error() {
         return;
     }
@@ -492,15 +454,11 @@ fn test_max_dyn_depth_default_exceeded() {
     let bytes = fory.serialize(&outer).unwrap();
     let result: Result<Box<dyn Any>, _> = fory.deserialize(&bytes);
 
-    assert!(result.is_err());
-    let err = result.unwrap_err();
-    let err_msg = format!("{:?}", err);
-    assert!(err_msg.contains("Maximum dynamic object nesting depth"));
-    assert!(err_msg.contains("5"));
+    assert!(matches!(result, Err(Error::DepthExceed(_))));
 }
 
 #[test]
-fn test_max_dyn_depth_default_within_limit() {
+fn dynamic_default_within_limit() {
     if fory_core::error::should_panic_on_error() {
         return;
     }
@@ -532,7 +490,7 @@ fn static_depth_exceeded() {
         let mut fory = Fory::builder()
             .xlang(false)
             .compatible(compatible)
-            .max_struct_depth(32)
+            .max_dyn_depth(32)
             .build();
         fory.register::<StaticNode>(110).unwrap();
 
@@ -557,7 +515,7 @@ fn flat_types_skip_depth_gate() {
         let mut fory = Fory::builder()
             .xlang(false)
             .compatible(compatible)
-            .max_struct_depth(0)
+            .max_dyn_depth(0)
             .build();
         fory.register::<FlatValue>(140).unwrap();
         fory.register::<FlatKind>(141).unwrap();
@@ -580,7 +538,7 @@ fn flat_types_skip_depth_gate() {
     let mut writer = Fory::builder()
         .xlang(false)
         .compatible(true)
-        .max_struct_depth(0)
+        .max_dyn_depth(0)
         .build();
     writer.register::<FlatFuture>(142).unwrap();
     let bytes = writer
@@ -595,7 +553,7 @@ fn flat_types_skip_depth_gate() {
     let mut reader = Fory::builder()
         .xlang(false)
         .compatible(true)
-        .max_struct_depth(0)
+        .max_dyn_depth(0)
         .build();
     reader.register::<FlatValue>(142).unwrap();
     assert_eq!(
@@ -614,7 +572,7 @@ fn flat_alias_skips_depth_gate() {
         let mut fory = Fory::builder()
             .xlang(false)
             .compatible(compatible)
-            .max_struct_depth(0)
+            .max_dyn_depth(0)
             .build();
         fory.register::<FlatAlias>(144).unwrap();
 
@@ -632,7 +590,7 @@ fn skipped_option_skips_depth_gate() {
         let mut fory = Fory::builder()
             .xlang(false)
             .compatible(compatible)
-            .max_struct_depth(0)
+            .max_dyn_depth(0)
             .build();
         fory.register::<FlatSkipped>(146).unwrap();
 
@@ -657,7 +615,7 @@ fn zero_array_skips_depth_gate() {
         let mut fory = Fory::builder()
             .xlang(false)
             .compatible(compatible)
-            .max_struct_depth(0)
+            .max_dyn_depth(0)
             .build();
         fory.register::<SkippedChild>(150).unwrap();
         fory.register::<FlatZeroArray>(151).unwrap();
@@ -677,7 +635,7 @@ fn skipped_custom_default_keeps_depth() {
         let mut fory = Fory::builder()
             .xlang(false)
             .compatible(compatible)
-            .max_struct_depth(0)
+            .max_dyn_depth(0)
             .build();
         fory.register::<SkippedCustomDefault>(147).unwrap();
 
@@ -700,7 +658,7 @@ fn skipped_default_keeps_depth() {
         let mut fory = Fory::builder()
             .xlang(false)
             .compatible(compatible)
-            .max_struct_depth(0)
+            .max_dyn_depth(0)
             .build();
         fory.register_union::<SkippedDefaultVariant>(149).unwrap();
 
@@ -722,7 +680,7 @@ fn shadowed_leaf_name_keeps_depth_gate() {
         let mut fory = Fory::builder()
             .xlang(false)
             .compatible(compatible)
-            .max_struct_depth(0)
+            .max_dyn_depth(0)
             .build();
         fory.register::<String>(145).unwrap();
 
@@ -741,14 +699,14 @@ fn compatible_mismatch_depth() {
     let mut writer = Fory::builder()
         .xlang(false)
         .compatible(true)
-        .max_struct_depth(0)
+        .max_dyn_depth(0)
         .build();
     writer.register::<RemoteNode>(143).unwrap();
 
     let mut reader = Fory::builder()
         .xlang(false)
         .compatible(true)
-        .max_struct_depth(32)
+        .max_dyn_depth(32)
         .build();
     reader.register::<StaticNode>(143).unwrap();
 
@@ -765,9 +723,34 @@ fn compatible_mismatch_depth() {
 }
 
 #[test]
-fn static_depth_default_limit() {
-    let fory = Fory::builder().xlang(false).compatible(false).build();
-    assert_eq!(fory.get_max_struct_depth(), 256);
+fn mixed_depth_limit() {
+    for compatible in [false, true] {
+        let mut fory = Fory::builder()
+            .xlang(false)
+            .compatible(compatible)
+            .max_dyn_depth(3)
+            .build();
+        fory.register::<StaticNode>(160).unwrap();
+
+        let typed = static_chain(3);
+        let bytes = fory.serialize_with::<StaticNodeRoot>(&typed).unwrap();
+        assert_eq!(fory.deserialize::<StaticNode>(&bytes).unwrap(), typed);
+
+        // Any dispatch and generated static child reads share the same root depth. The three
+        // derived frames fit alone, but the enclosing dynamic dispatch needs a fourth frame.
+        let value: Box<dyn Any> = Box::new(typed);
+        let bytes = fory.serialize(&value).unwrap();
+        assert!(matches!(
+            fory.deserialize::<Box<dyn Any>>(&bytes),
+            Err(Error::DepthExceed(_))
+        ));
+
+        // Reuse after failure must have the full allowance: one dynamic and two derived frames.
+        let boundary: Box<dyn Any> = Box::new(static_chain(2));
+        let bytes = fory.serialize(&boundary).unwrap();
+        let decoded = fory.deserialize::<Box<dyn Any>>(&bytes).unwrap();
+        assert_eq!(*decoded.downcast::<StaticNode>().unwrap(), static_chain(2));
+    }
 }
 
 #[test]
@@ -775,7 +758,7 @@ fn enum_null_default_depth() {
     let mut fory = Fory::builder()
         .xlang(false)
         .compatible(false)
-        .max_struct_depth(16)
+        .max_dyn_depth(16)
         .build();
     fory.register::<RecursiveDefault>(112).unwrap();
 
@@ -800,7 +783,7 @@ fn skipped_field_default_depth() {
         let mut fory = Fory::builder()
             .xlang(false)
             .compatible(compatible)
-            .max_struct_depth(1)
+            .max_dyn_depth(1)
             // A missing depth gate still terminates at this small allocation budget.
             .max_graph_memory_bytes(64)
             .build();
@@ -835,7 +818,7 @@ fn empty_collections_skip_depth_gate() {
         let mut fory = Fory::builder()
             .xlang(false)
             .compatible(compatible)
-            .max_struct_depth(0)
+            .max_dyn_depth(0)
             .build();
         fory.register::<EmptyCollections>(159).unwrap();
 
@@ -859,7 +842,7 @@ fn empty_defaults_skip_depth_gate() {
         let mut fory = Fory::builder()
             .xlang(false)
             .compatible(compatible)
-            .max_struct_depth(0)
+            .max_dyn_depth(0)
             .build();
         fory.register::<StaticNode>(156).unwrap();
         fory.register::<EmptyDefault>(157).unwrap();
@@ -889,7 +872,7 @@ fn empty_defaults_skip_depth_gate() {
     let mut reader = Fory::builder()
         .xlang(false)
         .compatible(true)
-        .max_struct_depth(0)
+        .max_dyn_depth(0)
         .build();
     reader.register::<EmptyDefault>(158).unwrap();
     assert_eq!(
@@ -904,7 +887,7 @@ fn mixed_enum_gates_selected_path() {
         let mut fory = Fory::builder()
             .xlang(false)
             .compatible(compatible)
-            .max_struct_depth(0)
+            .max_dyn_depth(0)
             .build();
         fory.register_union::<MixedDepthEnum>(153).unwrap();
 
@@ -930,7 +913,7 @@ fn flat_enum_default_skips_gate() {
         let mut fory = Fory::builder()
             .xlang(false)
             .compatible(compatible)
-            .max_struct_depth(0)
+            .max_dyn_depth(0)
             .build();
         fory.register_union::<MixedDepthEnum>(154).unwrap();
 
@@ -950,7 +933,6 @@ fn union_skip_depth() {
         .xlang(true)
         .compatible(true)
         .max_dyn_depth(1)
-        .max_struct_depth(1)
         .build();
     writer.register::<SkipWriter>(120).unwrap();
     writer.register_union::<SkipUnion>(121).unwrap();
@@ -979,7 +961,6 @@ fn unknown_union_depth() {
         .xlang(true)
         .compatible(false)
         .max_dyn_depth(1)
-        .max_struct_depth(1)
         .build();
     writer.register_union::<FutureUnion>(130).unwrap();
     let bytes = writer.serialize(&future_union_chain(12)).unwrap();

@@ -198,16 +198,16 @@ pub trait Serializer: Sized + 'static {
     /// Custom serializers are conservative by default. Built-in leaves opt
     /// out, carrier serializers propagate their child capability, and dynamic
     /// or weak-reference serializers opt out when their existing read owner
-    /// already charges the dynamic-depth budget.
+    /// already charges the shared read-depth counter.
     #[doc(hidden)]
-    const READ_REQUIRES_STRUCT_DEPTH: bool = true;
+    const READ_REQUIRES_DEPTH: bool = true;
 
     /// Whether default construction can enter a statically dispatched derived value.
     ///
     /// This differs from reading: empty Option and collection defaults do not read their child,
     /// while a skipped field still invokes its selected serializer's default constructor.
     #[doc(hidden)]
-    const DEFAULT_REQUIRES_STRUCT_DEPTH: bool = true;
+    const DEFAULT_REQUIRES_DEPTH: bool = true;
 
     /// Return the concrete registered owner represented by this serializer's wire metadata.
     #[doc(hidden)]

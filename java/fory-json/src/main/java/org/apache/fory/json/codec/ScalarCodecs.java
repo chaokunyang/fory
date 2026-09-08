@@ -3177,6 +3177,11 @@ public final class ScalarCodecs {
 
   public static final class AtomicIntegerArrayCodec implements JsonValueCodec<AtomicIntegerArray> {
     public static final AtomicIntegerArrayCodec INSTANCE = new AtomicIntegerArrayCodec();
+    private static final int SHALLOW_BYTES =
+        GraphMemoryEstimates.shallowObjectBytes(AtomicIntegerArray.class);
+    private static final int ARRAY_HEADER_BYTES = GraphMemoryEstimates.objectArrayBytes();
+    private static final int ARRAY_BATCH_SIZE = 1024;
+    private static final int ARRAY_BATCH_MASK = ARRAY_BATCH_SIZE - 1;
 
     @Override
     public void writeString(StringJsonWriter writer, AtomicIntegerArray value) {
@@ -3227,14 +3232,19 @@ public final class ScalarCodecs {
       reader.enterDepth();
       reader.expect('[');
       if (reader.consume(']')) {
-        reader.exitDepth();
+        finishArray(reader, 0);
         return new AtomicIntegerArray(0);
       }
       int[] values = new int[8];
       int size = 0;
+      int nextBatchEnd = ARRAY_BATCH_MASK;
       do {
         if (reader.tryReadNull()) {
           throw new ForyJsonException("Cannot read null into AtomicIntegerArray element");
+        }
+        if (size == nextBatchEnd) {
+          reader.reserveGraphMemory(ARRAY_BATCH_SIZE * Integer.BYTES);
+          nextBatchEnd += ARRAY_BATCH_SIZE;
         }
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
@@ -3242,7 +3252,7 @@ public final class ScalarCodecs {
         values[size++] = reader.readInt();
       } while (reader.consume(','));
       reader.expect(']');
-      reader.exitDepth();
+      finishArray(reader, size);
       return new AtomicIntegerArray(Arrays.copyOf(values, size));
     }
 
@@ -3250,14 +3260,19 @@ public final class ScalarCodecs {
       reader.enterDepth();
       reader.expect('[');
       if (reader.consume(']')) {
-        reader.exitDepth();
+        finishArray(reader, 0);
         return new AtomicIntegerArray(0);
       }
       int[] values = new int[8];
       int size = 0;
+      int nextBatchEnd = ARRAY_BATCH_MASK;
       do {
         if (reader.tryReadNull()) {
           throw new ForyJsonException("Cannot read null into AtomicIntegerArray element");
+        }
+        if (size == nextBatchEnd) {
+          reader.reserveGraphMemory(ARRAY_BATCH_SIZE * Integer.BYTES);
+          nextBatchEnd += ARRAY_BATCH_SIZE;
         }
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
@@ -3265,7 +3280,7 @@ public final class ScalarCodecs {
         values[size++] = reader.readInt();
       } while (reader.consume(','));
       reader.expect(']');
-      reader.exitDepth();
+      finishArray(reader, size);
       return new AtomicIntegerArray(Arrays.copyOf(values, size));
     }
 
@@ -3273,14 +3288,19 @@ public final class ScalarCodecs {
       reader.enterDepth();
       reader.expect('[');
       if (reader.consume(']')) {
-        reader.exitDepth();
+        finishArray(reader, 0);
         return new AtomicIntegerArray(0);
       }
       int[] values = new int[8];
       int size = 0;
+      int nextBatchEnd = ARRAY_BATCH_MASK;
       do {
         if (reader.tryReadNull()) {
           throw new ForyJsonException("Cannot read null into AtomicIntegerArray element");
+        }
+        if (size == nextBatchEnd) {
+          reader.reserveGraphMemory(ARRAY_BATCH_SIZE * Integer.BYTES);
+          nextBatchEnd += ARRAY_BATCH_SIZE;
         }
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
@@ -3288,13 +3308,24 @@ public final class ScalarCodecs {
         values[size++] = reader.readInt();
       } while (reader.consume(','));
       reader.expect(']');
-      reader.exitDepth();
+      finishArray(reader, size);
       return new AtomicIntegerArray(Arrays.copyOf(values, size));
+    }
+
+    private static void finishArray(JsonReader reader, int size) {
+      int tailSize = size & ARRAY_BATCH_MASK;
+      reader.reserveGraphMemory(SHALLOW_BYTES + ARRAY_HEADER_BYTES + tailSize * Integer.BYTES);
+      reader.exitDepth();
     }
   }
 
   public static class AtomicLongArrayCodec implements JsonValueCodec<AtomicLongArray> {
     public static final AtomicLongArrayCodec INSTANCE = new AtomicLongArrayCodec();
+    private static final int SHALLOW_BYTES =
+        GraphMemoryEstimates.shallowObjectBytes(AtomicLongArray.class);
+    private static final int ARRAY_HEADER_BYTES = GraphMemoryEstimates.objectArrayBytes();
+    private static final int ARRAY_BATCH_SIZE = 1024;
+    private static final int ARRAY_BATCH_MASK = ARRAY_BATCH_SIZE - 1;
 
     protected AtomicLongArrayCodec() {}
 
@@ -3347,14 +3378,19 @@ public final class ScalarCodecs {
       reader.enterDepth();
       reader.expect('[');
       if (reader.consume(']')) {
-        reader.exitDepth();
+        finishArray(reader, 0);
         return new AtomicLongArray(0);
       }
       long[] values = new long[8];
       int size = 0;
+      int nextBatchEnd = ARRAY_BATCH_MASK;
       do {
         if (reader.tryReadNull()) {
           throw new ForyJsonException("Cannot read null into AtomicLongArray element");
+        }
+        if (size == nextBatchEnd) {
+          reader.reserveGraphMemory(ARRAY_BATCH_SIZE * Long.BYTES);
+          nextBatchEnd += ARRAY_BATCH_SIZE;
         }
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
@@ -3362,7 +3398,7 @@ public final class ScalarCodecs {
         values[size++] = reader.readLong();
       } while (reader.consume(','));
       reader.expect(']');
-      reader.exitDepth();
+      finishArray(reader, size);
       return new AtomicLongArray(Arrays.copyOf(values, size));
     }
 
@@ -3370,14 +3406,19 @@ public final class ScalarCodecs {
       reader.enterDepth();
       reader.expect('[');
       if (reader.consume(']')) {
-        reader.exitDepth();
+        finishArray(reader, 0);
         return new AtomicLongArray(0);
       }
       long[] values = new long[8];
       int size = 0;
+      int nextBatchEnd = ARRAY_BATCH_MASK;
       do {
         if (reader.tryReadNull()) {
           throw new ForyJsonException("Cannot read null into AtomicLongArray element");
+        }
+        if (size == nextBatchEnd) {
+          reader.reserveGraphMemory(ARRAY_BATCH_SIZE * Long.BYTES);
+          nextBatchEnd += ARRAY_BATCH_SIZE;
         }
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
@@ -3385,7 +3426,7 @@ public final class ScalarCodecs {
         values[size++] = reader.readLong();
       } while (reader.consume(','));
       reader.expect(']');
-      reader.exitDepth();
+      finishArray(reader, size);
       return new AtomicLongArray(Arrays.copyOf(values, size));
     }
 
@@ -3393,14 +3434,19 @@ public final class ScalarCodecs {
       reader.enterDepth();
       reader.expect('[');
       if (reader.consume(']')) {
-        reader.exitDepth();
+        finishArray(reader, 0);
         return new AtomicLongArray(0);
       }
       long[] values = new long[8];
       int size = 0;
+      int nextBatchEnd = ARRAY_BATCH_MASK;
       do {
         if (reader.tryReadNull()) {
           throw new ForyJsonException("Cannot read null into AtomicLongArray element");
+        }
+        if (size == nextBatchEnd) {
+          reader.reserveGraphMemory(ARRAY_BATCH_SIZE * Long.BYTES);
+          nextBatchEnd += ARRAY_BATCH_SIZE;
         }
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
@@ -3408,8 +3454,14 @@ public final class ScalarCodecs {
         values[size++] = reader.readLong();
       } while (reader.consume(','));
       reader.expect(']');
-      reader.exitDepth();
+      finishArray(reader, size);
       return new AtomicLongArray(Arrays.copyOf(values, size));
+    }
+
+    private static void finishArray(JsonReader reader, int size) {
+      int tailSize = size & ARRAY_BATCH_MASK;
+      reader.reserveGraphMemory(SHALLOW_BYTES + ARRAY_HEADER_BYTES + tailSize * Long.BYTES);
+      reader.exitDepth();
     }
   }
 

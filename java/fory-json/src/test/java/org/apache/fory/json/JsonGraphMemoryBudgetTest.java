@@ -35,6 +35,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import org.apache.fory.json.annotation.JsonAnyProperty;
@@ -235,6 +237,32 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
     long budget = headerBytes + 1023L * Integer.BYTES;
     ForyJson json = newJsonBuilder().withMaxGraphMemoryBytes(budget).build();
     assertThrows(ForyJsonException.class, () -> json.fromJson(intArray(1024), int[].class));
+  }
+
+  @Test
+  public void atomicPrimitiveArrayOwners() {
+    int headerBytes = GraphMemoryEstimates.objectArrayBytes();
+    long emptyIntBytes = shallow(AtomicIntegerArray.class) + headerBytes;
+    assertEquals(assertClassBudget("[]", AtomicIntegerArray.class, emptyIntBytes).length(), 0);
+
+    long intBytes = emptyIntBytes + 2L * Integer.BYTES;
+    AtomicIntegerArray ints = assertClassBudget("[1,2]", AtomicIntegerArray.class, intBytes);
+    assertEquals(ints.length(), 2);
+    assertEquals(ints.get(1), 2);
+    AtomicIntegerArray utf8Ints =
+        assertClassBytesBudget(
+            "[1,2]".getBytes(StandardCharsets.UTF_8), AtomicIntegerArray.class, intBytes);
+    assertEquals(utf8Ints.get(1), 2);
+
+    long longBytes = shallow(AtomicLongArray.class) + headerBytes + Long.BYTES;
+    AtomicLongArray longs = assertClassBudget("[3]", AtomicLongArray.class, longBytes);
+    assertEquals(longs.get(0), 3L);
+
+    long batchBytes = emptyIntBytes + 1024L * Integer.BYTES;
+    AtomicIntegerArray batch =
+        assertClassBudget(intArray(1024), AtomicIntegerArray.class, batchBytes);
+    assertEquals(batch.length(), 1024);
+    assertEquals(batch.get(1023), 1023);
   }
 
   @Test

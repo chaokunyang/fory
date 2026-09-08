@@ -457,7 +457,8 @@ occurrence. A reference array is charged even when its elements are leaves, and 
 even when all of its properties are leaves. Primitive arrays decoded from JSON arrays reserve the
 portable array header and actual Java primitive width using the same batch schedule.
 `AtomicReference`, `AtomicReferenceArray`, and generic `Optional<T>` values include wrapper and
-reference storage; primitive optionals and atomic primitive values are leaves.
+reference storage. `AtomicIntegerArray` and `AtomicLongArray` include their wrapper and retained
+primitive backing array. Primitive optionals and atomic primitive scalar values are leaves.
 
 Dedicated Java JSON leaf codecs are excluded from graph accounting: null, strings, characters,
 booleans, numeric values including arbitrary-precision numbers, enums, temporal and other scalar

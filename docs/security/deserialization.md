@@ -104,6 +104,13 @@ is not reached through an explicitly selected static root or a registered
 enclosing owner, is serialization mechanics only and does not by itself
 authorize a dynamically selected class.
 
+Python `typing.Union` annotations select the serializers used for ordinary field writes and schema
+composition; they are not a separate deserialization allow-list. A wire-selected alternative must
+still pass the active registration and deserialization policy. If it does, a value outside the
+annotation's alternatives is a type or schema correctness issue unless the application established
+an additional explicit policy that the read bypassed. Generated unions with declared case tables
+retain their exact case-table contract.
+
 Java Fory JSON treats an explicitly selected top-level class with an empty
 `JsonSubTypes.value` as one static schema authorization. That declaration authorizes the finite
 concrete closure proven by Java sealed metadata, Kotlin metadata, or a Scala 3 derived codec. The
@@ -141,6 +148,14 @@ serializer is allowed by the active policy, the application owns whether that
 type's construction, hooks, setters, finalizers, or other logic is safe for the
 application's trust boundary.
 
+Some standard-library value constructors can also perform disproportionate work. Java object
+deserialization and Kotlin native object deserialization reject canonical-equivalence regex
+matching before compiling a received pattern. Applications that compile patterns through custom
+serializers must apply an equivalent policy at that serializer boundary.
+
+Other supported regex flags and syntax remain delegated to the platform parser under the controlled
+failure rules below.
+
 When policy-approved construction or callable execution is allowed, resource
 accounting should not claim to bound arbitrary code outside Fory's ownership.
 Fory-owned accounting can cover only objects and storage that Fory itself
@@ -155,6 +170,22 @@ references should enforce the Fory instance's configured depth limit before craf
 nesting can exhaust the call stack or bypass cleanup. A malformed input that
 exceeds the configured depth should fail the root operation instead of
 continuing unbounded recursion.
+
+Depth limiting is a read-side defense because encoded input controls decoder recursion. It does not
+imply a matching serialization limit. Writers must not add depth accounting, generated branches,
+or wire restrictions merely to mirror a reader check. Generated depth accounting belongs only on
+an actual field, variant, or default-value path that can directly, or through a carrier, enter
+another derived struct or enum read. Flat fields, field or variant paths for which the generated
+reader emits no read or construction, and carriers containing only leaves must omit it because
+those paths cannot extend the recursive read chain. A fixed-size carrier with zero elements also
+cannot enter its child reader and must not propagate the child's depth capability. A custom default
+or skipped default variant that can construct another derived value remains subject to depth
+accounting at that default-value owner. Enum accounting belongs inside the selected generated
+variant or default path; a flat selected path must not inherit nesting capability from another
+variant. If skip/default tag mapping makes a generated arm the one actually entered, use that arm's
+field capability. Classify default construction separately from reading: empty optional, collection,
+and map defaults cannot enter their ordinary child reader. A skipped field can still construct a
+nested value through its selected default constructor.
 
 Loops that consume encoded data should guarantee byte progress, logical
 progress, or a terminal error. Inputs that can keep a reader in a no-progress
@@ -180,6 +211,13 @@ Deserialization code must prevent the following outcomes for untrusted input:
 When a path cannot produce one of these outcomes, earlier rejection of malformed
 bytes is normally a correctness or interoperability choice, not a security
 requirement.
+
+A delegated parser failure is controlled when the parser converts its own recursion or syntax
+failure to a throwable or error that unwinds to the public API caller while root cleanup still
+runs. Propagation to the caller is the controlled root error, not an escape from the root boundary.
+Do not add a Fory-side length or nesting scan solely to reject the same input earlier or with a more
+specific error. A security finding must show that the failure terminates the process, cannot unwind
+through root cleanup, prevents cleanup, or performs disproportionate work before rejection.
 
 ## Reader Limits Do Not Imply Writer Limits
 
@@ -213,6 +251,19 @@ concrete consequence in the current implementation:
 - Later-root corruption or a failed-root cleanup leak.
 - A concrete type, registration, callable, or deserialization-policy violation.
 
+The consequence must be reachable from a supported public or root read API under the stated
+configuration. Calling an internal helper with arguments its current owners never supply, assuming
+a future caller, or requiring the application to violate an explicit trusted-input or configuration
+contract does not establish an untrusted-input path. Configuration defaults and platform or mode
+preconditions must be read from their final builder or factory owner rather than inferred from an
+intermediate default value.
+
+Checked-in tests and owning documentation are evidence of intentional behavior. A scanner finding
+that contradicts them must first show that the documented behavior itself violates a security
+boundary; implementation asymmetry with another runtime is not sufficient. Repository-external
+controls such as workflow approval, registry identity binding, protected environments, and secret
+scope require manual confirmation when they are part of an exploit chain.
+
 Protocol strictness alone is outside this gate. Do not change code merely
 because a malformed or noncanonical flag, enum value, marker, length form, or
 reserved value is accepted, rejected late, decoded differently, or produces a
@@ -232,10 +283,10 @@ downstream buffer-underflow, type, reference, depth, or serializer error is a
 valid rejection. A decoder does not need a new local check merely to replace
 that controlled failure with a more specific or more uniform error.
 
-Tests for malformed input should prove that the root operation fails, cleanup
-remains correct, and any relevant security invariant is preserved. They should
-not pin an exact error type or message when doing so would require additional
-successful-path validation that protects no security boundary.
+Tests for a security-motivated malformed-input rejection should prove that the root operation
+fails, cleanup remains correct, and the relevant security invariant is preserved. They should not
+pin an exact error type or message when doing so would require additional successful-path
+validation that protects no security boundary.
 
 ## Non-Security Semantics
 
@@ -278,6 +329,11 @@ the required bytes are available or have been read exactly.
 
 For buffer-backed input:
 
+- A wire length or count must be representable by the platform's native index type before it is
+  narrowed or used in bounds, size, allocation, or cursor arithmetic.
+- Unchecked fast lookahead must prove every accessed byte or character against the logical end of
+  the active input range. Spare backing-array capacity and bytes outside a borrowed slice are not
+  readable input.
 - Fixed-size binary values and primitive dense arrays should call the byte
   owner's readability check for the required encoded byte size before allocating
   the destination. For buffer-backed input this is normally a remaining-byte
@@ -320,6 +376,13 @@ For stream-backed input:
   availability branches.
 - A truncated stream should fail before allocating the final deserialized value
   and should allocate only for bytes actually read plus bounded spare capacity.
+- A long-lived stream or channel reader should periodically discard or compact consumed bytes.
+  Capacity may retain a previous geometric high-water mark for reuse, but subsequent growth must be
+  based on unread buffered data rather than the total number of bytes consumed over the reader's
+  lifetime.
+- Compaction must preserve any zero-copy view that escaped an earlier root read. A serializer that
+  copies an in-band buffer completely before returning may identify that source as non-escaping, but
+  the general buffer-object read contract must assume that the returned view remains live.
 
 The byte owner should stay byte-oriented. Buffer, reader, or read-context APIs
 may expose byte read and byte skip operations, but string decoding, decimal
@@ -407,6 +470,11 @@ Graph budget accounting should:
   array, and primitive dense-array leaf owners unless a language-specific owner section explicitly
   includes them.
 
+A compatible list-to-primitive-dense-array conversion materializes a primitive dense-array leaf and
+keeps that leaf exclusion. It must prove proportional readable element bytes before allocation.
+The reverse conversion to a general list materializes list owner/reference storage and reserves
+that target storage normally.
+
 Skipped leaf owners must still be gated by remaining input bytes. If the unread input does not
 contain enough bytes for a string, binary value, primitive scalar, primitive array, or primitive
 dense array, the reader must not read or create that leaf value.
@@ -438,6 +506,9 @@ temporary compressed arrays remain construction scratch outside the retained gra
 Float16 and BFloat16 dense-array carriers also include their wrapper's shallow owner. When a boxed
 list conversion first decodes a primitive array, the array's reservation remains as credit toward
 the final list estimate, and the conversion reserves only a positive remaining difference.
+For a non-empty Guava `ImmutableIntArray`, reserve the returned wrapper and its retained `int[]`
+once; a temporary decode array is construction scratch rather than another retained owner. The
+shared empty singleton creates no new graph owner and is not charged.
 
 ### Java Fory JSON
 
@@ -642,6 +713,12 @@ Metadata readers should:
   arrays require an exact trusted full-array registration or checked name-cache
   entry so input cannot make the JVM derive an unbounded family of array classes.
 - Reset or release metadata state at the correct root-operation boundary.
+- Validate runtime construction requirements that remote type structure can violate before invoking
+  reflective type factories. For example, a map or set representation must reject a key shape that
+  the target runtime cannot use as a key rather than allowing the runtime factory to panic.
+- Bound remotely supplied Java proxy interface combinations before creating proxy classes. Repeated
+  use of an already accepted interface combination should reuse the existing shape entry, including
+  when a later handler value is invalid.
 
 A class-resolution cache reachable from untrusted deserialization may publish
 an entry only from explicit trusted configuration or after the active class
@@ -653,6 +730,11 @@ Checks that require the materialized `Class<?>` remain owned by their existing
 caller. A cache entry that stores a data-only unknown-class placeholder may
 return that same placeholder on an exact hit, but must not authorize loading the
 original missed wire name.
+Java unknown-name caches retain at most 8192 entries per resolver and admit only names whose
+encoded namespace and type name each fit the existing 2048-byte MetaString cache bound. Longer names
+remain decodable but do not enter these caches or consume their entry allowance. These bounds cap
+retained encoded-name array contents at 32 MiB per resolver, before shared-array deduplication;
+they are not an exact heap-size estimate.
 Exact registered-name-table hits are trusted for both ID and name registrations,
 and exact checked name-cache hits are trusted. After both exact lookups miss, a
 reader must not infer another accepted name from inverse registration,
@@ -669,6 +751,19 @@ cache hits or generated field readers must not add validation, hashing,
 allocation, or policy work for these limits. The concrete sequence for metadata
 parsing, cache publishing, local-header matching, and counting belongs to the
 [xlang implementation guide](../specification/xlang_implementation_guide.md).
+
+A configured entry-count bound combined with a validated per-entry byte bound is a finite cache
+bound. The fact that input can fill such a cache, that the cache survives root reset, or that it is
+outside the returned graph's memory budget is not by itself a vulnerability. A security finding
+must additionally establish a concrete disproportionate resource cost, persistent service failure,
+policy bypass, or violation of the documented bound. Heap-size estimates that depend on runtime
+object overhead should be measured before they are used as impact evidence.
+
+Diagnostic deduplication is also persistent state. A process-wide `warnOnce` or similar facility
+must not retain a distinct key, formatted message, or argument for every wire-controlled name. Such
+diagnostics may be emitted without per-value retention or deduplicated by an existing bounded owner;
+they must not introduce a parallel unbounded name cache. Log destination capacity and rotation remain
+application operational concerns when diagnostic logging is enabled.
 
 The checked metadata cache is the only owner of whether a received TypeDef or
 TypeMeta header has already been validated. A metadata cache hit means the
@@ -738,11 +833,15 @@ paths compact.
 
 Reference tracking validation is security-relevant when malformed input can:
 
-- Access an out-of-range reference without reporting an error.
+- Use an out-of-range reference id for a physical out-of-bounds or unsafe memory access.
 - Leave retained reference state after a failed root operation.
 - Register unbounded callbacks or resolver state before the referenced value is
   available.
 - Cause a no-progress loop or crash.
+
+Returning a bounds-safe null, empty weak reference, or alternative graph value for malformed
+reference bytes is a correctness issue unless it also crosses an explicit type or policy boundary,
+causes unsafe memory ownership, retains state across roots, or creates disproportionate work.
 
 Reference tracking validation is not required merely because a malformed flag is
 not rejected at the earliest possible byte. Lazy rejection is acceptable when

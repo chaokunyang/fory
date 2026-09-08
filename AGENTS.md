@@ -47,8 +47,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Row format accepts only trusted input and is outside Fory's untrusted binary-deserialization security boundary. Rust `check_string_read(false)` is likewise an explicit trusted-input mode that disables UTF-8 validation; its caller owns the validity guarantee. Classify issues in those paths as correctness, soundness, or hardening bugs when applicable, not as attacker-controlled deserialization vulnerabilities under the default security model.
 - Do not make assumptions about runtime behavior, ownership, registration, metadata construction, protocol semantics, or test coverage. Read the current code, owning docs/specs, and relevant tests before making a design judgment or implementation decision. If the evidence is incomplete, inspect more or state the uncertainty explicitly instead of filling gaps from memory or analogy with another runtime.
 - For untrusted deserialization, read `docs/security/deserialization.md` before changing allocation, stream filling, skip, reference, metadata, or policy validation behavior. Variable-length deserialization must not allocate or reserve backing/output capacity from attacker-declared lengths or counts before the byte owner has proven proportional readable bytes with `checkReadableBytes` or the runtime equivalent. Root graph memory reservation is accounting only and may happen before that byte check, but it must not replace the byte check.
-- Malformed input must surface as a controlled root-operation error and still run
-  root cleanup, but the exact exception type, error code, message, detection
+- When a decoder rejects malformed input, that rejection must surface as a controlled
+  root-operation error and still run root cleanup, but the exact exception type, error code,
+  message, detection
   layer, and detection point are not contracts unless a public API or
   specification explicitly says otherwise. Differences only in error type,
   message, layer, offset, or detection point are not security findings. An
@@ -67,6 +68,12 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   helper when the language supports it. A bounds-safe downstream operation that
   already raises a controlled root error is sufficient; do not duplicate it for
   error precision.
+- A delegated parser failure is controlled when that parser turns its own recursion or syntax
+  failure into a throwable or error that unwinds to the public API caller while root cleanup still
+  runs. Propagation to the caller is the controlled root error, not an escape from the root boundary.
+  Do not add a Fory-side length or nesting scan solely to reject the same input earlier. Require
+  evidence that the failure terminates the process, cannot unwind through root cleanup, prevents
+  cleanup, or performs disproportionate work before classifying it as a security issue.
 - Before reporting or fixing a robustness finding, prove that the current path
   causes at least one concrete consequence: crash, panic, undefined behavior,
   or out-of-bounds access; disproportionate allocation, CPU work, or stream
@@ -77,6 +84,26 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   malformed or noncanonical flag, enum value, marker, length form, or reserved
   value is accepted, rejected late, decoded differently, or produces a less
   precise error.
+- Before accepting a scanner finding, trace it from a supported public or root API through the
+  current configuration defaults and owning serializer. A directly callable helper, a hypothetical
+  future caller, an unsupported configuration combination, or a value reachable only after the
+  application violates an explicit trust contract is not an attacker path. Treat checked-in tests
+  that deliberately require the reported behavior as contract evidence and reconcile the owning
+  documentation before proposing a fix.
+- A documented zero-copy reader may return a view backed by caller-owned input. Mutation or reuse of
+  that input after the read is application behavior, not attacker control, unless the public API
+  promises an independent result. Keep the lifetime and immutability requirement explicit in the
+  runtime's user guide.
+- A finite cache that accepts attacker-influenced entries is not a security finding merely because
+  it is fillable or excluded from `maxGraphMemoryBytes`. Prove that its configured count and
+  per-entry byte bounds permit a concrete disproportionate allocation, persistent failure, policy
+  violation, or other security consequence. Estimated heap multipliers require measurement before
+  they support a vulnerability classification. External repository, identity-provider, registry,
+  or environment settings that are not visible in the repository remain manual-verification
+  dependencies and must not be reported as confirmed exploit preconditions.
+- Treat diagnostic deduplication as persistent state. Never pass a wire-controlled name, message,
+  or argument to an unbounded process-wide `warnOnce` or similar deduplication set. Use ordinary
+  logging or an existing bounded owner; do not create a parallel cache solely for diagnostics.
 - Arbitrary-precision binary Decimal codecs accept only scales in
   `[-10_000, 10_000]` and an absolute unscaled magnitude of at most `10_000`
   binary bytes. The Java standalone `BigInteger` serializer uses the same
@@ -168,7 +195,15 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   `KotlinClassMetadata.readStrict`. Do not add compiler or metadata minor-version allowlists after a
   successful strict parse. Validate unsupported declaration shapes and mismatched JVM members at
   the concrete consumer instead.
-- Decoder depth and the generic-type stack paired with that depth use root-operation failure cleanup. Nested decoders decrement depth and pop generic types only after successful child reads; do not add nested `try/finally` to restore them after exceptions. The root operation's `finally`/reset must clear both decoder depth and the generic-type stack.
+- Decoder depth is a read-side defense against recursion controlled by encoded input. Do not add a
+  corresponding depth check, counter, branch, or generated-code expansion to serialization/write
+  paths. Account for depth only where the actual read or default-construction operation can enter
+  a nested type. Flat fields, carriers containing only leaves, and empty construction paths must
+  not increment, compare, or decrement depth. Decoder depth and the generic-type stack paired with
+  that depth use root-operation failure cleanup. Nested decoders decrement depth and pop generic
+  types only after successful child reads; do not add nested `try/finally` to restore them after
+  exceptions. The root operation's `finally`/reset must clear both decoder depth and the generic-type
+  stack.
 - Keep public APIs minimal. Public APIs must match user ownership and mental model, not internal implementation details; generated flows stay type-owned, while custom serializer registration stays explicit.
 - A Fory instance may register types or serializers only before its first root
   serialization or deserialization operation. Starting either operation
@@ -269,6 +304,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 ## Shared Engineering Expectations
 
 - Favor zero-copy techniques, JIT or codegen opportunities, and cache-friendly memory access patterns in performance-critical paths.
+- Writer size estimates are optimization hints, not capacity proofs. Before an unchecked or native
+  write, the natural writer owner must prove aggregate destination capacity for every emitted byte;
+  serialized output must never include unwritten or uninitialized storage.
 - Keep hot paths allocation-minimal. Avoid per-call or per-element object allocation, boxing, wrapper round-trips, callbacks, iterator carriers, or holder objects unless there is a measured reason and no lower-allocation design preserves the same behavior.
 - Keep hot-path control flow direct and predictable. Hoist repeated buffer/cache/state lookups into locals for multi-step operations, keep cold rebuild or restoration logic on slow branches, and avoid tiny forwarding helpers that only obscure the owner.
 - When a language supports cold and no-inline annotations, mark cold entrances reachable from

@@ -45,6 +45,12 @@ Fory security boundaries include:
 - Cleanup boundaries, where state created during a failed root operation must
   not leak into later operations.
 
+Serialization normally consumes application-owned values rather than attacker-controlled encoded
+bytes. Its low-level memory-safety boundary still applies when values originated outside the
+application. Writer size estimates are optimization hints rather than capacity proofs: an
+unchecked or native write must first prove that its destination contains enough space for every
+emitted byte, and returned output must never contain unwritten or uninitialized storage.
+
 Runtime serializer code generation and JIT compilation are not paths for
 executing encoded input. They operate on types and schemas after the active
 registration check, `TypeChecker`, schema check, or policy check has accepted the
@@ -59,6 +65,9 @@ and output-path options are trusted build inputs whose provenance and review
 belong to the application or build owner. Fory does not claim that running
 `foryc` on a hostile schema is safe. Applications must not pass untrusted schema
 files to `foryc` or compile generated source from an untrusted schema.
+Generated deserializers and service readers used at runtime follow the same untrusted-input
+security model as handwritten readers; the build-input boundary does not exempt their runtime
+behavior from review.
 
 The [deserialization security model](deserialization.md) defines how to
 classify these boundaries for untrusted deserialization paths.
@@ -100,6 +109,8 @@ Applications are responsible for:
   application intends to accept.
 - Treating cross-language peers and schemas as part of the application's trust
   relationship.
+- Honoring documented input-buffer lifetime and immutability requirements when a zero-copy read
+  returns a view backed by caller-owned input.
 
 Disabling registration or using dynamic deserialization on trusted data is a
 configuration choice. For untrusted data, bypassing an explicit Fory policy,

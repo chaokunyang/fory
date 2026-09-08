@@ -112,6 +112,11 @@ For fields inside a generated struct, use `@ForyField(ref: true)` on that field 
 
 ## Reusing a Buffer
 
+Some aligned primitive typed arrays and `BoolList` values are decoded as zero-copy views backed by
+the input `Uint8List`. Keep that input unchanged while the returned value is in use. If the
+application reuses or mutates receive buffers, copy those returned arrays before releasing the
+input buffer for reuse.
+
 If you want to avoid allocating a new `Uint8List` on every call, use `serializeTo` and `deserializeFrom` with an explicit `Buffer`:
 
 ```dart

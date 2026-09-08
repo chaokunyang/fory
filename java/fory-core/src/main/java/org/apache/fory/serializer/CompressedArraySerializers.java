@@ -225,7 +225,7 @@ public final class CompressedArraySerializers {
     }
 
     private int[] readFromBufferObject(ReadContext readContext) {
-      MemoryBuffer buf = readContext.readBufferObject();
+      MemoryBuffer buf = readContext.readBufferObjectCopySource();
       int size = buf.remaining();
       validateBinarySize(size, 4);
       buf.checkReadableBytes(size);
@@ -343,7 +343,7 @@ public final class CompressedArraySerializers {
     }
 
     private long[] readFromBufferObject(ReadContext readContext) {
-      MemoryBuffer buf = readContext.readBufferObject();
+      MemoryBuffer buf = readContext.readBufferObjectCopySource();
       int size = buf.remaining();
       validateBinarySize(size, 8);
       buf.checkReadableBytes(size);

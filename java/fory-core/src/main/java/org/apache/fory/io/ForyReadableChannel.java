@@ -24,6 +24,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SeekableByteChannel;
 import javax.annotation.concurrent.NotThreadSafe;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.AndroidSupport;
@@ -31,10 +32,19 @@ import org.apache.fory.util.Preconditions;
 
 @NotThreadSafe
 public class ForyReadableChannel implements ForyStreamReader, ReadableByteChannel {
+  // Retire consumed backing storage in input-proportional chunks. Smaller chunks make direct
+  // buffer allocation dominate tiny-root streams; one MiB bounds stale growth while amortizing it.
+  private static final int MIN_COMPACTION_BYTES = 1 << 20;
+
   private final ReadableByteChannel channel;
   private final SeekableByteChannel seekableChannel;
   private final MemoryBuffer memoryBuffer;
   private ByteBuffer byteBuffer;
+  private final int initialBufferSize;
+  private boolean compactBeforeNextRoot;
+  // A retained view keeps its backing alive after the root returns, so compaction must switch to a
+  // new backing instead of overwriting the old one.
+  private boolean bufferViewRetained;
 
   public ForyReadableChannel(ReadableByteChannel channel) {
     this(
@@ -68,6 +78,7 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
       buffer = ByteBuffer.allocate(buffer.capacity());
     }
     this.byteBuffer = buffer;
+    this.initialBufferSize = buffer.capacity();
     if (buffer.isDirect()) {
       this.memoryBuffer = MemoryBuffer.fromDirectByteBuffer(buffer, 0, this);
     } else if (buffer.hasArray()) {
@@ -134,6 +145,17 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
       return totalRead;
     } catch (IOException e) {
       throw new DeserializationException("Failed to read the provided byte channel", e);
+    } finally {
+      // Callers may hold pre-fill absolute indexes, so retire consumed bytes at the next root.
+      // Limited fills can leave spare capacity after growing; waiting for a full backing lets
+      // repeated compaction retain an ever-growing capacity.
+      scheduleBufferCompaction();
+    }
+  }
+
+  private void scheduleBufferCompaction() {
+    if (memoryBuffer.readerIndex() >= MIN_COMPACTION_BYTES) {
+      compactBeforeNextRoot = true;
     }
   }
 
@@ -152,6 +174,7 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
     newByteBuf.put(byteBuf);
     byteBuffer = newByteBuf;
     memoryBuf.initByteBuffer(newByteBuf, position);
+    bufferViewRetained = false;
     return newByteBuf;
   }
 
@@ -229,6 +252,8 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
   }
 
   private void ensureBuffered(int numBytes) {
+    // Typed reads within a root must use memoryBuffer directly: getBuffer may compact and
+    // invalidate absolute offsets held by the current read.
     MemoryBuffer buf = memoryBuffer;
     int remaining = buf.remaining();
     if (remaining < numBytes) {
@@ -287,9 +312,61 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
     channel.close();
   }
 
+  /** Returns the buffer for the next root read, compacting consumed input when needed. */
   @Override
   public MemoryBuffer getBuffer() {
-    return memoryBuffer;
+    MemoryBuffer buffer = memoryBuffer;
+    if (compactBeforeNextRoot) {
+      compactBuffer();
+    }
+    return buffer;
+  }
+
+  @Internal
+  @Override
+  public void retainBufferView() {
+    bufferViewRetained = true;
+  }
+
+  private void compactBuffer() {
+    MemoryBuffer memoryBuf = memoryBuffer;
+    int readerIndex = memoryBuf.readerIndex();
+    int remaining = memoryBuf.remaining();
+    // Fill runs before its caller advances the current root's cursor. Check at the next root
+    // instead, and keep the request pending until unread bytes fit within the consumed prefix.
+    // Charging each copy to that prefix keeps compaction amortized even after a large prefetch.
+    if (readerIndex < remaining) {
+      return;
+    }
+    compactBeforeNextRoot = false;
+    ByteBuffer byteBuf = byteBuffer;
+    int position = byteBuf.position();
+    int bufferStart = position - memoryBuf.size();
+    if (!bufferViewRetained) {
+      byteBuf.position(bufferStart + readerIndex);
+      byteBuf.limit(position);
+      byteBuf.compact();
+      byteBuf.limit(remaining);
+      memoryBuf.initByteBuffer(byteBuf, remaining);
+      memoryBuf.readerIndex(0);
+      return;
+    }
+    int newCapacity = Math.max(initialBufferSize, ForyStreamReader.nextBufferSize(remaining));
+    // The next getBuffer call is the next root boundary. Replacing the backing here preserves
+    // reader indexes during the root that requested the fill, and an old backing remains valid for
+    // zero-copy values returned by earlier roots.
+    ByteBuffer newByteBuf =
+        byteBuf.isDirect()
+            ? ByteBuffer.allocateDirect(newCapacity)
+            : ByteBuffer.allocate(newCapacity);
+    ByteBuffer unreadBytes = byteBuf.duplicate();
+    unreadBytes.position(bufferStart + readerIndex);
+    unreadBytes.limit(position);
+    newByteBuf.put(unreadBytes);
+    byteBuffer = newByteBuf;
+    memoryBuf.initByteBuffer(newByteBuf, remaining);
+    memoryBuf.readerIndex(0);
+    bufferViewRetained = false;
   }
 
   private void readFully(ByteBuffer dst, int length) throws IOException {

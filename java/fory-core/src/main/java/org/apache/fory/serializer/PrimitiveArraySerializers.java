@@ -128,7 +128,7 @@ public final class PrimitiveArraySerializers {
     protected final short[] readShortBits(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       if (readContext.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = readContext.readBufferObject();
+        MemoryBuffer buf = readContext.readBufferObjectCopySource();
         int size = buf.remaining();
         if ((size & 1) != 0) {
           throwUnalignedBinarySize(size, 2);
@@ -194,7 +194,7 @@ public final class PrimitiveArraySerializers {
     public boolean[] read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       if (readContext.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = readContext.readBufferObject();
+        MemoryBuffer buf = readContext.readBufferObjectCopySource();
         int size = buf.remaining();
         buf.checkReadableBytes(size);
         reserveArray(readContext, size, 1);
@@ -239,7 +239,7 @@ public final class PrimitiveArraySerializers {
     public byte[] read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       if (readContext.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = readContext.readBufferObject();
+        MemoryBuffer buf = readContext.readBufferObjectCopySource();
         int size = buf.remaining();
         buf.checkReadableBytes(size);
         reserveArray(readContext, size, 1);
@@ -290,7 +290,7 @@ public final class PrimitiveArraySerializers {
         throw new UnsupportedOperationException();
       }
       if (readContext.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = readContext.readBufferObject();
+        MemoryBuffer buf = readContext.readBufferObjectCopySource();
         int size = buf.remaining();
         if ((size & 1) != 0) {
           throwUnalignedBinarySize(size, 2);
@@ -368,7 +368,7 @@ public final class PrimitiveArraySerializers {
     public int[] read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       if (readContext.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = readContext.readBufferObject();
+        MemoryBuffer buf = readContext.readBufferObjectCopySource();
         int size = buf.remaining();
         if ((size & 3) != 0) {
           throwUnalignedBinarySize(size, 4);
@@ -460,7 +460,7 @@ public final class PrimitiveArraySerializers {
     public long[] read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       if (readContext.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = readContext.readBufferObject();
+        MemoryBuffer buf = readContext.readBufferObjectCopySource();
         int size = buf.remaining();
         if ((size & 7) != 0) {
           throwUnalignedBinarySize(size, 8);
@@ -556,7 +556,7 @@ public final class PrimitiveArraySerializers {
     public float[] read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       if (readContext.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = readContext.readBufferObject();
+        MemoryBuffer buf = readContext.readBufferObjectCopySource();
         int size = buf.remaining();
         if ((size & 3) != 0) {
           throwUnalignedBinarySize(size, 4);
@@ -609,7 +609,7 @@ public final class PrimitiveArraySerializers {
     public double[] read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       if (readContext.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = readContext.readBufferObject();
+        MemoryBuffer buf = readContext.readBufferObjectCopySource();
         int size = buf.remaining();
         if ((size & 7) != 0) {
           throwUnalignedBinarySize(size, 8);

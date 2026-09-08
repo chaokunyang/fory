@@ -21,7 +21,10 @@
 
 package org.apache.fory.kotlin.xlang
 
+import java.io.ByteArrayInputStream
 import java.math.BigDecimal
+import java.nio.ByteBuffer
+import java.nio.channels.Channels
 import java.time.Instant
 import java.time.LocalDate
 import java.util.TreeMap
@@ -42,10 +45,12 @@ import org.apache.fory.annotation.Ref
 import org.apache.fory.exception.ForyException
 import org.apache.fory.exception.InsecureException
 import org.apache.fory.exception.SerializationException
+import org.apache.fory.io.ForyReadableChannel
 import org.apache.fory.kotlin.Fixed
 import org.apache.fory.kotlin.ForyKotlin
 import org.apache.fory.kotlin.VarInt
 import org.apache.fory.kotlin.register
+import org.apache.fory.memory.MemoryBuffer
 import org.apache.fory.memory.MemoryUtils
 import org.apache.fory.serializer.GraphMemoryEstimates
 import org.apache.fory.serializer.StaticGeneratedStructSerializer
@@ -495,18 +500,8 @@ private fun staticSerializerRoundTrip(dataFile: String) {
       nullableUInts = uintArrayOf(42u, UInt.MAX_VALUE),
     )
   val decodedArrays = fory.deserialize(fory.serialize(arrays), KotlinDenseArrays::class.java)
-  check(decodedArrays.ubytes contentEquals arrays.ubytes)
-  check(decodedArrays.ushorts contentEquals arrays.ushorts)
-  check(decodedArrays.uints contentEquals arrays.uints)
-  check(decodedArrays.ulongs contentEquals arrays.ulongs)
-  check(decodedArrays.ints contentEquals arrays.ints)
-  check(decodedArrays.longs contentEquals arrays.longs)
-  check(decodedArrays.bytes contentEquals arrays.bytes)
-  check(decodedArrays.shorts contentEquals arrays.shorts)
-  check(decodedArrays.floats contentEquals arrays.floats)
-  check(decodedArrays.doubles contentEquals arrays.doubles)
-  check(decodedArrays.booleans contentEquals arrays.booleans)
-  check(decodedArrays.nullableUInts!!.contentEquals(arrays.nullableUInts!!))
+  checkDenseArrayValues(decodedArrays, arrays)
+  denseArrayChannelCopies(arrays)
   val arrayDescriptors =
     checkNotNull(
         fory.getSerializer(KotlinDenseArrays::class.java) as? StaticGeneratedStructSerializer<*>
@@ -623,6 +618,70 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   }
   checkUnionListBudget(emptyList())
   checkUnionListBudget(listOf(1u, 2u, UInt.MAX_VALUE))
+}
+
+private fun denseArrayChannelCopies(arrays: KotlinDenseArrays) {
+  val fory =
+    ForyKotlin.builder()
+      .withXlang(true)
+      .withCompatible(false)
+      .requireClassRegistration(true)
+      .withRefTracking(false)
+      .build()
+  fory.register<KotlinDenseArrays>("kotlin.KotlinDenseArrays")
+  check(fory.getSerializer(KotlinDenseArrays::class.java) is StaticGeneratedStructSerializer<*>)
+  // Cross the channel's one-MiB compaction threshold with one generated unsigned array field.
+  val large = arrays.copy(uints = UIntArray((1 shl 20) / Int.SIZE_BYTES) { it.toUInt() })
+  var largeArrayBuffers = 0
+  val firstRoot =
+    fory.serialize(large) { buffer ->
+      if (buffer.totalBytes() == large.uints.size * Int.SIZE_BYTES) {
+        largeArrayBuffers++
+      }
+      true
+    }
+  check(largeArrayBuffers == 1)
+  val secondRoot = fory.serialize(arrays) { true }
+  val last = arrays.copy(uints = uintArrayOf(UInt.MAX_VALUE - 1u, 7u))
+  val thirdRoot = fory.serialize(last) { true }
+  val data = firstRoot + secondRoot + thirdRoot
+  for (direct in listOf(false, true)) {
+    val initialBuffer =
+      if (direct) ByteBuffer.allocateDirect(firstRoot.size) else ByteBuffer.allocate(firstRoot.size)
+    ForyReadableChannel(Channels.newChannel(ByteArrayInputStream(data)), initialBuffer).use {
+      channel ->
+      // A full first frame makes the next root grow and schedule compaction after its array copies.
+      val channelBuffer = channel.buffer
+      val first = fory.deserialize(channel, emptyList<MemoryBuffer>()) as KotlinDenseArrays
+      val second = fory.deserialize(channel, emptyList<MemoryBuffer>()) as KotlinDenseArrays
+      val backing = channelBuffer.heapMemory ?: channelBuffer.offHeapBuffer
+      check(channelBuffer.readerIndex() > 0)
+      val compacted = channel.buffer
+      check((compacted.heapMemory ?: compacted.offHeapBuffer) === backing) {
+        "Copied Kotlin unsigned arrays must not retain a channel view"
+      }
+      check(compacted.readerIndex() == 0)
+      val third = fory.deserialize(channel, emptyList<MemoryBuffer>()) as KotlinDenseArrays
+      checkDenseArrayValues(first, large)
+      checkDenseArrayValues(second, arrays)
+      checkDenseArrayValues(third, last)
+    }
+  }
+}
+
+private fun checkDenseArrayValues(actual: KotlinDenseArrays, expected: KotlinDenseArrays) {
+  check(actual.ubytes contentEquals expected.ubytes)
+  check(actual.ushorts contentEquals expected.ushorts)
+  check(actual.uints contentEquals expected.uints)
+  check(actual.ulongs contentEquals expected.ulongs)
+  check(actual.ints contentEquals expected.ints)
+  check(actual.longs contentEquals expected.longs)
+  check(actual.bytes contentEquals expected.bytes)
+  check(actual.shorts contentEquals expected.shorts)
+  check(actual.floats contentEquals expected.floats)
+  check(actual.doubles contentEquals expected.doubles)
+  check(actual.booleans contentEquals expected.booleans)
+  check(actual.nullableUInts!!.contentEquals(expected.nullableUInts!!))
 }
 
 private fun generatedFieldTypeGuard() {

@@ -22,6 +22,7 @@ package org.apache.fory.io;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.memory.MemoryBuffer;
 
 /**
@@ -156,6 +157,10 @@ public interface ForyStreamReader {
    * for same {@link ForyStreamReader} instance.
    */
   MemoryBuffer getBuffer();
+
+  /** Marks the current input backing as retained beyond the decoding operation. */
+  @Internal
+  default void retainBufferView() {}
 
   /**
    * Create a {@link ForyInputStream} from the provided {@link InputStream}. Note that the provided

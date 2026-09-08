@@ -35,15 +35,22 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.fory.config.Config;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.io.ForyStreamReader;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.ReflectionUtils;
+import org.apache.fory.serializer.PrimitiveArraySerializers;
+import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.bean.BeanA;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -414,6 +421,293 @@ public class StreamTest extends ForyTestBase {
   private static Object backingBuffer(MemoryBuffer buffer) {
     byte[] heapMemory = buffer.getHeapMemory();
     return heapMemory != null ? heapMemory : buffer.getOffHeapBuffer();
+  }
+
+  private static int backingCapacity(MemoryBuffer buffer) {
+    byte[] heapMemory = buffer.getHeapMemory();
+    return heapMemory != null ? heapMemory.length : buffer.getOffHeapBuffer().capacity();
+  }
+
+  @Test
+  public void testChannelDiscardsConsumedBytes() throws IOException {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
+    byte[] expected = new byte[64];
+    for (int i = 0; i < expected.length; i++) {
+      expected[i] = (byte) i;
+    }
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    int numMessages = 30_000;
+    for (int i = 0; i < numMessages; i++) {
+      fory.serialize(output, ByteBuffer.wrap(expected));
+    }
+    byte[] data = output.toByteArray();
+
+    for (boolean direct : new boolean[] {false, true}) {
+      ByteBuffer initialBuffer = direct ? ByteBuffer.allocateDirect(32) : ByteBuffer.allocate(32);
+      try (ForyReadableChannel channel =
+          new ForyReadableChannel(new ChunkedReadableByteChannel(data, 17), initialBuffer)) {
+        ByteBuffer first = null;
+        for (int i = 0; i < numMessages; i++) {
+          ByteBuffer value = (ByteBuffer) fory.deserialize(channel);
+          if (first == null) {
+            first = value;
+          }
+          assertEquals(toBytes(value), expected);
+        }
+        int capacity = backingCapacity(channel.getBuffer());
+        assertTrue(capacity <= 1 << 21, "Unexpected retained channel capacity " + capacity);
+        assertTrue(backingCapacity(channel.getBuffer()) < data.length);
+        // Later compaction must not overwrite a zero-copy buffer returned from the first root.
+        assertEquals(toBytes(first), expected);
+      }
+    }
+  }
+
+  @Test
+  public void testChannelSmallMessageAmortized() throws IOException {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
+    byte[] message = fory.serialize(7);
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    int numMessages = 1_000_000;
+    for (int i = 0; i < numMessages; i++) {
+      output.write(message, 0, message.length);
+    }
+    byte[] data = output.toByteArray();
+
+    try (ForyReadableChannel channel =
+        new ForyReadableChannel(
+            new ChunkedReadableByteChannel(data, message.length), ByteBuffer.allocateDirect(64))) {
+      Object initialBacking = backingBuffer(channel.getBuffer());
+      for (int i = 0; i < numMessages; i++) {
+        assertEquals(fory.deserialize(channel), Integer.valueOf(7));
+        if (i == 0) {
+          Assert.assertSame(backingBuffer(channel.getBuffer()), initialBacking);
+        }
+      }
+      assertTrue(backingCapacity(channel.getBuffer()) <= 1 << 21);
+      assertTrue(backingCapacity(channel.getBuffer()) < data.length);
+    }
+  }
+
+  @Test
+  public void testChannelExactFullCompaction() throws IOException {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
+    byte[] expected = new byte[1 << 20];
+    for (int i = 0; i < expected.length; i++) {
+      expected[i] = (byte) i;
+    }
+    byte[] firstRoot = fory.serialize(ByteBuffer.wrap(expected));
+    byte[] secondExpected = new byte[] {9, 8, 7};
+    byte[] secondRoot = fory.serialize(ByteBuffer.wrap(secondExpected));
+    byte[] data = Arrays.copyOf(firstRoot, firstRoot.length + secondRoot.length);
+    System.arraycopy(secondRoot, 0, data, firstRoot.length, secondRoot.length);
+
+    for (boolean direct : new boolean[] {false, true}) {
+      ByteBuffer initialBuffer =
+          direct
+              ? ByteBuffer.allocateDirect(firstRoot.length)
+              : ByteBuffer.allocate(firstRoot.length);
+      try (ForyReadableChannel channel =
+          new ForyReadableChannel(
+              new ChunkedReadableByteChannel(data, firstRoot.length), initialBuffer)) {
+        ByteBuffer first = (ByteBuffer) fory.deserialize(channel);
+        assertEquals(toBytes(first), expected);
+        ByteBuffer second = (ByteBuffer) fory.deserialize(channel);
+        assertEquals(toBytes(second), secondExpected);
+        assertEquals(backingCapacity(channel.getBuffer()), firstRoot.length);
+        assertEquals(toBytes(first), expected);
+        assertEquals(toBytes(second), secondExpected);
+      }
+    }
+  }
+
+  @Test
+  public void testChannelCustomBufferView() throws IOException {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .build();
+    fory.registerSerializer(BufferView.class, new BufferViewSerializer(fory.getConfig()));
+    byte[] expected = new byte[1 << 20];
+    for (int i = 0; i < expected.length; i++) {
+      expected[i] = (byte) i;
+    }
+    byte[] firstRoot = fory.serialize(new BufferView(expected));
+    byte[] secondExpected = new byte[] {9, 8, 7};
+    byte[] secondRoot = fory.serialize(new BufferView(secondExpected));
+    byte[] data = Arrays.copyOf(firstRoot, firstRoot.length + secondRoot.length);
+    System.arraycopy(secondRoot, 0, data, firstRoot.length, secondRoot.length);
+
+    for (boolean direct : new boolean[] {false, true}) {
+      ByteBuffer initialBuffer =
+          direct
+              ? ByteBuffer.allocateDirect(firstRoot.length)
+              : ByteBuffer.allocate(firstRoot.length);
+      try (ForyReadableChannel channel =
+          new ForyReadableChannel(
+              new ChunkedReadableByteChannel(data, firstRoot.length), initialBuffer)) {
+        BufferView first = (BufferView) fory.deserialize(channel);
+        assertEquals(toBytes(first.buffer), expected);
+        BufferView second = (BufferView) fory.deserialize(channel);
+        assertEquals(toBytes(second.buffer), secondExpected);
+        Object retainedBacking = backingBuffer(second.buffer);
+        Assert.assertNotSame(backingBuffer(channel.getBuffer()), retainedBacking);
+        assertEquals(toBytes(first.buffer), expected);
+        assertEquals(toBytes(second.buffer), secondExpected);
+      }
+    }
+  }
+
+  @Test
+  public void testChannelInPlaceCompaction() throws IOException {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
+    int[] expected = new int[(1 << 20) / Integer.BYTES];
+    byte[] firstRoot = fory.serialize(expected);
+    byte[] secondRoot = fory.serialize(7);
+    byte[] data = Arrays.copyOf(firstRoot, firstRoot.length + secondRoot.length);
+    System.arraycopy(secondRoot, 0, data, firstRoot.length, secondRoot.length);
+
+    for (boolean direct : new boolean[] {false, true}) {
+      ByteBuffer initialBuffer =
+          direct
+              ? ByteBuffer.allocateDirect(firstRoot.length)
+              : ByteBuffer.allocate(firstRoot.length);
+      try (ForyReadableChannel channel =
+          new ForyReadableChannel(
+              new ChunkedReadableByteChannel(data, firstRoot.length), initialBuffer)) {
+        MemoryBuffer channelBuffer = channel.getBuffer();
+        assertEquals(((int[]) fory.deserialize(channel)).length, expected.length);
+        assertEquals(fory.deserialize(channel), Integer.valueOf(7));
+        Object grownBacking = backingBuffer(channelBuffer);
+        assertTrue(channelBuffer.readerIndex() > 0);
+        Assert.assertSame(backingBuffer(channel.getBuffer()), grownBacking);
+        assertEquals(channelBuffer.readerIndex(), 0);
+      }
+    }
+  }
+
+  @Test
+  public void testChannelPrefetchCompaction() throws IOException {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .build();
+    Assert.assertSame(
+        fory.getTypeResolver().getSerializer(int[].class).getClass(),
+        PrimitiveArraySerializers.IntArraySerializer.class);
+    int[] expected = new int[1025];
+    for (int i = 0; i < expected.length; i++) {
+      expected[i] = i + 3;
+    }
+    int[] callbacks = {0};
+    byte[] frame =
+        fory.serialize(
+            expected,
+            bufferObject -> {
+              callbacks[0]++;
+              return true;
+            });
+    assertEquals(callbacks[0], 1);
+    int numMessages = 4096;
+    byte[] data = new byte[frame.length * numMessages];
+    for (int offset = 0; offset < data.length; offset += frame.length) {
+      System.arraycopy(frame, 0, data, offset, frame.length);
+    }
+    // At repeated retirement boundaries, 17-byte reads leave the backing short of full until a
+    // body spans growth. Frame-sized reads can fill it early and hide continued capacity growth.
+    for (int chunkSize : new int[] {data.length, 17}) {
+      for (boolean direct : new boolean[] {false, true}) {
+        ByteBuffer initialBuffer =
+            direct ? ByteBuffer.allocateDirect(4096) : ByteBuffer.allocate(4096);
+        try (ForyReadableChannel channel =
+            new ForyReadableChannel(
+                new ChunkedReadableByteChannel(data, chunkSize), initialBuffer)) {
+          MemoryBuffer buffer = channel.getBuffer();
+          for (int i = 0; i < numMessages; i++) {
+            assertEquals((int[]) fory.deserialize(channel, Collections.emptyList()), expected);
+          }
+          // Full prefetch can finish just before a root crosses half the backing. Retirement must
+          // use the completed root's cursor, or these small frames cause continued geometric
+          // growth.
+          int capacity = backingCapacity(buffer);
+          assertTrue(
+              capacity <= 1 << 22,
+              "Unexpected retained channel capacity "
+                  + capacity
+                  + ", chunkSize="
+                  + chunkSize
+                  + ", direct="
+                  + direct);
+        }
+      }
+    }
+  }
+
+  private static byte[] toBytes(ByteBuffer buffer) {
+    ByteBuffer duplicate = buffer.duplicate();
+    byte[] bytes = new byte[duplicate.remaining()];
+    duplicate.get(bytes);
+    return bytes;
+  }
+
+  private static byte[] toBytes(MemoryBuffer buffer) {
+    return buffer.getBytes(buffer.readerIndex(), buffer.remaining());
+  }
+
+  private static final class BufferView {
+    private final byte[] bytes;
+    private final MemoryBuffer buffer;
+
+    private BufferView(byte[] bytes) {
+      this.bytes = bytes;
+      this.buffer = null;
+    }
+
+    private BufferView(MemoryBuffer buffer) {
+      this.bytes = null;
+      this.buffer = buffer;
+    }
+  }
+
+  private static final class BufferViewSerializer extends Serializer<BufferView> {
+    private BufferViewSerializer(Config config) {
+      super(config, BufferView.class);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, BufferView value) {
+      byte[] bytes = value.bytes != null ? value.bytes : toBytes(value.buffer);
+      writeContext.writeBufferObject(PrimitiveArraySerializers.byteArrayBufferObject(bytes));
+    }
+
+    @Override
+    public BufferView read(ReadContext readContext) {
+      return new BufferView(readContext.readBufferObject());
+    }
   }
 
   @Test

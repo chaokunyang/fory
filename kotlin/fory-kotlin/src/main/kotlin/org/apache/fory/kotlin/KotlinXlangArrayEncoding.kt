@@ -154,7 +154,8 @@ public object KotlinXlangArrayEncoding {
   }
 
   private fun arrayBuffer(readContext: ReadContext): MemoryBuffer =
-    if (readContext.isPeerOutOfBandEnabled) readContext.readBufferObject() else readContext.buffer
+    if (readContext.isPeerOutOfBandEnabled) readContext.readBufferObjectCopySource()
+    else readContext.buffer
 
   private fun arrayByteSize(readContext: ReadContext, buffer: MemoryBuffer, elementSize: Int): Int {
     val size =

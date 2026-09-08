@@ -22,6 +22,7 @@ package org.apache.fory.context;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.config.Config;
 import org.apache.fory.config.Int64Encoding;
 import org.apache.fory.exception.InsecureException;
@@ -531,9 +532,23 @@ public final class ReadContext {
 
   /**
    * Reads a buffer object payload, resolving either an in-band slice or the next out-of-band
-   * buffer.
+   * buffer. An in-band result is a retained zero-copy view, so stream readers preserve its backing
+   * after this operation returns.
    */
   public MemoryBuffer readBufferObject() {
+    return readBufferObject(true);
+  }
+
+  /**
+   * Reads a buffer object which the caller copies completely before returning. The returned buffer
+   * must not be retained by the decoded value.
+   */
+  @Internal
+  public MemoryBuffer readBufferObjectCopySource() {
+    return readBufferObject(false);
+  }
+
+  private MemoryBuffer readBufferObject(boolean retainView) {
     MemoryBuffer buffer = this.buffer;
     boolean inBand = buffer.readBoolean();
     if (inBand) {
@@ -552,6 +567,11 @@ public final class ReadContext {
       int readerIndex = buffer.readerIndex();
       MemoryBuffer slice = buffer.slice(readerIndex, size);
       buffer.readerIndex(readerIndex + size);
+      if (retainView) {
+        // Filling finishes before slicing; advancing within proven bytes cannot replace its
+        // backing.
+        buffer.getStreamReader().retainBufferView();
+      }
       return slice;
     }
     Preconditions.checkArgument(outOfBandBuffers.hasNext());

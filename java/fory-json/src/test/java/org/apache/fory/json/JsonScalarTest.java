@@ -26,6 +26,7 @@ import static org.apache.fory.json.JsonTestSupport.newUtf16Reader;
 import static org.apache.fory.json.JsonTestSupport.newUtf8Reader;
 import static org.apache.fory.json.JsonTestSupport.newUtf8Writer;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.expectThrows;
@@ -2642,6 +2643,21 @@ public class JsonScalarTest extends ForyJsonTestModels {
     assertThrows(
         RuntimeException.class,
         () -> json.fromJson("\"2024-02-03T04:05:06+99:00\"", OffsetDateTime.class));
+  }
+
+  @Test
+  public void readUtf16TemporalProbe() throws Exception {
+    String truncated = "\"2024-02-03T04:05:0";
+    Utf16JsonReader reader = newUtf16Reader(truncated);
+    Field bytes = Utf16JsonReader.class.getDeclaredField("bytes");
+    bytes.setAccessible(true);
+    // Checked String access makes overreads fail deterministically without Unsafe access or
+    // constraining the public error contract.
+    bytes.set(reader, null);
+    Method probe = Utf16JsonReader.class.getDeclaredMethod("tryReadIsoOffsetDateTimeToken");
+    probe.setAccessible(true);
+    assertNull(probe.invoke(reader));
+    assertEquals(reader.position(), 0);
   }
 
   @Test

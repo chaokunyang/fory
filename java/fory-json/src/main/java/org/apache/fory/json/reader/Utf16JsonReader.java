@@ -2328,7 +2328,8 @@ public final class Utf16JsonReader extends JsonReader {
       int index, int inputLength, int year, int month, int day, int hour, int minute) {
     int second = 0;
     int nano = 0;
-    if (index < inputLength && charAtFast(index) == ':') {
+    // charAtFast may be unchecked, so prove ':' and both seconds digits are in this input.
+    if (inputLength - index >= 3 && charAtFast(index) == ':') {
       second = parse2(index + 1);
       if (second < 0) {
         return null;

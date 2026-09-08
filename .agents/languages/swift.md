@@ -13,6 +13,9 @@ Load this file when changing `swift/` or Swift xlang behavior.
 - Swift formatting uses `swift/.swift-format`; do not rely on SwiftLint for indentation or source
   formatting.
 - Use `ENABLE_FORY_DEBUG_OUTPUT=1` when debugging Swift tests.
+- Wire lengths must include implicit protocol bytes and size extensions in widened arithmetic
+  before narrowing to `Int`. In particular, TypeMeta field-name sizes encode length minus one;
+  checking only that encoded size still permits an `Int.max + 1` trap on 32-bit targets.
 - Generated Swift gRPC companions are compiler-owned files targeting grpc-swift 1.x. Keep grpc-swift out of the `swift/` runtime package; it belongs only to generated user code and the compiler build fixture.
 - Prefer the user-requested or existing Foundation public value type when it is the intended Swift surface; do not invent Fory-prefixed wrappers only to avoid import ambiguity.
 - Preserve distinct temporal semantics. Timestamp values and day-only local dates should have protocol-accurate helper names and no stale aliases after a refactor.

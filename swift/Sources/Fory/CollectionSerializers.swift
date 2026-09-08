@@ -396,7 +396,7 @@ private func preparePrimitiveArrayStorage(
 
 @inline(__always)
 private func readPrimitiveArrayByteSize(_ context: ReadContext) throws -> Int {
-    let byteSize = Int(try context.buffer.readVarUInt32())
+    let byteSize = try checkedWireCount(context.buffer.readVarUInt32())
     try context.ensureRemainingBytes(byteSize, label: "primitive_array_bytes")
     return byteSize
 }
@@ -842,7 +842,7 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
         ownerBytes: Int
     ) throws -> [Codec.Target] where Codec.Target == Element.Target {
         let buffer = context.buffer
-        let length = Int(try buffer.readVarUInt32())
+        let length = try checkedWireCount(buffer.readVarUInt32())
         try context.ensureCollectionLength(length, label: "array")
         if length == 0 {
             try reserveGraphArrayMemory(
@@ -1211,7 +1211,7 @@ public enum SetSerializer<Element: Serializer>: Serializer where Element.Target:
         ownerBytes: Int
     ) throws -> Set<Codec.Target> where Codec.Target == Element.Target {
         let buffer = context.buffer
-        let length = Int(try buffer.readVarUInt32())
+        let length = try checkedWireCount(buffer.readVarUInt32())
         try context.ensureCollectionLength(length, label: "set")
         try reserveGraphArrayMemory(
             context,
@@ -1779,7 +1779,7 @@ where Key.Target: Hashable {
         KeyCodec.Target == Key.Target,
         ValueCodec.Target == Value.Target
     {
-        let totalLength = Int(try context.buffer.readVarUInt32())
+        let totalLength = try checkedWireCount(context.buffer.readVarUInt32())
         try context.ensureCollectionLength(totalLength, label: "map")
         try reserveGraphMapMemory(
             context,

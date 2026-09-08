@@ -145,3 +145,50 @@ func stringSerializerRejectsInvalidPayloads() throws {
         #expect("\(error)".contains("unsupported string encoding"))
     }
 }
+
+@Test(.enabled(if: Int.bitWidth == 32, "Requires a 32-bit Int"))
+func wireLengthsFailWithoutTrapping() throws {
+    let stringLength = UInt64(Int32.max) + 1
+    let stringBuffer = ByteBuffer()
+    stringBuffer.writeVarUInt36Small(
+        (stringLength << 2) | ManualStringEncoding.utf8.rawValue
+    )
+    let stringContext = ReadContext(
+        buffer: stringBuffer,
+        typeResolver: TypeResolver(config: Config(trackRef: false)),
+        config: Config(trackRef: false)
+    )
+
+    #expect(throws: (any Error).self) {
+        _ = try String.readData(stringContext)
+    }
+
+    let binaryLength = UInt32.max
+    let binaryBuffer = ByteBuffer()
+    binaryBuffer.writeVarUInt32(binaryLength)
+    let binaryContext = ReadContext(
+        buffer: binaryBuffer,
+        typeResolver: TypeResolver(config: Config(trackRef: false)),
+        config: Config(trackRef: false)
+    )
+
+    #expect(throws: (any Error).self) {
+        _ = try Data.readData(binaryContext)
+    }
+}
+
+@Test(.enabled(if: Int.bitWidth == 32, "Requires a 32-bit Int"))
+func extendedMetaLengthFailsSafely() throws {
+    let prefixLength: UInt64 = 0b11_1111
+    let buffer = ByteBuffer()
+    buffer.writeUInt8(UInt8(prefixLength << 2))
+    buffer.writeVarUInt32(UInt32.max)
+
+    #expect(throws: (any Error).self) {
+        _ = try readMetaString(
+            buffer: buffer,
+            decoder: .typeName,
+            encodings: [.utf8]
+        )
+    }
+}

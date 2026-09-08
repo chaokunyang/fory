@@ -269,7 +269,7 @@ extension ReadContext {
         let elementFieldType =
             fieldType.generics.first
             ?? TypeMeta.FieldType(typeID: TypeId.unknown.rawValue, nullable: true)
-        let length = Int(try buffer.readVarUInt32())
+        let length = try checkedWireCount(buffer.readVarUInt32())
         try ensureCollectionLength(length, label: "compatible_collection")
         if length == 0 {
             return []
@@ -396,7 +396,7 @@ extension ReadContext {
             fieldType.generics.dropFirst().first
             ?? TypeMeta.FieldType(typeID: TypeId.unknown.rawValue, nullable: true)
 
-        let totalLength = Int(try buffer.readVarUInt32())
+        let totalLength = try checkedWireCount(buffer.readVarUInt32())
         try ensureCollectionLength(totalLength, label: "compatible_map")
         if totalLength == 0 {
             return [:]

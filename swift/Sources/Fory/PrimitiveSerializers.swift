@@ -57,6 +57,42 @@ internal func uint64ToUIntOverflow(_ value: UInt64) -> ForyError {
     ForyError.invalidData("uint64 value \(value) overflows UInt")
 }
 
+// Wire-declared sizes and counts must fit the native index type before an owner
+// performs bounds or allocation arithmetic. A trapping Int conversion would abort
+// 32-bit processes. UInt64 callers are bounded by varuint36 or a varuint32 plus a
+// small protocol prefix, so supported 64-bit targets can narrow without a branch.
+@usableFromInline
+@inline(__always)
+internal func checkedWireCount(_ value: UInt64) throws -> Int {
+    #if arch(arm64) || arch(x86_64)
+        return Int(value)
+    #else
+        guard value <= UInt64(Int.max) else {
+            throw wireCountOverflow(value)
+        }
+        return Int(value)
+    #endif
+}
+
+@usableFromInline
+@inline(__always)
+internal func checkedWireCount(_ value: UInt32) throws -> Int {
+    #if arch(arm64) || arch(x86_64)
+        return Int(value)
+    #else
+        guard UInt64(value) <= UInt64(Int.max) else {
+            throw wireCountOverflow(UInt64(value))
+        }
+        return Int(value)
+    #endif
+}
+
+@usableFromInline
+@inline(never)
+internal func wireCountOverflow(_ value: UInt64) -> ForyError {
+    ForyError.invalidData("wire-declared size \(value) overflows Int")
+}
+
 extension Bool: Serializer {
     public static var staticTypeId: TypeId { .bool }
     public static var readDataAlwaysAdvances: Bool { true }
@@ -457,7 +493,7 @@ extension String: Serializer {
     public static func readData(_ context: ReadContext) throws -> String {
         let header = try context.buffer.readVarUInt36Small()
         let encoding = header & 0x03
-        let byteLength = Int(header >> 2)
+        let byteLength = try checkedWireCount(header >> 2)
 
         switch encoding {
         case StringEncoding.utf8.rawValue:
@@ -514,7 +550,7 @@ extension Data: Serializer {
 
     public static func readData(_ context: ReadContext) throws -> Data {
         let length = try context.buffer.readVarUInt32()
-        let byteLength = Int(length)
+        let byteLength = try checkedWireCount(length)
         try context.ensureRemainingBytes(byteLength, label: "binary")
         let bytes = try context.buffer.readBytes(count: byteLength)
         return Data(bytes)

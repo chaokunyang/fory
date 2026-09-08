@@ -56,6 +56,21 @@ func typeMetaTruncationFailsCleanly() {
     }
 }
 
+@Test(.enabled(if: Int.bitWidth == 32, "Requires a 32-bit Int"))
+func typeMetaNameLengthFitsInt() throws {
+    let body = ByteBuffer()
+    body.writeUInt8(0b1100_0001)
+    body.writeVarUInt32(903)
+    body.writeUInt8(0b0011_1100)
+    // The encoded length fits a 32-bit Int, but its implicit final byte does not.
+    body.writeVarUInt32(UInt32(Int32.max) - 15)
+    body.writeUInt8(UInt8(TypeId.int32.rawValue))
+
+    #expect(throws: (any Error).self) {
+        _ = try TypeMeta.decode(encodedTypeMetaBody(body))
+    }
+}
+
 @Test
 func remoteTypeMetaUsesFixedDepth() throws {
     let config = Config(compatible: true, maxDepth: 2)

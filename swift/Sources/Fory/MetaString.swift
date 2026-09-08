@@ -562,7 +562,8 @@ func readMetaString(
 
     var length = Int(header >> 2)
     if length >= 0b11_1111 {
-        length = 0b11_1111 + Int(try buffer.readVarUInt32())
+        length = try checkedWireCount(
+            UInt64(0b11_1111) + UInt64(try buffer.readVarUInt32()))
     }
     let bytes = try buffer.readBytes(count: length)
     return try decoder.decode(bytes: bytes, encoding: encodings[encodingIndex])

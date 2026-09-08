@@ -290,7 +290,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             let header = try buffer.readUInt8()
             let encodingFlags = Int((header >> 6) & 0b11)
             let inlineSize = Int32((header >> 2) & 0b1111)
-            var nameSize = Int(inlineSize)
+            var nameSize = Int(inlineSize) + 1
             var fieldID: Int32 = encodingFlags == 3 ? inlineSize : -1
             if inlineSize == Int32(fieldNameSizeThreshold) {
                 let extensionSize = try buffer.readVarUInt32()
@@ -300,7 +300,9 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
                     }
                     fieldID += Int32(extensionSize)
                 } else {
-                    nameSize += Int(extensionSize)
+                    // The wire stores length minus one. Include the implicit byte before
+                    // narrowing so an Int.max encoded size cannot trap before the bounds check.
+                    nameSize = try checkedWireCount(UInt64(nameSize) + UInt64(extensionSize))
                 }
             }
 
@@ -324,7 +326,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             guard encodingFlags < fieldNameMetaStringEncodings.count else {
                 throw ForyError.invalidData("invalid field name encoding id")
             }
-            let nameBytes = try buffer.readBytes(count: nameSize + 1)
+            let nameBytes = try buffer.readBytes(count: nameSize)
             let name = try MetaStringDecoder.fieldName
                 .decode(bytes: nameBytes, encoding: fieldNameMetaStringEncodings[encodingFlags])
                 .value
@@ -453,7 +455,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 
         var metaSize = Int(header & typeMetaSizeMask)
         if metaSize == Int(typeMetaSizeMask) {
-            metaSize += Int(try buffer.readVarUInt32())
+            metaSize = try checkedWireCount(UInt64(metaSize) + UInt64(try buffer.readVarUInt32()))
         }
         if metaSize > maxTypeMetaBytes {
             throw ForyError.invalidData(
@@ -481,7 +483,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             let compatible = (metaHeader & compatibleTypeMetaFlag) != 0
             numFields = Int(metaHeader & UInt8(smallNumFieldsThreshold))
             if numFields == smallNumFieldsThreshold {
-                numFields += Int(try bodyReader.readVarUInt32())
+                numFields = try checkedWireCount(
+                    UInt64(numFields) + UInt64(try bodyReader.readVarUInt32()))
             }
             if numFields > maxTypeFields {
                 throw ForyError.invalidData(
@@ -711,7 +714,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 
         var length = Int(header >> 2)
         if length >= bigNameThreshold {
-            length = bigNameThreshold + Int(try buffer.readVarUInt32())
+            length = try checkedWireCount(
+                UInt64(bigNameThreshold) + UInt64(try buffer.readVarUInt32()))
         }
         let bytes = try buffer.readBytes(count: length)
         return try decoder.decode(bytes: bytes, encoding: encodings[encodingIndex])

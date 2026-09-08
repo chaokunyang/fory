@@ -332,7 +332,8 @@ public final class ReadContext {
                 let headerHash = typeMetaHashFromHeader(header)
                 var bodySize = Int(header & UInt64(typeMetaSizeMask))
                 if bodySize == typeMetaSizeMask {
-                    bodySize += Int(try buffer.readVarUInt32())
+                    bodySize = try checkedWireCount(
+                        UInt64(bodySize) + UInt64(try buffer.readVarUInt32()))
                 }
                 if headerHash == localTypeDefHeaderHash {
                     // The declared local type owns this protocol-defined 52-bit hash, so this is a
@@ -396,7 +397,7 @@ public final class ReadContext {
         let headerHash = typeMetaHashFromHeader(header)
         var bodySize = Int(header & UInt64(typeMetaSizeMask))
         if bodySize == typeMetaSizeMask {
-            bodySize += Int(try buffer.readVarUInt32())
+            bodySize = try checkedWireCount(UInt64(bodySize) + UInt64(try buffer.readVarUInt32()))
         }
         if let cached = typeResolver.getTypeInfo(forHeaderHash: headerHash) {
             // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
@@ -437,7 +438,7 @@ public final class ReadContext {
         let headerHash = typeMetaHashFromHeader(header)
         var bodySize = Int(header & UInt64(typeMetaSizeMask))
         if bodySize == typeMetaSizeMask {
-            bodySize += Int(try buffer.readVarUInt32())
+            bodySize = try checkedWireCount(UInt64(bodySize) + UInt64(try buffer.readVarUInt32()))
         }
         if headerHash == localTypeInfo.typeDefHeaderHash {
             // A nonempty per-root TypeDef table still uses the expected local 52-bit identity.
@@ -486,7 +487,8 @@ public final class ReadContext {
                 let headerHash = typeMetaHashFromHeader(header)
                 var bodySize = Int(header & UInt64(typeMetaSizeMask))
                 if bodySize == typeMetaSizeMask {
-                    bodySize += Int(try buffer.readVarUInt32())
+                    bodySize = try checkedWireCount(
+                        UInt64(bodySize) + UInt64(try buffer.readVarUInt32()))
                 }
 
                 if headerHash == localTypeDefHeaderHash {

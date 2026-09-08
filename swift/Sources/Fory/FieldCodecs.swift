@@ -1771,7 +1771,7 @@ private func readPackedArrayElementCount(
     width: Int,
     label: String
 ) throws -> Int {
-    let byteSize = Int(try context.buffer.readVarUInt32())
+    let byteSize = try checkedWireCount(context.buffer.readVarUInt32())
     try context.ensureRemainingBytes(byteSize, label: "primitive_array_bytes")
     if byteSize % width != 0 {
         throw ForyError.invalidData("\(label) byte size mismatch")
@@ -1845,7 +1845,7 @@ private func readListPayloadAsArrayPayload<ElementCodec: FieldCodec>(
     remoteElementTypeID: UInt32
 ) throws -> [ElementCodec.Target] {
     let buffer = context.buffer
-    let length = Int(try buffer.readVarUInt32())
+    let length = try checkedWireCount(buffer.readVarUInt32())
     try context.ensureCollectionLength(length, label: "array")
     if length == 0 {
         return []

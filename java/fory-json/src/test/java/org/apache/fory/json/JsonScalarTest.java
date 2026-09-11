@@ -1645,6 +1645,36 @@ public class JsonScalarTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void writeFloatingBuffers() {
+    String expected =
+        "[17,"
+            + Float.toString(Float.MAX_VALUE)
+            + ","
+            + Double.toString(-Double.MAX_VALUE)
+            + ",1.25]";
+    for (int capacity = 0; capacity < 49; capacity++) {
+      Utf8JsonWriter utf8 = newUtf8Writer(new byte[capacity]);
+      utf8.writeRawValue("[17,");
+      utf8.writeFloat(Float.MAX_VALUE);
+      utf8.writeComma(2);
+      utf8.writeDouble(-Double.MAX_VALUE);
+      utf8.writeComma(3);
+      utf8.writeFloat(1.25f);
+      utf8.writeArrayEnd();
+      assertEquals(new String(utf8.toJsonBytes(), StandardCharsets.UTF_8), expected);
+      StringJsonWriter text = newStringWriter(new byte[capacity]);
+      text.writeRawValue("[17,");
+      text.writeFloat(Float.MAX_VALUE);
+      text.writeComma(2);
+      text.writeDouble(-Double.MAX_VALUE);
+      text.writeComma(3);
+      text.writeFloat(1.25f);
+      text.writeArrayEnd();
+      assertEquals(text.toJson(), expected);
+    }
+  }
+
+  @Test
   public void reuseFloatingWriters() {
     Utf8JsonWriter utf8Writer = newUtf8Writer(new byte[4]);
     utf8Writer.writeFloat(1.25f);
@@ -3079,7 +3109,7 @@ public class JsonScalarTest extends ForyJsonTestModels {
   @Test
   public void portableFloatFormatterFallback() throws Exception {
     Method appendTo =
-        Class.forName("org.apache.fory.json.writer.JdkFloatFormatter")
+        Class.forName("org.apache.fory.json.writer.FloatingDecimal")
             .getDeclaredMethod("appendTo", float.class, StringBuilder.class);
     appendTo.setAccessible(true);
     float[] values = {1.5f, 1.1f, Float.MIN_VALUE, Float.MAX_VALUE, 1.0e-20f, 1.0e20f};
@@ -3094,7 +3124,7 @@ public class JsonScalarTest extends ForyJsonTestModels {
   @Test
   public void portableDoubleFormatterFallback() throws Exception {
     Method appendTo =
-        Class.forName("org.apache.fory.json.writer.JdkDoubleFormatter")
+        Class.forName("org.apache.fory.json.writer.FloatingDecimal")
             .getDeclaredMethod("appendTo", double.class, StringBuilder.class);
     appendTo.setAccessible(true);
     double[] values = {1.5d, 1.1d, Double.MIN_VALUE, Double.MAX_VALUE, 1.0e-200d, 1.0e200d};

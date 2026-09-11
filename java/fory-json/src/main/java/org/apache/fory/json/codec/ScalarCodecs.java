@@ -73,6 +73,7 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.regex.Pattern;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.JsonConfig;
 import org.apache.fory.json.meta.JsonAsciiToken;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.reader.JsonReader;
@@ -87,6 +88,7 @@ import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.GraphMemoryEstimates;
+import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Float16;
 
@@ -97,7 +99,8 @@ import org.apache.fory.type.Float16;
  * built-in instances also identify direct array, collection, map, field, and generated-code paths;
  * replacing one with a custom codec intentionally disables those built-in shortcuts. The dynamic
  * {@code Object} codec maps arrays and objects to {@link org.apache.fory.json.JsonArray} and {@link
- * org.apache.fory.json.JsonObject}, and dispatches writes through the active writer's resolver.
+ * org.apache.fory.json.JsonObject}, and writes Boolean and Integer directly when no scalar Mixin is
+ * configured. Other runtime values use the active writer's resolver.
  *
  * <p>Arbitrary-precision resource guards remain owned by reader construction of {@link BigInteger}
  * and {@link BigDecimal}. Primitive numeric readers retain their direct overflow and IEEE-754
@@ -121,12 +124,33 @@ public final class ScalarCodecs {
   public static final class NaturalCodec implements JsonValueCodec<Object> {
     public static final NaturalCodec INSTANCE = new NaturalCodec();
 
-    private NaturalCodec() {}
+    private final boolean scalarMixins;
+
+    private NaturalCodec() {
+      scalarMixins = false;
+    }
+
+    /** Creates the dynamic codec for an instance with configured Mixin annotations. */
+    @Internal
+    public NaturalCodec(JsonConfig config) {
+      scalarMixins =
+          config.mixins().containsKey(Boolean.class) || config.mixins().containsKey(Integer.class);
+    }
 
     @Override
     public void writeString(StringJsonWriter writer, Object value) {
       if (value == null) {
         writer.writeNull();
+        return;
+      }
+      // Registration cannot replace these built-ins, but a Mixin can attach a custom codec.
+      // Keep Mixin resolution and its type checks on the ordinary runtime dispatch path.
+      if (value instanceof Boolean && !scalarMixins) {
+        writer.writeBoolean((Boolean) value);
+        return;
+      }
+      if (value instanceof Integer && !scalarMixins) {
+        writer.writeInt((Integer) value);
         return;
       }
       JsonTypeInfo typeInfo = writer.typeResolver().getRuntimeTypeInfo(value.getClass());
@@ -137,6 +161,16 @@ public final class ScalarCodecs {
     public void writeUtf8(Utf8JsonWriter writer, Object value) {
       if (value == null) {
         writer.writeNull();
+        return;
+      }
+      // Registration cannot replace these built-ins, but a Mixin can attach a custom codec.
+      // Keep Mixin resolution and its type checks on the ordinary runtime dispatch path.
+      if (value instanceof Boolean && !scalarMixins) {
+        writer.writeBoolean((Boolean) value);
+        return;
+      }
+      if (value instanceof Integer && !scalarMixins) {
+        writer.writeInt((Integer) value);
         return;
       }
       JsonTypeInfo typeInfo = writer.typeResolver().getRuntimeTypeInfo(value.getClass());
@@ -340,7 +374,8 @@ public final class ScalarCodecs {
       if (reader.tryReadNullToken()) {
         return primitive ? primitiveNull(boolean.class) : null;
       }
-      return reader.readBoolean();
+      // The null-token probe already consumed whitespace for this concrete representation.
+      return reader.readBooleanTokenValue();
     }
 
     @Override
@@ -348,7 +383,8 @@ public final class ScalarCodecs {
       if (reader.tryReadNullToken()) {
         return primitive ? primitiveNull(boolean.class) : null;
       }
-      return reader.readBoolean();
+      // The null-token probe already consumed whitespace for this concrete representation.
+      return reader.readBooleanTokenValue();
     }
 
     @Override
@@ -356,7 +392,8 @@ public final class ScalarCodecs {
       if (reader.tryReadNullToken()) {
         return primitive ? primitiveNull(boolean.class) : null;
       }
-      return reader.readBoolean();
+      // The null-token probe already consumed whitespace for this concrete representation.
+      return reader.readBooleanTokenValue();
     }
   }
 
@@ -392,7 +429,8 @@ public final class ScalarCodecs {
       if (reader.tryReadNullToken()) {
         return primitive ? primitiveNull(int.class) : null;
       }
-      return reader.readInt();
+      // The null-token probe already consumed whitespace for this concrete representation.
+      return reader.readIntTokenValue();
     }
 
     @Override
@@ -400,7 +438,8 @@ public final class ScalarCodecs {
       if (reader.tryReadNullToken()) {
         return primitive ? primitiveNull(int.class) : null;
       }
-      return reader.readInt();
+      // The null-token probe already consumed whitespace for this concrete representation.
+      return reader.readIntTokenValue();
     }
 
     @Override
@@ -408,7 +447,8 @@ public final class ScalarCodecs {
       if (reader.tryReadNullToken()) {
         return primitive ? primitiveNull(int.class) : null;
       }
-      return reader.readInt();
+      // The null-token probe already consumed whitespace for this concrete representation.
+      return reader.readIntTokenValue();
     }
   }
 
@@ -1814,7 +1854,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, DateTimeFormatter.ISO_LOCAL_TIME);
+        writer.writeLocalTime(value);
       }
     }
 
@@ -1823,7 +1863,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, DateTimeFormatter.ISO_LOCAL_TIME);
+        writer.writeLocalTime(value);
       }
     }
 
@@ -1851,7 +1891,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        writer.writeLocalDateTime(value);
       }
     }
 
@@ -1860,7 +1900,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        writer.writeLocalDateTime(value);
       }
     }
 
@@ -1970,8 +2010,28 @@ public final class ScalarCodecs {
     public void writeUtf8(Utf8JsonWriter writer, ZoneOffset value) {
       if (value == null) {
         writer.writeNull();
+        return;
+      }
+      // ZoneOffset IDs are canonical ASCII: Z, +/-HH:mm, or +/-HH:mm:ss. They require no escaping.
+      String id = value.getId();
+      int length = id.length();
+      if (length == 1) {
+        writer.writeRawValue(0x225a22L, 0, 3);
+        return;
+      }
+      long first =
+          '"'
+              | ((long) (value.getTotalSeconds() < 0 ? '-' : '+') << 8)
+              | ((long) id.charAt(1) << 16)
+              | ((long) id.charAt(2) << 24)
+              | ((long) ':' << 32)
+              | ((long) id.charAt(4) << 40)
+              | ((long) id.charAt(5) << 48);
+      if (length == 6) {
+        writer.writeRawValue(first | ((long) '"' << 56), 0, 8);
       } else {
-        writer.writeString(value.getId());
+        long second = id.charAt(7) | ((long) id.charAt(8) << 8) | ((long) '"' << 16);
+        writer.writeRawValue(first | ((long) ':' << 56), second, 11);
       }
     }
 
@@ -1993,6 +2053,7 @@ public final class ScalarCodecs {
 
   public static final class ZoneIdCodec implements JsonValueCodec<ZoneId> {
     public static final ZoneIdCodec INSTANCE = new ZoneIdCodec();
+    private static final boolean STRING_BYTES_BACKED = StringSerializer.isBytesBackedString();
 
     @Override
     public void writeString(StringJsonWriter writer, ZoneId value) {
@@ -2007,8 +2068,17 @@ public final class ScalarCodecs {
     public void writeUtf8(Utf8JsonWriter writer, ZoneId value) {
       if (value == null) {
         writer.writeNull();
+        return;
+      }
+      String id = value.getId();
+      if (STRING_BYTES_BACKED
+          && StringSerializer.isLatin1Coder(StringSerializer.getStringCoder(id))) {
+        // Canonical ZoneId syntax is ASCII and excludes quotes, escapes, and control characters.
+        writer.writeRawValue('"', 0, 1);
+        writer.writeRawValue(StringSerializer.getStringBytes(id));
+        writer.writeRawValue('"', 0, 1);
       } else {
-        writer.writeString(value.getId());
+        writer.writeString(id);
       }
     }
 
@@ -2060,7 +2130,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, DateTimeFormatter.ISO_ZONED_DATE_TIME);
+        writer.writeZonedDateTime(value);
       }
     }
 
@@ -2069,7 +2139,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, DateTimeFormatter.ISO_ZONED_DATE_TIME);
+        writer.writeZonedDateTime(value);
       }
     }
 
@@ -2129,16 +2199,12 @@ public final class ScalarCodecs {
   public static final class YearMonthCodec implements JsonValueCodec<YearMonth> {
     public static final YearMonthCodec INSTANCE = new YearMonthCodec();
 
-    private static final class Formatter {
-      private static final DateTimeFormatter INSTANCE = DateTimeFormatter.ofPattern("uuuu-MM");
-    }
-
     @Override
     public void writeString(StringJsonWriter writer, YearMonth value) {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, Formatter.INSTANCE);
+        writer.writeYearMonth(value);
       }
     }
 
@@ -2147,7 +2213,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, Formatter.INSTANCE);
+        writer.writeYearMonth(value);
       }
     }
 
@@ -2170,16 +2236,12 @@ public final class ScalarCodecs {
   public static final class MonthDayCodec implements JsonValueCodec<MonthDay> {
     public static final MonthDayCodec INSTANCE = new MonthDayCodec();
 
-    private static final class Formatter {
-      private static final DateTimeFormatter INSTANCE = DateTimeFormatter.ofPattern("--MM-dd");
-    }
-
     @Override
     public void writeString(StringJsonWriter writer, MonthDay value) {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, Formatter.INSTANCE);
+        writer.writeMonthDay(value);
       }
     }
 
@@ -2188,7 +2250,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, Formatter.INSTANCE);
+        writer.writeMonthDay(value);
       }
     }
 
@@ -2253,7 +2315,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, DateTimeFormatter.ISO_OFFSET_TIME);
+        writer.writeOffsetTime(value);
       }
     }
 
@@ -2262,23 +2324,23 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, DateTimeFormatter.ISO_OFFSET_TIME);
+        writer.writeOffsetTime(value);
       }
     }
 
     @Override
     public OffsetTime readUtf8(Utf8JsonReader reader) {
-      return reader.tryReadNullToken() ? null : reader.readOffsetTime();
+      return reader.tryReadNextNullToken() ? null : reader.readOffsetTime();
     }
 
     @Override
     public OffsetTime readLatin1(Latin1JsonReader reader) {
-      return reader.tryReadNullToken() ? null : reader.readOffsetTime();
+      return reader.tryReadNextNullToken() ? null : reader.readOffsetTime();
     }
 
     @Override
     public OffsetTime readUtf16(Utf16JsonReader reader) {
-      return reader.tryReadNullToken() ? null : reader.readOffsetTime();
+      return reader.tryReadNextNullToken() ? null : reader.readOffsetTime();
     }
   }
 
@@ -3867,6 +3929,7 @@ public final class ScalarCodecs {
     private final int[] tokenSuffixes;
     private final byte[] tokenSuffixLengths;
     private final int[] tokenLengths;
+    private final int[] writeTokenIndexes;
     private final Enum<?>[] values;
     private final Enum<?>[] tokenValues;
     private final int tokenCount;
@@ -3880,6 +3943,7 @@ public final class ScalarCodecs {
       tokenSuffixes = new int[constants.length];
       tokenSuffixLengths = new byte[constants.length];
       tokenLengths = new int[constants.length];
+      writeTokenIndexes = new int[constants.length];
       values = new Enum<?>[constants.length];
       tokenValues = new Enum<?>[constants.length];
       int localTokenCount = 0;
@@ -3897,6 +3961,19 @@ public final class ScalarCodecs {
           tokenSuffixLengths[localTokenCount] = (byte) JsonAsciiToken.suffixLength(tokenLength);
           tokenLengths[localTokenCount] = tokenLength;
           tokenValues[localTokenCount] = constant;
+          boolean ascii = true;
+          for (int j = 0; j < name.length(); j++) {
+            char ch = name.charAt(j);
+            if (ch < 0x20 || ch >= 0x80 || ch == '"' || ch == '\\') {
+              ascii = false;
+              break;
+            }
+          }
+          // Reader tokens are compacted and may contain Latin1 names. Only JSON-safe ASCII
+          // tokens can also serve as raw UTF8 output; retain their index by enum ordinal.
+          if (ascii) {
+            writeTokenIndexes[i] = localTokenCount + 1;
+          }
           localTokenCount++;
         }
       }
@@ -3917,8 +3994,17 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeString(value.name());
+        int index = writeTokenIndex(value);
+        if (index >= 0) {
+          writer.writeRawValue(tokenPrefixes[index], tokenSuffixes[index], tokenLengths[index]);
+        } else {
+          writer.writeString(value.name());
+        }
       }
+    }
+
+    private int writeTokenIndex(Enum<?> value) {
+      return value.getDeclaringClass() == type ? writeTokenIndexes[value.ordinal()] - 1 : -1;
     }
 
     @Override

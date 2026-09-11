@@ -19,8 +19,11 @@
 
 package org.apache.fory.json.reader;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodType;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -32,8 +35,11 @@ import java.time.OffsetTime;
 import java.time.Period;
 import java.time.Year;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.Objects;
 import java.util.UUID;
 import org.apache.fory.annotation.Internal;
@@ -44,7 +50,12 @@ import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.meta.JsonFieldTable;
 import org.apache.fory.json.meta.JsonSubtypeScanInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.NativeByteOrder;
+import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.internal._JDKAccess;
+import org.apache.fory.serializer.StringSerializer;
 
 /**
  * Representation-neutral JSON cursor and common scalar parsing owner.
@@ -71,9 +82,10 @@ import org.apache.fory.memory.NativeByteOrder;
  * intentionally avoid cleanup-only {@code try/finally} regions.
  */
 public abstract class JsonReader {
-  private static final int MAX_BIG_NUMBER_LENGTH = 10_000;
-  private static final int INITIAL_BIG_DECIMAL_BUFFER_SIZE = 64;
+  static final int MAX_BIG_NUMBER_LENGTH = 10_000;
+  private static final MethodHandle BIG_INTEGER_CONSTRUCTOR = bigIntegerConstructor();
   private static final byte[] EMPTY_BYTES = new byte[0];
+  private static final byte[] HEX_VALUES = hexValues();
   static final int MAX_BIG_DECIMAL_SCALE = 10_000;
   private static final int COMPACT_DECIMAL_MAX_SCALE = 18;
   private static final long[] LONG_POWERS_OF_TEN = {
@@ -102,7 +114,7 @@ public abstract class JsonReader {
   private static final int DOUBLE_FRACTION_BITS = 52;
   private static final long DOUBLE_SIGN_BIT = 0x8000_0000_0000_0000L;
   private static final long DOUBLE_FRACTION_MASK = (1L << DOUBLE_FRACTION_BITS) - 1;
-  private static final long[] COMPACT_DOUBLE_MANTISSAS = {
+  private static final long[] COMPACT_DECIMAL_MANTISSAS = {
     0x8000_0000_0000_0000L,
     0xcccc_cccc_cccc_ccccL,
     0xa3d7_0a3d_70a3_d70aL,
@@ -488,169 +500,27 @@ public abstract class JsonReader {
     return quotedTextView;
   }
 
-  /** Reads a nullable Base64 JSON string directly into its decoded bytes. */
+  /** Reads a nullable Base64 JSON string into its decoded bytes. */
   public final byte[] readBase64() {
-    if (tryReadNull()) {
+    if (tryReadNullToken()) {
       return null;
     }
-    if (position >= length() || charAt(position++) != '"') {
-      throw error("Expected Base64 JSON string");
-    }
-    int bodyStart = position;
-    int end = -1;
-    int padding = 0;
-    while (position < length()) {
-      char ch = charAt(position++);
-      if (ch == '"') {
-        end = position - 1;
-        break;
-      }
-      if (ch == '\\') {
-        // Rare: an escaped character in the body, fall back to the validating two-pass path
-        position = bodyStart;
-        return readBase64Escaped(bodyStart);
-      }
-      if (ch == '=') {
-        if (++padding > 2) {
-          throw error("Invalid Base64 JSON string padding");
-        }
-      } else if (padding != 0 || base64Digit(ch) < 0) {
-        throw error("Invalid Base64 JSON string");
-      }
-    }
-    if (end < 0) {
-      throw error("Unterminated Base64 JSON string");
-    }
-    int bodyLength = end - bodyStart;
-    if (bodyLength == 0) {
-      return EMPTY_BYTES;
-    }
-    if ((bodyLength & 3) != 0) {
-      throw error("Invalid Base64 JSON string length");
-    }
-    int decodedLength = (bodyLength >>> 2) * 3 - padding;
-    // Base64 is a binary leaf: validated input bounds its storage, not the graph memory budget.
-    byte[] decoded = new byte[decodedLength];
-    decodeBase64(decoded, bodyStart, end);
-    return decoded;
-  }
-
-  private byte[] readBase64Escaped(int bodyStart) {
-    // Validate and consume the complete encoded text before allocating, so untrusted input can
-    // only request decoded storage proportional to code units already proven readable.
-    long shape = scanBase64Shape();
-    int encodedLength = (int) (shape >>> 2);
+    String encoded = readString();
+    int encodedLength = encoded.length();
     if (encodedLength == 0) {
       return EMPTY_BYTES;
     }
-    int end = position;
-    int padding = (int) (shape & 3);
-    int decodedLength = (encodedLength >>> 2) * 3 - padding;
-    byte[] decoded = new byte[decodedLength];
-    position = bodyStart;
-    decodeBase64Escaped(decoded, encodedLength);
-    position = end;
-    return decoded;
-  }
-
-  private long scanBase64Shape() {
-    int encodedLength = 0;
-    int padding = 0;
-    while (position < length()) {
-      char ch = charAt(position++);
-      if (ch == '"') {
-        if ((encodedLength & 3) != 0) {
-          throw error("Invalid Base64 JSON string length");
-        }
-        return ((long) encodedLength << 2) | padding;
-      }
-      if (ch == '\\') {
-        ch = readEscapedFieldNameChar();
-      } else if (ch < 0x20) {
-        throw error("Unescaped control character in Base64 JSON string");
-      }
-      if (ch == '=') {
-        if (++padding > 2) {
-          throw error("Invalid Base64 JSON string padding");
-        }
-      } else {
-        if (padding != 0 || base64Digit(ch) < 0) {
-          throw error("Invalid Base64 JSON string");
-        }
-      }
-      encodedLength++;
+    // The JDK also accepts unpadded input; Fory's Base64 representation requires complete quartets.
+    if ((encodedLength & 3) != 0) {
+      throw error("Invalid Base64 JSON string length");
     }
-    throw error("Unterminated Base64 JSON string");
-  }
-
-  private void decodeBase64(byte[] decoded, int start, int end) {
-    int output = 0;
-    for (int index = start; index < end; index += 4) {
-      int bits = (base64Digit(charAt(index)) << 18) | (base64Digit(charAt(index + 1)) << 12);
-      char third = charAt(index + 2);
-      char fourth = charAt(index + 3);
-      if (third != '=') {
-        bits |= base64Digit(third) << 6;
-      }
-      if (fourth != '=') {
-        bits |= base64Digit(fourth);
-      }
-      decoded[output++] = (byte) (bits >>> 16);
-      if (output < decoded.length) {
-        decoded[output++] = (byte) (bits >>> 8);
-        if (output < decoded.length) {
-          decoded[output++] = (byte) bits;
-        }
-      }
+    // The string reader proves the complete input before any decoded binary storage is allocated.
+    // The JDK decoder can use its bulk intrinsic after the representation-specific string scan.
+    try {
+      return Base64.getDecoder().decode(encoded);
+    } catch (IllegalArgumentException e) {
+      throw new ForyJsonException("Invalid Base64 JSON string at JSON position " + position, e);
     }
-  }
-
-  private void decodeBase64Escaped(byte[] decoded, int encodedLength) {
-    int output = 0;
-    for (int index = 0; index < encodedLength; index += 4) {
-      int bits = (base64Digit(readBase64Char()) << 18) | (base64Digit(readBase64Char()) << 12);
-      char third = readBase64Char();
-      char fourth = readBase64Char();
-      if (third != '=') {
-        bits |= base64Digit(third) << 6;
-      }
-      if (fourth != '=') {
-        bits |= base64Digit(fourth);
-      }
-      decoded[output++] = (byte) (bits >>> 16);
-      if (output < decoded.length) {
-        decoded[output++] = (byte) (bits >>> 8);
-        if (output < decoded.length) {
-          decoded[output++] = (byte) bits;
-        }
-      }
-    }
-  }
-
-  private char readBase64Char() {
-    char ch = charAt(position++);
-    return ch == '\\' ? readEscapedFieldNameChar() : ch;
-  }
-
-  private static final byte[] BASE64_DIGIT_VALUES = new byte[128];
-
-  static {
-    java.util.Arrays.fill(BASE64_DIGIT_VALUES, (byte) -1);
-    for (char c = 'A'; c <= 'Z'; c++) {
-      BASE64_DIGIT_VALUES[c] = (byte) (c - 'A');
-    }
-    for (char c = 'a'; c <= 'z'; c++) {
-      BASE64_DIGIT_VALUES[c] = (byte) (c - 'a' + 26);
-    }
-    for (char c = '0'; c <= '9'; c++) {
-      BASE64_DIGIT_VALUES[c] = (byte) (c - '0' + 52);
-    }
-    BASE64_DIGIT_VALUES['+'] = 62;
-    BASE64_DIGIT_VALUES['/'] = 63;
-  }
-
-  private static int base64Digit(char ch) {
-    return ch < 128 ? BASE64_DIGIT_VALUES[ch] : -1;
   }
 
   public String readCharSequence() {
@@ -795,17 +665,22 @@ public abstract class JsonReader {
     return slice(start, position);
   }
 
-  private void scanNumberToken() {
+  // Absolute point/exponent offsets occupy the high/low 32 bits; -1 means a separator is absent.
+  long scanNumberToken() {
     int start = position;
+    int point = -1;
+    int exponent = -1;
     if (position < length() && charAt(position) == '-') {
       position++;
     }
     readIntegerDigits();
     if (position < length() && charAt(position) == '.') {
+      point = position;
       position++;
       readDigits();
     }
     if (position < length() && (charAt(position) == 'e' || charAt(position) == 'E')) {
+      exponent = position;
       position++;
       if (position < length() && (charAt(position) == '+' || charAt(position) == '-')) {
         position++;
@@ -815,6 +690,7 @@ public abstract class JsonReader {
     if (start == position) {
       throw error("Expected number");
     }
+    return ((long) point << 32) | (exponent & 0xffff_ffffL);
   }
 
   public final int readInt() {
@@ -1152,32 +1028,43 @@ public abstract class JsonReader {
     return parseOffsetTimeValue(readQuotedTextValue());
   }
 
-  protected final BigDecimal readBigDecimalFallback(int start) {
+  protected BigDecimal readBigDecimalFallback(int start) {
     position = start;
-    scanNumberToken();
+    long separators = scanNumberToken();
     int numberLength = position - start;
     if (numberLength > MAX_BIG_NUMBER_LENGTH) {
       throwBigNumberLengthExceeded(position);
     }
-    char[] chars = numericWorkspace.bigDecimalBuffer;
-    if (chars.length < numberLength) {
-      chars = new char[Math.max(numberLength, chars.length << 1)];
-      numericWorkspace.bigDecimalBuffer = chars;
+    String number = slice(start, position);
+    int exponent = (int) separators;
+    if (exponent >= 0) {
+      exponent -= start;
     }
-    for (int i = 0; i < numberLength; i++) {
-      chars[i] = charAt(start + i);
+    int coefficientEnd = exponent < 0 ? numberLength : exponent;
+    int point = (int) (separators >>> 32);
+    if (point >= 0) {
+      point -= start;
     }
-    BigDecimal value;
-    try {
-      value = new BigDecimal(chars, 0, numberLength);
-    } catch (NumberFormatException e) {
-      throw new ForyJsonException("Invalid JSON big decimal at JSON position " + position, e);
+    long scale = point < 0 ? 0 : coefficientEnd - point - 1;
+    if (exponent >= 0) {
+      scale = readExponentScale(start + exponent, scale);
     }
-    int scale = value.scale();
     if (scale > MAX_BIG_DECIMAL_SCALE || scale < -MAX_BIG_DECIMAL_SCALE) {
       throwBigDecimalScaleExceeded();
     }
-    return value;
+    // The scanner has validated the decimal grammar. Preserve every coefficient digit, including
+    // trailing zeroes, and reuse integer conversion instead of repeating JDK decimal digit parsing.
+    byte[] bytes = bigNumberBytes(number);
+    BigInteger unscaled;
+    if (point < 0) {
+      unscaled = parseBigInteger(bytes, 0, coefficientEnd, 0, 0);
+    } else {
+      byte[] coefficient = new byte[coefficientEnd - 1];
+      System.arraycopy(bytes, 0, coefficient, 0, point);
+      System.arraycopy(bytes, point + 1, coefficient, point, coefficientEnd - point - 1);
+      unscaled = parseBigInteger(coefficient, 0, coefficient.length, 0, 0);
+    }
+    return new BigDecimal(unscaled, (int) scale);
   }
 
   protected final void beginQuotedScalar() {
@@ -1237,6 +1124,45 @@ public abstract class JsonReader {
       throwBigDecimalScaleExceeded();
     }
     return BigDecimal.valueOf(negative ? -unscaled : unscaled, (int) adjustedScale);
+  }
+
+  static UUID parseUuidBytes(byte[] bytes, int start) {
+    // The concrete reader has already checked the token bounds and separators.
+    // Invalid digits remain negative through packing, so one test validates all eight groups.
+    int a = hexValue4(bytes, start);
+    int b = hexValue4(bytes, start + 4);
+    int c = hexValue4(bytes, start + 9);
+    int d = hexValue4(bytes, start + 14);
+    int e = hexValue4(bytes, start + 19);
+    int f = hexValue4(bytes, start + 24);
+    int g = hexValue4(bytes, start + 28);
+    int h = hexValue4(bytes, start + 32);
+    if ((a | b | c | d | e | f | g | h) < 0) {
+      throw new IllegalArgumentException();
+    }
+    return new UUID(
+        ((long) a << 48) | ((long) b << 32) | ((long) c << 16) | d,
+        ((long) e << 48) | ((long) f << 32) | ((long) g << 16) | h);
+  }
+
+  static int hexValue4(byte[] bytes, int offset) {
+    byte[] values = HEX_VALUES;
+    return (values[bytes[offset] & 0xff] << 12)
+        | (values[bytes[offset + 1] & 0xff] << 8)
+        | (values[bytes[offset + 2] & 0xff] << 4)
+        | values[bytes[offset + 3] & 0xff];
+  }
+
+  private static byte[] hexValues() {
+    byte[] values = new byte[256];
+    Arrays.fill(values, (byte) -1);
+    for (int i = 0; i < 10; i++) {
+      values['0' + i] = (byte) i;
+    }
+    for (int i = 0; i < 6; i++) {
+      values['a' + i] = values['A' + i] = (byte) (10 + i);
+    }
+    return values;
   }
 
   private UUID readUuidToken() {
@@ -1446,7 +1372,8 @@ public abstract class JsonReader {
 
   private LocalTime parseLocalTimeValue(CharSequence value) {
     try {
-      return LocalTime.parse(value);
+      LocalTime time = parseIsoTime(value, 0, value.length());
+      return time != null ? time : LocalTime.parse(value);
     } catch (RuntimeException e) {
       throw invalidStringValue("java.time.LocalTime", e);
     }
@@ -1454,6 +1381,10 @@ public abstract class JsonReader {
 
   private LocalDateTime parseLocalDateTimeValue(CharSequence value) {
     try {
+      LocalDateTime dateTime = parseIsoDateTime(value, value.length());
+      if (dateTime != null) {
+        return dateTime;
+      }
       return LocalDateTime.parse(value);
     } catch (RuntimeException e) {
       throw invalidStringValue("java.time.LocalDateTime", e);
@@ -1462,6 +1393,13 @@ public abstract class JsonReader {
 
   private Instant parseInstantValue(CharSequence value) {
     try {
+      int end = value.length() - 1;
+      if (end >= 19 && value.charAt(end) == 'Z') {
+        LocalDateTime dateTime = parseIsoDateTime(value, end);
+        if (dateTime != null) {
+          return dateTime.toInstant(ZoneOffset.UTC);
+        }
+      }
       return Instant.parse(value);
     } catch (RuntimeException e) {
       throw invalidStringValue("java.time.Instant", e);
@@ -1470,6 +1408,10 @@ public abstract class JsonReader {
 
   private Duration parseDurationValue(CharSequence value) {
     try {
+      Duration duration = parseIsoDuration(value);
+      if (duration != null) {
+        return duration;
+      }
       return Duration.parse(value);
     } catch (RuntimeException e) {
       throw invalidStringValue("java.time.Duration", e);
@@ -1478,6 +1420,24 @@ public abstract class JsonReader {
 
   private ZonedDateTime parseZonedDateTimeValue(CharSequence value) {
     try {
+      int end = value.length();
+      int zoneStart = indexOf(value, '[', 16);
+      int offsetEnd = zoneStart < 0 ? end : zoneStart;
+      int offsetStart = isoOffsetStart(value, 16, offsetEnd);
+      if (offsetStart >= 0 && (zoneStart < 0 || value.charAt(end - 1) == ']')) {
+        ZoneOffset offset = parseIsoOffset(value, offsetStart, offsetEnd);
+        LocalDateTime dateTime = parseIsoDateTime(value, offsetStart);
+        if (offset != null && dateTime != null) {
+          ZoneId zone =
+              zoneStart < 0
+                  ? offset
+                  : ZoneId.of(value.subSequence(zoneStart + 1, end - 1).toString());
+          // ISO parsing resolves an explicit offset to an instant before applying the region's
+          // rules, including when the supplied local time falls in a gap or uses another offset.
+          // JDK 8's generic parser can discard that explicit offset; preserve the encoded instant.
+          return ZonedDateTime.ofInstant(dateTime, offset, zone);
+        }
+      }
       return ZonedDateTime.parse(value);
     } catch (RuntimeException e) {
       throw invalidStringValue("java.time.ZonedDateTime", e);
@@ -1494,6 +1454,9 @@ public abstract class JsonReader {
 
   private YearMonth parseYearMonthValue(CharSequence value) {
     try {
+      if (value.length() == 7 && value.charAt(4) == '-') {
+        return YearMonth.of(parse4(value, 0), parse2(value, 5));
+      }
       return YearMonth.parse(value);
     } catch (RuntimeException e) {
       throw invalidStringValue("java.time.YearMonth", e);
@@ -1502,6 +1465,12 @@ public abstract class JsonReader {
 
   private MonthDay parseMonthDayValue(CharSequence value) {
     try {
+      if (value.length() == 7
+          && value.charAt(0) == '-'
+          && value.charAt(1) == '-'
+          && value.charAt(4) == '-') {
+        return MonthDay.of(parse2(value, 2), parse2(value, 5));
+      }
       return MonthDay.parse(value);
     } catch (RuntimeException e) {
       throw invalidStringValue("java.time.MonthDay", e);
@@ -1510,6 +1479,10 @@ public abstract class JsonReader {
 
   private Period parsePeriodValue(CharSequence value) {
     try {
+      Period period = parseIsoPeriod(value);
+      if (period != null) {
+        return period;
+      }
       return Period.parse(value);
     } catch (RuntimeException e) {
       throw invalidStringValue("java.time.Period", e);
@@ -1518,10 +1491,229 @@ public abstract class JsonReader {
 
   private OffsetTime parseOffsetTimeValue(CharSequence value) {
     try {
+      int end = value.length();
+      int offsetStart = isoOffsetStart(value, 5, end);
+      if (offsetStart >= 0) {
+        ZoneOffset offset = parseIsoOffset(value, offsetStart, end);
+        LocalTime time = parseIsoTime(value, 0, offsetStart);
+        if (offset != null && time != null) {
+          return OffsetTime.of(time, offset);
+        }
+      }
       return OffsetTime.parse(value);
     } catch (RuntimeException e) {
       throw invalidStringValue("java.time.OffsetTime", e);
     }
+  }
+
+  private static LocalDateTime parseIsoDateTime(CharSequence value, int end) {
+    if (end < 16 || value.charAt(4) != '-' || value.charAt(7) != '-' || value.charAt(10) != 'T') {
+      return null;
+    }
+    LocalTime time = parseIsoTime(value, 11, end);
+    if (time == null) {
+      return null;
+    }
+    LocalDate date = LocalDate.of(parse4(value, 0), parse2(value, 5), parse2(value, 8));
+    return LocalDateTime.of(date, time);
+  }
+
+  private static LocalTime parseIsoTime(CharSequence value, int start, int end) {
+    int length = end - start;
+    if (length < 5 || value.charAt(start + 2) != ':') {
+      return null;
+    }
+    int hour = parse2(value, start);
+    int minute = parse2(value, start + 3);
+    int second = 0;
+    int nano = 0;
+    if (length != 5) {
+      if (length < 8 || value.charAt(start + 5) != ':') {
+        return null;
+      }
+      second = parse2(value, start + 6);
+      if (length != 8) {
+        if (length > 18 || value.charAt(start + 8) != '.') {
+          return null;
+        }
+        for (int i = start + 9; i < end; i++) {
+          int digit = value.charAt(i) - '0';
+          if (digit < 0 || digit > 9) {
+            return null;
+          }
+          nano = nano * 10 + digit;
+        }
+        nano *= (int) LONG_POWERS_OF_TEN[18 - length];
+      }
+    }
+    // ISO_INSTANT additionally accepts leap seconds and midnight at 24:00. Its JDK parser owns
+    // those uncommon forms; normal LocalTime construction cannot represent them.
+    if (hour > 23 || minute > 59 || second > 59) {
+      return null;
+    }
+    return LocalTime.of(hour, minute, second, nano);
+  }
+
+  private static int isoOffsetStart(CharSequence value, int start, int end) {
+    for (int i = start; i < end; i++) {
+      char ch = value.charAt(i);
+      if (ch == 'Z' || ch == '+' || ch == '-') {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private static ZoneOffset parseIsoOffset(CharSequence value, int start, int end) {
+    int length = end - start;
+    if (value.charAt(start) == 'Z') {
+      return length == 1 ? ZoneOffset.UTC : null;
+    }
+    if ((length != 6 && length != 9) || value.charAt(start + 3) != ':') {
+      return null;
+    }
+    int hour = parse2(value, start + 1);
+    int minute = parse2(value, start + 4);
+    int second = 0;
+    if (length == 9) {
+      if (value.charAt(start + 6) != ':') {
+        return null;
+      }
+      second = parse2(value, start + 7);
+    }
+    if (minute > 59 || second > 59) {
+      return null;
+    }
+    int seconds = hour * 3600 + minute * 60 + second;
+    return ZoneOffset.ofTotalSeconds(value.charAt(start) == '-' ? -seconds : seconds);
+  }
+
+  private static Duration parseIsoDuration(CharSequence value) {
+    int length = value.length();
+    if (length < 4 || value.charAt(0) != 'P' || value.charAt(1) != 'T') {
+      return null;
+    }
+    int offset = 2;
+    int previousUnit = 0;
+    long seconds = 0;
+    int nanos = 0;
+    while (offset < length) {
+      boolean negative = value.charAt(offset) == '-';
+      if (negative) {
+        offset++;
+      }
+      int start = offset;
+      long component = 0;
+      while (offset < length) {
+        int digit = value.charAt(offset) - '0';
+        if (digit < 0 || digit > 9) {
+          break;
+        }
+        component = Math.subtractExact(Math.multiplyExact(component, 10L), digit);
+        offset++;
+      }
+      if (offset == start || offset == length) {
+        return null;
+      }
+      if (!negative) {
+        component = Math.negateExact(component);
+      }
+      char suffix = value.charAt(offset++);
+      if (suffix == '.') {
+        int multiplier = 100_000_000;
+        while (offset < length) {
+          int digit = value.charAt(offset) - '0';
+          if (digit < 0 || digit > 9) {
+            break;
+          }
+          if (multiplier == 0) {
+            return null;
+          }
+          nanos += digit * multiplier;
+          multiplier /= 10;
+          offset++;
+        }
+        if (offset == length || value.charAt(offset++) != 'S') {
+          return null;
+        }
+        // Keep the lexical sign for -0.fraction; JDK 8 loses it when parsing the integer zero.
+        if (negative) {
+          nanos = -nanos;
+        }
+        suffix = 'S';
+      }
+      int unit;
+      int factor;
+      if (suffix == 'H') {
+        unit = 1;
+        factor = 3600;
+      } else if (suffix == 'M') {
+        unit = 2;
+        factor = 60;
+      } else if (suffix == 'S') {
+        unit = 3;
+        factor = 1;
+      } else {
+        return null;
+      }
+      if (unit <= previousUnit) {
+        return null;
+      }
+      previousUnit = unit;
+      seconds = Math.addExact(seconds, Math.multiplyExact(component, (long) factor));
+    }
+    return Duration.ofSeconds(seconds, nanos);
+  }
+
+  private static Period parseIsoPeriod(CharSequence value) {
+    int length = value.length();
+    if (length < 3 || value.charAt(0) != 'P') {
+      return null;
+    }
+    int offset = 1;
+    int previousUnit = 0;
+    int years = 0;
+    int months = 0;
+    int days = 0;
+    while (offset < length) {
+      boolean negative = value.charAt(offset) == '-';
+      if (negative) {
+        offset++;
+      }
+      int start = offset;
+      long component = 0;
+      while (offset < length) {
+        int digit = value.charAt(offset) - '0';
+        if (digit < 0 || digit > 9) {
+          break;
+        }
+        component = Math.addExact(Math.multiplyExact(component, 10L), digit);
+        offset++;
+      }
+      if (offset == start || offset == length) {
+        return null;
+      }
+      int amount = Math.toIntExact(negative ? -component : component);
+      char suffix = value.charAt(offset++);
+      int unit;
+      if (suffix == 'Y') {
+        unit = 1;
+        years = amount;
+      } else if (suffix == 'M') {
+        unit = 2;
+        months = amount;
+      } else if (suffix == 'D') {
+        unit = 3;
+        days = amount;
+      } else {
+        return null;
+      }
+      if (unit <= previousUnit) {
+        return null;
+      }
+      previousUnit = unit;
+    }
+    return Period.of(years, months, days);
   }
 
   private ForyJsonException invalidStringValue(String type, RuntimeException e) {
@@ -1600,22 +1792,158 @@ public abstract class JsonReader {
     }
   }
 
-  final BigInteger parseBigInteger(String number) {
+  private byte[] bigNumberBytes(String number) {
+    if (StringSerializer.isBytesBackedString() && StringSerializer.getStringCoder(number) == 0) {
+      return StringSerializer.getStringBytes(number);
+    }
+    // Bound the transcoding allocation on JDK8 or when compact strings are disabled.
     if (number.length() > MAX_BIG_NUMBER_LENGTH) {
       throwBigNumberLengthExceeded(position);
     }
-    try {
-      return new BigInteger(number);
-    } catch (NumberFormatException e) {
-      throw new ForyJsonException("Invalid JSON big integer at JSON position " + position, e);
+    return number.getBytes(StandardCharsets.ISO_8859_1);
+  }
+
+  final BigInteger parseBigInteger(String number) {
+    byte[] bytes = bigNumberBytes(number);
+    return parseBigInteger(bytes, 0, bytes.length, 0, 0);
+  }
+
+  final BigInteger parseBigInteger(byte[] bytes, int start, int end, long prefix, int prefixEnd) {
+    // UTF8 callers lend a span already validated within the input limit. The converter does not
+    // retain it; the resulting BigInteger owns its magnitude storage.
+    if (end - start > MAX_BIG_NUMBER_LENGTH) {
+      throwBigNumberLengthExceeded(position);
     }
+    // Callers have validated ASCII integer or coefficient syntax. Accumulate eighteen digits at a
+    // time in unsigned 64-bit words; each multiplication produces an exact high half and one carry.
+    // The length gate above bounds scratch storage by the text already proven readable.
+    boolean negative = bytes[start] == '-';
+    int offset = start + (negative ? 1 : 0);
+    int digits = end - offset;
+    int capacity = (digits + 17) / 18;
+    long[] words = numericWorkspace.bigIntegerBuffer;
+    if (words.length < capacity) {
+      words = new long[capacity];
+      numericWorkspace.bigIntegerBuffer = words;
+    }
+    int firstEnd;
+    int wordCount = 1;
+    if (prefixEnd > offset) {
+      // The UTF-8 integer reader already parsed this unsigned prefix, including abs(MIN_VALUE).
+      // Append the short suffix group first so the remaining loop keeps its fixed 18-digit stride.
+      words[0] = prefix;
+      firstEnd = prefixEnd;
+      int count = (end - firstEnd) % 18;
+      if (count != 0) {
+        long multiplier = LONG_POWERS_OF_TEN[count];
+        long product = prefix * multiplier;
+        long high = DecimalMath.unsignedMultiplyHigh(prefix, multiplier);
+        long sum = product + parseDecimalChunk(bytes, firstEnd, firstEnd + count);
+        words[0] = sum;
+        high += Long.compareUnsigned(sum, product) < 0 ? 1 : 0;
+        if (high != 0) {
+          words[wordCount++] = high;
+        }
+        firstEnd += count;
+      }
+    } else {
+      firstEnd = offset + (digits - 1) % 18 + 1;
+      words[0] = parseDecimalChunk(bytes, offset, firstEnd);
+    }
+    for (offset = firstEnd; offset < end; offset += 18) {
+      long carry = parseDecimalChunk(bytes, offset, offset + 18);
+      for (int i = 0; i < wordCount; i++) {
+        long word = words[i];
+        long product = word * 1_000_000_000_000_000_000L;
+        long high = DecimalMath.unsignedMultiplyHigh(word, 1_000_000_000_000_000_000L);
+        long sum = product + carry;
+        words[i] = sum;
+        carry = high + (Long.compareUnsigned(sum, product) < 0 ? 1 : 0);
+      }
+      if (carry != 0) {
+        words[wordCount++] = carry;
+      }
+    }
+    long highWord = words[wordCount - 1];
+    if (wordCount == 1 && highWord >= 0) {
+      return BigInteger.valueOf(negative ? -highWord : highWord);
+    }
+    if (BIG_INTEGER_CONSTRUCTOR != null) {
+      int leadingInts = Long.numberOfLeadingZeros(highWord) >>> 5;
+      // The constructor retains this canonical big-endian magnitude. Never lend the reusable
+      // numeric workspace: later reads must not mutate a previously returned BigInteger.
+      int[] magnitude = new int[wordCount * 2 - leadingInts];
+      if (leadingInts == 0) {
+        magnitude[0] = (int) (highWord >>> 32);
+      }
+      magnitude[1 - leadingInts] = (int) highWord;
+      for (int i = 0; i < wordCount - 1; i++) {
+        long word = words[i];
+        int index = magnitude.length - (i + 1) * 2;
+        magnitude[index] = (int) (word >>> 32);
+        magnitude[index + 1] = (int) word;
+      }
+      return bigInteger(magnitude, negative ? -1 : 1);
+    }
+    int leadingBytes = Long.numberOfLeadingZeros(highWord) >>> 3;
+    byte[] magnitude = new byte[wordCount * Long.BYTES - leadingBytes];
+    // A non-compact magnitude has at least eight bytes. Emit its partial high word first; the
+    // following full-word stores overwrite any padding, so no leading-zero byte scan is needed.
+    LittleEndian.putInt64(magnitude, 0, Long.reverseBytes(highWord) >>> (leadingBytes << 3));
+    for (int i = 0; i < wordCount - 1; i++) {
+      LittleEndian.putInt64(
+          magnitude, magnitude.length - (i + 1) * Long.BYTES, Long.reverseBytes(words[i]));
+    }
+    return new BigInteger(negative ? -1 : 1, magnitude);
+  }
+
+  private static BigInteger bigInteger(int[] magnitude, int signum) {
+    try {
+      return (BigInteger) BIG_INTEGER_CONSTRUCTOR.invokeExact(magnitude, signum);
+    } catch (ThreadDeath e) {
+      throw e;
+    } catch (VirtualMachineError e) {
+      throw e;
+    } catch (Throwable e) {
+      throw new ForyJsonException("Cannot construct JSON integer magnitude", e);
+    }
+  }
+
+  private static MethodHandle bigIntegerConstructor() {
+    if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      return null;
+    }
+    try {
+      return _JDKAccess._trustedLookup(BigInteger.class)
+          .findConstructor(
+              BigInteger.class, MethodType.methodType(void.class, int[].class, int.class));
+    } catch (NoSuchMethodException | IllegalAccessException e) {
+      return null;
+    }
+  }
+
+  private static long parseDecimalChunk(byte[] bytes, int start, int end) {
+    long value = 0;
+    while (end - start >= 8) {
+      // The complete token has already passed ASCII digit validation.
+      long digits = LittleEndian.getInt64(bytes, start) - 0x3030_3030_3030_3030L;
+      long pairs = (digits * 10 + (digits >>> 8)) & 0x00ff_00ff_00ff_00ffL;
+      long groups = (pairs * 100 + (pairs >>> 16)) & 0x0000_ffff_0000_ffffL;
+      long block = (groups & 0xffff) * 10_000 + (groups >>> 32);
+      value = value * 100_000_000 + block;
+      start += 8;
+    }
+    for (int i = start; i < end; i++) {
+      value = value * 10 + bytes[i] - '0';
+    }
+    return value;
   }
 
   final void throwBigDecimalScaleExceeded() {
     throw error("JSON big decimal scale " + MAX_BIG_DECIMAL_SCALE + " exceeded");
   }
 
-  private void throwBigNumberLengthExceeded(int offset) {
+  final void throwBigNumberLengthExceeded(int offset) {
     position = offset;
     throw error("JSON big number length " + MAX_BIG_NUMBER_LENGTH + " exceeded");
   }
@@ -1636,8 +1964,9 @@ public abstract class JsonReader {
   }
 
   protected static double compactDoubleValue(boolean negative, long unscaled, int scale) {
-    if (unscaled == 0) {
-      return negative ? -0.0d : 0.0d;
+    if (unscaled == 0 || scale == 0) {
+      double value = (double) unscaled;
+      return negative ? -value : value;
     }
     long bits = tryCompactDoubleBits(unscaled, scale);
     if (bits == 0) {
@@ -1658,7 +1987,8 @@ public abstract class JsonReader {
   private static long tryCompactDoubleBits(long unscaled, int scale) {
     int leadingZeros = Long.numberOfLeadingZeros(unscaled);
     long upper =
-        DecimalMath.unsignedMultiplyHigh(unscaled << leadingZeros, COMPACT_DOUBLE_MANTISSAS[scale]);
+        DecimalMath.unsignedMultiplyHigh(
+            unscaled << leadingZeros, COMPACT_DECIMAL_MANTISSAS[scale]);
     int upperBit = (int) (upper >>> 63);
     long mantissa = upper >>> (upperBit + 9);
     leadingZeros += 1 ^ upperBit;
@@ -1724,12 +2054,13 @@ public abstract class JsonReader {
   }
 
   protected static float compactFloatValue(boolean negative, long unscaled, int scale) {
-    if (unscaled == 0) {
-      return negative ? -0.0f : 0.0f;
+    if (unscaled == 0 || scale == 0) {
+      float value = (float) unscaled;
+      return negative ? -value : value;
     }
-    long converted = decimalToBinary(unscaled, scale, FLOAT_FRACTION_BITS, -126, 127);
+    int converted = tryCompactFloatBits(unscaled, scale);
     if (converted >= 0) {
-      return Float.intBitsToFloat((int) converted | (negative ? FLOAT_SIGN_BIT : 0));
+      return Float.intBitsToFloat(converted | (negative ? FLOAT_SIGN_BIT : 0));
     }
     long divisor = LONG_POWERS_OF_TEN[scale];
     float estimate = (float) unscaled / (float) divisor;
@@ -1738,6 +2069,29 @@ public abstract class JsonReader {
       bits |= FLOAT_SIGN_BIT;
     }
     return Float.intBitsToFloat(bits);
+  }
+
+  private static int tryCompactFloatBits(long unscaled, int scale) {
+    int shift = Long.numberOfLeadingZeros(unscaled);
+    long high =
+        DecimalMath.unsignedMultiplyHigh(unscaled << shift, COMPACT_DECIMAL_MANTISSAS[scale]);
+    int upperBit = (int) (high >>> 63);
+    int discardedBits = 39 + upperBit;
+    long remainder = high & ((1L << discardedBits) - 1);
+    long halfway = 1L << (discardedBits - 1);
+    // A positive long divided by 10^scale (0..18) is normal and finite. As in decimalToBinary,
+    // the exact high product lies in [high, high + 2); only a midpoint overlap needs correction.
+    // Round at float precision here: converting through double can round a midpoint twice.
+    if (remainder <= halfway && remainder + 2 >= halfway) {
+      return -1;
+    }
+    int significand = (int) (high >>> discardedBits) + (remainder > halfway ? 1 : 0);
+    int exponent = (int) ((-scale * 217706L) >> 16) + 63 + upperBit - shift;
+    if (significand == (1 << (FLOAT_FRACTION_BITS + 1))) {
+      significand >>>= 1;
+      exponent++;
+    }
+    return ((exponent + 127) << FLOAT_FRACTION_BITS) | (significand & FLOAT_FRACTION_MASK);
   }
 
   private static int correctCompactFloat(long unscaled, long divisor, int bits) {
@@ -1947,7 +2301,7 @@ public abstract class JsonReader {
         | (significand & ((1L << fractionBits) - 1));
   }
 
-  private long readExponentScale(int offset, long scale) {
+  final long readExponentScale(int offset, long scale) {
     offset++;
     boolean negativeExponent = false;
     if (offset < length()) {
@@ -2430,9 +2784,8 @@ public abstract class JsonReader {
     }
     char ch = charAt(position);
     if (ch == '"') {
-      // Unknown values are validation-only. Hashing validates the complete escaped string without
-      // materializing storage that no object can own.
-      readStringHash();
+      // Skipped text still needs escape and Unicode validation, but no decoded storage or hash.
+      position = scanStringEnd(position);
     } else if (ch == '{') {
       skipObject();
     } else if (ch == '[') {
@@ -2668,7 +3021,7 @@ public abstract class JsonReader {
     }
     do {
       skipWhitespace();
-      readString();
+      position = scanStringEnd(position);
       expect(':');
       skipValue();
     } while (consume(','));
@@ -2791,7 +3144,7 @@ public abstract class JsonReader {
     }
   }
 
-  protected final char readUnicodeEscape() {
+  protected char readUnicodeEscape() {
     if (position + 4 > length()) {
       throw error("Short unicode escape");
     }
@@ -2816,7 +3169,7 @@ public abstract class JsonReader {
   protected abstract String slice(int start, int end);
 
   private static final class NumericWorkspace {
-    private char[] bigDecimalBuffer = new char[INITIAL_BIG_DECIMAL_BUFFER_SIZE];
+    private long[] bigIntegerBuffer = new long[4];
   }
 
   private static final class QuotedTextView implements CharSequence {

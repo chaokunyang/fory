@@ -67,12 +67,12 @@ import org.apache.fory.serializer.StringSerializer;
  * detached copy, while {@link #writeTo(OutputStream)} writes the active range without closing or
  * flushing the destination. Reset applies the configured retained-buffer limit.
  *
- * <p>Finite float and double spelling comes from the JDK formatter, directly when available and
- * through a retained {@link StringBuilder} otherwise. Compact {@link BigDecimal} values are emitted
- * directly with JDK-compatible spelling; inflated values and out-of-long {@link BigInteger} values
- * use canonical JDK text on the cold arbitrary-precision path. The {@link Appendable} methods emit
- * escaped string content without adding surrounding quotes and are used by formatter-owned quoted
- * values.
+ * <p>Finite float and double values use direct shortest-decimal conversion with Java spelling.
+ * Older runtimes retain their JDK spelling through a reusable {@link StringBuilder}. Compact {@link
+ * BigDecimal} values are emitted directly with JDK-compatible spelling; inflated values and
+ * out-of-long {@link BigInteger} values use canonical JDK text on the cold arbitrary-precision
+ * path. The {@link Appendable} methods emit escaped string content without adding surrounding
+ * quotes and are used by formatter-owned quoted values.
  */
 public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   private static final byte[] MIN_INT_BYTES =
@@ -280,16 +280,16 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       return;
     }
     int pos = position;
-    if (pos + JdkFloatFormatter.MAX_CHARS > buffer.length) {
-      grow(JdkFloatFormatter.MAX_CHARS);
+    // Both the direct converter and the portable builder copy consume this reservation.
+    if (pos + FloatingDecimal.FLOAT_MAX_CHARS > buffer.length) {
+      grow(FloatingDecimal.FLOAT_MAX_CHARS);
     }
-    int newPosition = JdkFloatFormatter.write(buffer, pos, value);
-    if (newPosition >= 0) {
-      position = newPosition;
+    if (FloatingDecimal.AVAILABLE) {
+      position = FloatingDecimal.write(buffer, pos, value);
       return;
     }
     StringBuilder builder = decimalBuilder;
-    JdkFloatFormatter.appendTo(value, builder);
+    FloatingDecimal.appendTo(value, builder);
     writeDecimalBuilder(builder);
   }
 
@@ -300,23 +300,21 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       return;
     }
     int pos = position;
-    if (pos + JdkDoubleFormatter.MAX_CHARS > buffer.length) {
-      grow(JdkDoubleFormatter.MAX_CHARS);
+    // Both the direct converter and the portable builder copy consume this reservation.
+    if (pos + FloatingDecimal.DOUBLE_MAX_CHARS > buffer.length) {
+      grow(FloatingDecimal.DOUBLE_MAX_CHARS);
     }
-    int newPosition = JdkDoubleFormatter.write(buffer, pos, value);
-    if (newPosition >= 0) {
-      position = newPosition;
+    if (FloatingDecimal.AVAILABLE) {
+      position = FloatingDecimal.write(buffer, pos, value);
       return;
     }
     StringBuilder builder = decimalBuilder;
-    JdkDoubleFormatter.appendTo(value, builder);
+    FloatingDecimal.appendTo(value, builder);
     writeDecimalBuilder(builder);
   }
 
   private static StringBuilder newDecimalBuilder() {
-    return JdkFloatFormatter.isAvailable() && JdkDoubleFormatter.isAvailable()
-        ? null
-        : new StringBuilder(JdkDoubleFormatter.MAX_CHARS);
+    return FloatingDecimal.AVAILABLE ? null : new StringBuilder(FloatingDecimal.DOUBLE_MAX_CHARS);
   }
 
   private void writeDecimalBuilder(StringBuilder builder) {

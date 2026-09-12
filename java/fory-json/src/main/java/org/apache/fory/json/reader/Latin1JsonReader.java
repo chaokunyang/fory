@@ -82,6 +82,7 @@ public final class Latin1JsonReader extends JsonReader {
   private byte[] stringDecodeBuffer = new byte[INITIAL_STRING_DECODE_BUFFER_SIZE];
   // Keep the cache after hot representation fields; an inherited reference shifts their offsets.
   private final FieldNameCache fieldNameCache;
+  private ZoneIdCache zoneIdCache;
 
   public Latin1JsonReader(JsonConfig config, JsonTypeResolver typeResolver) {
     super(config, typeResolver);
@@ -89,6 +90,40 @@ public final class Latin1JsonReader extends JsonReader {
     // The configured limit belongs to each reader; pooled-state concurrency must not divide it.
     int maxEntries = config.maxCachedFieldNames();
     fieldNameCache = maxEntries == 0 ? null : new FieldNameCache(maxEntries);
+  }
+
+  @Override
+  ZoneIdCache zoneIds() {
+    if (zoneIdCache == null) {
+      zoneIdCache = new ZoneIdCache();
+    }
+    return zoneIdCache;
+  }
+
+  @Override
+  boolean matchesZoneId(int start, int end, byte[] expected) {
+    int length = expected.length;
+    if (length != end - start) {
+      return false;
+    }
+    byte[] bytes = input;
+    if (length >= Long.BYTES) {
+      int last = length - Long.BYTES;
+      for (int i = 0; i < last; i += Long.BYTES) {
+        if (LittleEndian.getInt64(bytes, start + i) != LittleEndian.getInt64(expected, i)) {
+          return false;
+        }
+      }
+      // Both ranges were proved by the scanned token and equal length. The overlapping last
+      // word compares every tail byte without reading beyond either range.
+      return LittleEndian.getInt64(bytes, start + last) == LittleEndian.getInt64(expected, last);
+    }
+    for (int i = 0; i < length; i++) {
+      if (bytes[start + i] != expected[i]) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @Override

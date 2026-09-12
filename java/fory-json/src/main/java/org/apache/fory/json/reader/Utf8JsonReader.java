@@ -128,6 +128,7 @@ public final class Utf8JsonReader extends JsonReader {
   private byte[] stringDecodeBuffer = new byte[INITIAL_STRING_DECODE_BUFFER_SIZE];
   // Keep the cache after hot representation fields; an inherited reference shifts their offsets.
   private final FieldNameCache fieldNameCache;
+  private ZoneIdCache zoneIdCache;
 
   public Utf8JsonReader(JsonConfig config, JsonTypeResolver typeResolver) {
     super(config, typeResolver);
@@ -136,6 +137,40 @@ public final class Utf8JsonReader extends JsonReader {
     // The configured limit belongs to each reader; pooled-state concurrency must not divide it.
     int maxEntries = config.maxCachedFieldNames();
     fieldNameCache = maxEntries == 0 ? null : new FieldNameCache(maxEntries);
+  }
+
+  @Override
+  ZoneIdCache zoneIds() {
+    if (zoneIdCache == null) {
+      zoneIdCache = new ZoneIdCache();
+    }
+    return zoneIdCache;
+  }
+
+  @Override
+  boolean matchesZoneId(int start, int end, byte[] expected) {
+    int length = expected.length;
+    if (length != end - start) {
+      return false;
+    }
+    byte[] bytes = input;
+    if (length >= Long.BYTES) {
+      int last = length - Long.BYTES;
+      for (int i = 0; i < last; i += Long.BYTES) {
+        if (LittleEndian.getInt64(bytes, start + i) != LittleEndian.getInt64(expected, i)) {
+          return false;
+        }
+      }
+      // Both ranges were proved by the scanned token and equal length. The overlapping last
+      // word compares every tail byte without reading beyond either range.
+      return LittleEndian.getInt64(bytes, start + last) == LittleEndian.getInt64(expected, last);
+    }
+    for (int i = 0; i < length; i++) {
+      if (bytes[start + i] != expected[i]) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @Override
@@ -2904,13 +2939,14 @@ public final class Utf8JsonReader extends JsonReader {
         if (input[position] == '[') {
           int start = position + 1;
           int end = start;
+          long hash = ZoneIdCache.HASH_SEED;
           // ZoneId rejects quotes and control characters as part of its name validation.
           // Only a JSON escape needs the text fallback before the bracketed ID is materialized.
           while (end < inputLimit && input[end] != ']' && input[end] != '\\') {
-            end++;
+            hash = hash * ZoneIdCache.HASH_MULTIPLIER ^ (input[end++] & 0xff);
           }
           if (end + 1 < inputLimit && input[end] == ']' && input[end + 1] == '"') {
-            ZoneId zone = ZoneId.of(newLatin1String(start, end));
+            ZoneId zone = zoneIds().get(this, start, end, hash);
             position = end + 2;
             return zonedDateTime(dateTime, offset, zone);
           }
@@ -2926,15 +2962,10 @@ public final class Utf8JsonReader extends JsonReader {
     if (ZONED_DATE_TIME_CONSTRUCTOR == null) {
       return ZonedDateTime.ofInstant(dateTime, offset, zone);
     }
-    // The explicit offset determines the instant, including gaps and overlaps. An equal offset
-    // at that instant proves the parsed local date/time is already correct, so it can be reused.
-    long seconds =
-        epochDay(dateTime.getYear(), dateTime.getMonthValue(), dateTime.getDayOfMonth()) * 86400L
-            + dateTime.toLocalTime().toSecondOfDay()
-            - offset.getTotalSeconds();
-    Instant instant = Instant.ofEpochSecond(seconds, dateTime.getNano());
-    if (!zone.getRules().getOffset(instant).equals(offset)) {
-      return ZonedDateTime.ofInstant(instant, zone);
+    // A valid offset proves that the parsed local date/time already describes the explicit
+    // instant, including either side of an overlap. Gaps and mismatches still require conversion.
+    if (!zone.getRules().isValidOffset(dateTime, offset)) {
+      return ZonedDateTime.ofInstant(dateTime, offset, zone);
     }
     try {
       return (ZonedDateTime) ZONED_DATE_TIME_CONSTRUCTOR.invokeExact(dateTime, offset, zone);

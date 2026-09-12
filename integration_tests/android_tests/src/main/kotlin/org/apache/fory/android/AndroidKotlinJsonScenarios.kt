@@ -89,8 +89,9 @@ internal object AndroidKotlinJsonScenarios {
         val accountType = jsonTypeRef<AndroidKotlinAccount>()
         val value = AndroidKotlinAccount(26, "android", null)
         // Omitting null restores the constructor default; explicit null inclusion preserves null.
+        // Assert inclusion independently of the reflected property order.
         val text = json.toJson(value, accountType)
-        check(text == "{\"id\":26,\"name\":\"android\"}")
+        check(!text.contains("\"label\":")) { text }
         check(json.toJsonBytes(value, accountType).decodeToString() == text)
         val defaulted = AndroidKotlinAccount(26, "android")
         check(json.fromJson(text, accountType) == defaulted)
@@ -99,7 +100,7 @@ internal object AndroidKotlinJsonScenarios {
         val jsonWithNulls =
             ForyJsonKotlin.builder().writeNullFields(true).withAsyncCompilation(false).build()
         val textWithNulls = jsonWithNulls.toJson(value, accountType)
-        check(textWithNulls == "{\"id\":26,\"name\":\"android\",\"label\":null}")
+        check(textWithNulls.contains("\"label\":null")) { textWithNulls }
         check(jsonWithNulls.toJsonBytes(value, accountType).decodeToString() == textWithNulls)
         check(jsonWithNulls.fromJson(textWithNulls, accountType) == value)
         check(jsonWithNulls.fromJson(textWithNulls.toByteArray(), accountType) == value)

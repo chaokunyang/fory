@@ -88,7 +88,7 @@ public abstract class JsonReader {
   private static final byte[] HEX_VALUES = hexValues();
   static final int MAX_BIG_DECIMAL_SCALE = 10_000;
   private static final int COMPACT_DECIMAL_MAX_SCALE = 18;
-  private static final long[] LONG_POWERS_OF_TEN = {
+  static final long[] LONG_POWERS_OF_TEN = {
     1L,
     10L,
     100L,
@@ -590,7 +590,7 @@ public abstract class JsonReader {
     return startsWith("null");
   }
 
-  public final char peekToken() {
+  public char peekToken() {
     skipWhitespace();
     if (position >= length()) {
       throw error("Expected token");
@@ -624,38 +624,23 @@ public abstract class JsonReader {
     return tryReadNull();
   }
 
+  // Positioned token readers and skipValue reuse the concrete literal check without whitespace.
+  protected abstract boolean tryReadNullLiteral();
+
   public final boolean readBoolean() {
     skipWhitespace();
-    if (position < length() && charAt(position) == '"') {
-      return readQuotedBoolean();
-    }
     return readBooleanToken();
   }
 
-  private boolean readBooleanToken() {
-    if (startsWith("true")) {
-      position += 4;
-      return true;
-    } else if (startsWith("false")) {
-      position += 5;
-      return false;
-    }
-    throw error("Expected boolean");
-  }
-
-  private boolean readQuotedBoolean() {
-    beginQuotedScalar();
-    boolean value = readBooleanToken();
-    finishQuotedScalar();
-    return value;
-  }
+  // Concrete readers own both native and quoted boolean token parsing.
+  protected abstract boolean readBooleanToken();
 
   public final String readNumberAsString() {
     skipWhitespace();
     return readNumberToken();
   }
 
-  public final Number readNumber() {
+  public Number readNumber() {
     return materializeNumber(readNumberAsString());
   }
 
@@ -1927,9 +1912,10 @@ public abstract class JsonReader {
     while (end - start >= 8) {
       // The complete token has already passed ASCII digit validation.
       long digits = LittleEndian.getInt64(bytes, start) - 0x3030_3030_3030_3030L;
-      long pairs = (digits * 10 + (digits >>> 8)) & 0x00ff_00ff_00ff_00ffL;
-      long groups = (pairs * 100 + (pairs >>> 16)) & 0x0000_ffff_0000_ffffL;
-      long block = (groups & 0xffff) * 10_000 + (groups >>> 32);
+      // Each decimal group fits its selected lanes, so the packed products have no lane carries.
+      long pairs = ((digits * (10 * 256 + 1)) >>> 8) & 0x00ff_00ff_00ff_00ffL;
+      long groups = ((pairs * (100 * 65536 + 1)) >>> 16) & 0x0000_ffff_0000_ffffL;
+      long block = (groups * (10_000L * (1L << 32) + 1)) >>> 32;
       value = value * 100_000_000 + block;
       start += 8;
     }
@@ -2302,20 +2288,21 @@ public abstract class JsonReader {
   }
 
   final long readExponentScale(int offset, long scale) {
-    offset++;
-    boolean negativeExponent = false;
-    if (offset < length()) {
-      int ch = charAt(offset);
-      if (ch == '-' || ch == '+') {
-        negativeExponent = ch == '-';
-        offset++;
-      }
-    }
-    int exponentStart = offset;
-    long exponent = 0;
     int inputLength = length();
+    offset++;
+    int ch = offset < inputLength ? charAt(offset) : -1;
+    boolean negativeExponent = ch == '-';
+    if (negativeExponent || ch == '+') {
+      offset++;
+      ch = offset < inputLength ? charAt(offset) : -1;
+    }
+    if (ch < '0' || ch > '9') {
+      throw numberError(offset, "Expected exponent digit");
+    }
+    long exponent = ch - '0';
+    offset++;
     while (offset < inputLength) {
-      int ch = charAt(offset);
+      ch = charAt(offset);
       if (ch < '0' || ch > '9') {
         break;
       }
@@ -2326,9 +2313,6 @@ public abstract class JsonReader {
         }
       }
       offset++;
-    }
-    if (offset == exponentStart) {
-      throw numberError(offset, "Expected exponent digit");
     }
     position = offset;
     return negativeExponent ? scale + exponent : scale - exponent;
@@ -2778,26 +2762,28 @@ public abstract class JsonReader {
   }
 
   public final void skipValue() {
-    skipWhitespace();
-    if (position >= length()) {
-      throw error("Expected value");
-    }
-    char ch = charAt(position);
-    if (ch == '"') {
-      // Skipped text still needs escape and Unicode validation, but no decoded storage or hash.
-      position = scanStringEnd(position);
-    } else if (ch == '{') {
-      skipObject();
-    } else if (ch == '[') {
-      skipArray();
-    } else if (startsWith("true")) {
-      position += 4;
-    } else if (startsWith("false")) {
-      position += 5;
-    } else if (startsWith("null")) {
-      position += 4;
-    } else {
-      skipNumberToken();
+    switch (peekToken()) {
+      case '"':
+        // Skipped text still needs escape and Unicode validation, but no decoded storage or hash.
+        position = scanStringEnd(position);
+        return;
+      case '{':
+        skipObject();
+        return;
+      case '[':
+        skipArray();
+        return;
+      case 't':
+      case 'f':
+        readBooleanToken();
+        return;
+      case 'n':
+        if (!tryReadNullLiteral()) {
+          skipNumberToken();
+        }
+        return;
+      default:
+        skipNumberToken();
     }
   }
 
@@ -3014,32 +3000,32 @@ public abstract class JsonReader {
 
   private void skipObject() {
     enterDepth();
-    expect('{');
-    if (consume('}')) {
+    // skipValue already checked the opening delimiter.
+    position++;
+    if (consumeNextToken('}')) {
       exitDepth();
       return;
     }
     do {
-      skipWhitespace();
-      position = scanStringEnd(position);
-      expect(':');
+      expectNextToken('"');
+      position = scanStringEnd(position - 1);
+      expectNextToken(':');
       skipValue();
-    } while (consume(','));
-    expect('}');
+    } while (consumeNextCommaOrEndObject());
     exitDepth();
   }
 
   private void skipArray() {
     enterDepth();
-    expect('[');
-    if (consume(']')) {
+    // skipValue already checked the opening delimiter.
+    position++;
+    if (consumeNextToken(']')) {
       exitDepth();
       return;
     }
     do {
       skipValue();
-    } while (consume(','));
-    expect(']');
+    } while (consumeNextCommaOrEndArray());
     exitDepth();
   }
 

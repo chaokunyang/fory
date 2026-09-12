@@ -52,6 +52,35 @@ import org.testng.annotations.Test;
 
 public class JsonStringTest extends ForyJsonTestModels {
   @Test
+  public void readMixedFieldHash() {
+    String[][] fragments = {
+      {"\\\"", "\""}, {"\\\\", "\\"}, {"\\n", "\n"}, {"\\u0000", "\u0000"},
+      {"\\u00e9", "\u00e9"}, {"é", "é"}, {"\\u4e2d", "中"}, {"中", "中"},
+      {"\\ud83d\\ude00", "\ud83d\ude00"}, {"\ud83d\ude00", "\ud83d\ude00"}
+    };
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    for (int prefixLength = 0; prefixLength <= 9; prefixLength++) {
+      String prefix = new String(new char[prefixLength]).replace('\0', 'a');
+      for (String[] first : fragments) {
+        for (String[] second : fragments) {
+          String token = "\"" + prefix + first[0] + "x" + second[0] + "z\"";
+          String name = prefix + first[1] + "x" + second[1] + "z";
+          byte[] encoded = (token + ":17").getBytes(StandardCharsets.UTF_8);
+          for (int offset = 0; offset < 8; offset++) {
+            byte[] bytes = new byte[offset + encoded.length + 8];
+            System.arraycopy(encoded, 0, bytes, offset, encoded.length);
+            reader.reset(bytes, offset, encoded.length);
+            assertEquals(reader.readFieldNameHash(), JsonFieldNameHash.hash(name));
+            reader.expectNextToken(':');
+            assertEquals(reader.readNextIntValue(), 17);
+            reader.finish();
+          }
+        }
+      }
+    }
+  }
+
+  @Test
   public void readUnicodeEscapeSlices() {
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);
     for (char value : new char[] {0, 0x7f, 0xff, 0x100, 0x20ac, 0xabcd, 0xd7ff, 0xe000, 0xffff}) {
@@ -81,6 +110,53 @@ public class JsonStringTest extends ForyJsonTestModels {
           }
         }
       }
+    }
+  }
+
+  @Test
+  public void readUnicodeEscapePairs() {
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    char[] values = {0, 0xff, 0x100, 0x20ac, 0xd7ff, 0xe000, 0xffff};
+    for (char first : values) {
+      for (char second : values) {
+        String text =
+            "\"\\u0100" + String.format("\\u%04x\\u%04X", (int) first, (int) second) + "\",17";
+        byte[] encoded = text.getBytes(StandardCharsets.US_ASCII);
+        for (int offset = 0; offset < 8; offset++) {
+          byte[] bytes = new byte[offset + encoded.length + 8];
+          System.arraycopy(encoded, 0, bytes, offset, encoded.length);
+          for (int length = 0; length < encoded.length - 3; length++) {
+            reader.reset(bytes, offset, length);
+            assertThrows(ForyJsonException.class, reader::readString);
+          }
+          reader.reset(bytes, offset, encoded.length);
+          assertEquals(reader.readString(), "\u0100" + first + second);
+          reader.expectNextToken(',');
+          assertEquals(reader.readInt(), 17);
+          reader.finish();
+          for (int escape = 0; escape < 2; escape++) {
+            for (int digit = 0; digit < 4; digit++) {
+              int index = offset + 9 + escape * 6 + digit;
+              byte saved = bytes[index];
+              bytes[index] = 'x';
+              reader.reset(bytes, offset, encoded.length);
+              assertThrows(ForyJsonException.class, reader::readString);
+              bytes[index] = saved;
+            }
+          }
+        }
+      }
+    }
+    for (int count : new int[] {0, 1, 2, 3, 63, 64, 65, 511, 512, 513}) {
+      StringBuilder text = new StringBuilder("\"\\u0100");
+      StringBuilder expected = new StringBuilder("\u0100");
+      for (int i = 0; i < count; i++) {
+        text.append("\\u20ac\\n\\u0000\\uD834\\uDD1E\\uabcd\\uFFFF");
+        expected.append("\u20ac\n\u0000\uD834\uDD1E\uabcd\uFFFF");
+      }
+      reader.reset(text.append('"').toString().getBytes(StandardCharsets.US_ASCII));
+      assertEquals(reader.readString(), expected.toString());
+      reader.finish();
     }
   }
 

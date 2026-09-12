@@ -413,6 +413,15 @@ public final class Utf16JsonReader extends JsonReader {
     }
   }
 
+  @Override
+  public char peekToken() {
+    skipWhitespaceFast();
+    if (position >= length) {
+      throw error("Expected token");
+    }
+    return charAtFast(position);
+  }
+
   public boolean consumeToken(char expected) {
     skipWhitespaceFast();
     if (position < length && asciiAtFast(position) == expected) {
@@ -537,7 +546,8 @@ public final class Utf16JsonReader extends JsonReader {
     return tryReadNullToken();
   }
 
-  private boolean tryReadNullLiteral() {
+  @Override
+  protected boolean tryReadNullLiteral() {
     if (startsWithAscii("null")) {
       position += 4;
       return true;
@@ -568,7 +578,8 @@ public final class Utf16JsonReader extends JsonReader {
     return value;
   }
 
-  private boolean readBooleanToken() {
+  @Override
+  protected boolean readBooleanToken() {
     if (position < length && charAtFast(position) == '"') {
       return readQuotedBooleanValue();
     }

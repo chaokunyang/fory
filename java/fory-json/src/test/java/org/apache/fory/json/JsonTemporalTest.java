@@ -43,8 +43,16 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.zone.ZoneOffsetTransition;
+import java.time.zone.ZoneRules;
+import java.time.zone.ZoneRulesProvider;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.NavigableMap;
 import java.util.Random;
+import java.util.Set;
+import java.util.TreeMap;
 import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.codec.ScalarCodecs;
 import org.apache.fory.json.reader.Latin1JsonReader;
@@ -55,6 +63,114 @@ import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.testng.annotations.Test;
 
 public class JsonTemporalTest extends ForyJsonTestModels {
+  @Test
+  public void readZoneIds() {
+    ScalarCodecs.ZoneIdCodec codec = ScalarCodecs.ZoneIdCodec.INSTANCE;
+    for (String id : ZoneId.getAvailableZoneIds()) {
+      assertToken(codec, id, ZoneId.of(id));
+      ZoneId decoded =
+          codec.readUtf8(newUtf8Reader(('"' + id + '"').getBytes(StandardCharsets.US_ASCII)));
+      assertEquals(decoded.getId().hashCode(), new String(id.toCharArray()).hashCode());
+    }
+    for (String id :
+        new String[] {
+          "UT",
+          "UTC",
+          "GMT",
+          "Z",
+          "+18:00",
+          "-18:00",
+          "+07:13:29",
+          "UT+07:13:29",
+          "UTC-07:13:29",
+          "GMT+07:13:29",
+          "Europe/Paris"
+        }) {
+      ZoneId expected = ZoneId.of(id);
+      assertToken(codec, id, expected);
+      for (int i = 0; i < id.length(); i++) {
+        String escaped =
+            id.substring(0, i)
+                + String.format(Locale.ROOT, "\\u%04x", (int) id.charAt(i))
+                + id.substring(i + 1);
+        assertToken(codec, escaped, expected);
+      }
+    }
+    for (boolean codegen : new boolean[] {false, true}) {
+      ForyJson json = ForyJson.builder().withCodegen(codegen).build();
+      assertEquals(json.fromJson("  null", ZoneId.class), null);
+      for (String id :
+          new String[] {"", "A", "0Paris", "NoSuch/Zone", "Asia/\u4e0a\u6d77", "Europe:Paris"}) {
+        String token = json.toJson(id);
+        assertThrows(RuntimeException.class, () -> json.fromJson(token, ZoneId.class));
+        assertThrows(
+            RuntimeException.class,
+            () -> json.fromJson(token.getBytes(StandardCharsets.UTF_8), ZoneId.class));
+        assertEquals(json.fromJson("\"Europe/Paris\"", ZoneId.class), ZoneId.of("Europe/Paris"));
+      }
+    }
+  }
+
+  @Test
+  public void readPrefixedZones() {
+    ScalarCodecs.ZoneIdCodec codec = ScalarCodecs.ZoneIdCodec.INSTANCE;
+    for (String prefix : new String[] {"UT", "UTC", "GMT"}) {
+      for (int minutes = -1080; minutes <= 1080; minutes++) {
+        ZoneOffset offset = ZoneOffset.ofTotalSeconds(minutes * 60);
+        String id = prefix + (minutes == 0 ? "+00:00" : offset.getId());
+        ZoneId expected = ZoneId.of(id);
+        assertToken(codec, id, expected);
+        ZoneId actual =
+            codec.readUtf8(newUtf8Reader(('"' + id + '"').getBytes(StandardCharsets.US_ASCII)));
+        assertEquals(actual.getId(), expected.getId());
+        assertEquals(actual.getRules(), expected.getRules());
+      }
+      for (String suffix :
+          new String[] {"", "0", "+1", "-01", "+0130", "-01:30:29", "+00:00", "-00:00"}) {
+        String id = prefix + suffix;
+        ZoneId expected;
+        try {
+          expected = ZoneId.of(id);
+        } catch (java.time.DateTimeException e) {
+          rejectToken(codec, id);
+          continue;
+        }
+        assertToken(codec, id, expected);
+      }
+      for (String suffix : new String[] {"+18:01", "-18:01", "+19:00", "+01:60", "+0a:00"}) {
+        rejectToken(codec, prefix + suffix);
+      }
+    }
+  }
+
+  @Test
+  public void readZoneProviderRules() {
+    ZoneNameProvider provider = new ZoneNameProvider();
+    ZoneRulesProvider.registerProvider(provider);
+    ScalarCodecs.ZoneIdCodec codec = ScalarCodecs.ZoneIdCodec.INSTANCE;
+    for (String id : provider.ids) {
+      assertToken(codec, id, ZoneId.of(id));
+    }
+    String id = "ForyJson/Rules";
+    ForyJson json = ForyJson.builder().build();
+    String token = json.toJson(id);
+    int queries = provider.queries;
+    ZoneId first = json.fromJson(token, ZoneId.class);
+    assertEquals(provider.queries, queries + 1);
+    assertEquals(first.getRules(), provider.rules);
+    ZoneRules previous = provider.rules;
+    provider.rules = ZoneRules.of(ZoneOffset.ofHours(2));
+    ZoneId second = json.fromJson(token.getBytes(StandardCharsets.UTF_8), ZoneId.class);
+    assertEquals(provider.queries, queries + 2);
+    assertEquals(first.getRules(), previous);
+    assertEquals(second.getRules(), provider.rules);
+    ZoneId lazy = json.fromJson("\"ForyJson/Lazy\"", ZoneId.class);
+    assertEquals(provider.queries, queries + 3);
+    assertEquals(lazy.getRules(), provider.rules);
+    provider.rules = previous;
+    assertEquals(lazy.getRules(), previous);
+  }
+
   @Test
   public void readMonthDayComponents() {
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);
@@ -72,6 +188,57 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         assertEquals(reader.readMonthDay(), expected);
         assertEquals(reader.readInt(), 17);
         reader.finish();
+      }
+    }
+  }
+
+  @Test
+  public void readMonthDayWords() {
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    byte[] token = "\"--12-31\",17".getBytes(StandardCharsets.US_ASCII);
+    for (int offset = 0; offset < 8; offset++) {
+      byte[] bytes = new byte[offset + token.length + 8];
+      System.arraycopy(token, 0, bytes, offset, token.length);
+      reader.reset(bytes, offset, token.length);
+      assertEquals(reader.readMonthDay(), MonthDay.of(12, 31));
+      reader.expectNextToken(',');
+      assertEquals(reader.readInt(), 17);
+      reader.finish();
+      for (int length = 0; length < 9; length++) {
+        reader.reset(bytes, offset, length);
+        assertThrows(RuntimeException.class, reader::readMonthDay);
+      }
+      for (int lane : new int[] {3, 4, 6, 7}) {
+        byte saved = bytes[offset + lane];
+        for (int value = 0; value < 256; value++) {
+          if (value >= '0' && value <= '9') {
+            continue;
+          }
+          bytes[offset + lane] = (byte) value;
+          reader.reset(bytes, offset, token.length);
+          assertThrows(RuntimeException.class, reader::readMonthDay);
+        }
+        bytes[offset + lane] = saved;
+      }
+    }
+  }
+
+  @Test
+  public void writeMonthDayWords() {
+    for (int capacity = 0; capacity <= 16; capacity++) {
+      Utf8JsonWriter writer = newUtf8Writer(new byte[capacity]);
+      LocalDate first = LocalDate.of(2000, 1, 1);
+      for (int day = 0; day < 366; day++) {
+        MonthDay value = MonthDay.from(first.plusDays(day));
+        writer.reset();
+        String prefix = "       ".substring(0, day & 7);
+        writer.writeRawValue(prefix);
+        writer.writeMonthDay(value);
+        writer.writeComma(1);
+        writer.writeInt(17);
+        assertEquals(
+            new String(writer.toJsonBytes(), StandardCharsets.US_ASCII),
+            prefix + '"' + value.toString() + "\",17");
       }
     }
   }
@@ -186,8 +353,23 @@ public class JsonTemporalTest extends ForyJsonTestModels {
 
   @Test
   public void readNullableOffsetTime() {
-    JsonValueCodec<OffsetTime> codec = ScalarCodecs.OffsetTimeCodec.INSTANCE;
-    OffsetTime value = OffsetTime.of(1, 2, 3, 4, ZoneOffset.ofHours(5));
+    assertNullableTemporal(
+        ScalarCodecs.OffsetTimeCodec.INSTANCE, OffsetTime.of(1, 2, 3, 4, ZoneOffset.ofHours(5)));
+  }
+
+  @Test
+  public void readNullableInstant() {
+    assertNullableTemporal(ScalarCodecs.InstantCodec.INSTANCE, Instant.ofEpochSecond(-123456, 789));
+  }
+
+  @Test
+  public void readNullableZoneId() {
+    for (String id : new String[] {"Z", "+03:00", "UTC-05:30", "Europe/Paris"}) {
+      assertNullableTemporal(ScalarCodecs.ZoneIdCodec.INSTANCE, ZoneId.of(id));
+    }
+  }
+
+  private static <T> void assertNullableTemporal(JsonValueCodec<T> codec, T value) {
     for (String prefix : new String[] {"", " ", "\t\r\n"}) {
       for (boolean isNull : new boolean[] {true, false}) {
         String token = prefix + (isNull ? "null" : '"' + value.toString() + '"') + ",17";
@@ -195,7 +377,7 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         Utf8JsonReader utf8 = newUtf8Reader(bytes);
         Latin1JsonReader latin1 = newLatin1Reader(bytes);
         Utf16JsonReader utf16 = newUtf16Reader(token);
-        OffsetTime expected = isNull ? null : value;
+        T expected = isNull ? null : value;
         assertEquals(codec.readUtf8(utf8), expected);
         assertEquals(codec.readLatin1(latin1), expected);
         assertEquals(codec.readUtf16(utf16), expected);
@@ -541,13 +723,21 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   @Test
   public void readInstantCalendar() {
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    for (int second = 0; second < 86400; second++) {
+      Instant expected = Instant.ofEpochSecond(second, second * 1001);
+      reader.reset(('"' + expected.toString() + "\",17").getBytes(StandardCharsets.US_ASCII));
+      assertEquals(reader.readIsoInstant(), expected);
+      reader.expectNextToken(',');
+      assertEquals(reader.readInt(), 17);
+      reader.finish();
+    }
     int[] nanos = {0, 123000000, 123456000, 123456789};
     int[] extraYears = {400, 1600, 1900, 1970, 2000, 2100, 2400, 9999};
     for (int index = 0; index < 400 + extraYears.length; index++) {
       int year = index < 400 ? index : extraYears[index - 400];
       for (int month = 1; month <= 12; month++) {
         LocalDate first = LocalDate.of(year, month, 1);
-        for (int day : new int[] {1, first.lengthOfMonth()}) {
+        for (int day = 1; day <= first.lengthOfMonth(); day++) {
           Instant expected =
               LocalDateTime.of(
                       year,
@@ -602,6 +792,102 @@ public class JsonTemporalTest extends ForyJsonTestModels {
           json.fromJson(
               "\"1970-01-01T00:00:00Z\"".getBytes(StandardCharsets.US_ASCII), Instant.class),
           Instant.EPOCH);
+    }
+  }
+
+  @Test
+  public void readZonedCalendar() {
+    ZoneId[] zones = {ZoneId.of("Europe/Paris"), ZoneId.of("America/New_York"), ZoneId.of("UTC")};
+    for (int year : new int[] {0, 1, 399, 400, 1970, 2000, 2024, 9999}) {
+      for (int month = 1; month <= 12; month++) {
+        LocalDateTime dateTime = LocalDateTime.of(year, month, 1, 0, 0, 0, 123456789);
+        for (ZoneId zone : zones) {
+          for (ZoneOffset offset :
+              new ZoneOffset[] {ZoneOffset.UTC, ZoneOffset.MIN, ZoneOffset.MAX}) {
+            String text = dateTime.toString() + offset + '[' + zone.getId() + ']';
+            assertToken(
+                ScalarCodecs.ZonedDateTimeCodec.INSTANCE,
+                text,
+                ZonedDateTime.ofInstant(dateTime, offset, zone));
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  public void readZonedRegionBounds() {
+    String dateTime = "2024-01-01T12:34:56+01:00[";
+    ZonedDateTime expected = ZonedDateTime.parse(dateTime + "Europe/Paris]");
+    for (String id : new String[] {"Europe/Paris", "Europe\\/Paris", "Europe/Par\\u0069s"}) {
+      byte[] token = ('"' + dateTime + id + "]\"").getBytes(StandardCharsets.US_ASCII);
+      for (int offset = 0; offset < 8; offset++) {
+        byte[] bytes = new byte[offset + token.length + 3];
+        System.arraycopy(token, 0, bytes, offset, token.length);
+        bytes[offset + token.length] = ',';
+        bytes[offset + token.length + 1] = '1';
+        bytes[offset + token.length + 2] = '7';
+        Utf8JsonReader reader = newUtf8Reader(bytes);
+        reader.reset(bytes, offset, token.length + 3);
+        assertEquals(reader.readZonedDateTime(), expected);
+        reader.expect(',');
+        assertEquals(reader.readInt(), 17);
+        reader.reset(bytes, offset, token.length - 2);
+        assertThrows(RuntimeException.class, reader::readZonedDateTime);
+      }
+    }
+    ForyJson json = ForyJson.builder().build();
+    for (String id :
+        new String[] {
+          "Europe/Par\"is", "Europe/Par\nis", "Europe/Par\u0000is", "Europe/Paris\",17"
+        }) {
+      byte[] token = ('"' + dateTime + id + "]\"").getBytes(StandardCharsets.US_ASCII);
+      assertThrows(RuntimeException.class, () -> json.fromJson(token, ZonedDateTime.class));
+      assertEquals(
+          json.fromJson('"' + dateTime + "Europe/Paris]\"", ZonedDateTime.class), expected);
+    }
+  }
+
+  @Test
+  public void readZonedTransitions() {
+    for (String id :
+        new String[] {
+          "Europe/Paris",
+          "America/New_York",
+          "Australia/Lord_Howe",
+          "Pacific/Apia",
+          "Asia/Kathmandu"
+        }) {
+      ZoneId zone = ZoneId.of(id);
+      for (int year : new int[] {1890, 1910, 1940, 1970, 1990, 2011, 2024, 2100}) {
+        Instant probe = LocalDate.of(year, 1, 1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        ZoneOffsetTransition transition = zone.getRules().nextTransition(probe);
+        if (transition == null) {
+          continue;
+        }
+        for (LocalDateTime boundary :
+            new LocalDateTime[] {transition.getDateTimeBefore(), transition.getDateTimeAfter()}) {
+          for (int seconds : new int[] {-1, 0, 1, 1800}) {
+            LocalDateTime dateTime = boundary.plusSeconds(seconds).withNano(123456789);
+            for (ZoneOffset offset :
+                new ZoneOffset[] {
+                  transition.getOffsetBefore(),
+                  transition.getOffsetAfter(),
+                  ZoneOffset.UTC,
+                  ZoneOffset.MAX
+                }) {
+              ZonedDateTime expected = ZonedDateTime.ofInstant(dateTime, offset, zone);
+              String text = dateTime.toString() + offset + "[" + id + "]";
+              assertToken(ScalarCodecs.ZonedDateTimeCodec.INSTANCE, text, expected);
+              Utf8JsonReader reader =
+                  newUtf8Reader(("\"" + text + "\",17").getBytes(StandardCharsets.UTF_8));
+              assertEquals(reader.readZonedDateTime(), expected);
+              reader.expect(',');
+              assertEquals(reader.readInt(), 17);
+            }
+          }
+        }
+      }
     }
   }
 
@@ -770,6 +1056,40 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void writeInstantCalendar() {
+    Utf8JsonWriter utf8 = newUtf8Writer(new byte[1]);
+    StringJsonWriter string = newStringWriter(new byte[1]);
+    long[] starts = {
+      Instant.MIN.getEpochSecond(),
+      LocalDate.of(-400, 3, 1).atStartOfDay().toEpochSecond(ZoneOffset.UTC),
+      LocalDate.of(1600, 3, 1).atStartOfDay().toEpochSecond(ZoneOffset.UTC),
+      Instant.MAX.getEpochSecond() - 146096L * 86400
+    };
+    for (long start : starts) {
+      for (int day = 0; day < 146097; day++) {
+        assertInstant(utf8, string, Instant.ofEpochSecond(start + day * 86400L, day));
+      }
+    }
+    Random random = new Random(481907L);
+    long minimum = Instant.MIN.getEpochSecond();
+    long range = Instant.MAX.getEpochSecond() - minimum + 1;
+    for (int i = 0; i < 10000; i++) {
+      long second = minimum + Math.floorMod(random.nextLong(), range);
+      assertInstant(utf8, string, Instant.ofEpochSecond(second, random.nextInt(1_000_000_000)));
+    }
+  }
+
+  private static void assertInstant(Utf8JsonWriter utf8, StringJsonWriter string, Instant value) {
+    utf8.reset();
+    string.reset();
+    utf8.writeIsoInstant(value.getEpochSecond(), value.getNano());
+    string.writeIsoInstant(value.getEpochSecond(), value.getNano());
+    String expected = '"' + value.toString() + '"';
+    assertEquals(new String(utf8.toJsonBytes(), StandardCharsets.UTF_8), expected);
+    assertEquals(string.toJson(), expected);
+  }
+
+  @Test
   public void writeZoneOffsetTokens() {
     Utf8JsonWriter writer = newUtf8Writer(new byte[0]);
     for (int seconds = -64800; seconds <= 64800; seconds++) {
@@ -898,6 +1218,53 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void writeZonedRegions() {
+    Set<ZoneId> zones = new HashSet<>();
+    for (String id : ZoneId.getAvailableZoneIds()) {
+      zones.add(ZoneId.of(id));
+    }
+    zones.add(ZoneOffset.UTC);
+    zones.add(ZoneOffset.ofHoursMinutesSeconds(-7, -13, -29));
+    for (ZoneId zone : zones) {
+      for (int nanos : new int[] {0, 1, 123456789}) {
+        ZonedDateTime value = LocalDateTime.of(2024, 2, 29, 12, 13, 14, nanos).atZone(zone);
+        StringJsonWriter string = newStringWriter(new byte[1]);
+        string.writeZonedDateTime(value);
+        String expected = string.toJson();
+        for (int capacity :
+            new int[] {0, 1, expected.length() - 1, expected.length(), expected.length() + 1}) {
+          Utf8JsonWriter writer = newUtf8Writer(new byte[capacity]);
+          writer.writeArrayStart();
+          writer.writeZonedDateTime(value);
+          writer.writeComma(1);
+          writer.writeInt(17);
+          writer.writeArrayEnd();
+          assertEquals(
+              new String(writer.toJsonBytes(), StandardCharsets.UTF_8), "[" + expected + ",17]");
+          writer.reset();
+          writer.writeZonedDateTime(value);
+          assertEquals(new String(writer.toJsonBytes(), StandardCharsets.UTF_8), expected);
+        }
+      }
+    }
+  }
+
+  @Test
+  public void writeOffsetLayouts() {
+    LocalTime time = LocalTime.of(12, 34, 56);
+    Utf8JsonWriter writer = newUtf8Writer(new byte[0]);
+    for (int seconds = -64800; seconds <= 64800; seconds++) {
+      OffsetTime value = OffsetTime.of(time, ZoneOffset.ofTotalSeconds(seconds));
+      writer.reset();
+      writer.writeOffsetTime(value);
+      writer.writeComma(1);
+      writer.writeInt(17);
+      String expected = '"' + DateTimeFormatter.ISO_OFFSET_TIME.format(value) + "\",17";
+      assertEquals(new String(writer.toJsonBytes(), StandardCharsets.UTF_8), expected);
+    }
+  }
+
+  @Test
   public void writeOffsetTokens() {
     LocalTime time = LocalTime.of(12, 34, 56, 123456789);
     for (int seconds :
@@ -920,9 +1287,93 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void writeClockComponents() {
+    LocalDate date = LocalDate.of(2024, 2, 29);
+    ZoneOffset offset = ZoneOffset.ofHoursMinutes(1, 30);
+    for (int component = 0; component < 60; component++) {
+      for (int nano : new int[] {0, 123456789}) {
+        LocalTime time = LocalTime.of(component % 24, component, 59 - component, nano);
+        LocalDateTime dateTime = LocalDateTime.of(date, time);
+        assertWriter(ScalarCodecs.LocalTimeCodec.INSTANCE, time);
+        assertWriter(ScalarCodecs.OffsetTimeCodec.INSTANCE, OffsetTime.of(time, offset));
+        assertWriter(ScalarCodecs.LocalDateTimeCodec.INSTANCE, dateTime);
+        assertWriter(
+            ScalarCodecs.OffsetDateTimeCodec.INSTANCE, OffsetDateTime.of(dateTime, offset));
+        assertWriter(ScalarCodecs.ZonedDateTimeCodec.INSTANCE, dateTime.atZone(offset));
+      }
+    }
+  }
+
+  @Test
+  public void writeCalendarComponents() {
+    for (int month = 1; month <= 12; month++) {
+      int days = LocalDate.of(2024, month, 1).lengthOfMonth();
+      for (int day = 1; day <= days; day++) {
+        assertWriter(ScalarCodecs.LocalDateCodec.INSTANCE, LocalDate.of(2024, month, day));
+      }
+    }
+  }
+
+  @Test
+  public void writeTimeFractions() {
+    for (int digits = 0; digits < 1000; digits++) {
+      int[] nanos = {
+        digits,
+        digits * 1000,
+        digits * 1_000_000,
+        digits * 1_001_000,
+        digits * 1_000_000 + 999,
+        999_000_000 + digits * 1000
+      };
+      for (int nano : nanos) {
+        assertWriter(ScalarCodecs.LocalTimeCodec.INSTANCE, LocalTime.of(12, 34, 56, nano));
+      }
+    }
+    int[] nanos = {
+      0, 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 100010000, 123456789,
+      999999990, 999999999
+    };
+    ZoneOffset offset = ZoneOffset.ofHoursMinutesSeconds(-7, -13, -29);
+    for (int nano : nanos) {
+      LocalTime time = LocalTime.of(12, 34, 56, nano);
+      LocalDateTime dateTime = LocalDateTime.of(LocalDate.of(2024, 2, 29), time);
+      assertTemporalCapacity(ScalarCodecs.LocalTimeCodec.INSTANCE, time);
+      assertTemporalCapacity(ScalarCodecs.LocalDateTimeCodec.INSTANCE, dateTime);
+      assertTemporalCapacity(ScalarCodecs.OffsetTimeCodec.INSTANCE, OffsetTime.of(time, offset));
+      assertTemporalCapacity(
+          ScalarCodecs.OffsetDateTimeCodec.INSTANCE, OffsetDateTime.of(dateTime, offset));
+      assertTemporalCapacity(
+          ScalarCodecs.ZonedDateTimeCodec.INSTANCE, dateTime.atZone(ZoneId.of("Europe/Paris")));
+    }
+  }
+
+  private static <T> void assertTemporalCapacity(JsonValueCodec<T> codec, T value) {
+    StringJsonWriter string = newStringWriter(new byte[1]);
+    codec.writeString(string, value);
+    for (int capacity = 0; capacity <= 40; capacity++) {
+      for (int padding = 0; padding < 8; padding++) {
+        Utf8JsonWriter writer = newUtf8Writer(new byte[capacity]);
+        String prefix = "       ".substring(0, padding);
+        writer.writeRawValue(prefix);
+        codec.writeUtf8(writer, value);
+        writer.writeRawValue(",17");
+        assertEquals(
+            new String(writer.toJsonBytes(), StandardCharsets.UTF_8),
+            prefix + string.toJson() + ",17");
+        writer.reset();
+        codec.writeUtf8(writer, value);
+        assertEquals(new String(writer.toJsonBytes(), StandardCharsets.UTF_8), string.toJson());
+      }
+    }
+  }
+
+  @Test
   public void writeTemporalFormats() {
     int[] years = {-999999999, -1, 0, 1, 9999, 10000, 999999999};
-    int[] nanos = {0, 1, 10, 100, 1000, 1000010, 100000000, 123456789, 999999999};
+    int[] nanos = {
+      0, 1, 10, 100, 1000, 9999, 10000, 10001, 100000, 1000000, 1000010, 10000000, 99999999,
+      100000000, 100000001, 123456789, 999990000, 999999999
+    };
     ZoneOffset[] offsets = {
       ZoneOffset.UTC,
       ZoneOffset.ofHours(18),
@@ -1003,6 +1454,54 @@ public class JsonTemporalTest extends ForyJsonTestModels {
     assertThrows(RuntimeException.class, () -> codec.readUtf8(newUtf8Reader(bytes)));
     assertThrows(RuntimeException.class, () -> codec.readLatin1(newLatin1Reader(bytes)));
     assertThrows(RuntimeException.class, () -> codec.readUtf16(newUtf16Reader(token)));
+  }
+
+  private static final class ZoneNameProvider extends ZoneRulesProvider {
+    private final Set<String> ids =
+        new HashSet<>(
+            Arrays.asList(
+                "ForyJson/Rules", "ForyJson/Lazy", "UT_ForyJson", "UTC_ForyJson", "GMT_ForyJson"));
+    private ZoneRules rules = ZoneRules.of(ZoneOffset.ofHours(1));
+    private int queries;
+
+    private ZoneNameProvider() {
+      String characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/~._+-";
+      for (int i = 0; i < characters.length(); i++) {
+        ids.add("ForyJson/Characters/" + characters.charAt(i));
+      }
+      String pairCharacters = "AZaz09/~._+-";
+      for (int i = 0; i < pairCharacters.length(); i++) {
+        for (int j = 0; j < pairCharacters.length(); j++) {
+          String pair = "ForyJson/" + pairCharacters.charAt(i) + pairCharacters.charAt(j);
+          for (String tail : new String[] {"", "A", "AA", "AAA"}) {
+            ids.add(pair + tail);
+          }
+        }
+      }
+    }
+
+    @Override
+    protected Set<String> provideZoneIds() {
+      return ids;
+    }
+
+    @Override
+    protected ZoneRules provideRules(String zoneId, boolean forCaching) {
+      if (forCaching) {
+        queries++;
+        if (zoneId.equals("ForyJson/Lazy")) {
+          return null;
+        }
+      }
+      return rules;
+    }
+
+    @Override
+    protected NavigableMap<String, ZoneRules> provideVersions(String zoneId) {
+      NavigableMap<String, ZoneRules> versions = new TreeMap<>();
+      versions.put("test", rules);
+      return versions;
+    }
   }
 
   public static class TemporalFields {

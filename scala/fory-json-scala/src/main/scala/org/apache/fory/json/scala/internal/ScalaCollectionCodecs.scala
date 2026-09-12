@@ -558,6 +558,10 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int, runtimeType
       return
     }
     ScalaCollectionCodecs.requireSupportedRuntime(value.getClass)
+    if (kind == ScalaCollectionCodecs.ImmutableIntMapKind && keyCodec.isInstanceOf[MapCodec.IntKeyCodec]) {
+      writeIntMap(writer, value.asInstanceOf[scala.collection.immutable.IntMap[Any]])
+      return
+    }
     val codec = valueInfo.stringWriter()
     val iterator = value.iterator
     writer.writeObjectStart()
@@ -579,6 +583,10 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int, runtimeType
       return
     }
     ScalaCollectionCodecs.requireSupportedRuntime(value.getClass)
+    if (kind == ScalaCollectionCodecs.ImmutableIntMapKind && keyCodec.isInstanceOf[MapCodec.IntKeyCodec]) {
+      writeIntMap(writer, value.asInstanceOf[scala.collection.immutable.IntMap[Any]])
+      return
+    }
     val codec = valueInfo.utf8Writer()
     val iterator = value.iterator
     writer.writeObjectStart()
@@ -590,6 +598,40 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int, runtimeType
       keyCodec.writeName(writer, entry._1)
       codec.writeUtf8(writer, entry._2)
       index += 1
+    }
+    writer.writeObjectEnd()
+  }
+
+  private def writeIntMap(
+      writer: StringJsonWriter,
+      value: scala.collection.immutable.IntMap[Any]
+  ): Unit = {
+    val codec = valueInfo.stringWriter()
+    writer.writeObjectStart()
+    var first = true // Avoid a captured counter update on every entry.
+    // foreachEntry preserves IntMap's traversal order without materializing iterator tuples.
+    // This route is selected only for natural integer keys; custom key codecs keep the generic loop.
+    value.foreachEntry { (key, entryValue) =>
+      if (first) first = false else writer.writeComma(1)
+      writer.writeIntFieldName(key)
+      codec.writeString(writer, entryValue)
+    }
+    writer.writeObjectEnd()
+  }
+
+  private def writeIntMap(
+      writer: Utf8JsonWriter,
+      value: scala.collection.immutable.IntMap[Any]
+  ): Unit = {
+    val codec = valueInfo.utf8Writer()
+    writer.writeObjectStart()
+    var first = true // Avoid a captured counter update on every entry.
+    // foreachEntry preserves IntMap's traversal order without materializing iterator tuples.
+    // This route is selected only for natural integer keys; custom key codecs keep the generic loop.
+    value.foreachEntry { (key, entryValue) =>
+      if (first) first = false else writer.writeComma(1)
+      writer.writeIntFieldName(key)
+      codec.writeUtf8(writer, entryValue)
     }
     writer.writeObjectEnd()
   }
@@ -804,7 +846,8 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int, runtimeType
     case ScalaCollectionCodecs.ImmutableLongMapKind =>
       scala.collection.immutable.LongMap.newBuilder[Any].asInstanceOf[scala.collection.mutable.Builder[(Any, Any), _]]
     case ScalaCollectionCodecs.MutableHashMapKind =>
-      scala.collection.mutable.HashMap.newBuilder[Any, Any]
+      // Keep the small initial table while reducing bucket allocation during incremental decoding.
+      scala.collection.mutable.HashMap.newBuilder[Any, Any](16, 1.0)
     case ScalaCollectionCodecs.MutableLinkedHashMapKind =>
       scala.collection.mutable.LinkedHashMap.newBuilder[Any, Any]
     case ScalaCollectionCodecs.MutableAnyRefMapKind =>

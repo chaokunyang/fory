@@ -92,6 +92,8 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   private static final int[] DIGIT_TRIPLES = new int[1000];
   private static final int[] DIGIT_QUADS = new int[10000];
   private static final boolean STRING_BYTES_BACKED = StringSerializer.isBytesBackedString();
+  private static final boolean COMPACT_STRINGS_ENABLED =
+      STRING_BYTES_BACKED && StringSerializer.isLatin1Coder(StringSerializer.getStringCoder("Z"));
 
   static {
     String base64Digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -598,7 +600,10 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     }
     byte[] bytes = buffer;
     bytes[pos++] = (byte) '"';
-    pos = writeLocalDateBytes(bytes, pos, year, value.getMonthValue(), value.getDayOfMonth());
+    // Valid month/day components fit in one byte, bounding the shared helper's table indices.
+    pos =
+        writeLocalDateBytes(
+            bytes, pos, year, value.getMonthValue() & 0xff, value.getDayOfMonth() & 0xff);
     bytes[pos++] = (byte) '"';
     position = pos;
   }
@@ -775,9 +780,11 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       writeTemporal(value, DateTimeFormatter.ISO_ZONED_DATE_TIME);
       return;
     }
-    boolean region = !value.getZone().equals(value.getOffset());
+    // Named regions keep their bracketed ID even when their rules have a fixed offset.
+    boolean region = !(value.getZone() instanceof ZoneOffset);
     String zoneId = value.getZone().getId();
-    int additional = 42 + zoneId.length();
+    int zoneIdLength = zoneId.length();
+    int additional = 42 + zoneIdLength;
     int pos = position;
     if (pos + additional > buffer.length) {
       grow(additional);
@@ -790,9 +797,15 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     pos = writeOffsetBytes(bytes, pos, value.getOffset());
     if (region) {
       bytes[pos++] = '[';
-      // ZoneId's region syntax is ASCII and excludes JSON quoting and escape characters.
-      for (int i = 0; i < zoneId.length(); i++) {
-        bytes[pos++] = (byte) zoneId.charAt(i);
+      // ZoneId's canonical region syntax is ASCII. The enclosing reservation includes the full ID.
+      byte[] zoneBytes = STRING_BYTES_BACKED ? StringSerializer.getStringBytes(zoneId) : null;
+      if (zoneBytes != null && zoneBytes.length == zoneIdLength) {
+        System.arraycopy(zoneBytes, 0, bytes, pos, zoneIdLength);
+        pos += zoneIdLength;
+      } else {
+        for (int i = 0; i < zoneIdLength; i++) {
+          bytes[pos++] = (byte) zoneId.charAt(i);
+        }
       }
       bytes[pos++] = ']';
     }
@@ -827,19 +840,22 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       grow(9);
     }
     byte[] bytes = buffer;
-    int month = DIGIT_QUADS[value.getMonthValue()] >>> 16;
-    int day = DIGIT_QUADS[value.getDayOfMonth()] >>> 16;
+    int digits = DIGIT_QUADS[value.getMonthValue() * 100 + value.getDayOfMonth()];
     LittleEndian.putInt64(
-        bytes, pos, 0x2d2d22L | ((long) month << 24) | ((long) '-' << 40) | ((long) day << 48));
+        bytes,
+        pos,
+        0x00002d00002d2d22L | ((digits & 0xffffL) << 24) | ((digits & 0xffff0000L) << 32));
     pos += 8;
     bytes[pos++] = '"';
     position = pos;
   }
 
   private static int writeIsoTimeBytes(byte[] bytes, int pos, LocalTime value) {
-    int hour = DIGIT_QUADS[value.getHour()] >>> 16;
-    int minute = DIGIT_QUADS[value.getMinute()] >>> 16;
-    int second = DIGIT_QUADS[value.getSecond()] >>> 16;
+    // Clock components are nonnegative byte-backed values. Keep the unsigned bounds explicit
+    // so the JIT can prove that every lookup is inside the digit table.
+    int hour = DIGIT_QUADS[value.getHour() & 0xff] >>> 16;
+    int minute = DIGIT_QUADS[value.getMinute() & 0xff] >>> 16;
+    int second = DIGIT_QUADS[value.getSecond() & 0xff] >>> 16;
     LittleEndian.putInt64(
         bytes,
         pos,
@@ -851,34 +867,58 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     pos += 8;
     int nano = value.getNano();
     if (nano != 0) {
-      bytes[pos++] = '.';
-      pos = writePadded9(bytes, pos, nano);
-      while (bytes[pos - 1] == '0') {
-        pos--;
+      int millis = nano / 1_000_000;
+      int micros = nano / 1000;
+      int middle = micros - millis * 1000;
+      int low = nano - micros * 1000;
+      LittleEndian.putInt32(bytes, pos, (DIGIT_TRIPLES[millis] & 0xffffff00) | '.');
+      pos += 4;
+      int lastGroup;
+      // Decimal groups determine both their digits and the significant fraction width. Callers
+      // reserve a closing quote after the maximum fraction, covering the last store's spare byte.
+      if (low != 0) {
+        LittleEndian.putInt32(bytes, pos, DIGIT_TRIPLES[middle] >>> 8);
+        LittleEndian.putInt32(bytes, pos + 3, DIGIT_TRIPLES[low] >>> 8);
+        pos += 6;
+        lastGroup = low;
+      } else if (middle != 0) {
+        LittleEndian.putInt32(bytes, pos, DIGIT_TRIPLES[middle] >>> 8);
+        pos += 3;
+        lastGroup = middle;
+      } else {
+        lastGroup = millis;
+      }
+      // In [1, 999], multiplication by the inverse of five maps its multiples to [1, 199],
+      // and other values above 858993458. Only even quotients fit entirely in bits 1 through 7,
+      // so this mask recognizes multiples of ten without division or a dependent digit load.
+      if (((lastGroup * 0xcccccccd) & 0xffffff01) == 0) {
+        do {
+          pos--;
+        } while (bytes[pos - 1] == '0');
       }
     }
     return pos;
   }
 
   private static int writeOffsetBytes(byte[] bytes, int pos, ZoneOffset offset) {
-    // ZoneOffset stores its canonical ASCII ID at construction; do not format it again per write.
+    // ZoneOffset constructs its canonical ID from ASCII literals and decimal digits. Its byte
+    // layout follows the fixed compact-string setting, unlike arbitrary caller-provided Strings.
     String id = offset.getId();
-    int length = id.length();
-    if (STRING_BYTES_BACKED) {
+    if (COMPACT_STRINGS_ENABLED) {
       byte[] text = StringSerializer.getStringBytes(id);
-      if (text.length == length) {
-        if (length == 9) {
-          LittleEndian.putInt64(bytes, pos, LittleEndian.getInt64(text, 0));
-          bytes[pos + 8] = text[8];
-        } else if (length == 6) {
-          LittleEndian.putInt32(bytes, pos, LittleEndian.getInt32(text, 0));
-          LittleEndian.putInt32(bytes, pos + 2, LittleEndian.getInt32(text, 2));
-        } else {
-          bytes[pos] = 'Z';
-        }
-        return pos + length;
+      int length = text.length;
+      if (length == 6) {
+        LittleEndian.putInt32(bytes, pos, LittleEndian.getInt32(text, 0));
+        LittleEndian.putInt32(bytes, pos + 2, LittleEndian.getInt32(text, 2));
+      } else if (length == 9) {
+        LittleEndian.putInt64(bytes, pos, LittleEndian.getInt64(text, 0));
+        bytes[pos + 8] = text[8];
+      } else {
+        bytes[pos] = 'Z';
       }
+      return pos + length;
     }
+    int length = id.length();
     for (int i = 0; i < length; i++) {
       bytes[pos++] = (byte) id.charAt(i);
     }
@@ -1160,10 +1200,15 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
 
   @Override
   public void writeIntFieldName(int value) {
-    writeByteRaw((byte) '"');
-    writeInt(value);
-    writeByteRaw((byte) '"');
-    writeByteRaw((byte) ':');
+    // One reservation covers the sign, ten digits, both quotes, and the colon.
+    if (position + 14 > buffer.length) {
+      grow(14);
+    }
+    buffer[position++] = (byte) '"';
+    writeIntNoEnsure(value);
+    buffer[position] = (byte) '"';
+    buffer[position + 1] = (byte) ':';
+    position += 2;
   }
 
   @Override
@@ -2763,16 +2808,13 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     return writePadded8(bytes, pos, middle, low);
   }
 
-  private static int writePadded8Digits(byte[] bytes, int pos, int value) {
-    int high = divide10000(value);
-    int low = value - high * 10000;
-    return writePadded8(bytes, pos, high, low);
-  }
-
   private static int writePadded9(byte[] bytes, int pos, int value) {
     int high = value / 100_000_000;
+    // Derive both quotients from the original value so the two four-digit groups do not
+    // depend on first subtracting the leading digit.
+    int groups = divide10000(value);
     bytes[pos++] = (byte) ('0' + high);
-    return writePadded8Digits(bytes, pos, value - high * 100_000_000);
+    return writePadded8(bytes, pos, groups - high * 10000, value - groups * 10000);
   }
 
   private static int writePaddedDigits(byte[] bytes, int pos, int value, int digits) {

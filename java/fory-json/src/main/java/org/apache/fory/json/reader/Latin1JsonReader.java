@@ -366,6 +366,15 @@ public final class Latin1JsonReader extends JsonReader {
     }
   }
 
+  @Override
+  public char peekToken() {
+    skipWhitespaceFast();
+    if (position >= input.length) {
+      throw error("Expected token");
+    }
+    return (char) (input[position] & 0xff);
+  }
+
   public boolean consumeToken(char expected) {
     skipWhitespaceFast();
     if (position < input.length && input[position] == expected) {
@@ -488,7 +497,8 @@ public final class Latin1JsonReader extends JsonReader {
     return tryReadNullToken();
   }
 
-  private boolean tryReadNullLiteral() {
+  @Override
+  protected boolean tryReadNullLiteral() {
     if (startsWithAscii("null")) {
       position += 4;
       return true;
@@ -519,7 +529,8 @@ public final class Latin1JsonReader extends JsonReader {
     return value;
   }
 
-  private boolean readBooleanToken() {
+  @Override
+  protected boolean readBooleanToken() {
     if (position < input.length && input[position] == '"') {
       return readQuotedBooleanValue();
     }

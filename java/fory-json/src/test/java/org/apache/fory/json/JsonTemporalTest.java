@@ -603,6 +603,67 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readDateDigits() {
+    for (boolean withTime : new boolean[] {false, true}) {
+      String text = "2024-02-29" + (withTime ? "T23:59:59.123456789" : "");
+      byte[] token = ('"' + text + '"').getBytes(StandardCharsets.US_ASCII);
+      Object expected = withTime ? LocalDateTime.parse(text) : LocalDate.of(2024, 2, 29);
+      for (int start = 0; start < 8; start++) {
+        byte[] bytes = new byte[start + token.length];
+        System.arraycopy(token, 0, bytes, start, token.length);
+        Utf8JsonReader reader = newUtf8Reader(bytes);
+        reader.reset(bytes, start, token.length);
+        assertEquals(
+            withTime ? reader.readIsoLocalDateTime() : reader.readIsoLocalDate(), expected);
+        reader.finish();
+        for (int length = 0; length < token.length; length++) {
+          reader.reset(bytes, start, length);
+          assertThrows(
+              RuntimeException.class,
+              () -> {
+                if (withTime) {
+                  reader.readIsoLocalDateTime();
+                } else {
+                  reader.readIsoLocalDate();
+                }
+                reader.finish();
+              });
+        }
+      }
+      for (int lane : new int[] {1, 2, 3, 4, 6, 7, 9, 10}) {
+        byte original = token[lane];
+        for (int value = 0; value < 256; value++) {
+          token[lane] = (byte) value;
+          Latin1JsonReader reference = newLatin1Reader(token);
+          Utf8JsonReader reader = newUtf8Reader(token);
+          Object parsed;
+          try {
+            // The unchanged text reader owns alternate-sign grammar as well as invalid digits.
+            parsed = withTime ? reference.readIsoLocalDateTime() : reference.readIsoLocalDate();
+            reference.finish();
+          } catch (RuntimeException e) {
+            assertThrows(
+                RuntimeException.class,
+                () -> {
+                  if (withTime) {
+                    reader.readIsoLocalDateTime();
+                  } else {
+                    reader.readIsoLocalDate();
+                  }
+                  reader.finish();
+                });
+            continue;
+          }
+          assertEquals(
+              withTime ? reader.readIsoLocalDateTime() : reader.readIsoLocalDate(), parsed);
+          reader.finish();
+        }
+        token[lane] = original;
+      }
+    }
+  }
+
+  @Test
   public void readTimeComponents() {
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);
     int[] seconds = {0, 1, 30, 59};

@@ -3322,17 +3322,11 @@ public final class Utf8JsonReader extends JsonReader {
     if (bytes[dateStart + 4] != '-' || bytes[dateStart + 7] != '-') {
       return null;
     }
-    int year = parseFourDigits(bytes, dateStart, inputLimit);
-    int month = parse2(bytes, dateStart + 5);
-    int day = parse2(bytes, dateStart + 8);
-    if (year < 0 || month < 0 || day < 0) {
-      return null;
-    }
     int end = dateStart + 10;
     int ch = bytes[end];
     if (ch == '"') {
       position = end + 1;
-      return localDate(year, month, day);
+      return tryReadDate(bytes, dateStart);
     }
     if (ch == 'T') {
       int stringEnd = tryScanSimpleStringTail(bytes, end + 1);
@@ -3340,7 +3334,7 @@ public final class Utf8JsonReader extends JsonReader {
         return null;
       }
       position = stringEnd;
-      return localDate(year, month, day);
+      return tryReadDate(bytes, dateStart);
     }
     return null;
   }
@@ -3371,13 +3365,25 @@ public final class Utf8JsonReader extends JsonReader {
     if (time == null) {
       return null;
     }
-    int year = parseFourDigits(bytes, start, inputLimit);
-    int month = parse2(bytes, start + 5);
-    int day = parse2(bytes, start + 8);
-    if (year < 0 || month < 0 || day < 0) {
+    LocalDate date = tryReadDate(bytes, start);
+    return date == null ? null : LocalDateTime.of(date, time);
+  }
+
+  private static LocalDate tryReadDate(byte[] bytes, int start) {
+    // Both callers bound the full ten-byte date and check its two separators. Gather YYYYMMDD
+    // into eight ASCII lanes so year, month, and day share one digit check and pair conversion.
+    long head = LittleEndian.getInt64(bytes, start);
+    long tail = LittleEndian.getInt32(bytes, start + 6) & 0xffff0000L;
+    long text = (head & 0xffffffffL) | ((head >>> 8) & 0x0000ffff00000000L) | (tail << 32);
+    long digits = text - ASCII_ZEROES;
+    if (((digits | (ASCII_NINES - text)) & ASCII_HIGH_BITS) != 0) {
       return null;
     }
-    return LocalDateTime.of(localDate(year, month, day), time);
+    long pairs = (digits * 10 + (digits >>> 8)) & 0x00ff00ff00ff00ffL;
+    int year = (int) (pairs & 0xff) * 100 + (int) ((pairs >>> 16) & 0xff);
+    int month = (int) ((pairs >>> 32) & 0xff);
+    int day = (int) (pairs >>> 48);
+    return localDate(year, month, day);
   }
 
   private static LocalDate localDate(int year, int month, int day) {

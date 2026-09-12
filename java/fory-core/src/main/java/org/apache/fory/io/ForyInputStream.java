@@ -127,14 +127,15 @@ public class ForyInputStream extends InputStream implements ForyStreamReader {
       len -= remaining;
       dstIndex += remaining;
       try {
-        int read = stream.read(dst, dstIndex, len);
-        while (read < len) {
+        // Check the first read for EOF too, before using its result to advance the offset.
+        int read = 0;
+        do {
           int newRead = stream.read(dst, dstIndex + read, len - read);
           if (newRead < 0) {
             throw new IndexOutOfBoundsException("No enough data in the stream " + stream);
           }
           read += newRead;
-        }
+        } while (read < len);
       } catch (IOException e) {
         throw new RuntimeException(e);
       }

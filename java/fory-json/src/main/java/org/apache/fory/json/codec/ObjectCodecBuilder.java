@@ -462,6 +462,29 @@ final class ObjectCodecBuilder {
       FieldBuilder builder,
       JsonCreatorInfo creatorInfo,
       JsonObjectModel objectModel) {
+    if (objectModel != null && field.requiresUnboxedBinding()) {
+      if (builder.explicitInclude == Include.NON_EMPTY && field.mayBeEmpty()) {
+        // A lowered carrier cannot prove the logical CharSequence/collection emptiness. Keep this
+        // unsupported shape separate from ordinary Kotlin property inclusion and default values.
+        throw new ForyJsonException(
+            "JSON property " + field.name() + " cannot check an unboxed logical empty value");
+      }
+      // The logical codec is bound only after the recursive parent shell is published. Its exact
+      // transparent-null action and physical carrier are normalized in JsonFieldInfo.resolveTypes.
+      return;
+    }
+    if (objectModel != null && field.hasOccurrenceNullability()) {
+      // Kotlin inclusion controls writing independently of constructor defaults. An omitted value
+      // may restore a different default or fail a required read; never override the chosen policy.
+      if (!field.occurrenceNullable()
+          && builder.hasWriteSource()
+          && !field.occurrenceWrapsNull()
+          && field.writeRawType() != null
+          && !field.writeRawType().isPrimitive()) {
+        field.requireNonNullWrite();
+      }
+      return;
+    }
     int argumentIndex = builder.creatorArgumentIndex;
     boolean requiredArgument =
         objectModel != null
@@ -469,41 +492,9 @@ final class ObjectCodecBuilder {
             && argumentIndex >= 0
             && !creatorInfo.hasDefault(argumentIndex)
             && builder.hasWriteSource();
-    if (objectModel != null
-        && (field.hasOccurrenceNullability() || requiredArgument)
-        && builder.explicitInclude == Include.NON_EMPTY
-        && field.mayBeEmpty()) {
-      // Validate the logical type even when a value class is lowered to a different JVM carrier.
+    if (requiredArgument && builder.explicitInclude == Include.NON_EMPTY && field.mayBeEmpty()) {
       throw new ForyJsonException(
           "Reconstructible JSON property " + field.name() + " cannot omit an empty value");
-    }
-    if (objectModel != null && field.requiresUnboxedBinding()) {
-      // The logical codec is bound only after the recursive parent shell is published. Its exact
-      // transparent-null action and physical carrier are normalized in JsonFieldInfo.resolveTypes.
-      return;
-    }
-    if (objectModel != null && field.hasOccurrenceNullability()) {
-      // Compiler defaults and deferred initializers may differ from an empty value. Preserve the
-      // occurrence instead of evaluating application defaults during serialization.
-      if (field.omitEmpty()) {
-        field.includeEmptyWrite();
-      }
-      if (field.occurrenceNullable()) {
-        if (builder.explicitInclude == Include.NON_NULL
-            || builder.explicitInclude == Include.NON_EMPTY) {
-          throw new ForyJsonException(
-              "Nullable reconstructible JSON property "
-                  + field.name()
-                  + " cannot omit an explicit null value");
-        }
-        field.includeNullWrite();
-      } else if (builder.hasWriteSource()
-          && !field.occurrenceWrapsNull()
-          && field.writeRawType() != null
-          && !field.writeRawType().isPrimitive()) {
-        field.requireNonNullWrite();
-      }
-      return;
     }
     if (requiredArgument && !field.writeNull() && !field.writeRawType().isPrimitive()) {
       // Language models without occurrence nullability still need every non-defaulted argument.

@@ -3928,7 +3928,7 @@ public final class Utf8JsonReader extends JsonReader {
     int nameLength = 0;
     boolean latin1 = true;
     while (cursor < length) {
-      int b = bytes[cursor++] & 0xFF;
+      int b = bytes[cursor++];
       if (b == '"') {
         position = cursor;
         return JsonFieldNameHash.finish(hash, value, nameLength, latin1);
@@ -3962,12 +3962,14 @@ public final class Utf8JsonReader extends JsonReader {
           throw error("Unpaired low surrogate escape");
         }
       } else {
+        // A signed byte below space is either a control character or a UTF-8 byte. Ordinary
+        // ASCII needs only one range check; escape-decoded characters bypass this classification.
         if (b < 0x20) {
-          throw errorAt("Control character in string", cursor);
-        }
-        if (b >= 0x80) {
+          if (b >= 0) {
+            throw errorAt("Control character in string", cursor);
+          }
           position = cursor;
-          b = readUtf8CodePoint(b);
+          b = readUtf8CodePoint(b & 0xFF);
           cursor = position;
           if (b > 0xFFFF) {
             if (latin1) {

@@ -52,6 +52,35 @@ import org.testng.annotations.Test;
 
 public class JsonStringTest extends ForyJsonTestModels {
   @Test
+  public void readFieldHashBytes() {
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    for (String prefix : new String[] {"", "abcdefghi"}) {
+      byte[] token = ("\"" + prefix + "x\":17").getBytes(StandardCharsets.US_ASCII);
+      for (int raw = 0; raw < 256; raw++) {
+        token[prefix.length() + 1] = (byte) raw;
+        for (int offset = 0; offset < 8; offset++) {
+          byte[] input = new byte[offset + token.length + 8];
+          System.arraycopy(token, 0, input, offset, token.length);
+          reader.reset(input, offset, token.length);
+          if (raw >= 0x20 && raw < 0x80 && raw != '"' && raw != '\\') {
+            assertEquals(reader.readFieldNameHash(), JsonFieldNameHash.hash(prefix + (char) raw));
+            reader.expectNextToken(':');
+            assertEquals(reader.readInt(), 17);
+            reader.finish();
+          } else {
+            assertThrows(
+                ForyJsonException.class,
+                () -> {
+                  reader.readFieldNameHash();
+                  reader.expectNextToken(':');
+                });
+          }
+        }
+      }
+    }
+  }
+
+  @Test
   public void readMixedFieldHash() {
     String[][] fragments = {
       {"\\\"", "\""}, {"\\\\", "\\"}, {"\\n", "\n"}, {"\\u0000", "\u0000"},

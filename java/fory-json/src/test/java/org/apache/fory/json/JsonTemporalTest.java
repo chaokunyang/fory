@@ -827,7 +827,15 @@ public class JsonTemporalTest extends ForyJsonTestModels {
     }
     for (String text :
         new String[] {
-          "P+1Y+2M+3D", "P01Y002M0003D", "P-00Y-01M-002D", "P2W", "-P1Y2M", "p1y", "P0Y0M0D"
+          "P+1Y+2M+3D",
+          "P01Y002M0003D",
+          "P-00Y-01M-002D",
+          "P1Y000000000002M3D",
+          "P000000000002147483647Y-00000000002147483648M+000000000000D",
+          "P2W",
+          "-P1Y2M",
+          "p1y",
+          "P0Y0M0D"
         }) {
       assertToken(ScalarCodecs.PeriodCodec.INSTANCE, text, Period.parse(text));
     }
@@ -835,7 +843,16 @@ public class JsonTemporalTest extends ForyJsonTestModels {
     ForyJson json = ForyJson.builder().build();
     for (String text :
         new String[] {
-          "P", "P1D1Y", "P1Y1Y", "P2147483648D", "P-2147483649M", "P1.0Y", "P1e0D", "P1Y\\x"
+          "P",
+          "P1D1Y",
+          "P1Y1Y",
+          "P2147483648D",
+          "P-2147483649M",
+          "P1Y00000000002147483648M",
+          "P1Y+",
+          "P1.0Y",
+          "P1e0D",
+          "P1Y\\x"
         }) {
       byte[] token = ('"' + text + '"').getBytes(StandardCharsets.UTF_8);
       assertThrows(ForyJsonException.class, () -> json.fromJson(token, Period.class));

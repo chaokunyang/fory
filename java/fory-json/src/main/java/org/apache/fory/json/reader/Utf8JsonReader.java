@@ -890,8 +890,13 @@ public final class Utf8JsonReader extends JsonReader {
     if (ch == '"') {
       return readQuotedIntValue();
     }
-    if (ch == '-') {
-      return readNegativeIntToken(offset);
+    boolean negative = ch == '-';
+    if (negative) {
+      offset++;
+      if (offset >= inputLimit) {
+        throw error("Expected digit");
+      }
+      ch = bytes[offset];
     }
     if (ch == '0') {
       position = offset + 1;
@@ -904,10 +909,7 @@ public final class Utf8JsonReader extends JsonReader {
     }
     int result = ch - '0';
     offset++;
-    int safeEnd = offset + 8;
-    if (safeEnd > inputLimit) {
-      safeEnd = inputLimit;
-    }
+    int safeEnd = Math.min(offset + 8, inputLimit);
     while (offset < safeEnd) {
       ch = bytes[offset];
       if (ch < '0' || ch > '9') {
@@ -919,19 +921,20 @@ public final class Utf8JsonReader extends JsonReader {
     if (offset < inputLimit) {
       ch = bytes[offset];
       if (ch >= '0' && ch <= '9') {
-        return readPositiveIntTail(bytes, offset, inputLimit, result);
+        return readIntTail(bytes, offset, inputLimit, result, negative);
       }
     }
     position = offset;
     rejectFractionOrExponentFast();
-    return result;
+    return negative ? -result : result;
   }
 
-  private int readPositiveIntTail(byte[] bytes, int offset, int inputLimit, int result) {
-    // The caller has consumed exactly nine positive digits. A Java int can contain only one more;
-    // any following digit is necessarily overflow rather than another loop iteration.
+  private int readIntTail(byte[] bytes, int offset, int inputLimit, int result, boolean negative) {
+    // Nine magnitude digits fit regardless of sign. Only the tenth digit needs the asymmetric
+    // MIN_VALUE bound; its magnitude wraps to MIN_VALUE, whose negation is the same int value.
     int digit = bytes[offset] - '0';
-    if (result > INT_MAX_DIV_10 || (result == INT_MAX_DIV_10 && digit > INT_MAX_MOD_10)) {
+    if (result > INT_MAX_DIV_10
+        || (result == INT_MAX_DIV_10 && digit > (negative ? 8 : INT_MAX_MOD_10))) {
       position = offset;
       throw error("Integer overflow");
     }
@@ -946,68 +949,7 @@ public final class Utf8JsonReader extends JsonReader {
     }
     position = offset;
     rejectFractionOrExponentFast();
-    return result;
-  }
-
-  private int readNegativeIntToken(int start) {
-    byte[] bytes = input;
-    int offset = start + 1;
-    int inputLimit = this.inputLimit;
-    if (offset >= inputLimit) {
-      throw error("Expected digit");
-    }
-    int ch = bytes[offset];
-    if (ch == '0') {
-      position = offset + 1;
-      rejectLeadingDigitFast();
-      rejectFractionOrExponentFast();
-      return 0;
-    }
-    if (ch < '1' || ch > '9') {
-      throw error("Expected digit");
-    }
-    int result = '0' - ch;
-    offset++;
-    // Nine negative digits always fit. Only the tenth digit needs the asymmetric MIN_VALUE bound.
-    int safeEnd = Math.min(offset + 8, inputLimit);
-    while (offset < safeEnd) {
-      ch = bytes[offset];
-      if (ch < '0' || ch > '9') {
-        break;
-      }
-      result = result * 10 - (ch - '0');
-      offset++;
-    }
-    if (offset < inputLimit) {
-      ch = bytes[offset];
-      if (ch >= '0' && ch <= '9') {
-        return readNegativeIntTail(bytes, offset, inputLimit, result);
-      }
-    }
-    position = offset;
-    rejectFractionOrExponentFast();
-    return result;
-  }
-
-  private int readNegativeIntTail(byte[] bytes, int offset, int inputLimit, int result) {
-    int digit = bytes[offset] - '0';
-    if (result < Integer.MIN_VALUE / 10
-        || (result == Integer.MIN_VALUE / 10 && digit > -(Integer.MIN_VALUE % 10))) {
-      position = offset;
-      throw error("Integer overflow");
-    }
-    result = result * 10 - digit;
-    offset++;
-    if (offset < inputLimit) {
-      int ch = bytes[offset];
-      if (ch >= '0' && ch <= '9') {
-        position = offset;
-        throw error("Integer overflow");
-      }
-    }
-    position = offset;
-    rejectFractionOrExponentFast();
-    return result;
+    return negative ? -result : result;
   }
 
   public long readLongValue() {
@@ -2834,17 +2776,8 @@ public final class Utf8JsonReader extends JsonReader {
   @Override
   public Period readPeriod() {
     skipWhitespaceFast();
-    int mark = position;
-    try {
-      Period value = tryReadPeriod();
-      if (value != null) {
-        return value;
-      }
-    } catch (ForyJsonException e) {
-      // ISO components also allow plus signs and leading zeros, unlike JSON integers.
-    }
-    position = mark;
-    return super.readPeriod();
+    Period value = tryReadPeriod();
+    return value != null ? value : super.readPeriod();
   }
 
   private Period tryReadPeriod() {
@@ -2854,17 +2787,37 @@ public final class Utf8JsonReader extends JsonReader {
     if (offset > limit - 5 || bytes[offset] != '"' || bytes[offset + 1] != 'P') {
       return null;
     }
-    position = offset + 2;
+    offset += 2;
     int previousUnit = 0;
     int years = 0;
     int months = 0;
     int days = 0;
-    while (position < limit && bytes[position] != '"') {
-      int amount = readIntToken();
-      if (position == limit) {
+    while (offset < limit && bytes[offset] != '"') {
+      // ISO signs and leading zeros differ from JSON tokens. Keep the cursor local until the
+      // complete period is accepted, so uncommon ISO forms can restart in the generic parser.
+      int ch = bytes[offset];
+      boolean negative = ch == '-';
+      if (negative || ch == '+') {
+        offset++;
+      }
+      int start = offset;
+      int safeEnd = offset + Math.min(10, limit - offset);
+      long magnitude = 0;
+      while (offset < safeEnd) {
+        ch = bytes[offset];
+        if (ch < '0' || ch > '9') {
+          break;
+        }
+        magnitude = magnitude * 10 + ch - '0';
+        offset++;
+      }
+      if (offset == start
+          || offset == limit
+          || magnitude > (negative ? 2_147_483_648L : Integer.MAX_VALUE)) {
         return null;
       }
-      int suffix = bytes[position++];
+      int amount = (int) (negative ? -magnitude : magnitude);
+      int suffix = bytes[offset++];
       int unit;
       if (suffix == 'Y') {
         unit = 1;
@@ -2883,11 +2836,12 @@ public final class Utf8JsonReader extends JsonReader {
       }
       previousUnit = unit;
     }
-    if (previousUnit == 0 || position == limit) {
+    if (previousUnit == 0 || offset == limit) {
       return null;
     }
-    position++;
-    return Period.of(years, months, days);
+    Period value = Period.of(years, months, days);
+    position = offset + 1;
+    return value;
   }
 
   @Override

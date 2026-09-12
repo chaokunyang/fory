@@ -89,6 +89,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   private static final long EIGHT_DIGITS = 100_000_000L;
   private static final int[] HEX_PAIRS = new int[256];
   private static final long UTF16_ASCII_MASK = 0xFF80FF80FF80FF80L;
+  private static final char[] DIGIT_PAIRS = new char[256];
   private static final int[] DIGIT_TRIPLES = new int[1000];
   private static final int[] DIGIT_QUADS = new int[10000];
   private static final boolean STRING_BYTES_BACKED = StringSerializer.isBytesBackedString();
@@ -106,6 +107,9 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       int first = high < 10 ? '0' + high : 'a' + high - 10;
       int second = low < 10 ? '0' + low : 'a' + low - 10;
       HEX_PAIRS[i] = first | (second << 8);
+    }
+    for (int i = 0; i < 100; i++) {
+      DIGIT_PAIRS[i] = (char) (('0' + i / 10) | (('0' + i % 10) << 8));
     }
     for (int i = 0; i < 1000; i++) {
       int c0 = '0' + i / 100;
@@ -853,13 +857,13 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   private static int writeIsoTimeBytes(byte[] bytes, int pos, LocalTime value) {
     // Clock components are nonnegative byte-backed values. Keep the unsigned bounds explicit
     // so the JIT can prove that every lookup is inside the digit table.
-    int hour = DIGIT_QUADS[value.getHour() & 0xff] >>> 16;
-    int minute = DIGIT_QUADS[value.getMinute() & 0xff] >>> 16;
-    int second = DIGIT_QUADS[value.getSecond() & 0xff] >>> 16;
+    int hour = DIGIT_PAIRS[value.getHour() & 0xff];
+    int minute = DIGIT_PAIRS[value.getMinute() & 0xff];
+    int second = DIGIT_PAIRS[value.getSecond() & 0xff];
     LittleEndian.putInt64(
         bytes,
         pos,
-        (hour & 0xffffL)
+        (long) hour
             | ((long) ':' << 16)
             | ((long) minute << 24)
             | ((long) ':' << 40)

@@ -2844,8 +2844,8 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
 
   // Callers select a four-digit year and reserve the complete ten-byte date.
   private static int writeLocalDateBytes(byte[] bytes, int pos, int year, int month, int day) {
-    int monthDigits = DIGIT_QUADS[month] >>> 16;
-    int dayDigits = DIGIT_QUADS[day] >>> 16;
+    int monthDigits = DIGIT_PAIRS[month];
+    int dayDigits = DIGIT_PAIRS[day];
     LittleEndian.putInt64(
         bytes,
         pos,

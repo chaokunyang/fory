@@ -87,7 +87,9 @@ public final class ForyJsonBuilder {
    * <p>The default is {@code NON_NULL}. {@code NON_EMPTY} additionally omits empty CharSequence
    * values, arrays, collections, maps, and absent JDK Optional values. Root values and container
    * entries are not filtered. Inclusion examines the logical property value before a custom value
-   * codec runs. Language models retain properties needed for reconstruction.
+   * codec runs. Kotlin properties follow this policy even when omission changes the value restored
+   * by a constructor default or causes a missing-property read failure. Other language models may
+   * retain properties needed for reconstruction.
    *
    * @throws IllegalArgumentException if inclusion is {@code DEFAULT}, which requires a parent
    *     default

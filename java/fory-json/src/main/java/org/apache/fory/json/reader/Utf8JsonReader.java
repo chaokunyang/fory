@@ -38,7 +38,6 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
-import java.util.List;
 import java.util.UUID;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
@@ -2964,18 +2963,14 @@ public final class Utf8JsonReader extends JsonReader {
     if (ZONED_DATE_TIME_CONSTRUCTOR == null) {
       return ZonedDateTime.ofInstant(dateTime, ZoneOffset.ofTotalSeconds(offsetSeconds), zone);
     }
-    // Match the explicit offset in seconds before constructing one. Reuse the rules' immutable
-    // offset for normal times or either side of an overlap; gaps and mismatches need conversion.
-    List<ZoneOffset> offsets = zone.getRules().getValidOffsets(dateTime);
-    ZoneOffset offset = null;
-    for (int i = 0; i < offsets.size(); i++) {
-      ZoneOffset candidate = offsets.get(i);
-      if (candidate.getTotalSeconds() == offsetSeconds) {
-        offset = candidate;
-        break;
-      }
-    }
-    if (offset == null) {
+    // The token's explicit offset identifies one instant, including either side of an overlap.
+    // Zone rules change on whole seconds; the original local date/time retains the nanoseconds.
+    long epochSecond =
+        dateTime.toLocalDate().toEpochDay() * 86400
+            + dateTime.toLocalTime().toSecondOfDay()
+            - offsetSeconds;
+    ZoneOffset offset = zone.getRules().getOffset(Instant.ofEpochSecond(epochSecond));
+    if (offset.getTotalSeconds() != offsetSeconds) {
       return ZonedDateTime.ofInstant(dateTime, ZoneOffset.ofTotalSeconds(offsetSeconds), zone);
     }
     try {

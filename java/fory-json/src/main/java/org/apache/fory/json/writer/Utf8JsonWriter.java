@@ -912,8 +912,11 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       byte[] text = StringSerializer.getStringBytes(id);
       int length = text.length;
       if (length == 6) {
-        LittleEndian.putInt32(bytes, pos, LittleEndian.getInt32(text, 0));
-        LittleEndian.putInt32(bytes, pos + 2, LittleEndian.getInt32(text, 2));
+        // Callers reserve the nine-byte offset form, covering this store's two spare bytes.
+        long digits =
+            (LittleEndian.getInt32(text, 0) & 0xffffL)
+                | ((long) LittleEndian.getInt32(text, 2) << 16);
+        LittleEndian.putInt64(bytes, pos, digits);
       } else if (length == 9) {
         LittleEndian.putInt64(bytes, pos, LittleEndian.getInt64(text, 0));
         bytes[pos + 8] = text[8];

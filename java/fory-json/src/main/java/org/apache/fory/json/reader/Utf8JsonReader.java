@@ -1295,8 +1295,7 @@ public final class Utf8JsonReader extends JsonReader {
         // The first stop proves the short digit prefix; the eighteen-digit bound still makes
         // its complete accumulation safe without a per-digit overflow check.
         int count = Long.numberOfTrailingZeros(stop) >>> 3;
-        digits = (digits & ((1L << (count << 3)) - 1)) << ((Long.BYTES - count) << 3);
-        result = result * LONG_POWERS_OF_TEN[count] + combineEightDigits(digits);
+        result = appendLongDigits(result, digits, count);
         offset += count;
         break;
       }
@@ -1373,8 +1372,7 @@ public final class Utf8JsonReader extends JsonReader {
         // The first stop proves the short digit prefix; the eighteen-digit bound still makes
         // its complete accumulation safe without a per-digit overflow check.
         int count = Long.numberOfTrailingZeros(stop) >>> 3;
-        digits = (digits & ((1L << (count << 3)) - 1)) << ((Long.BYTES - count) << 3);
-        result = result * LONG_POWERS_OF_TEN[count] - combineEightDigits(digits);
+        result = -appendLongDigits(-result, digits, count);
         offset += count;
         break;
       }
@@ -1415,6 +1413,13 @@ public final class Utf8JsonReader extends JsonReader {
     position = offset;
     rejectFractionOrExponentFast();
     return result;
+  }
+
+  private static long appendLongDigits(long value, long digits, int count) {
+    // The first stop already validated these lanes; both callers keep the complete magnitude below
+    // nineteen digits.
+    digits = (digits & ((1L << (count << 3)) - 1)) << ((Long.BYTES - count) << 3);
+    return value * LONG_POWERS_OF_TEN[count] + combineEightDigits(digits);
   }
 
   private static int parseEightDigits(byte[] bytes, int offset, int safeEnd) {

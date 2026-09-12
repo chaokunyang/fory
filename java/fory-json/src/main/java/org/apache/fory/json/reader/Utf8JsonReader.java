@@ -38,6 +38,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
@@ -2896,10 +2897,10 @@ public final class Utf8JsonReader extends JsonReader {
     int mark = position;
     if (mark < inputLimit && input[mark] == '"') {
       position = mark + 1;
-      ZoneOffset offset = tryReadOffset();
-      if (offset != null && position < inputLimit && input[position] == '"') {
+      int offsetSeconds = tryReadOffsetSeconds();
+      if (offsetSeconds != Integer.MIN_VALUE && position < inputLimit && input[position] == '"') {
         position++;
-        return offset;
+        return ZoneOffset.ofTotalSeconds(offsetSeconds);
       }
     }
     position = mark;
@@ -2913,10 +2914,10 @@ public final class Utf8JsonReader extends JsonReader {
     if (mark < inputLimit && input[mark] == '"') {
       LocalTime time = tryReadTime(mark + 1);
       if (time != null) {
-        ZoneOffset offset = tryReadOffset();
-        if (offset != null && position < inputLimit && input[position] == '"') {
+        int offsetSeconds = tryReadOffsetSeconds();
+        if (offsetSeconds != Integer.MIN_VALUE && position < inputLimit && input[position] == '"') {
           position++;
-          return OffsetTime.of(time, offset);
+          return OffsetTime.of(time, ZoneOffset.ofTotalSeconds(offsetSeconds));
         }
       }
     }
@@ -2930,10 +2931,11 @@ public final class Utf8JsonReader extends JsonReader {
     int mark = position;
     LocalDateTime dateTime = tryReadDateTime();
     if (dateTime != null) {
-      ZoneOffset offset = tryReadOffset();
-      if (offset != null && position < inputLimit) {
+      int offsetSeconds = tryReadOffsetSeconds();
+      if (offsetSeconds != Integer.MIN_VALUE && position < inputLimit) {
         if (input[position] == '"') {
           position++;
+          ZoneOffset offset = ZoneOffset.ofTotalSeconds(offsetSeconds);
           return ZonedDateTime.ofInstant(dateTime, offset, offset);
         }
         if (input[position] == '[') {
@@ -2948,7 +2950,7 @@ public final class Utf8JsonReader extends JsonReader {
           if (end + 1 < inputLimit && input[end] == ']' && input[end + 1] == '"') {
             ZoneId zone = zoneIds().get(this, start, end, hash);
             position = end + 2;
-            return zonedDateTime(dateTime, offset, zone);
+            return zonedDateTime(dateTime, offsetSeconds, zone);
           }
         }
       }
@@ -2958,14 +2960,23 @@ public final class Utf8JsonReader extends JsonReader {
   }
 
   private static ZonedDateTime zonedDateTime(
-      LocalDateTime dateTime, ZoneOffset offset, ZoneId zone) {
+      LocalDateTime dateTime, int offsetSeconds, ZoneId zone) {
     if (ZONED_DATE_TIME_CONSTRUCTOR == null) {
-      return ZonedDateTime.ofInstant(dateTime, offset, zone);
+      return ZonedDateTime.ofInstant(dateTime, ZoneOffset.ofTotalSeconds(offsetSeconds), zone);
     }
-    // A valid offset proves that the parsed local date/time already describes the explicit
-    // instant, including either side of an overlap. Gaps and mismatches still require conversion.
-    if (!zone.getRules().isValidOffset(dateTime, offset)) {
-      return ZonedDateTime.ofInstant(dateTime, offset, zone);
+    // Match the explicit offset in seconds before constructing one. Reuse the rules' immutable
+    // offset for normal times or either side of an overlap; gaps and mismatches need conversion.
+    List<ZoneOffset> offsets = zone.getRules().getValidOffsets(dateTime);
+    ZoneOffset offset = null;
+    for (int i = 0; i < offsets.size(); i++) {
+      ZoneOffset candidate = offsets.get(i);
+      if (candidate.getTotalSeconds() == offsetSeconds) {
+        offset = candidate;
+        break;
+      }
+    }
+    if (offset == null) {
+      return ZonedDateTime.ofInstant(dateTime, ZoneOffset.ofTotalSeconds(offsetSeconds), zone);
     }
     try {
       return (ZonedDateTime) ZONED_DATE_TIME_CONSTRUCTOR.invokeExact(dateTime, offset, zone);
@@ -3342,10 +3353,10 @@ public final class Utf8JsonReader extends JsonReader {
   private OffsetDateTime tryReadIsoOffsetDateTimeToken() {
     LocalDateTime dateTime = tryReadDateTime();
     if (dateTime != null) {
-      ZoneOffset offset = tryReadOffset();
-      if (offset != null && position < inputLimit && input[position] == '"') {
+      int offsetSeconds = tryReadOffsetSeconds();
+      if (offsetSeconds != Integer.MIN_VALUE && position < inputLimit && input[position] == '"') {
         position++;
-        return OffsetDateTime.of(dateTime, offset);
+        return OffsetDateTime.of(dateTime, ZoneOffset.ofTotalSeconds(offsetSeconds));
       }
     }
     return null;
@@ -3531,20 +3542,21 @@ public final class Utf8JsonReader extends JsonReader {
     return nano * NANO_SCALE[9 - end + start];
   }
 
-  private ZoneOffset tryReadOffset() {
+  private int tryReadOffsetSeconds() {
+    // Two-digit components cannot produce MIN_VALUE, which selects decoded-text parsing.
     byte[] bytes = input;
     int start = position;
     int limit = inputLimit;
     if (start >= limit) {
-      return null;
+      return Integer.MIN_VALUE;
     }
     if (bytes[start] == 'Z') {
       position = start + 1;
-      return ZoneOffset.UTC;
+      return 0;
     }
     int sign = bytes[start];
     if ((sign != '+' && sign != '-') || start > limit - 6 || bytes[start + 3] != ':') {
-      return null;
+      return Integer.MIN_VALUE;
     }
     // The six-byte prefix bounds the word load. Pack HH:mm's four digit lanes together;
     // the intervening colon was checked above and does not participate in digit arithmetic.
@@ -3552,7 +3564,7 @@ public final class Utf8JsonReader extends JsonReader {
     int digitText = (text & 0xffff0000) | ((text & 0xff) << 8) | (bytes[start + 1] & 0xff);
     int digits = digitText - (int) ASCII_ZEROES;
     if (((digits | ((int) ASCII_NINES - digitText)) & INT_BYTE_HIGH_BITS) != 0) {
-      return null;
+      return Integer.MIN_VALUE;
     }
     int pairs = (digits * 10 + (digits >>> 8)) & 0x00ff00ff;
     int hours = pairs & 0xff;
@@ -3561,18 +3573,17 @@ public final class Utf8JsonReader extends JsonReader {
     int end = start + 6;
     if (end < limit && bytes[end] == ':') {
       if (end > limit - 3) {
-        return null;
+        return Integer.MIN_VALUE;
       }
       seconds = parse2(bytes, end + 1);
       end += 3;
     }
     if (minutes > 59 || seconds < 0 || seconds > 59) {
-      return null;
+      return Integer.MIN_VALUE;
     }
     int total = hours * 3600 + minutes * 60 + seconds;
-    ZoneOffset offset = ZoneOffset.ofTotalSeconds(sign == '-' ? -total : total);
     position = end;
-    return offset;
+    return sign == '-' ? -total : total;
   }
 
   private int tryScanSimpleStringTail(byte[] bytes, int offset) {

@@ -171,6 +171,18 @@ public class JsonTemporalTest extends ForyJsonTestModels {
     assertEquals(lazy.getRules(), provider.rules);
     provider.rules = previous;
     assertEquals(lazy.getRules(), previous);
+    ZoneOffset offset = ZoneOffset.ofHoursMinutesSeconds(1, 2, 3);
+    provider.rules = ZoneRules.of(offset);
+    try {
+      byte[] dateTime =
+          "\"2024-01-01T12:00:00.123456789+01:02:03[ForyJson/Rules]\""
+              .getBytes(StandardCharsets.US_ASCII);
+      ZonedDateTime decoded = json.fromJson(dateTime, ZonedDateTime.class);
+      assertEquals(decoded.toInstant(), Instant.parse("2024-01-01T10:57:57.123456789Z"));
+      assertSame(decoded.getOffset(), offset);
+    } finally {
+      provider.rules = previous;
+    }
   }
 
   @Test

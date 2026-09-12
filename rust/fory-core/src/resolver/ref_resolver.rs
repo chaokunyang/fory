@@ -418,6 +418,11 @@ impl RefReader {
     /// that referenced objects which were not yet available during deserialization.
     #[inline(always)]
     pub fn resolve_callbacks(&mut self) {
+        // An unallocated queue has neither callbacks nor storage to release. Check capacity
+        // rather than length so an empty allocated queue still follows the normal cleanup path.
+        if self.callbacks.capacity() == 0 {
+            return;
+        }
         let callbacks = std::mem::take(&mut self.callbacks);
         for callback in callbacks {
             callback(self);

@@ -629,8 +629,10 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       writeTemporal(value, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
       return;
     }
-    if (value.getOffset().getTotalSeconds() != 0) {
-      writeOffsetDateTimeValue(value);
+    ZoneOffset offset = value.getOffset();
+    if (offset.getTotalSeconds() != 0) {
+      // Carry the resolved components across the non-UTC call instead of reloading their owners.
+      writeOffsetDateTimeValue(date, value.toLocalTime(), offset);
       return;
     }
     int pos = position;
@@ -767,7 +769,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     position = pos;
   }
 
-  private void writeOffsetDateTimeValue(OffsetDateTime value) {
+  private void writeOffsetDateTimeValue(LocalDate date, LocalTime time, ZoneOffset offset) {
     int pos = position;
     if (pos + 40 > buffer.length) {
       grow(40);
@@ -776,9 +778,9 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     bytes[pos++] = '"';
     pos =
         writeLocalDateBytes(
-            bytes, pos, value.getYear(), value.getMonthValue(), value.getDayOfMonth(), 'T');
-    pos = writeIsoTimeBytes(bytes, pos, value.toLocalTime());
-    pos = writeOffsetBytes(bytes, pos, value.getOffset(), '"');
+            bytes, pos, date.getYear(), date.getMonthValue(), date.getDayOfMonth(), 'T');
+    pos = writeIsoTimeBytes(bytes, pos, time);
+    pos = writeOffsetBytes(bytes, pos, offset, '"');
     position = pos;
   }
 

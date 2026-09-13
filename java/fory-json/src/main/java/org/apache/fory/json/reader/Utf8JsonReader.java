@@ -1122,11 +1122,12 @@ public final class Utf8JsonReader extends JsonReader {
       }
     }
     while (offset < safeEnd) {
-      ch = bytes[offset];
-      if (ch < '0' || ch > '9') {
+      int digit = bytes[offset] - '0';
+      // Negative differences sort above nine, so one unsigned comparison covers both bounds.
+      if (Integer.compareUnsigned(digit, 9) > 0) {
         break;
       }
-      value = value * 10 + (ch - '0');
+      value = value * 10 + digit;
       offset++;
     }
     if (offset < limit && bytes[offset] >= '0' && bytes[offset] <= '9') {

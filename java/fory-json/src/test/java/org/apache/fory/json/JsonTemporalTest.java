@@ -416,6 +416,11 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readNullableLocalTime() {
+    assertNullableTemporal(ScalarCodecs.LocalTimeCodec.INSTANCE, LocalTime.of(1, 2, 3, 4));
+  }
+
+  @Test
   public void readNullableOffsetTime() {
     assertNullableTemporal(
         ScalarCodecs.OffsetTimeCodec.INSTANCE, OffsetTime.of(1, 2, 3, 4, ZoneOffset.ofHours(5)));

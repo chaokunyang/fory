@@ -31,6 +31,7 @@ import static org.testng.Assert.assertTrue;
 
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import org.apache.fory.json.data.CharValue;
 import org.apache.fory.json.data.Kind;
 import org.apache.fory.json.data.Nested;
@@ -145,6 +146,42 @@ public class JsonStringTest extends ForyJsonTestModels {
             assertEquals(reader.readNextIntValue(), 17);
             reader.finish();
           }
+        }
+      }
+    }
+  }
+
+  @Test
+  public void readHexDigitPairs() {
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    byte[] token = "\"\\u0000\",17".getBytes(StandardCharsets.US_ASCII);
+    String digits = "0123456789aBcDeF";
+    for (int value = 0; value <= 0xffff; value++) {
+      if (Character.isSurrogate((char) value)) {
+        continue;
+      }
+      for (int lane = 0; lane < 4; lane++) {
+        token[3 + lane] = (byte) digits.charAt((value >>> (12 - lane * 4)) & 15);
+      }
+      reader.reset(token);
+      assertEquals(reader.readString(), String.valueOf((char) value));
+      reader.expectNextToken(',');
+      assertEquals(reader.readInt(), 17);
+      reader.finish();
+    }
+    for (int lane = 0; lane < 4; lane++) {
+      for (int value = 0; value < 256; value++) {
+        Arrays.fill(token, 3, 7, (byte) '0');
+        token[3 + lane] = (byte) value;
+        reader.reset(token);
+        int digit = value < 128 ? Character.digit((char) value, 16) : -1;
+        if (digit < 0) {
+          assertThrows(ForyJsonException.class, reader::readString);
+        } else {
+          assertEquals(reader.readString(), String.valueOf((char) (digit << (12 - lane * 4))));
+          reader.expectNextToken(',');
+          assertEquals(reader.readInt(), 17);
+          reader.finish();
         }
       }
     }

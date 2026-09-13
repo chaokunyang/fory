@@ -2863,7 +2863,6 @@ public final class Utf8JsonReader extends JsonReader {
 
   @Override
   public ZoneOffset readZoneOffset() {
-    skipWhitespaceFast();
     byte[] bytes = input;
     int limit = inputLimit;
     int mark = position;
@@ -2928,6 +2927,11 @@ public final class Utf8JsonReader extends JsonReader {
       return ZoneOffset.ofTotalSeconds(total);
     }
     position = mark;
+    if (mark < limit && isWhitespace(bytes[mark])) {
+      // Retry once after whitespace, keeping token-ready reads free of a second whitespace probe.
+      skipWhitespaceFast();
+      return readZoneOffset();
+    }
     return super.readZoneOffset();
   }
 

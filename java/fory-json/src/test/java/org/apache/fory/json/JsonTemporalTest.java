@@ -382,6 +382,11 @@ public class JsonTemporalTest extends ForyJsonTestModels {
       ZoneOffset expected = ZoneOffset.of(text);
       assertToken(ScalarCodecs.ZoneOffsetCodec.INSTANCE, text, expected);
       byte[] token = ('"' + text + '"').getBytes(StandardCharsets.UTF_8);
+      reader.reset((" \t\r\n\"" + text + "\",17").getBytes(StandardCharsets.US_ASCII));
+      assertEquals(reader.readZoneOffset(), expected);
+      reader.expectNextToken(',');
+      assertEquals(reader.readInt(), 17);
+      reader.finish();
       for (int offset = 0; offset < 8; offset++) {
         byte[] bytes = new byte[offset + token.length + 8];
         System.arraycopy(token, 0, bytes, offset, token.length);

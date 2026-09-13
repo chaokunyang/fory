@@ -2694,7 +2694,7 @@ public final class Utf8JsonReader extends JsonReader {
   }
 
   private static int epochDay(int year, int month, int day) {
-    // The component parser proves a four-digit year. Neri and Schneider, Proposition 6.2:
+    // Both component parsers prove a four-digit year. Neri and Schneider, Proposition 6.2:
     // https://arxiv.org/abs/2102.06959.
     // Moving four-digit years forward one Gregorian cycle keeps January/February of year zero
     // nonnegative. The epoch adjustment removes that cycle, and every product fits an int.
@@ -3116,8 +3116,10 @@ public final class Utf8JsonReader extends JsonReader {
     }
     // The token's explicit offset identifies one instant, including either side of an overlap.
     // Zone rules change on whole seconds; the original local date/time retains the nanoseconds.
+    // tryReadDateTime proves a four-digit year, as required by the integer epoch-day conversion.
+    LocalDate date = dateTime.toLocalDate();
     long epochSecond =
-        dateTime.toLocalDate().toEpochDay() * 86400
+        epochDay(date.getYear(), date.getMonthValue(), date.getDayOfMonth()) * 86400L
             + dateTime.toLocalTime().toSecondOfDay()
             - offsetSeconds;
     ZoneOffset offset = zone.getRules().getOffset(Instant.ofEpochSecond(epochSecond));

@@ -604,10 +604,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     }
     byte[] bytes = buffer;
     bytes[pos++] = (byte) '"';
-    // Valid month/day components fit in one byte, bounding the shared helper's table indices.
-    pos =
-        writeLocalDateBytes(
-            bytes, pos, year, value.getMonthValue() & 0xff, value.getDayOfMonth() & 0xff);
+    pos = writeLocalDateBytes(bytes, pos, year, value.getMonthValue(), value.getDayOfMonth());
     bytes[pos++] = (byte) '"';
     position = pos;
   }
@@ -2849,8 +2846,9 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
 
   // Callers select a four-digit year and reserve the complete ten-byte date.
   private static int writeLocalDateBytes(byte[] bytes, int pos, int year, int month, int day) {
-    int monthDigits = DIGIT_PAIRS[month];
-    int dayDigits = DIGIT_PAIRS[day];
+    // Calendar components fit a byte; retain that lookup bound after JDK field getters inline.
+    int monthDigits = DIGIT_PAIRS[month & 0xff];
+    int dayDigits = DIGIT_PAIRS[day & 0xff];
     LittleEndian.putInt64(
         bytes,
         pos,

@@ -1539,6 +1539,12 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         assertInstant(utf8, string, Instant.ofEpochSecond(start + day * 86400L, day));
       }
     }
+    // Exercise both edges of the positive 31-bit century numerator and neighboring midnights.
+    for (long day : new long[] {-719469, -719468, -719467, 536151442, 536151443, 536151444}) {
+      for (int second = -1; second <= 1; second++) {
+        assertInstant(utf8, string, Instant.ofEpochSecond(day * 86400L + second, 123456789));
+      }
+    }
     Random random = new Random(481907L);
     long minimum = Instant.MIN.getEpochSecond();
     long range = Instant.MAX.getEpochSecond() - minimum + 1;

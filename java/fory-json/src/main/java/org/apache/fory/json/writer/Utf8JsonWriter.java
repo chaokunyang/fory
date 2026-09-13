@@ -795,7 +795,8 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     boolean region = !(value.getZone() instanceof ZoneOffset);
     String zoneId = value.getZone().getId();
     int zoneIdLength = zoneId.length();
-    int additional = 42 + zoneIdLength;
+    // The closing bracket/quote store writes two spare bytes beyond the logical value.
+    int additional = 44 + zoneIdLength;
     int pos = position;
     if (pos + additional > buffer.length) {
       grow(additional);
@@ -816,8 +817,8 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
           bytes[pos++] = (byte) zoneId.charAt(i);
         }
       }
-      bytes[pos++] = ']';
-      bytes[pos++] = '"';
+      LittleEndian.putInt32(bytes, pos, ']' | ('"' << 8));
+      pos += 2;
     }
     position = pos;
   }

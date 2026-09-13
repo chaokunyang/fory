@@ -2063,7 +2063,8 @@ public final class Utf8JsonReader extends JsonReader {
           } else {
             // The coefficient bound makes every eight-digit suffix safe. Consume only the
             // validated short prefix and preserve its actual scale before the delimiter.
-            digits = (digits & ((1L << (count << 3)) - 1)) << ((Long.BYTES - count) << 3);
+            // The left shift also discards every byte after the validated prefix.
+            digits <<= (Long.BYTES - count) << 3;
             unscaled = unscaled * LONG_POWERS_OF_TEN[count] + combineEightDigits(digits);
           }
           return finishDoubleToken(
@@ -2176,7 +2177,8 @@ public final class Utf8JsonReader extends JsonReader {
           } else {
             // The coefficient bound makes every eight-digit suffix safe. Consume only the
             // validated short prefix and preserve its actual scale before the delimiter.
-            digits = (digits & ((1L << (count << 3)) - 1)) << ((Long.BYTES - count) << 3);
+            // The left shift also discards every byte after the validated prefix.
+            digits <<= (Long.BYTES - count) << 3;
             unscaled = unscaled * LONG_POWERS_OF_TEN[count] + combineEightDigits(digits);
           }
           return finishSignedDoubleToken(

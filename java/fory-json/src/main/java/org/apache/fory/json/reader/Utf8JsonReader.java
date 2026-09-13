@@ -918,7 +918,10 @@ public final class Utf8JsonReader extends JsonReader {
     while (offset < safeEnd) {
       ch = bytes[offset];
       if (ch < '0' || ch > '9') {
-        break;
+        // A non-digit already ends the magnitude; only exhausting the digit bound needs the tail.
+        position = offset;
+        rejectFractionOrExponentFast();
+        return negative ? -result : result;
       }
       result = result * 10 + (ch - '0');
       offset++;

@@ -1149,6 +1149,58 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readInstantFractions() {
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    for (int length = 0; length <= 9; length++) {
+      String fraction = "123456789".substring(0, length);
+      String text = "2024-02-29T23:59:59." + fraction + "Z";
+      Instant expected = Instant.parse(text);
+      byte[] token = ('"' + text + "\",17").getBytes(StandardCharsets.US_ASCII);
+      for (int offset = 0; offset < 8; offset++) {
+        byte[] bytes = new byte[offset + token.length];
+        System.arraycopy(token, 0, bytes, offset, token.length);
+        reader.reset(bytes, offset, token.length);
+        assertEquals(reader.readIsoInstant(), expected);
+        reader.expectNextToken(',');
+        assertEquals(reader.readInt(), 17);
+        reader.finish();
+        reader.reset(bytes, offset, token.length - 3);
+        assertEquals(reader.readIsoInstant(), expected);
+        reader.finish();
+        for (int end = 0; end < token.length - 3; end++) {
+          reader.reset(bytes, offset, end);
+          assertThrows(RuntimeException.class, reader::readIsoInstant);
+        }
+      }
+      byte[] exact = Arrays.copyOf(token, token.length - 3);
+      for (int lane = 21; lane < exact.length; lane++) {
+        byte original = exact[lane];
+        for (int value = 0; value < 256; value++) {
+          exact[lane] = (byte) value;
+          Latin1JsonReader reference = newLatin1Reader(exact);
+          reader.reset(exact);
+          Instant parsed;
+          try {
+            parsed = reference.readIsoInstant();
+            reference.finish();
+          } catch (RuntimeException e) {
+            assertThrows(
+                RuntimeException.class,
+                () -> {
+                  reader.readIsoInstant();
+                  reader.finish();
+                });
+            continue;
+          }
+          assertEquals(reader.readIsoInstant(), parsed);
+          reader.finish();
+        }
+        exact[lane] = original;
+      }
+    }
+  }
+
+  @Test
   public void readInstantClockRanges() {
     for (String clock : new String[] {"00:00:00", "23:59:59"}) {
       byte[] token = ('"' + "2024-02-29T" + clock + "Z\"").getBytes(StandardCharsets.US_ASCII);

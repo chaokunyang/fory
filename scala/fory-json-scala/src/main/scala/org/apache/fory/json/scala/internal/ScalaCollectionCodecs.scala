@@ -237,6 +237,7 @@ private[scala] final class ScalaIterableCodec(
   private var elementInfo: JsonTypeInfo = _
   private var elementClassTag: ClassTag[Any] = _
   private var booleanArrayCodec: JsonValueCodec[Array[Boolean]] = _
+  private var intArrayCodec: JsonValueCodec[Array[Int]] = _
 
   override def resolveTypes(typeRef: TypeRef[_], resolver: JsonTypeResolver): Unit = {
     val arguments = ScalaTypeSupport.runtimeArguments(
@@ -250,6 +251,14 @@ private[scala] final class ScalaIterableCodec(
       kind == ScalaCollectionCodecs.ImmutableArraySeqKind ||
       kind == ScalaCollectionCodecs.MutableArraySeqKind
     ) elementClassTag = ScalaTypeSupport.classTag(ScalaTypeSupport.rawType(arguments(0)))
+    if (
+      kind == ScalaCollectionCodecs.ImmutableHashSetKind &&
+      (elementInfo.stringWriter() eq ScalarCodecs.IntCodec.PRIMITIVE)
+    ) intArrayCodec = ArrayCodec.create(
+      classOf[Array[Int]],
+      TypeRef.of(classOf[Array[Int]]),
+      resolver
+    )
     if (kind == ScalaCollectionCodecs.ImmutableArraySeqKind) {
       val codec = elementInfo.stringWriter()
       if (
@@ -384,9 +393,10 @@ private[scala] final class ScalaIterableCodec(
     writer.writeArrayEnd()
   }
 
-  // A primitive schema can use the array decoder; boxed and custom elements retain their codec.
-  // The array decoder owns depth and backing storage; this owner reserves only the wrapper.
+  // Primitive schemas can reuse array decoders; boxed and custom elements retain their codec.
+  // ArraySeq adds its wrapper charge; integer sets transfer the array charge in intSet.
   override def readLatin1(reader: Latin1JsonReader): scala.collection.Iterable[Any] = {
+    if (intArrayCodec != null) return intSet(reader, intArrayCodec.readLatin1(reader))
     if (booleanArrayCodec != null && elementClassTag.runtimeClass == java.lang.Boolean.TYPE) {
       val values = booleanArrayCodec.readLatin1(reader)
       if (values == null) return null
@@ -416,6 +426,7 @@ private[scala] final class ScalaIterableCodec(
   }
 
   override def readUtf16(reader: Utf16JsonReader): scala.collection.Iterable[Any] = {
+    if (intArrayCodec != null) return intSet(reader, intArrayCodec.readUtf16(reader))
     if (booleanArrayCodec != null && elementClassTag.runtimeClass == java.lang.Boolean.TYPE) {
       val values = booleanArrayCodec.readUtf16(reader)
       if (values == null) return null
@@ -445,6 +456,7 @@ private[scala] final class ScalaIterableCodec(
   }
 
   override def readUtf8(reader: Utf8JsonReader): scala.collection.Iterable[Any] = {
+    if (intArrayCodec != null) return intSet(reader, intArrayCodec.readUtf8(reader))
     if (booleanArrayCodec != null && elementClassTag.runtimeClass == java.lang.Boolean.TYPE) {
       val values = booleanArrayCodec.readUtf8(reader)
       if (values == null) return null
@@ -471,6 +483,20 @@ private[scala] final class ScalaIterableCodec(
     val result = builder.result().asInstanceOf[scala.collection.Iterable[Any]]
     reader.exitDepth()
     result
+  }
+
+  private def intSet(reader: JsonReader, values: Array[Int]): scala.collection.Iterable[Any] = {
+    if (values == null) return null
+    // The array decoder already charged four bytes per input occurrence, matching each candidate
+    // set reference. Transfer that storage and header credit before building the retained owner.
+    reader.reserveGraphMemory(math.max(0, resultOwnerBytes - GraphMemoryEstimates.objectArrayBytes()))
+    val builder = scala.collection.immutable.HashSet.newBuilder[Int]
+    var index = 0
+    while (index < values.length) {
+      builder += values(index)
+      index += 1
+    }
+    builder.result()
   }
 
   private def newBuilder(): scala.collection.mutable.Builder[Any, _] = kind match {

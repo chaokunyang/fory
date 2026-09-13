@@ -158,6 +158,18 @@ final class BooleanLabelCodec extends AbstractJsonValueCodec[Boolean] {
   override def read(reader: JsonReader): Boolean = reader.readString() == "yes"
 }
 
+final class LabeledIntCodec extends AbstractJsonValueCodec[Int] {
+  override def write(writer: JsonWriter, value: Int): Unit = writer.writeString("id:" + value)
+
+  override def read(reader: JsonReader): Int = reader.readString().stripPrefix("id:").toInt
+}
+
+case class IntSetValues(
+    values: Set[Int],
+    @org.apache.fory.json.annotation.JsonCodec(elementCodec = classOf[LabeledIntCodec])
+    labeled: Set[Int]
+)
+
 case class BooleanArraySeqValue(
     @org.apache.fory.json.annotation.JsonCodec(elementCodec = classOf[BooleanLabelCodec])
     values: scala.collection.immutable.ArraySeq[Boolean]
@@ -894,6 +906,55 @@ class ScalaJsonSuite extends AnyFunSuite {
       assert(new String(json.toJsonBytes(value), UTF_8) == text)
       assert(json.fromJson(text, classOf[LongMapCodecSlots]) == value)
       assert(json.fromJson(text.getBytes(UTF_8), classOf[LongMapCodecSlots]) == value)
+    }
+  }
+
+  test("integer set decoding") {
+    val setType = ScalaTypeRef[Set[Int]]
+    val hashType = ScalaTypeRef[scala.collection.immutable.HashSet[Int]]
+    val boxedType = ScalaTypeRef[Set[java.lang.Integer]]
+    for (codegen <- Seq(false, true)) {
+      val json = ForyJsonScala.builder().withCodegen(codegen).withAsyncCompilation(false).build()
+      val model = IntSetValues(Set(Int.MinValue, Int.MaxValue), Set(-7, 8))
+      val encoded = json.toJson(model)
+      assert(encoded.contains("\"id:-7\""))
+      assert(json.fromJson(encoded, classOf[IntSetValues]) == model)
+      assert(json.fromJson(encoded.getBytes(UTF_8), classOf[IntSetValues]) == model)
+      for (size <- Seq(0, 1, 8, 9, 32, 512, 1024, 1025)) {
+        val values = (0 until size).map(i => (i * 1498724053) ^ (i >>> 3))
+        val expected = values.toSet
+        val text = (values ++ values.reverse).map { i =>
+          if ((i & 1) == 0) i.toString else "\"" + i + "\""
+        }.mkString("[", ",", "]")
+        assert(json.fromJson(text, setType) == expected)
+        assert(json.fromJson(text.getBytes(UTF_8), setType) == expected)
+        assert(json.fromJson(text.getBytes(UTF_8), hashType) == expected)
+      }
+      assert(json.fromJson("null", setType) == null)
+      assert(json.fromJson("null".getBytes(UTF_8), setType) == null)
+      assert(json.fromJson("[null,1]", boxedType) == Set(null, java.lang.Integer.valueOf(1)))
+      for (text <- Seq("[null]", "[2147483648]", "[-2147483649]", "[1.0]", "[1e0]", "[1,]")) {
+        assertThrows[org.apache.fory.json.ForyJsonException] {
+          json.fromJson(text.getBytes(UTF_8), setType)
+        }
+        assert(json.fromJson("[-2147483648,2147483647,0]".getBytes(UTF_8), setType) ==
+          Set(Int.MinValue, Int.MaxValue, 0))
+      }
+    }
+    val bounded = ForyJsonScala.builder().withCodegen(false).withMaxGraphMemoryBytes(128).build()
+    assertThrows[org.apache.fory.json.ForyJsonException] {
+      bounded.fromJson((0 until 1025).mkString("[", ",", "]").getBytes(UTF_8), setType)
+    }
+    assert(bounded.fromJson("[1,1]".getBytes(UTF_8), setType) == Set(1))
+    val ownerBytes = org.apache.fory.serializer.GraphMemoryEstimates.shallowObjectBytes(
+      classOf[scala.collection.immutable.HashSet[_]]
+    )
+    val repeated = List.fill(9)(7).mkString("[", ",", "]").getBytes(UTF_8)
+    val exact = ForyJsonScala.builder().withMaxGraphMemoryBytes(ownerBytes + 9 * 4).build()
+    assert(exact.fromJson(repeated, setType) == Set(7))
+    val short = ForyJsonScala.builder().withMaxGraphMemoryBytes(ownerBytes + 9 * 4 - 1).build()
+    assertThrows[org.apache.fory.json.ForyJsonException] {
+      short.fromJson(repeated, setType)
     }
   }
 

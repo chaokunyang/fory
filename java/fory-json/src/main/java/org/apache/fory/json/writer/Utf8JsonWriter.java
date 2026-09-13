@@ -90,7 +90,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   private static final int[] HEX_PAIRS = new int[256];
   private static final long UTF16_ASCII_MASK = 0xFF80FF80FF80FF80L;
   private static final char[] DIGIT_PAIRS = new char[256];
-  private static final int[] DIGIT_TRIPLES = new int[1000];
+  private static final int[] DIGIT_TRIPLES = new int[2048];
   private static final int[] DIGIT_QUADS = new int[10000];
   private static final boolean STRING_BYTES_BACKED = StringSerializer.isBytesBackedString();
   private static final boolean COMPACT_STRINGS_ENABLED =
@@ -869,12 +869,14 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
             | ((long) ':' << 40)
             | ((long) second << 48));
     pos += 8;
-    int nano = value.getNano();
+    // LocalTime nanos fit thirty bits. Exposing that range bounds the millisecond quotient to 1073,
+    // which fits the enlarged triplet table without masks on each lookup address.
+    int nano = value.getNano() & 0x3fffffff;
     if (nano != 0) {
-      int millis = nano / 1_000_000;
       int micros = nano / 1000;
+      int millis = nano / 1_000_000;
       int middle = micros - millis * 1000;
-      int low = nano - micros * 1000;
+      int low = nano % 1000;
       LittleEndian.putInt32(bytes, pos, (DIGIT_TRIPLES[millis] & 0xffffff00) | '.');
       pos += 4;
       int lastGroup;

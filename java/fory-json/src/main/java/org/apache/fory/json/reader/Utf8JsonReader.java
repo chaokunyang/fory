@@ -1590,6 +1590,24 @@ public final class Utf8JsonReader extends JsonReader {
     if (offset < inputLimit && bytes[offset] == '.') {
       offset++;
       int fractionStart = offset;
+      // This bound makes every eight-digit append Long-safe, including a short digit prefix
+      // ending inside the loaded word. The scalar tail retains exact overflow handling.
+      while (unscaled < LONG_MAX_DIV_EIGHT_DIGITS && offset <= inputLimit - Long.BYTES) {
+        long text = LittleEndian.getInt64(bytes, offset);
+        long digits = text - ASCII_ZEROES;
+        long stop = (digits | (ASCII_NINES - text)) & ASCII_HIGH_BITS;
+        if (stop != 0) {
+          int count = Long.numberOfTrailingZeros(stop) >>> 3;
+          digits = (digits & ((1L << (count << 3)) - 1)) << ((Long.BYTES - count) << 3);
+          unscaled = unscaled * LONG_POWERS_OF_TEN[count] + combineEightDigits(digits);
+          offset += count;
+          scale += count;
+          break;
+        }
+        unscaled = unscaled * EIGHT_DIGITS + combineEightDigits(digits);
+        offset += Long.BYTES;
+        scale += Long.BYTES;
+      }
       while (offset < inputLimit) {
         ch = bytes[offset];
         if (ch < '0' || ch > '9') {
@@ -1679,6 +1697,24 @@ public final class Utf8JsonReader extends JsonReader {
     if (offset < inputLimit && bytes[offset] == '.') {
       offset++;
       int fractionStart = offset;
+      // This bound makes every eight-digit append Long-safe, including a short digit prefix
+      // ending inside the loaded word. The scalar tail retains exact overflow handling.
+      while (unscaled < LONG_MAX_DIV_EIGHT_DIGITS && offset <= inputLimit - Long.BYTES) {
+        long text = LittleEndian.getInt64(bytes, offset);
+        long digits = text - ASCII_ZEROES;
+        long stop = (digits | (ASCII_NINES - text)) & ASCII_HIGH_BITS;
+        if (stop != 0) {
+          int count = Long.numberOfTrailingZeros(stop) >>> 3;
+          digits = (digits & ((1L << (count << 3)) - 1)) << ((Long.BYTES - count) << 3);
+          unscaled = unscaled * LONG_POWERS_OF_TEN[count] + combineEightDigits(digits);
+          offset += count;
+          scale += count;
+          break;
+        }
+        unscaled = unscaled * EIGHT_DIGITS + combineEightDigits(digits);
+        offset += Long.BYTES;
+        scale += Long.BYTES;
+      }
       while (offset < inputLimit) {
         ch = bytes[offset];
         if (ch < '0' || ch > '9') {

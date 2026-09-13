@@ -1452,6 +1452,54 @@ public class JsonScalarTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readDecimalFractions() {
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    for (String digits :
+        new String[] {
+          "1",
+          "99999999",
+          "12345678901234567",
+          "9223372036854775807",
+          "9223372036854775808",
+          "9999999999999999999999999999999999"
+        }) {
+      for (int point = 0; point < digits.length(); point++) {
+        String decimal =
+            (point == 0 ? "0" : digits.substring(0, point)) + '.' + digits.substring(point);
+        for (String sign : new String[] {"", "-"}) {
+          for (String exponent : new String[] {"", "e+19", "e-19"}) {
+            String token = sign + decimal + exponent;
+            BigDecimal expected = new BigDecimal(token);
+            assertBigDecimalReaders(token);
+            assertQuotedBigDecimalReaders(token);
+            byte[] value = token.getBytes(StandardCharsets.UTF_8);
+            for (int offset = 0; offset < 4; offset++) {
+              byte[] bytes = new byte[offset + value.length + 8];
+              Arrays.fill(bytes, (byte) '9');
+              System.arraycopy(value, 0, bytes, offset, value.length);
+              reader.reset(bytes, offset, value.length);
+              assertEquals(reader.readBigDecimal(), expected);
+              reader.finish();
+            }
+            reader.reset((token + ",123456789").getBytes(StandardCharsets.UTF_8));
+            assertEquals(reader.readBigDecimal(), expected);
+            reader.expectNextToken(',');
+            assertEquals(reader.readIntValue(), 123456789);
+            reader.finish();
+          }
+        }
+      }
+    }
+    for (int zeros : new int[] {0, 7, 8, 15, 16, 31, 1000, 9900}) {
+      for (String sign : new String[] {"", "-"}) {
+        String token = sign + "0." + repeat('0', zeros) + "12345e" + (zeros + 5);
+        assertBigDecimalReaders(token);
+        assertQuotedBigDecimalReaders(token);
+      }
+    }
+  }
+
+  @Test
   public void readDecimalByteSpans() {
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);
     for (String number :

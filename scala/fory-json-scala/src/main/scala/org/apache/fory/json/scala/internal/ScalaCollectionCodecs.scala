@@ -764,13 +764,15 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int, runtimeType
     var size = 0
     if (!reader.consumeNextToken('}')) {
       var more = true
+      // Small maps stay on the direct insertion path. The bounded prefix is charged at the
+      // tail or carried into the suffix owner, so it cannot reach a 1024-entry batch here.
       while (more) {
-        ScalaCollectionCodecs.reserveMapEntries(reader, size)
         val key = reader.readFieldNameInt()
         reader.expectNextToken(':')
         result = result.updated(key, codec.readLatin1(reader))
         size += 1
         more = reader.consumeNextCommaOrEndObject()
+        if (size == 16 && more) return readIntMapEntries(reader, result, size)
       }
     }
     ScalaCollectionCodecs.reserveMapTail(reader, size)
@@ -784,13 +786,15 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int, runtimeType
     var size = 0
     if (!reader.consumeNextToken('}')) {
       var more = true
+      // Small maps stay on the direct insertion path. The bounded prefix is charged at the
+      // tail or carried into the suffix owner, so it cannot reach a 1024-entry batch here.
       while (more) {
-        ScalaCollectionCodecs.reserveMapEntries(reader, size)
         val key = reader.readFieldNameInt()
         reader.expectNextToken(':')
         result = result.updated(key, codec.readUtf16(reader))
         size += 1
         more = reader.consumeNextCommaOrEndObject()
+        if (size == 16 && more) return readIntMapEntries(reader, result, size)
       }
     }
     ScalaCollectionCodecs.reserveMapTail(reader, size)
@@ -804,18 +808,240 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int, runtimeType
     var size = 0
     if (!reader.consumeNextToken('}')) {
       var more = true
+      // Small maps stay on the direct insertion path. The bounded prefix is charged at the
+      // tail or carried into the suffix owner, so it cannot reach a 1024-entry batch here.
       while (more) {
-        ScalaCollectionCodecs.reserveMapEntries(reader, size)
         val key = reader.readFieldNameInt()
         reader.expectNextToken(':')
         result = result.updated(key, codec.readUtf8(reader))
         size += 1
         more = reader.consumeNextCommaOrEndObject()
+        if (size == 16 && more) return readIntMapEntries(reader, result, size)
       }
     }
     ScalaCollectionCodecs.reserveMapTail(reader, size)
     reader.exitDepth()
     result.asInstanceOf[scala.collection.Map[Any, Any]]
+  }
+
+  private def readIntMapEntries(
+      reader: Latin1JsonReader,
+      first: scala.collection.immutable.IntMap[Any],
+      readCount: Int
+  ): scala.collection.Map[Any, Any] = {
+    val codec = valueInfo.latin1Reader()
+    ScalaCollectionCodecs.reserveMapEntries(reader, readCount)
+    val firstKey = reader.readFieldNameInt()
+    reader.expectNextToken(':')
+    val firstValue = codec.readLatin1(reader)
+    if (!reader.consumeNextCommaOrEndObject()) {
+      // A single remaining entry needs no temporary arrays or subtree construction.
+      val result = first.updated(firstKey, firstValue)
+      ScalaCollectionCodecs.reserveMapTail(reader, readCount + 1)
+      reader.exitDepth()
+      return result.asInstanceOf[scala.collection.Map[Any, Any]]
+    }
+    var keys = new Array[Long](32)
+    var values = new Array[AnyRef](32)
+    keys(0) = firstKey.toLong << 32
+    values(0) = firstValue.asInstanceOf[AnyRef]
+    var size = 1
+    var count = readCount + 1
+    var more = true
+    while (more) {
+      ScalaCollectionCodecs.reserveMapEntries(reader, count)
+      val key = reader.readFieldNameInt()
+      reader.expectNextToken(':')
+      val value = codec.readLatin1(reader)
+      if (size == keys.length) {
+        keys = java.util.Arrays.copyOf(keys, size << 1)
+        values = java.util.Arrays.copyOf(values, size << 1)
+      }
+      keys(size) = (key.toLong << 32) | size.toLong
+      values(size) = value.asInstanceOf[AnyRef]
+      size += 1
+      count += 1
+      more = reader.consumeNextCommaOrEndObject()
+    }
+    ScalaCollectionCodecs.reserveMapTail(reader, count)
+    sortIntMapKeys(keys, size)
+    // Standard right-biased union keeps the last occurrence across the prefix/suffix boundary.
+    val result = first ++ intMapRange(keys, values, 0, size)
+    reader.exitDepth()
+    result.asInstanceOf[scala.collection.Map[Any, Any]]
+  }
+
+  private def readIntMapEntries(
+      reader: Utf16JsonReader,
+      first: scala.collection.immutable.IntMap[Any],
+      readCount: Int
+  ): scala.collection.Map[Any, Any] = {
+    val codec = valueInfo.utf16Reader()
+    ScalaCollectionCodecs.reserveMapEntries(reader, readCount)
+    val firstKey = reader.readFieldNameInt()
+    reader.expectNextToken(':')
+    val firstValue = codec.readUtf16(reader)
+    if (!reader.consumeNextCommaOrEndObject()) {
+      // A single remaining entry needs no temporary arrays or subtree construction.
+      val result = first.updated(firstKey, firstValue)
+      ScalaCollectionCodecs.reserveMapTail(reader, readCount + 1)
+      reader.exitDepth()
+      return result.asInstanceOf[scala.collection.Map[Any, Any]]
+    }
+    var keys = new Array[Long](32)
+    var values = new Array[AnyRef](32)
+    keys(0) = firstKey.toLong << 32
+    values(0) = firstValue.asInstanceOf[AnyRef]
+    var size = 1
+    var count = readCount + 1
+    var more = true
+    while (more) {
+      ScalaCollectionCodecs.reserveMapEntries(reader, count)
+      val key = reader.readFieldNameInt()
+      reader.expectNextToken(':')
+      val value = codec.readUtf16(reader)
+      if (size == keys.length) {
+        keys = java.util.Arrays.copyOf(keys, size << 1)
+        values = java.util.Arrays.copyOf(values, size << 1)
+      }
+      keys(size) = (key.toLong << 32) | size.toLong
+      values(size) = value.asInstanceOf[AnyRef]
+      size += 1
+      count += 1
+      more = reader.consumeNextCommaOrEndObject()
+    }
+    ScalaCollectionCodecs.reserveMapTail(reader, count)
+    sortIntMapKeys(keys, size)
+    // Standard right-biased union keeps the last occurrence across the prefix/suffix boundary.
+    val result = first ++ intMapRange(keys, values, 0, size)
+    reader.exitDepth()
+    result.asInstanceOf[scala.collection.Map[Any, Any]]
+  }
+
+  private def readIntMapEntries(
+      reader: Utf8JsonReader,
+      first: scala.collection.immutable.IntMap[Any],
+      readCount: Int
+  ): scala.collection.Map[Any, Any] = {
+    val codec = valueInfo.utf8Reader()
+    ScalaCollectionCodecs.reserveMapEntries(reader, readCount)
+    val firstKey = reader.readFieldNameInt()
+    reader.expectNextToken(':')
+    val firstValue = codec.readUtf8(reader)
+    if (!reader.consumeNextCommaOrEndObject()) {
+      // A single remaining entry needs no temporary arrays or subtree construction.
+      val result = first.updated(firstKey, firstValue)
+      ScalaCollectionCodecs.reserveMapTail(reader, readCount + 1)
+      reader.exitDepth()
+      return result.asInstanceOf[scala.collection.Map[Any, Any]]
+    }
+    var keys = new Array[Long](32)
+    var values = new Array[AnyRef](32)
+    keys(0) = firstKey.toLong << 32
+    values(0) = firstValue.asInstanceOf[AnyRef]
+    var size = 1
+    var count = readCount + 1
+    var more = true
+    while (more) {
+      ScalaCollectionCodecs.reserveMapEntries(reader, count)
+      val key = reader.readFieldNameInt()
+      reader.expectNextToken(':')
+      val value = codec.readUtf8(reader)
+      if (size == keys.length) {
+        keys = java.util.Arrays.copyOf(keys, size << 1)
+        values = java.util.Arrays.copyOf(values, size << 1)
+      }
+      keys(size) = (key.toLong << 32) | size.toLong
+      values(size) = value.asInstanceOf[AnyRef]
+      size += 1
+      count += 1
+      more = reader.consumeNextCommaOrEndObject()
+    }
+    ScalaCollectionCodecs.reserveMapTail(reader, count)
+    sortIntMapKeys(keys, size)
+    // Standard right-biased union keeps the last occurrence across the prefix/suffix boundary.
+    val result = first ++ intMapRange(keys, values, 0, size)
+    reader.exitDepth()
+    result.asInstanceOf[scala.collection.Map[Any, Any]]
+  }
+
+  private def sortIntMapKeys(keys: Array[Long], size: Int): Unit = {
+    // Ordered keys need no scratch storage or counting passes. Include the input index in the
+    // comparison so this also proves the order of duplicate keys before choosing their last value.
+    var ordered = 1
+    while (ordered < size && java.lang.Long.compareUnsigned(keys(ordered - 1), keys(ordered)) <= 0) {
+      ordered += 1
+    }
+    if (ordered == size) return
+    if (size <= 256) {
+      java.util.Arrays.sort(keys, 0, size)
+      return
+    }
+    // Four stable byte passes bound sorting work independently of input order, including on
+    // JDK 8. Equal keys retain their input positions, so the last duplicate still wins.
+    val scratch = new Array[Long](size)
+    val counts = new Array[Int](256)
+    var source = keys
+    var target = scratch
+    var shift = 32
+    while (shift < 64) {
+      java.util.Arrays.fill(counts, 0)
+      var index = 0
+      while (index < size) {
+        val digit = ((source(index) >>> shift) & 255).toInt
+        counts(digit) += 1
+        index += 1
+      }
+      var total = 0
+      var digit = 0
+      while (digit < 256) {
+        val count = counts(digit)
+        counts(digit) = total
+        total += count
+        digit += 1
+      }
+      index = 0
+      while (index < size) {
+        val entry = source(index)
+        val digit = ((entry >>> shift) & 255).toInt
+        val position = counts(digit)
+        target(position) = entry
+        counts(digit) = position + 1
+        index += 1
+      }
+      val swap = source
+      source = target
+      target = swap
+      shift += 8
+    }
+  }
+
+  private def intMapRange(
+      keys: Array[Long],
+      values: Array[AnyRef],
+      from: Int,
+      until: Int
+  ): scala.collection.immutable.IntMap[Any] = {
+    // Keys are ordered by their bits; equal-key ranges retain increasing input positions.
+    val first = (keys(from) >> 32).toInt
+    val last = (keys(until - 1) >> 32).toInt
+    if (first == last) {
+      return scala.collection.immutable.IntMap.singleton(first, values(keys(until - 1).toInt))
+    }
+    // Splitting at the highest differing bit gives disjoint Patricia prefixes. Standard IntMap
+    // union joins these subtrees without copying an insertion path for every input entry.
+    // Each recursion removes one differing key bit, bounding the stack by the 32-bit key width.
+    val bit = java.lang.Integer.highestOneBit(first ^ last)
+    var low = from + 1
+    var high = until - 1
+    while (low < high) {
+      val middle = (low + high) >>> 1
+      if ((((keys(middle) >> 32).toInt ^ first) & bit) == 0) low = middle + 1
+      else high = middle
+    }
+    val left = intMapRange(keys, values, from, low)
+    val right = intMapRange(keys, values, low, until)
+    left ++ right
   }
 
   private def readLongMap(reader: Latin1JsonReader): scala.collection.Map[Any, Any] = {

@@ -716,6 +716,39 @@ class ScalaJsonSuite extends AnyFunSuite {
     assert(shallow.fromJson("{}".getBytes(UTF_8), mapType).isEmpty)
   }
 
+  test("int map key order") {
+    val mapType = new TypeRef[scala.collection.immutable.IntMap[String]]() {}
+    val random = new scala.util.Random(431)
+    for (json <- Seq(
+        ForyJsonScala.builder().withCodegen(false).build(),
+        ForyJsonScala.builder().withAsyncCompilation(false).build()
+      ); size <- Seq(0, 1, 2, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129, 255, 256, 257, 511, 512, 513, 1025)) {
+      val keys = Vector.tabulate(size) { i =>
+        if (i == 0) Int.MinValue
+        else if (i == 1) Int.MaxValue
+        else if (i % 7 == 0) 0
+        else random.nextInt()
+      }
+      for (ordered <- Seq(keys.sorted, keys.sorted.reverse, random.shuffle(keys), keys.indices.toVector)) {
+        val entries = ordered.zipWithIndex.map { case (key, i) =>
+          key -> (if (i % 5 == 0) null else "界" + i)
+        }
+        val expected = entries.foldLeft(scala.collection.immutable.IntMap.empty[String]) {
+          case (map, (key, value)) => map.updated(key, value)
+        }
+        val text = entries.map { case (key, value) =>
+          "\"" + key + "\":" + (if (value == null) "null" else "\"" + value + "\"")
+        }.mkString("{", ",", "}")
+        val ascii = text.replace("界", "\\u754c")
+        for (actual <- Seq(json.fromJson(text, mapType), json.fromJson(ascii, mapType),
+            json.fromJson(text.getBytes(UTF_8), mapType))) {
+          assert(actual == expected)
+          assert(actual.iterator.toList == expected.iterator.toList)
+        }
+      }
+    }
+  }
+
   test("int map entries") {
     val mapType = new TypeRef[scala.collection.immutable.IntMap[String]]() {}
     val nestedType = new TypeRef[List[scala.collection.immutable.IntMap[String]]]() {}

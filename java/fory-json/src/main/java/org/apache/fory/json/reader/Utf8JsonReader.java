@@ -2864,14 +2864,60 @@ public final class Utf8JsonReader extends JsonReader {
   @Override
   public ZoneOffset readZoneOffset() {
     skipWhitespaceFast();
+    byte[] bytes = input;
+    int limit = inputLimit;
     int mark = position;
-    if (mark < inputLimit && input[mark] == '"') {
-      position = mark + 1;
-      int offsetSeconds = tryReadOffsetSeconds();
-      if (offsetSeconds != Integer.MIN_VALUE && position < inputLimit && input[position] == '"') {
-        position++;
-        return ZoneOffset.ofTotalSeconds(offsetSeconds);
+    // Own the complete offset token and its closing quote here. A small suffix delegate can
+    // pull the offset parser into array loops and make performance depend on C2 compilation order.
+    parse:
+    {
+      if (mark >= limit || bytes[mark] != '"') {
+        break parse;
       }
+      int start = mark + 1;
+      if (start >= limit) {
+        break parse;
+      }
+      int total = 0;
+      int end;
+      int sign = bytes[start];
+      if (sign == 'Z') {
+        end = start + 1;
+      } else {
+        if ((sign != '+' && sign != '-') || start > limit - 6 || bytes[start + 3] != ':') {
+          break parse;
+        }
+        int text = LittleEndian.getInt32(bytes, start + 2);
+        int digitText = (text & 0xffff0000) | ((text & 0xff) << 8) | (bytes[start + 1] & 0xff);
+        int digits = digitText - (int) ASCII_ZEROES;
+        if (((digits | ((int) ASCII_NINES - digitText)) & INT_BYTE_HIGH_BITS) != 0) {
+          break parse;
+        }
+        int pairs = (digits * 10 + (digits >>> 8)) & 0x00ff00ff;
+        int hours = pairs & 0xff;
+        int minutes = pairs >>> 16;
+        int seconds = 0;
+        end = start + 6;
+        if (end < limit && bytes[end] == ':') {
+          if (end > limit - 3) {
+            break parse;
+          }
+          seconds = parse2(bytes, end + 1);
+          end += 3;
+        }
+        if (minutes > 59 || seconds < 0 || seconds > 59) {
+          break parse;
+        }
+        total = hours * 3600 + minutes * 60 + seconds;
+        if (sign == '-') {
+          total = -total;
+        }
+      }
+      if (end >= limit || bytes[end] != '"') {
+        break parse;
+      }
+      position = end + 1;
+      return ZoneOffset.ofTotalSeconds(total);
     }
     position = mark;
     return super.readZoneOffset();

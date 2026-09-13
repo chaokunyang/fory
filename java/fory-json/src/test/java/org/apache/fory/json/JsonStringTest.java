@@ -81,6 +81,47 @@ public class JsonStringTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readPackedFieldEscapes() {
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    for (int length = 1; length <= 9; length++) {
+      for (char escaped : new char[] {'"', '\\', '/'}) {
+        for (int mask = 1; mask < (1 << length); mask++) {
+          StringBuilder token = new StringBuilder("\"");
+          StringBuilder name = new StringBuilder();
+          for (int i = 0; i < length; i++) {
+            if ((mask & (1 << i)) != 0) {
+              token.append('\\').append(escaped);
+              name.append(escaped);
+            } else {
+              token.append('a');
+              name.append('a');
+            }
+          }
+          token.append('"');
+          int nameEnd = token.length();
+          token.append(":17");
+          byte[] encoded = token.toString().getBytes(StandardCharsets.US_ASCII);
+          for (int offset = 0; offset < 8; offset++) {
+            byte[] bytes = new byte[offset + encoded.length + 8];
+            System.arraycopy(encoded, 0, bytes, offset, encoded.length);
+            reader.reset(bytes, offset, encoded.length);
+            assertEquals(reader.readFieldNameHash(), JsonFieldNameHash.hash(name.toString()));
+            reader.expectNextToken(':');
+            assertEquals(reader.readInt(), 17);
+            reader.finish();
+            if (mask == (1 << length) - 1) {
+              for (int end = 0; end < nameEnd; end++) {
+                reader.reset(bytes, offset, end);
+                assertThrows(ForyJsonException.class, reader::readFieldNameHash);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  @Test
   public void readMixedFieldHash() {
     String[][] fragments = {
       {"\\\"", "\""}, {"\\\\", "\\"}, {"\\n", "\n"}, {"\\u0000", "\u0000"},

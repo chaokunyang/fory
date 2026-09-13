@@ -3916,9 +3916,58 @@ public final class Utf8JsonReader extends JsonReader {
           position = nameOffset + nameLength + 1;
           return word & ((1L << (nameLength << 3)) - 1);
         }
+        if (((word >>> (nameLength << 3)) & 0xFF) == '\\') {
+          long escaped = readEscapedPackedHash(word, nameOffset, nameLength);
+          if (escaped != 0) {
+            return escaped;
+          }
+        }
       }
     }
     return readQuotedStringHashSlow();
+  }
+
+  private long readEscapedPackedHash(long word, int start, int escapeIndex) {
+    byte[] bytes = input;
+    int limit = inputLimit;
+    int cursor = start + Long.BYTES;
+    while (cursor < limit) {
+      int escaped =
+          escapeIndex == 7
+              ? bytes[cursor] & 0xFF
+              : (int) (word >>> ((escapeIndex + 1) << 3)) & 0xFF;
+      if (escaped != '"' && escaped != '\\' && escaped != '/') {
+        return 0;
+      }
+      // Remove the escape introducer, preserving the validated prefix (including escaped quotes).
+      // Ignore borrowed stop bits after that prefix unless they identify an actual quote or escape.
+      long prefixMask = (1L << (escapeIndex << 3)) - 1;
+      word =
+          (word & prefixMask)
+              | ((word >>> 8) & ~prefixMask)
+              | ((long) (bytes[cursor++] & 0xFF) << 56);
+      long stopMask =
+          escapeIndex == 7 ? 0 : stringStopMask(word) & (-1L << ((escapeIndex + 1) << 3));
+      if (stopMask == 0) {
+        if (cursor < limit && bytes[cursor] == '"') {
+          position = cursor + 1;
+          return word;
+        }
+        return 0;
+      }
+      int count = Long.numberOfTrailingZeros(stopMask) >>> 3;
+      int stop = (int) (word >>> (count << 3)) & 0xFF;
+      if (stop == '"') {
+        position = cursor - Long.BYTES + count + 1;
+        return word & ((1L << (count << 3)) - 1);
+      }
+      if (stop != '\\') {
+        return 0;
+      }
+      escapeIndex = count;
+    }
+    // Zero is not a compact key. Leave position unchanged so the full decoder owns every miss.
+    return 0;
   }
 
   private long readQuotedStringHashSlow() {

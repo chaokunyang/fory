@@ -2890,6 +2890,11 @@ public final class Utf8JsonReader extends JsonReader {
         }
         // The bounded word includes both separators and the character after HH:mm.
         long text = LittleEndian.getInt64(bytes, mark);
+        ZoneOffset cached = ZoneIdCache.Offsets.get(text);
+        if (cached != null) {
+          position = mark + 8;
+          return cached;
+        }
         if ((text & 0x000000ff000000ffL) != 0x0000003a00000022L) {
           break parse;
         }

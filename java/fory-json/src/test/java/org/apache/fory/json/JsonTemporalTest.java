@@ -525,7 +525,8 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   public void readOffsetPrefixes() {
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);
     Latin1JsonReader latin1 = newLatin1Reader(new byte[0]);
-    for (String text : new String[] {"\"+07:20:13\"", "\"-07:20\"", "\"Z\""}) {
+    for (String text :
+        new String[] {"\"+07:20:13\"", "\"-07:20\"", "\"+07:15\"", "\"-07:30\"", "\"Z\""}) {
       byte[] token = text.getBytes(StandardCharsets.US_ASCII);
       for (int index = 0; index < token.length; index++) {
         byte saved = token[index];

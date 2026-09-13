@@ -938,6 +938,41 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readInstantClockRanges() {
+    for (String clock : new String[] {"00:00:00", "23:59:59"}) {
+      byte[] token = ('"' + "2024-02-29T" + clock + "Z\"").getBytes(StandardCharsets.US_ASCII);
+      for (int lane : new int[] {12, 15, 18}) {
+        byte tens = token[lane];
+        byte ones = token[lane + 1];
+        for (int value = 0; value < 100; value++) {
+          token[lane] = (byte) ('0' + value / 10);
+          token[lane + 1] = (byte) ('0' + value % 10);
+          Latin1JsonReader reference = newLatin1Reader(token);
+          Utf8JsonReader reader = newUtf8Reader(token);
+          Instant expected;
+          try {
+            // ISO_INSTANT accepts 24:00:00 and leap seconds through the existing text fallback.
+            expected = reference.readIsoInstant();
+            reference.finish();
+          } catch (RuntimeException e) {
+            assertThrows(
+                RuntimeException.class,
+                () -> {
+                  reader.readIsoInstant();
+                  reader.finish();
+                });
+            continue;
+          }
+          assertEquals(reader.readIsoInstant(), expected);
+          reader.finish();
+        }
+        token[lane] = tens;
+        token[lane + 1] = ones;
+      }
+    }
+  }
+
+  @Test
   public void readZonedCalendar() {
     ZoneId[] zones = {ZoneId.of("Europe/Paris"), ZoneId.of("America/New_York"), ZoneId.of("UTC")};
     for (int year : new int[] {0, 1, 399, 400, 1970, 2000, 2024, 9999}) {

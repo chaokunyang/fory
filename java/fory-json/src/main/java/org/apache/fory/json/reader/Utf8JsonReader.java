@@ -2599,21 +2599,23 @@ public final class Utf8JsonReader extends JsonReader {
     int year = (int) (datePairs & 0xffff) * 100 + (int) ((datePairs >>> 16) & 0xffff);
     int month = (int) ((datePairs >>> 32) & 0xffff);
     int day = (int) (datePairs >>> 48);
+    long timePrefix = LittleEndian.getInt64(bytes, start + 11);
     long timeText =
-        (LittleEndian.getInt64(bytes, start + 11) & ~0x0000ff0000ff0000L) | 0x0000300000300000L;
+        (timePrefix & 0xffffL)
+            | ((timePrefix >>> 8) & 0xffff0000L)
+            | ((timePrefix >>> 16) & 0xffff00000000L)
+            | 0x3030000000000000L;
     long timeDigits = timeText - ASCII_ZEROES;
     if (((timeDigits | (ASCII_NINES - timeText)) & ASCII_HIGH_BITS) != 0) {
       return null;
     }
-    // HH:mm:ss starts its digit pairs in byte lanes 0, 3, and 6. Each validated pair is at most
-    // 99, so multiplying the three tens lanes together cannot carry into another result.
-    long timePairs = ((timeDigits * (10 * 256 + 1)) >>> 8) & 0x00ff0000ff0000ffL;
-    int hour = (int) timePairs & 0xff;
-    int minute = (int) (timePairs >>> 24) & 0xff;
-    int second = (int) (timePairs >>> 48) & 0xff;
+    // The three pairs fit in separate 16-bit lanes. Biasing by 32768 minus each bound
+    // sets that lane's high bit exactly for an invalid component, without cross-lane carries.
+    long timePairs = ((timeDigits * (10 * 256 + 1)) >>> 8) & 0x00ff00ff00ff00ffL;
+    long invalidTime = (timePairs + 0x7fc47fc47fe8L) & 0x8000800080008000L;
     // Validate the UTC components once, without constructing local date/time carriers whose
     // factories repeat range checks. ISO_INSTANT's leap seconds and 24:00 stay with its parser.
-    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) {
+    if (month < 1 || month > 12 || day < 1 || day > 31 || invalidTime != 0) {
       return null;
     }
     if (day > 28) {
@@ -2638,8 +2640,11 @@ public final class Utf8JsonReader extends JsonReader {
       return null;
     }
     int epochDay = epochDay(year, month, day);
+    // The middle product is hour * 3600 + minute * 60 + second. Higher cross terms are
+    // multiples of 60, so their low two bits are zero and cannot disturb its seventeenth bit.
+    int secondOfDay = (int) ((timePairs * 0x0e10003c0001L) >>> 32) & 0x1ffff;
     position = end + 2;
-    return instant(epochDay * 86400L + hour * 3600 + minute * 60 + second, nano);
+    return instant(epochDay * 86400L + secondOfDay, nano);
   }
 
   private static int epochDay(int year, int month, int day) {

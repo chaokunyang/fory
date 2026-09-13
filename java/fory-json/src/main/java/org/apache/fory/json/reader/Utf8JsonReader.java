@@ -2649,7 +2649,7 @@ public final class Utf8JsonReader extends JsonReader {
   }
 
   private static int epochDay(int year, int month, int day) {
-    // Both component parsers prove a four-digit year. Neri and Schneider, Proposition 6.2:
+    // The component parser proves a four-digit year. Neri and Schneider, Proposition 6.2:
     // https://arxiv.org/abs/2102.06959.
     // Moving four-digit years forward one Gregorian cycle keeps January/February of year zero
     // nonnegative. The epoch adjustment removes that cycle, and every product fits an int.
@@ -2659,7 +2659,8 @@ public final class Utf8JsonReader extends JsonReader {
       marchYear--;
       marchMonth += 12;
     }
-    int century = marchYear / 100;
+    // The four-digit year bounds marchYear by 10399, making this quotient exact with int math.
+    int century = (marchYear * 5243) >>> 19;
     return ((1461 * marchYear) >>> 2)
         - century
         + (century >>> 2)

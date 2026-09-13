@@ -1103,7 +1103,12 @@ public final class Utf8JsonReader extends JsonReader {
     // let the existing magnitude converter handle values above signed MAX_VALUE without rescanning.
     int safeEnd = offset + Math.min(19, limit - offset);
     long value = 0;
-    while (safeEnd - offset >= Long.BYTES) {
+    // The nineteen-digit prefix contains at most two words. A fixed bound lets the compiler
+    // expand the word loads without a backedge or accumulation into the initial zero value.
+    for (int word = 0; word < 2; word++) {
+      if (safeEnd - offset < Long.BYTES) {
+        break;
+      }
       long text = LittleEndian.getInt64(bytes, offset);
       long digits = text - ASCII_ZEROES;
       long stop = (digits | (ASCII_NINES - text)) & ASCII_HIGH_BITS;

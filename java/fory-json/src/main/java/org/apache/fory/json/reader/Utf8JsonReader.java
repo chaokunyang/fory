@@ -4189,6 +4189,17 @@ public final class Utf8JsonReader extends JsonReader {
     long value = 0;
     int nameLength = 0;
     boolean latin1 = true;
+    if (cursor < length - Long.BYTES && bytes[cursor + Long.BYTES] != '"') {
+      long word = LittleEndian.getInt64(bytes, cursor);
+      if (stringStopMask(word) == 0) {
+        // Long ASCII names use FNV rather than a packed key. Seed it without rebuilding the
+        // same eight-byte prefix one character at a time; short names retain their packed key.
+        hash = JsonFieldNameHash.hashPacked(word, Long.BYTES);
+        nameLength = Long.BYTES;
+        latin1 = false;
+        cursor += Long.BYTES;
+      }
+    }
     while (cursor < length) {
       int b = bytes[cursor++];
       if (b == '"') {

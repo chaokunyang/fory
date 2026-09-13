@@ -3398,44 +3398,50 @@ public final class Utf8JsonReader extends JsonReader {
   private LocalTime tryReadTime(int start) {
     byte[] bytes = input;
     int limit = inputLimit;
-    if (start > limit - 5 || bytes[start + 2] != ':') {
+    if (start > limit - 8) {
+      return tryReadMinuteTime(start);
+    }
+    long text = LittleEndian.getInt64(bytes, start);
+    // A complete clock prefix shares one bounds proof and one check for its two separators.
+    if ((text & 0x0000ff0000ff0000L) != 0x00003a00003a0000L) {
+      return tryReadMinuteTime(start);
+    }
+    long digitText = (text & ~0x0000ff0000ff0000L) | 0x0000300000300000L;
+    long digits = digitText - ASCII_ZEROES;
+    if (((digits | (ASCII_NINES - digitText)) & ASCII_HIGH_BITS) != 0) {
       return null;
     }
-    int hour;
-    int minute;
-    int second = 0;
+    int hour = (int) (digits & 0xff) * 10 + (int) ((digits >>> 8) & 0xff);
+    int minute = (int) ((digits >>> 24) & 0xff) * 10 + (int) ((digits >>> 32) & 0xff);
+    int second = (int) ((digits >>> 48) & 0xff) * 10 + (int) (digits >>> 56);
     int nano = 0;
-    int end;
-    boolean hasSeconds = start <= limit - 8 && bytes[start + 5] == ':';
-    if (hasSeconds) {
-      long text = LittleEndian.getInt64(bytes, start);
-      // Replace the two known colons with zero digits before validating all six digit lanes.
-      long digitText = (text & ~0x0000ff0000ff0000L) | 0x0000300000300000L;
-      long digits = digitText - ASCII_ZEROES;
-      if (((digits | (ASCII_NINES - digitText)) & ASCII_HIGH_BITS) != 0) {
-        return null;
-      }
-      hour = (int) (digits & 0xff) * 10 + (int) ((digits >>> 8) & 0xff);
-      minute = (int) ((digits >>> 24) & 0xff) * 10 + (int) ((digits >>> 32) & 0xff);
-      second = (int) ((digits >>> 48) & 0xff) * 10 + (int) (digits >>> 56);
-      end = start + 8;
-    } else {
-      hour = parse2(bytes, start);
-      minute = parse2(bytes, start + 3);
-      end = start + 5;
-    }
+    int end = start + 8;
     position = end;
-    if (hasSeconds && end < limit && bytes[end] == '.') {
+    if (end < limit && bytes[end] == '.') {
       nano = readFractionNanos(end + 1);
     }
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
+    if (hour > 23 || minute > 59 || second > 59) {
       return null;
     }
     return localTime(hour, minute, second, nano);
   }
 
+  private LocalTime tryReadMinuteTime(int start) {
+    byte[] bytes = input;
+    if (start > inputLimit - 5 || bytes[start + 2] != ':') {
+      return null;
+    }
+    int hour = parse2(bytes, start);
+    int minute = parse2(bytes, start + 3);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return null;
+    }
+    position = start + 5;
+    return localTime(hour, minute, 0, 0);
+  }
+
   private static LocalTime localTime(int hour, int minute, int second, int nano) {
-    // tryReadTime validates the clock components, and readFractionNanos consumes at most nine
+    // Both time prefixes validate the clock components, and readFractionNanos consumes at most nine
     // digits. The JDK factory retains whole-hour reuse without validating those ranges again.
     if (LOCAL_TIME_FACTORY == null) {
       return LocalTime.of(hour, minute, second, nano);

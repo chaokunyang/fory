@@ -681,6 +681,43 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readTimeSeparators() {
+    for (String clock : new String[] {"01:02", "01:02:03.123456789"}) {
+      byte[] token = ('"' + clock + "\",17").getBytes(StandardCharsets.US_ASCII);
+      for (int lane : new int[] {3, 6}) {
+        byte saved = token[lane];
+        for (int value = 0; value < 256; value++) {
+          token[lane] = (byte) value;
+          Latin1JsonReader reference = newLatin1Reader(token);
+          Utf8JsonReader reader = newUtf8Reader(token);
+          LocalTime expected;
+          try {
+            expected = reference.readIsoLocalTime();
+            reference.expectNextToken(',');
+            assertEquals(reference.readInt(), 17);
+            reference.finish();
+          } catch (RuntimeException e) {
+            assertThrows(
+                RuntimeException.class,
+                () -> {
+                  reader.readIsoLocalTime();
+                  reader.expectNextToken(',');
+                  reader.readInt();
+                  reader.finish();
+                });
+            continue;
+          }
+          assertEquals(reader.readIsoLocalTime(), expected);
+          reader.expectNextToken(',');
+          assertEquals(reader.readInt(), 17);
+          reader.finish();
+        }
+        token[lane] = saved;
+      }
+    }
+  }
+
+  @Test
   public void readTimeComponents() {
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);
     int[] seconds = {0, 1, 30, 59};

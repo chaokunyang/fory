@@ -2038,17 +2038,17 @@ public final class ScalarCodecs {
 
     @Override
     public ZoneOffset readUtf8(Utf8JsonReader reader) {
-      return reader.tryReadNullToken() ? null : reader.readZoneOffset();
+      return reader.tryReadNextNullToken() ? null : reader.readZoneOffset();
     }
 
     @Override
     public ZoneOffset readLatin1(Latin1JsonReader reader) {
-      return reader.tryReadNullToken() ? null : reader.readZoneOffset();
+      return reader.tryReadNextNullToken() ? null : reader.readZoneOffset();
     }
 
     @Override
     public ZoneOffset readUtf16(Utf16JsonReader reader) {
-      return reader.tryReadNullToken() ? null : reader.readZoneOffset();
+      return reader.tryReadNextNullToken() ? null : reader.readZoneOffset();
     }
   }
 

@@ -1111,7 +1111,8 @@ public final class Utf8JsonReader extends JsonReader {
         value = value * EIGHT_DIGITS + combineEightDigits(digits);
         offset += Long.BYTES;
       } else {
-        int count = Long.numberOfTrailingZeros(stop) >>> 3;
+        // A nonzero stop locates one of eight lanes; retain that bound for the power-table index.
+        int count = (Long.numberOfTrailingZeros(stop) >>> 3) & 7;
         // The first stop proves the preceding digit lanes. Right-align them among eight
         // decimal places to convert a short prefix without rereading its individual bytes.
         digits = (digits & ((1L << (count << 3)) - 1)) << ((Long.BYTES - count) << 3);

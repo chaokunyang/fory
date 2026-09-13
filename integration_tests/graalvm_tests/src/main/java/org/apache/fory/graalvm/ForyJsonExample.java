@@ -28,6 +28,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -738,6 +739,19 @@ public final class ForyJsonExample {
         new String(bytes, StandardCharsets.UTF_8).equals("[\"Z\",\"+05:45\",\"-07:13:29\",null]"));
     Preconditions.checkArgument(
         Arrays.equals(DEFAULT_JSON.fromJson(bytes, ZoneOffset[].class), offsets));
+
+    OffsetTime[] times = {
+      OffsetTime.of(12, 34, 56, 0, offsets[0]),
+      OffsetTime.of(12, 34, 56, 123456789, offsets[1]),
+      OffsetTime.of(1, 2, 3, 120000000, offsets[2]),
+      null
+    };
+    bytes = DEFAULT_JSON.toJsonBytes(times);
+    Preconditions.checkArgument(
+        new String(bytes, StandardCharsets.UTF_8)
+            .equals("[\"12:34:56Z\",\"12:34:56.123456789+05:45\",\"01:02:03.12-07:13:29\",null]"));
+    Preconditions.checkArgument(
+        Arrays.equals(DEFAULT_JSON.fromJson(bytes, OffsetTime[].class), times));
 
     Instant instant = Instant.parse("9999-12-31T23:59:59.123456789Z");
     bytes = DEFAULT_JSON.toJsonBytes(instant);

@@ -2689,30 +2689,38 @@ public final class Utf8JsonReader extends JsonReader {
     {
       if (bytes[end] == '.') {
         int fractionStart = end + 1;
-        if (fractionStart <= limit - Long.BYTES) {
+        fraction:
+        {
+          if (fractionStart > limit - Long.BYTES) {
+            break fraction;
+          }
           long text = LittleEndian.getInt64(bytes, fractionStart);
           long digits = text - ASCII_ZEROES;
           long stop = (digits | (ASCII_NINES - text)) & ASCII_HIGH_BITS;
+          int last = 0;
           if (stop != 0) {
             int count = Long.numberOfTrailingZeros(stop) >>> 3;
-            // A short fraction and both UTC delimiters fit in the word already read. Finish
-            // the token locally instead of publishing and rereading an intermediate cursor.
-            if (count <= 6 && ((text >>> (count << 3)) & 0xffff) == 0x225a) {
-              digits &= (1L << (count << 3)) - 1;
-              nano = combineEightDigits(digits) * 10;
-              end = fractionStart + count + 2;
-              break ending;
+            // A short fraction and both UTC delimiters fit in the word already read.
+            if (count > 6 || ((text >>> (count << 3)) & 0xffff) != 0x225a) {
+              break fraction;
             }
-          } else if (fractionStart <= limit - 11) {
+            digits &= (1L << (count << 3)) - 1;
+            end = fractionStart + count + 2;
+          } else {
+            if (fractionStart > limit - 11) {
+              break fraction;
+            }
             // This word overlaps the eighth digit and includes the ninth digit plus Z and quote.
             int tail = LittleEndian.getInt32(bytes, fractionStart + 7);
-            int last = ((tail >>> 8) & 0xff) - '0';
-            if ((tail >>> 16) == 0x225a && Integer.compareUnsigned(last, 9) <= 0) {
-              nano = combineEightDigits(digits) * 10 + last;
-              end = fractionStart + 11;
-              break ending;
+            last = ((tail >>> 8) & 0xff) - '0';
+            if ((tail >>> 16) != 0x225a || Integer.compareUnsigned(last, 9) > 0) {
+              break fraction;
             }
+            end = fractionStart + 11;
           }
+          // Share one conversion call so both fraction widths contribute to its inline profile.
+          nano = combineEightDigits(digits) * 10 + last;
+          break ending;
         }
         nano = readFractionNanos(fractionStart);
         end = position;

@@ -1119,11 +1119,13 @@ public final class Utf8JsonReader extends JsonReader {
       } else {
         // A nonzero stop locates one of eight lanes; retain that bound for the power-table index.
         int count = (Long.numberOfTrailingZeros(stop) >>> 3) & 7;
-        // The first stop proves the preceding digit lanes. Right-align them among eight
-        // decimal places to convert a short prefix without rereading its individual bytes.
-        digits = (digits & ((1L << (count << 3)) - 1)) << ((Long.BYTES - count) << 3);
-        value = value * LONG_POWERS_OF_TEN[count] + combineEightDigits(digits);
-        offset += count;
+        // An immediate stop leaves the coefficient unchanged. For a nonempty prefix, the
+        // alignment shift discards every unvalidated lane without a separate dynamic mask.
+        if (count != 0) {
+          digits <<= (Long.BYTES - count) << 3;
+          value = value * LONG_POWERS_OF_TEN[count] + combineEightDigits(digits);
+          offset += count;
+        }
         break;
       }
     }

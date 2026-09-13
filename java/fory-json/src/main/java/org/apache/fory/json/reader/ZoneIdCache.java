@@ -131,7 +131,7 @@ final class ZoneIdCache {
   static final class Offsets {
     // Only canonical quarter-hour offsets are retained. The table is immutable after class
     // initialization: untrusted input cannot add entries, and hits compare all eight token bytes.
-    private static final long[] TEXT = new long[1024];
+    private static final long[] TEXT = new long[256];
     private static final ZoneOffset[] VALUES = values();
 
     static ZoneOffset get(long text) {
@@ -141,12 +141,13 @@ final class ZoneIdCache {
 
     private static int index(long text) {
       // The sign, two hour digits, and minute tens distinguish the finite quarter-hour set.
+      // Hour tens need one bit. XOR of the sign and minute tens gives eight distinct low-bit
+      // patterns for the two signs and four quarters, fitting all 146 spellings in 256 slots.
       // Other bytes can collide with these bits, so this index alone never proves a match.
       return (int)
           (((text >>> 24) & 0xf)
-              | ((text >>> 12) & 0x30)
-              | ((text >>> 34) & 0x1c0)
-              | ((text >>> 1) & 0x200));
+              | ((text >>> 12) & 0x10)
+              | (((text >>> 3) ^ (text >>> 35)) & 0xe0));
     }
 
     private static ZoneOffset[] values() {

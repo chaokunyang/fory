@@ -755,6 +755,35 @@ public class JsonScalarTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readIntTokenEnds() {
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    for (int value : new int[] {0, -1, 17, 123456789, Integer.MIN_VALUE, Integer.MAX_VALUE}) {
+      String number = Integer.toString(value);
+      for (String token : new String[] {number, '"' + number + '"'}) {
+        reader.reset((token + ",17").getBytes(StandardCharsets.US_ASCII));
+        assertEquals(reader.readIntTokenValue(), value);
+        reader.expectNextToken(',');
+        assertEquals(reader.readIntTokenValue(), 17);
+        reader.finish();
+      }
+      reader.reset(('"' + number + "\":17").getBytes(StandardCharsets.US_ASCII));
+      assertEquals(reader.readFieldNameInt(), value);
+      reader.expectNextToken(':');
+      assertEquals(reader.readIntTokenValue(), 17);
+      reader.finish();
+      for (String suffix : new String[] {".0", "e0", "E+1"}) {
+        String invalid = number + suffix;
+        for (String token : new String[] {invalid, '"' + invalid + '"'}) {
+          reader.reset(token.getBytes(StandardCharsets.US_ASCII));
+          assertThrows(RuntimeException.class, reader::readIntTokenValue);
+        }
+        reader.reset(('"' + invalid + '"').getBytes(StandardCharsets.US_ASCII));
+        assertThrows(RuntimeException.class, reader::readFieldNameInt);
+      }
+    }
+  }
+
+  @Test
   public void readUtf8NegativeInts() {
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);
     List<String> values =

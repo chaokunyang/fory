@@ -899,14 +899,17 @@ public final class Utf8JsonReader extends JsonReader {
       }
       ch = bytes[offset];
     }
-    return readIntMagnitude(bytes, offset, inputLimit, ch, negative);
+    int result = readIntMagnitude(bytes, offset, inputLimit, ch, negative);
+    rejectFractionOrExponentFast();
+    return result;
   }
 
+  // Scalar tokens reject fractions/exponents at their caller; field names instead require a quote.
+  // Keep that boundary validation out of the shared integer magnitude scan.
   private int readIntMagnitude(byte[] bytes, int offset, int inputLimit, int ch, boolean negative) {
     if (ch == '0') {
       position = offset + 1;
       rejectLeadingDigitFast();
-      rejectFractionOrExponentFast();
       return 0;
     }
     if (ch < '1' || ch > '9') {
@@ -920,7 +923,6 @@ public final class Utf8JsonReader extends JsonReader {
       if (ch < '0' || ch > '9') {
         // A non-digit already ends the magnitude; only exhausting the digit bound needs the tail.
         position = offset;
-        rejectFractionOrExponentFast();
         return negative ? -result : result;
       }
       result = result * 10 + (ch - '0');
@@ -933,7 +935,6 @@ public final class Utf8JsonReader extends JsonReader {
       }
     }
     position = offset;
-    rejectFractionOrExponentFast();
     return negative ? -result : result;
   }
 
@@ -956,7 +957,6 @@ public final class Utf8JsonReader extends JsonReader {
       }
     }
     position = offset;
-    rejectFractionOrExponentFast();
     return negative ? -result : result;
   }
 

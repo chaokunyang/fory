@@ -2623,7 +2623,8 @@ public final class Utf8JsonReader extends JsonReader {
       if (month == 2) {
         lastDay = (year & 3) == 0 && (year % 100 != 0 || year % 400 == 0) ? 29 : 28;
       } else {
-        lastDay = month == 4 || month == 6 || month == 9 || month == 11 ? 30 : 31;
+        // Month lengths alternate on either side of July/August; February is handled above.
+        lastDay = 30 + ((month + (month >>> 3)) & 1);
       }
       if (day > lastDay) {
         return null;

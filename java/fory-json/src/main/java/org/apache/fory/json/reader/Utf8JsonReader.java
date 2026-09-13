@@ -899,6 +899,10 @@ public final class Utf8JsonReader extends JsonReader {
       }
       ch = bytes[offset];
     }
+    return readIntMagnitude(bytes, offset, inputLimit, ch, negative);
+  }
+
+  private int readIntMagnitude(byte[] bytes, int offset, int inputLimit, int ch, boolean negative) {
     if (ch == '0') {
       position = offset + 1;
       rejectLeadingDigitFast();
@@ -2294,7 +2298,8 @@ public final class Utf8JsonReader extends JsonReader {
       throw error("Expected string");
     }
     int digitStart = position;
-    if (digitStart < inputLimit && input[digitStart] == '-') {
+    boolean negative = digitStart < inputLimit && input[digitStart] == '-';
+    if (negative) {
       digitStart++;
     }
     if (digitStart >= inputLimit) {
@@ -2305,12 +2310,9 @@ public final class Utf8JsonReader extends JsonReader {
       position = nameStart;
       return super.readFieldNameInt();
     }
-    if (ch < '0' || ch > '9') {
-      throw error("Expected integer field name");
-    }
-    // Reuse the native token's bounded digit scan and overflow handling. Escaped member names
-    // still need the decoded-string path, and the closing quote belongs to this operation.
-    int result = readIntToken();
+    // Both entries resolve the sign and first byte before sharing digit accumulation and overflow
+    // handling. The magnitude reader cannot interpret another quote as a nested quoted scalar.
+    int result = readIntMagnitude(input, digitStart, inputLimit, ch, negative);
     if (position >= inputLimit) {
       throw error("Unterminated string");
     }

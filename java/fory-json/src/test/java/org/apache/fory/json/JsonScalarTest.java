@@ -26,6 +26,7 @@ import static org.apache.fory.json.JsonTestSupport.newUtf16Reader;
 import static org.apache.fory.json.JsonTestSupport.newUtf8Reader;
 import static org.apache.fory.json.JsonTestSupport.newUtf8Writer;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.expectThrows;
@@ -524,6 +525,35 @@ public class JsonScalarTest extends ForyJsonTestModels {
     assertEquals(
         json.fromJson(json.toJsonBytes(UnicodeKind.values()), UnicodeKind[].class),
         UnicodeKind.values());
+  }
+
+  @Test
+  public void readEnumNames() {
+    for (Class<?> enumType : new Class<?>[] {EnumName.class, UnicodeKind.class}) {
+      ScalarCodecs.EnumCodec codec = new ScalarCodecs.EnumCodec(enumType);
+      Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+      for (Enum<?> value : (Enum<?>[]) enumType.getEnumConstants()) {
+        String name = value.name();
+        for (int escape = -1; escape < name.length(); escape++) {
+          String text = name;
+          if (escape >= 0) {
+            text =
+                name.substring(0, escape)
+                    + String.format(java.util.Locale.ROOT, "\\u%04x", (int) name.charAt(escape))
+                    + name.substring(escape + 1);
+          }
+          byte[] token = ('"' + text + '"').getBytes(StandardCharsets.UTF_8);
+          for (int offset = 0; offset < 8; offset++) {
+            byte[] input = new byte[offset + token.length + 8];
+            Arrays.fill(input, (byte) '9');
+            System.arraycopy(token, 0, input, offset, token.length);
+            reader.reset(input, offset, token.length);
+            assertSame(codec.readUtf8(reader), value);
+            reader.finish();
+          }
+        }
+      }
+    }
   }
 
   @Test(dataProvider = "enableCodegen")

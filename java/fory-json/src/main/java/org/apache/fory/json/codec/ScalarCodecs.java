@@ -4066,7 +4066,7 @@ public final class ScalarCodecs {
     }
 
     public Object readUtf8Enum(Utf8JsonReader reader) {
-      return enumValue(reader.readPackedStringHash());
+      return enumValue(reader.readStringHash());
     }
 
     public Object readNextUtf8Enum(Utf8JsonReader reader) {

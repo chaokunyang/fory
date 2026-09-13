@@ -92,11 +92,24 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   private static final char[] DIGIT_PAIRS = new char[256];
   private static final int[] DIGIT_TRIPLES = new int[2048];
   private static final int[] DIGIT_QUADS = new int[10000];
+  private static final long[] OFFSET_TEXT = new long[256];
   private static final boolean STRING_BYTES_BACKED = StringSerializer.isBytesBackedString();
   private static final boolean COMPACT_STRINGS_ENABLED =
       STRING_BYTES_BACKED && StringSerializer.isLatin1Coder(StringSerializer.getStringCoder("Z"));
 
   static {
+    // Quarter-hour offsets have distinct low eight bits after division by four: 900 / 4 is odd.
+    // Pack the signed half-seconds above the six ASCII bytes to verify hits with one table load.
+    // This finite table is initialized once; caller values never insert or replace entries.
+    for (int quarter = -72; quarter <= 72; quarter++) {
+      int seconds = quarter * 900;
+      String id = ZoneOffset.ofTotalSeconds(seconds).getId();
+      long text = (long) (seconds / 2) << 48;
+      for (int i = 0; i < id.length(); i++) {
+        text |= (long) id.charAt(i) << (i * 8);
+      }
+      OFFSET_TEXT[(seconds >>> 2) & 255] = text;
+    }
     String base64Digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     for (int i = 0; i < BASE64_PAIRS.length; i++) {
       BASE64_PAIRS[i] = (short) (base64Digits.charAt(i >>> 6) | (base64Digits.charAt(i & 63) << 8));
@@ -897,22 +910,32 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   }
 
   private static int writeOffsetBytes(byte[] bytes, int pos, ZoneOffset offset, int terminator) {
+    int seconds = offset.getTotalSeconds();
+    long text = OFFSET_TEXT[(seconds >>> 2) & 255];
+    if (((int) (text >> 48) << 1) == seconds) {
+      if (seconds == 0) {
+        LittleEndian.putInt32(bytes, pos, 'Z' | (terminator << 8));
+        return pos + 2;
+      }
+      LittleEndian.putInt64(bytes, pos, (text & 0x0000ffffffffffffL) | ((long) terminator << 48));
+      return pos + 7;
+    }
     // ZoneOffset constructs its canonical ID from ASCII literals and decimal digits. Its byte
     // layout follows the fixed compact-string setting, unlike arbitrary caller-provided Strings.
     String id = offset.getId();
     if (COMPACT_STRINGS_ENABLED) {
-      byte[] text = StringSerializer.getStringBytes(id);
-      int length = text.length;
+      byte[] idBytes = StringSerializer.getStringBytes(id);
+      int length = idBytes.length;
       if (length == 6) {
         // Callers reserve the nine-byte offset plus its delimiter. Fuse the delimiter into
         // the short form's word instead of issuing a dependent byte store in each caller.
         long digits =
-            (LittleEndian.getInt32(text, 0) & 0xffffL)
-                | ((long) LittleEndian.getInt32(text, 2) << 16);
+            (LittleEndian.getInt32(idBytes, 0) & 0xffffL)
+                | ((long) LittleEndian.getInt32(idBytes, 2) << 16);
         LittleEndian.putInt64(bytes, pos, digits | ((long) terminator << 48));
       } else if (length == 9) {
-        LittleEndian.putInt64(bytes, pos, LittleEndian.getInt64(text, 0));
-        bytes[pos + 8] = text[8];
+        LittleEndian.putInt64(bytes, pos, LittleEndian.getInt64(idBytes, 0));
+        bytes[pos + 8] = idBytes[8];
         bytes[pos + 9] = (byte) terminator;
       } else {
         LittleEndian.putInt32(bytes, pos, 'Z' | (terminator << 8));

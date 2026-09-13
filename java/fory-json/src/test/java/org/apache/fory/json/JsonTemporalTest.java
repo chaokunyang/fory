@@ -421,6 +421,47 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readOffsetTimeSuffixes() {
+    for (String clock : new String[] {"01:02", "23:59:59.999999999"}) {
+      for (String suffix :
+          new String[] {
+            "Z", "+00:00", "-00:00", "+18:00", "-18:00", "+01:02:03", "-01:02:03",
+            "+01", "+0102", "+010203", "+19:00", "-18:00:01", "+00:60", "+00:00:60"
+          }) {
+        String text = '"' + clock + suffix + '"';
+        byte[] token = text.getBytes(StandardCharsets.US_ASCII);
+        Latin1JsonReader reference = newLatin1Reader(token);
+        OffsetTime expected;
+        try {
+          expected = reference.readOffsetTime();
+          reference.finish();
+        } catch (RuntimeException e) {
+          Utf8JsonReader reader = newUtf8Reader(token);
+          assertThrows(
+              RuntimeException.class,
+              () -> {
+                reader.readOffsetTime();
+                reader.finish();
+              });
+          continue;
+        }
+        for (int offset = 0; offset < 8; offset++) {
+          byte[] bytes = new byte[offset + token.length + 8];
+          System.arraycopy(token, 0, bytes, offset, token.length);
+          Utf8JsonReader reader = newUtf8Reader(bytes);
+          reader.reset(bytes, offset, token.length);
+          assertEquals(reader.readOffsetTime(), expected);
+          reader.finish();
+          for (int length = 0; length < token.length; length++) {
+            reader.reset(bytes, offset, length);
+            assertThrows(RuntimeException.class, reader::readOffsetTime);
+          }
+        }
+      }
+    }
+  }
+
+  @Test
   public void readNullableOffsetTime() {
     assertNullableTemporal(
         ScalarCodecs.OffsetTimeCodec.INSTANCE, OffsetTime.of(1, 2, 3, 4, ZoneOffset.ofHours(5)));
@@ -681,10 +722,10 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
-  public void readTimeSeparators() {
+  public void readTimePrefixes() {
     for (String clock : new String[] {"01:02", "01:02:03.123456789"}) {
       byte[] token = ('"' + clock + "\",17").getBytes(StandardCharsets.US_ASCII);
-      for (int lane : new int[] {3, 6}) {
+      for (int lane = 1; lane < Math.min(9, clock.length() + 2); lane++) {
         byte saved = token[lane];
         for (int value = 0; value < 256; value++) {
           token[lane] = (byte) value;

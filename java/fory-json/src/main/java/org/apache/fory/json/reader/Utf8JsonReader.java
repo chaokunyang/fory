@@ -2880,16 +2880,64 @@ public final class Utf8JsonReader extends JsonReader {
   @Override
   public OffsetTime readOffsetTime() {
     skipWhitespaceFast();
+    byte[] bytes = input;
+    int limit = inputLimit;
     int mark = position;
-    if (mark < inputLimit && input[mark] == '"') {
+    // Keep this format's offset cursor local through the closing quote. Extracting its suffix
+    // into the shared offset reader makes C2 inline the whole time/offset subtree into arrays.
+    parse:
+    {
+      if (mark >= limit || bytes[mark] != '"') {
+        break parse;
+      }
       LocalTime time = tryReadTime(mark + 1);
-      if (time != null) {
-        int offsetSeconds = tryReadOffsetSeconds();
-        if (offsetSeconds != Integer.MIN_VALUE && position < inputLimit && input[position] == '"') {
-          position++;
-          return OffsetTime.of(time, ZoneOffset.ofTotalSeconds(offsetSeconds));
+      if (time == null) {
+        break parse;
+      }
+      int start = position;
+      if (start >= limit) {
+        break parse;
+      }
+      int total = 0;
+      int end;
+      int sign = bytes[start];
+      if (sign == 'Z') {
+        end = start + 1;
+      } else {
+        if ((sign != '+' && sign != '-') || start > limit - 6 || bytes[start + 3] != ':') {
+          break parse;
+        }
+        int text = LittleEndian.getInt32(bytes, start + 2);
+        int digitText = (text & 0xffff0000) | ((text & 0xff) << 8) | (bytes[start + 1] & 0xff);
+        int digits = digitText - (int) ASCII_ZEROES;
+        if (((digits | ((int) ASCII_NINES - digitText)) & INT_BYTE_HIGH_BITS) != 0) {
+          break parse;
+        }
+        int pairs = (digits * 10 + (digits >>> 8)) & 0x00ff00ff;
+        int hours = pairs & 0xff;
+        int minutes = pairs >>> 16;
+        int seconds = 0;
+        end = start + 6;
+        if (end < limit && bytes[end] == ':') {
+          if (end > limit - 3) {
+            break parse;
+          }
+          seconds = parse2(bytes, end + 1);
+          end += 3;
+        }
+        if (minutes > 59 || seconds < 0 || seconds > 59) {
+          break parse;
+        }
+        total = hours * 3600 + minutes * 60 + seconds;
+        if (sign == '-') {
+          total = -total;
         }
       }
+      if (end >= limit || bytes[end] != '"') {
+        break parse;
+      }
+      position = end + 1;
+      return OffsetTime.of(time, ZoneOffset.ofTotalSeconds(total));
     }
     position = mark;
     return super.readOffsetTime();
@@ -3402,14 +3450,11 @@ public final class Utf8JsonReader extends JsonReader {
       return tryReadMinuteTime(start);
     }
     long text = LittleEndian.getInt64(bytes, start);
-    // A complete clock prefix shares one bounds proof and one check for its two separators.
-    if ((text & 0x0000ff0000ff0000L) != 0x00003a00003a0000L) {
+    // Subtract "00:00:00" and bound by "99:99:99". Equal colon bounds validate the separators
+    // alongside the six digits and leave zero lanes between the three numeric pairs.
+    long digits = text - 0x30303a30303a3030L;
+    if (((digits | (0x39393a39393a3939L - text)) & ASCII_HIGH_BITS) != 0) {
       return tryReadMinuteTime(start);
-    }
-    long digitText = (text & ~0x0000ff0000ff0000L) | 0x0000300000300000L;
-    long digits = digitText - ASCII_ZEROES;
-    if (((digits | (ASCII_NINES - digitText)) & ASCII_HIGH_BITS) != 0) {
-      return null;
     }
     int hour = (int) (digits & 0xff) * 10 + (int) ((digits >>> 8) & 0xff);
     int minute = (int) ((digits >>> 24) & 0xff) * 10 + (int) ((digits >>> 32) & 0xff);

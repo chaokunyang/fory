@@ -752,8 +752,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     byte[] bytes = buffer;
     bytes[pos++] = '"';
     pos = writeIsoTimeBytes(bytes, pos, value.toLocalTime());
-    pos = writeOffsetBytes(bytes, pos, value.getOffset());
-    bytes[pos++] = '"';
+    pos = writeOffsetBytes(bytes, pos, value.getOffset(), '"');
     position = pos;
   }
 
@@ -769,8 +768,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
             bytes, pos, value.getYear(), value.getMonthValue(), value.getDayOfMonth());
     bytes[pos++] = 'T';
     pos = writeIsoTimeBytes(bytes, pos, value.toLocalTime());
-    pos = writeOffsetBytes(bytes, pos, value.getOffset());
-    bytes[pos++] = '"';
+    pos = writeOffsetBytes(bytes, pos, value.getOffset(), '"');
     position = pos;
   }
 
@@ -795,9 +793,8 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     pos = writeLocalDateBytes(bytes, pos, year, value.getMonthValue(), value.getDayOfMonth());
     bytes[pos++] = 'T';
     pos = writeIsoTimeBytes(bytes, pos, value.toLocalTime());
-    pos = writeOffsetBytes(bytes, pos, value.getOffset());
+    pos = writeOffsetBytes(bytes, pos, value.getOffset(), region ? '[' : '"');
     if (region) {
-      bytes[pos++] = '[';
       // ZoneId's canonical region syntax is ASCII. The enclosing reservation includes the full ID.
       byte[] zoneBytes = STRING_BYTES_BACKED ? StringSerializer.getStringBytes(zoneId) : null;
       if (zoneBytes != null && zoneBytes.length == zoneIdLength) {
@@ -809,8 +806,8 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
         }
       }
       bytes[pos++] = ']';
+      bytes[pos++] = '"';
     }
-    bytes[pos++] = '"';
     position = pos;
   }
 
@@ -903,7 +900,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     return pos;
   }
 
-  private static int writeOffsetBytes(byte[] bytes, int pos, ZoneOffset offset) {
+  private static int writeOffsetBytes(byte[] bytes, int pos, ZoneOffset offset, int terminator) {
     // ZoneOffset constructs its canonical ID from ASCII literals and decimal digits. Its byte
     // layout follows the fixed compact-string setting, unlike arbitrary caller-provided Strings.
     String id = offset.getId();
@@ -911,23 +908,26 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       byte[] text = StringSerializer.getStringBytes(id);
       int length = text.length;
       if (length == 6) {
-        // Callers reserve the nine-byte offset form, covering this store's two spare bytes.
+        // Callers reserve the nine-byte offset plus its delimiter. Fuse the delimiter into
+        // the short form's word instead of issuing a dependent byte store in each caller.
         long digits =
             (LittleEndian.getInt32(text, 0) & 0xffffL)
                 | ((long) LittleEndian.getInt32(text, 2) << 16);
-        LittleEndian.putInt64(bytes, pos, digits);
+        LittleEndian.putInt64(bytes, pos, digits | ((long) terminator << 48));
       } else if (length == 9) {
         LittleEndian.putInt64(bytes, pos, LittleEndian.getInt64(text, 0));
         bytes[pos + 8] = text[8];
+        bytes[pos + 9] = (byte) terminator;
       } else {
-        bytes[pos] = 'Z';
+        LittleEndian.putInt32(bytes, pos, 'Z' | (terminator << 8));
       }
-      return pos + length;
+      return pos + length + 1;
     }
     int length = id.length();
     for (int i = 0; i < length; i++) {
       bytes[pos++] = (byte) id.charAt(i);
     }
+    bytes[pos++] = (byte) terminator;
     return pos;
   }
 

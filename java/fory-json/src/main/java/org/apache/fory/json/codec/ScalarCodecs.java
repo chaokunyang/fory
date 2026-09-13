@@ -1997,6 +1997,9 @@ public final class ScalarCodecs {
 
   public static final class ZoneOffsetCodec implements JsonValueCodec<ZoneOffset> {
     public static final ZoneOffsetCodec INSTANCE = new ZoneOffsetCodec();
+    private static final boolean COMPACT_STRINGS_ENABLED =
+        StringSerializer.isBytesBackedString()
+            && StringSerializer.isLatin1Coder(StringSerializer.getStringCoder("Z"));
 
     @Override
     public void writeString(StringJsonWriter writer, ZoneOffset value) {
@@ -2015,23 +2018,38 @@ public final class ScalarCodecs {
       }
       // ZoneOffset IDs are canonical ASCII: Z, +/-HH:mm, or +/-HH:mm:ss. They require no escaping.
       String id = value.getId();
-      int length = id.length();
+      byte[] text = COMPACT_STRINGS_ENABLED ? StringSerializer.getStringBytes(id) : null;
+      int length = COMPACT_STRINGS_ENABLED ? text.length : id.length();
       if (length == 1) {
         writer.writeRawValue(0x225a22L, 0, 3);
         return;
       }
-      long first =
-          '"'
-              | ((long) (value.getTotalSeconds() < 0 ? '-' : '+') << 8)
-              | ((long) id.charAt(1) << 16)
-              | ((long) id.charAt(2) << 24)
-              | ((long) ':' << 32)
-              | ((long) id.charAt(4) << 40)
-              | ((long) id.charAt(5) << 48);
+      long first;
+      if (COMPACT_STRINGS_ENABLED) {
+        // The JDK builds every offset ID from ASCII. Its fixed String layout lets the two
+        // bounded words share both the sign and digits without per-character coder checks.
+        first =
+            '"'
+                | ((LittleEndian.getInt32(text, 0) & 0xffffL) << 8)
+                | ((long) LittleEndian.getInt32(text, 2) << 24);
+      } else {
+        first =
+            '"'
+                | ((long) (value.getTotalSeconds() < 0 ? '-' : '+') << 8)
+                | ((long) id.charAt(1) << 16)
+                | ((long) id.charAt(2) << 24)
+                | ((long) ':' << 32)
+                | ((long) id.charAt(4) << 40)
+                | ((long) id.charAt(5) << 48);
+      }
       if (length == 6) {
         writer.writeRawValue(first | ((long) '"' << 56), 0, 8);
       } else {
-        long second = id.charAt(7) | ((long) id.charAt(8) << 8) | ((long) '"' << 16);
+        long second =
+            (COMPACT_STRINGS_ENABLED
+                    ? LittleEndian.getInt32(text, 5) >>> 16
+                    : id.charAt(7) | (id.charAt(8) << 8))
+                | ((long) '"' << 16);
         writer.writeRawValue(first | ((long) ':' << 56), second, 11);
       }
     }

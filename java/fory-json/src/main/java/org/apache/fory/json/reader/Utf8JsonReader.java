@@ -797,7 +797,8 @@ public final class Utf8JsonReader extends JsonReader {
   protected boolean tryReadNullLiteral() {
     byte[] bytes = input;
     int offset = position;
-    if (offset + 3 < inputLimit && LittleEndian.getInt32(bytes, offset) == NULL_LITERAL) {
+    // Use the same complete-word bound as scalar token readers so inlined probes share it.
+    if (offset <= inputLimit - 4 && LittleEndian.getInt32(bytes, offset) == NULL_LITERAL) {
       position = offset + 4;
       return true;
     }

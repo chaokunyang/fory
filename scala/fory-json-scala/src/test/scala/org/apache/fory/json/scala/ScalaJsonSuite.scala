@@ -784,11 +784,17 @@ class ScalaJsonSuite extends AnyFunSuite {
         assert(json.fromJson(text, mapType) == value)
         assert(json.fromJson(text.getBytes(UTF_8), mapType) == value)
       }
-      for (size <- Seq(1023, 1024, 1025)) {
+      for (size <- Seq(0, 1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 1023, 1024, 1025)) {
         val value = scala.collection.mutable.LongMap((0 until size).map(i => i.toLong -> i.toString): _*)
         val text = json.toJson(value, mapType)
         assert(json.fromJson(text, mapType) == value)
         assert(json.fromJson(text.getBytes(UTF_8), mapType) == value)
+        val duplicates = (0 until size).map(i => "\"1\":\"" + i + "\"").mkString("{", ",", "}")
+        val last =
+          if (size == 0) scala.collection.mutable.LongMap.empty[String]
+          else scala.collection.mutable.LongMap(1L -> (size - 1).toString)
+        assert(json.fromJson(duplicates, mapType) == last)
+        assert(json.fromJson(duplicates.getBytes(UTF_8), mapType) == last)
       }
       for (text <- Seq("{\"9223372036854775808\":null}", "{\"1\":", "{\"1\":\"a\",}")) {
         assertThrows[RuntimeException](json.fromJson(text, mapType))

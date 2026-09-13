@@ -819,63 +819,110 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int, runtimeType
   }
 
   private def readLongMap(reader: Latin1JsonReader): scala.collection.Map[Any, Any] = {
-    val result = scala.collection.mutable.LongMap.empty[Any]
+    if (reader.consumeNextToken('}')) {
+      reader.exitDepth()
+      return scala.collection.mutable.LongMap.empty[Any].asInstanceOf[scala.collection.Map[Any, Any]]
+    }
     val codec = valueInfo.latin1Reader()
+    var keys = new Array[Long](8)
+    var values = new Array[AnyRef](8)
     var size = 0
-    if (!reader.consumeNextToken('}')) {
-      var more = true
-      while (more) {
-        ScalaCollectionCodecs.reserveMapEntries(reader, size)
-        val key = reader.readFieldNameLong()
-        reader.expectNextToken(':')
-        result.update(key, codec.readLatin1(reader))
-        size += 1
-        more = reader.consumeNextCommaOrEndObject()
+    var more = true
+    while (more) {
+      ScalaCollectionCodecs.reserveMapEntries(reader, size)
+      val key = reader.readFieldNameLong()
+      reader.expectNextToken(':')
+      val value = codec.readLatin1(reader)
+      if (size == keys.length) {
+        keys = java.util.Arrays.copyOf(keys, size << 1)
+        values = java.util.Arrays.copyOf(values, size << 1)
       }
+      keys(size) = key
+      values(size) = value.asInstanceOf[AnyRef]
+      size += 1
+      more = reader.consumeNextCommaOrEndObject()
     }
     ScalaCollectionCodecs.reserveMapTail(reader, size)
+    val result = longMap(keys, values, size)
     reader.exitDepth()
     result.asInstanceOf[scala.collection.Map[Any, Any]]
   }
 
   private def readLongMap(reader: Utf16JsonReader): scala.collection.Map[Any, Any] = {
-    val result = scala.collection.mutable.LongMap.empty[Any]
+    if (reader.consumeNextToken('}')) {
+      reader.exitDepth()
+      return scala.collection.mutable.LongMap.empty[Any].asInstanceOf[scala.collection.Map[Any, Any]]
+    }
     val codec = valueInfo.utf16Reader()
+    var keys = new Array[Long](8)
+    var values = new Array[AnyRef](8)
     var size = 0
-    if (!reader.consumeNextToken('}')) {
-      var more = true
-      while (more) {
-        ScalaCollectionCodecs.reserveMapEntries(reader, size)
-        val key = reader.readFieldNameLong()
-        reader.expectNextToken(':')
-        result.update(key, codec.readUtf16(reader))
-        size += 1
-        more = reader.consumeNextCommaOrEndObject()
+    var more = true
+    while (more) {
+      ScalaCollectionCodecs.reserveMapEntries(reader, size)
+      val key = reader.readFieldNameLong()
+      reader.expectNextToken(':')
+      val value = codec.readUtf16(reader)
+      if (size == keys.length) {
+        keys = java.util.Arrays.copyOf(keys, size << 1)
+        values = java.util.Arrays.copyOf(values, size << 1)
       }
+      keys(size) = key
+      values(size) = value.asInstanceOf[AnyRef]
+      size += 1
+      more = reader.consumeNextCommaOrEndObject()
     }
     ScalaCollectionCodecs.reserveMapTail(reader, size)
+    val result = longMap(keys, values, size)
     reader.exitDepth()
     result.asInstanceOf[scala.collection.Map[Any, Any]]
   }
 
   private def readLongMap(reader: Utf8JsonReader): scala.collection.Map[Any, Any] = {
-    val result = scala.collection.mutable.LongMap.empty[Any]
+    if (reader.consumeNextToken('}')) {
+      reader.exitDepth()
+      return scala.collection.mutable.LongMap.empty[Any].asInstanceOf[scala.collection.Map[Any, Any]]
+    }
     val codec = valueInfo.utf8Reader()
+    var keys = new Array[Long](8)
+    var values = new Array[AnyRef](8)
     var size = 0
-    if (!reader.consumeNextToken('}')) {
-      var more = true
-      while (more) {
-        ScalaCollectionCodecs.reserveMapEntries(reader, size)
-        val key = reader.readFieldNameLong()
-        reader.expectNextToken(':')
-        result.update(key, codec.readUtf8(reader))
-        size += 1
-        more = reader.consumeNextCommaOrEndObject()
+    var more = true
+    while (more) {
+      ScalaCollectionCodecs.reserveMapEntries(reader, size)
+      val key = reader.readFieldNameLong()
+      reader.expectNextToken(':')
+      val value = codec.readUtf8(reader)
+      if (size == keys.length) {
+        keys = java.util.Arrays.copyOf(keys, size << 1)
+        values = java.util.Arrays.copyOf(values, size << 1)
       }
+      keys(size) = key
+      values(size) = value.asInstanceOf[AnyRef]
+      size += 1
+      more = reader.consumeNextCommaOrEndObject()
     }
     ScalaCollectionCodecs.reserveMapTail(reader, size)
+    val result = longMap(keys, values, size)
     reader.exitDepth()
     result.asInstanceOf[scala.collection.Map[Any, Any]]
+  }
+
+  private def longMap(
+      keys: Array[Long],
+      values: Array[AnyRef],
+      size: Int
+  ): scala.collection.mutable.LongMap[Any] = {
+    // Size comes from consumed entries, not input-declared lengths. Half-full storage avoids
+    // rehashing; insertion order still resolves duplicate keys to their last value.
+    val capacity = math.min(size.toLong * 2, 1L << 30).toInt
+    val result = new scala.collection.mutable.LongMap[Any](capacity)
+    var index = 0
+    while (index < size) {
+      result.update(keys(index), values(index))
+      index += 1
+    }
+    result
   }
 
   private def newBuilder(): scala.collection.mutable.Builder[(Any, Any), _] = kind match {

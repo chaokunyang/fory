@@ -2970,11 +2970,21 @@ public final class Utf8JsonReader extends JsonReader {
       if (sign == 'Z') {
         end = start + 1;
       } else {
-        if ((sign != '+' && sign != '-') || start > limit - 6 || bytes[start + 3] != ':') {
+        if ((sign != '+' && sign != '-') || start > limit - 7) {
           break parse;
         }
-        int text = LittleEndian.getInt32(bytes, start + 2);
-        int digitText = (text & 0xffff0000) | ((text & 0xff) << 8) | (bytes[start + 1] & 0xff);
+        // The parsed clock proves start > 0. Normalize its last byte to the opening quote of
+        // the shared immutable offset table; the seven offset bytes still match verbatim.
+        long text = (LittleEndian.getInt64(bytes, start - 1) & ~0xffL) | '"';
+        ZoneOffset cached = ZoneIdCache.Offsets.get(text);
+        if (cached != null) {
+          position = start + 7;
+          return OffsetTime.of(time, cached);
+        }
+        if ((text & 0x000000ff00000000L) != 0x0000003a00000000L) {
+          break parse;
+        }
+        int digitText = ((int) (text >>> 16) & 0xffff) | ((int) (text >>> 24) & 0xffff0000);
         int digits = digitText - (int) ASCII_ZEROES;
         if (((digits | ((int) ASCII_NINES - digitText)) & INT_BYTE_HIGH_BITS) != 0) {
           break parse;

@@ -430,8 +430,22 @@ public class JsonTemporalTest extends ForyJsonTestModels {
     for (String clock : new String[] {"01:02", "23:59:59.999999999"}) {
       for (String suffix :
           new String[] {
-            "Z", "+00:00", "-00:00", "+18:00", "-18:00", "+01:02:03", "-01:02:03",
-            "+01", "+0102", "+010203", "+19:00", "-18:00:01", "+00:60", "+00:00:60"
+            "Z",
+            "+00:00",
+            "-00:00",
+            "+05:45",
+            "-03:30",
+            "+18:00",
+            "-18:00",
+            "+01:02:03",
+            "-01:02:03",
+            "+01",
+            "+0102",
+            "+010203",
+            "+19:00",
+            "-18:00:01",
+            "+00:60",
+            "+00:00:60"
           }) {
         String text = '"' + clock + suffix + '"';
         byte[] token = text.getBytes(StandardCharsets.US_ASCII);
@@ -463,6 +477,21 @@ public class JsonTemporalTest extends ForyJsonTestModels {
           }
         }
       }
+    }
+  }
+
+  @Test
+  public void readOffsetTimeOffsets() {
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    LocalTime time = LocalTime.of(12, 34, 56, 123456789);
+    for (int seconds = -64800; seconds <= 64800; seconds++) {
+      OffsetTime expected = OffsetTime.of(time, ZoneOffset.ofTotalSeconds(seconds));
+      byte[] token = ('"' + expected.toString() + "\",17").getBytes(StandardCharsets.US_ASCII);
+      reader.reset(token);
+      assertEquals(reader.readOffsetTime(), expected);
+      reader.expectNextToken(',');
+      assertEquals(reader.readInt(), 17);
+      reader.finish();
     }
   }
 

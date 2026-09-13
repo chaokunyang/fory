@@ -599,13 +599,12 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       return;
     }
     int pos = position;
-    if (pos + 12 > buffer.length) {
-      grow(12);
+    if (pos + 13 > buffer.length) {
+      grow(13);
     }
     byte[] bytes = buffer;
     bytes[pos++] = (byte) '"';
-    pos = writeLocalDateBytes(bytes, pos, year, value.getMonthValue(), value.getDayOfMonth());
-    bytes[pos++] = (byte) '"';
+    pos = writeLocalDateBytes(bytes, pos, year, value.getMonthValue(), value.getDayOfMonth(), '"');
     position = pos;
   }
 
@@ -736,8 +735,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     }
     byte[] bytes = buffer;
     bytes[pos++] = '"';
-    pos = writeLocalDateBytes(bytes, pos, year, value.getMonthValue(), value.getDayOfMonth());
-    bytes[pos++] = 'T';
+    pos = writeLocalDateBytes(bytes, pos, year, value.getMonthValue(), value.getDayOfMonth(), 'T');
     pos = writeIsoTimeBytes(bytes, pos, value.toLocalTime());
     bytes[pos++] = '"';
     position = pos;
@@ -765,8 +763,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     bytes[pos++] = '"';
     pos =
         writeLocalDateBytes(
-            bytes, pos, value.getYear(), value.getMonthValue(), value.getDayOfMonth());
-    bytes[pos++] = 'T';
+            bytes, pos, value.getYear(), value.getMonthValue(), value.getDayOfMonth(), 'T');
     pos = writeIsoTimeBytes(bytes, pos, value.toLocalTime());
     pos = writeOffsetBytes(bytes, pos, value.getOffset(), '"');
     position = pos;
@@ -790,8 +787,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     }
     byte[] bytes = buffer;
     bytes[pos++] = '"';
-    pos = writeLocalDateBytes(bytes, pos, year, value.getMonthValue(), value.getDayOfMonth());
-    bytes[pos++] = 'T';
+    pos = writeLocalDateBytes(bytes, pos, year, value.getMonthValue(), value.getDayOfMonth(), 'T');
     pos = writeIsoTimeBytes(bytes, pos, value.toLocalTime());
     pos = writeOffsetBytes(bytes, pos, value.getOffset(), region ? '[' : '"');
     if (region) {
@@ -2844,8 +2840,9 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     return pos;
   }
 
-  // Callers select a four-digit year and reserve the complete ten-byte date.
-  private static int writeLocalDateBytes(byte[] bytes, int pos, int year, int month, int day) {
+  // Callers select a four-digit year and reserve the date, its delimiter, and one spare byte.
+  private static int writeLocalDateBytes(
+      byte[] bytes, int pos, int year, int month, int day, int delimiter) {
     // Calendar components fit a byte; retain that lookup bound after JDK field getters inline.
     int monthDigits = DIGIT_PAIRS[month & 0xff];
     int dayDigits = DIGIT_PAIRS[day & 0xff];
@@ -2856,9 +2853,9 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
             | ((long) '-' << 32)
             | ((long) monthDigits << 40)
             | ((long) '-' << 56));
-    bytes[pos + 8] = (byte) dayDigits;
-    bytes[pos + 9] = (byte) (dayDigits >>> 8);
-    return pos + 10;
+    // Fuse the known date delimiter into the last word; the final byte is outside logical output.
+    LittleEndian.putInt32(bytes, pos + 8, dayDigits | (delimiter << 16));
+    return pos + 11;
   }
 
   private static int writePadded3(byte[] bytes, int pos, int value) {

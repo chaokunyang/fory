@@ -517,37 +517,39 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
-  public void readOffsetDigitLanes() {
+  public void readOffsetPrefixes() {
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);
     Latin1JsonReader latin1 = newLatin1Reader(new byte[0]);
-    byte[] token = "\"+07:20:13\"".getBytes(StandardCharsets.US_ASCII);
-    for (int index : new int[] {2, 3, 5, 6}) {
-      byte saved = token[index];
-      for (int digit = 0; digit < 256; digit++) {
-        token[index] = (byte) digit;
-        reader.reset(token);
-        // Preserve the unchanged text parser's grammar, including noncanonical offsets.
-        ZoneOffset expected = null;
-        try {
-          latin1.reset(token);
-          expected = latin1.readZoneOffset();
-          latin1.finish();
-        } catch (RuntimeException e) {
-          expected = null;
+    for (String text : new String[] {"\"+07:20:13\"", "\"-07:20\"", "\"Z\""}) {
+      byte[] token = text.getBytes(StandardCharsets.US_ASCII);
+      for (int index = 0; index < token.length; index++) {
+        byte saved = token[index];
+        for (int digit = 0; digit < 256; digit++) {
+          token[index] = (byte) digit;
+          reader.reset(token);
+          // Preserve the unchanged text parser's grammar, including noncanonical offsets.
+          ZoneOffset expected = null;
+          try {
+            latin1.reset(token);
+            expected = latin1.readZoneOffset();
+            latin1.finish();
+          } catch (RuntimeException e) {
+            expected = null;
+          }
+          if (expected == null) {
+            assertThrows(
+                RuntimeException.class,
+                () -> {
+                  reader.readZoneOffset();
+                  reader.finish();
+                });
+          } else {
+            assertEquals(reader.readZoneOffset(), expected);
+            reader.finish();
+          }
         }
-        if (expected == null) {
-          assertThrows(
-              RuntimeException.class,
-              () -> {
-                reader.readZoneOffset();
-                reader.finish();
-              });
-        } else {
-          assertEquals(reader.readZoneOffset(), expected);
-          reader.finish();
-        }
+        token[index] = saved;
       }
-      token[index] = saved;
     }
   }
 

@@ -2871,24 +2871,30 @@ public final class Utf8JsonReader extends JsonReader {
     // pull the offset parser into array loops and make performance depend on C2 compilation order.
     parse:
     {
-      if (mark >= limit || bytes[mark] != '"') {
+      if (mark > limit - 2) {
         break parse;
       }
       int start = mark + 1;
-      if (start >= limit) {
-        break parse;
-      }
       int total = 0;
       int end;
+      int terminator;
       int sign = bytes[start];
       if (sign == 'Z') {
         end = start + 1;
-      } else {
-        if ((sign != '+' && sign != '-') || start > limit - 6 || bytes[start + 3] != ':') {
+        if (end >= limit || bytes[mark] != '"') {
           break parse;
         }
-        int text = LittleEndian.getInt32(bytes, start + 2);
-        int digitText = (text & 0xffff0000) | ((text & 0xff) << 8) | (bytes[start + 1] & 0xff);
+        terminator = bytes[end];
+      } else {
+        if ((sign != '+' && sign != '-') || mark > limit - 8) {
+          break parse;
+        }
+        // The bounded word includes both separators and the character after HH:mm.
+        long text = LittleEndian.getInt64(bytes, mark);
+        if ((text & 0x000000ff000000ffL) != 0x0000003a00000022L) {
+          break parse;
+        }
+        int digitText = ((int) (text >>> 16) & 0xffff) | ((int) (text >>> 24) & 0xffff0000);
         int digits = digitText - (int) ASCII_ZEROES;
         if (((digits | ((int) ASCII_NINES - digitText)) & INT_BYTE_HIGH_BITS) != 0) {
           break parse;
@@ -2897,13 +2903,15 @@ public final class Utf8JsonReader extends JsonReader {
         int hours = pairs & 0xff;
         int minutes = pairs >>> 16;
         int seconds = 0;
-        end = start + 6;
-        if (end < limit && bytes[end] == ':') {
-          if (end > limit - 3) {
+        end = mark + 7;
+        terminator = (int) (text >>> 56);
+        if (terminator == ':') {
+          if (end > limit - 4) {
             break parse;
           }
           seconds = parse2(bytes, end + 1);
           end += 3;
+          terminator = bytes[end];
         }
         if (minutes > 59 || seconds < 0 || seconds > 59) {
           break parse;
@@ -2913,7 +2921,7 @@ public final class Utf8JsonReader extends JsonReader {
           total = -total;
         }
       }
-      if (end >= limit || bytes[end] != '"') {
+      if (terminator != '"') {
         break parse;
       }
       position = end + 1;

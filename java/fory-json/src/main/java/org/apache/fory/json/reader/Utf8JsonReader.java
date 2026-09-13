@@ -1437,9 +1437,10 @@ public final class Utf8JsonReader extends JsonReader {
   }
 
   private static int combineEightDigits(long digits) {
-    long pairs = (digits * 10 + (digits >>> 8)) & 0x00FF_00FF_00FF_00FFL;
-    long quads = (pairs * 100 + (pairs >>> 16)) & 0x0000_FFFF_0000_FFFFL;
-    return (int) ((quads & 0xFFFF) * 10_000 + (quads >>> 32));
+    // Validated digit groups fit their lanes, so lower products cannot carry into the result lane.
+    long pairs = ((digits * (10 * 256 + 1)) >>> 8) & 0x00FF_00FF_00FF_00FFL;
+    long quads = ((pairs * (100 * 65536 + 1)) >>> 16) & 0x0000_FFFF_0000_FFFFL;
+    return (int) ((quads * (10_000L * (1L << 32) + 1)) >>> 32);
   }
 
   private static int parseFourDigits(byte[] bytes, int offset, int safeEnd) {

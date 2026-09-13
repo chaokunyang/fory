@@ -2925,6 +2925,14 @@ public final class Utf8JsonReader extends JsonReader {
     byte[] bytes = input;
     int limit = inputLimit;
     int mark = position;
+    if (mark <= limit - Long.BYTES) {
+      // A cache hit proves the complete quoted token, including its sign and separators.
+      ZoneOffset cached = ZoneIdCache.Offsets.get(LittleEndian.getInt64(bytes, mark));
+      if (cached != null) {
+        position = mark + Long.BYTES;
+        return cached;
+      }
+    }
     // Own the complete offset token and its closing quote here. A small suffix delegate can
     // pull the offset parser into array loops and make performance depend on C2 compilation order.
     parse:
@@ -2949,11 +2957,6 @@ public final class Utf8JsonReader extends JsonReader {
         }
         // The bounded word includes both separators and the character after HH:mm.
         long text = LittleEndian.getInt64(bytes, mark);
-        ZoneOffset cached = ZoneIdCache.Offsets.get(text);
-        if (cached != null) {
-          position = mark + 8;
-          return cached;
-        }
         if ((text & 0x000000ff000000ffL) != 0x0000003a00000022L) {
           break parse;
         }

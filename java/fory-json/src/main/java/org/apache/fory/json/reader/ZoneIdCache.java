@@ -31,7 +31,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.ConcurrentHashMap;
-import org.apache.fory.collection.LongMap;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.platform.AndroidSupport;
@@ -55,7 +54,9 @@ final class ZoneIdCache {
   private static final boolean[] REGION_CHARACTERS = regionCharacters();
   private static final short[] REGION_PAIRS = regionPairs();
   private static final MethodHandle CACHED_RULES = cachedRules();
-  private LongMap<Entry> entries;
+  private Entry[] entries;
+  private int size;
+  private int shift;
 
   ZoneId get(JsonReader reader, int start, int end, long hash) {
     Entry entry = find(hash);
@@ -83,11 +84,19 @@ final class ZoneIdCache {
   }
 
   private Entry find(long hash) {
-    Entry entry = entries == null ? null : entries.get(hash);
-    if (entry != null) {
-      return entry;
+    Entry[] table = entries;
+    if (table != null) {
+      int mask = table.length - 1;
+      int index = (int) (hash * 0x9e3779b97f4a7c15L >>> shift);
+      Entry entry;
+      while ((entry = table[index]) != null) {
+        if (entry.hash == hash) {
+          return entry;
+        }
+        index = (index + 1) & mask;
+      }
     }
-    entry = SHARED.get(hash);
+    Entry entry = SHARED.get(hash);
     if (entry != null) {
       remember(hash, entry);
     }
@@ -95,12 +104,38 @@ final class ZoneIdCache {
   }
 
   private void remember(long hash, Entry entry) {
-    if (entries == null) {
-      entries = new LongMap<>(32);
+    if (size == MAX_LOCAL_ENTRIES) {
+      return;
     }
-    if (entries.size < MAX_LOCAL_ENTRIES) {
-      entries.put(hash, entry);
+    Entry[] table = entries;
+    if (table == null) {
+      table = entries = new Entry[64];
+      shift = Long.numberOfLeadingZeros(table.length - 1);
+    } else if (size >= table.length * 3 / 4) {
+      Entry[] previous = table;
+      table = entries = new Entry[table.length * 2];
+      int mask = table.length - 1;
+      shift = Long.numberOfLeadingZeros(mask);
+      for (Entry value : previous) {
+        if (value != null) {
+          int index = (int) (value.hash * 0x9e3779b97f4a7c15L >>> shift);
+          while (table[index] != null) {
+            index = (index + 1) & mask;
+          }
+          table[index] = value;
+        }
+      }
     }
+    int mask = table.length - 1;
+    int index = (int) (hash * 0x9e3779b97f4a7c15L >>> shift);
+    while (table[index] != null) {
+      if (table[index].hash == hash) {
+        return;
+      }
+      index = (index + 1) & mask;
+    }
+    table[index] = entry;
+    size++;
   }
 
   private ZoneId parse(String id, long hash) {
@@ -117,7 +152,7 @@ final class ZoneIdCache {
         if (SHARED.size() >= MAX_SHARED_ENTRIES) {
           return zone;
         }
-        entry = new Entry(id, zone);
+        entry = new Entry(id, zone, hash);
         SHARED.put(hash, entry);
       } else if (!entry.id.equals(id)) {
         // A hash is only a candidate. Do not replace an entry or grow collision chains.
@@ -230,11 +265,14 @@ final class ZoneIdCache {
   }
 
   private static final class Entry {
+    // Store the immutable hash once globally rather than in every reader's local key array.
+    final long hash;
     final String id;
     final ZoneId zone;
     final byte[] text;
 
-    Entry(String id, ZoneId zone) {
+    Entry(String id, ZoneId zone, long hash) {
+      this.hash = hash;
       this.id = id;
       this.zone = zone;
       // Valid zone IDs contain only ASCII; share the String's immutable storage when available.

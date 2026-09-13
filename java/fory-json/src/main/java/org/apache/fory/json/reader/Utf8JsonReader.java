@@ -2595,8 +2595,7 @@ public final class Utf8JsonReader extends JsonReader {
     if (((dateDigits | (ASCII_NINES - dateText)) & ASCII_HIGH_BITS) != 0) {
       return null;
     }
-    long datePairs =
-        (dateDigits & 0x00ff00ff00ff00ffL) * 10 + ((dateDigits >>> 8) & 0x00ff00ff00ff00ffL);
+    long datePairs = ((dateDigits * (10 * 256 + 1)) >>> 8) & 0x00ff00ff00ff00ffL;
     int year = (int) (datePairs & 0xffff) * 100 + (int) ((datePairs >>> 16) & 0xffff);
     int month = (int) ((datePairs >>> 32) & 0xffff);
     int day = (int) (datePairs >>> 48);
@@ -2608,8 +2607,7 @@ public final class Utf8JsonReader extends JsonReader {
     }
     // HH:mm:ss starts its digit pairs in byte lanes 0, 3, and 6. Each validated pair is at most
     // 99, so multiplying the three tens lanes together cannot carry into another result.
-    long timePairs =
-        (timeDigits & 0x00ff0000ff0000ffL) * 10 + ((timeDigits >>> 8) & 0x00ff0000ff0000ffL);
+    long timePairs = ((timeDigits * (10 * 256 + 1)) >>> 8) & 0x00ff0000ff0000ffL;
     int hour = (int) timePairs & 0xff;
     int minute = (int) (timePairs >>> 24) & 0xff;
     int second = (int) (timePairs >>> 48) & 0xff;

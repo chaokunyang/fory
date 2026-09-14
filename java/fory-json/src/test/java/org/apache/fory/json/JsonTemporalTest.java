@@ -336,6 +336,49 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readYearMonthPrefix() {
+    byte[] token = "\"2024-12\"".getBytes(StandardCharsets.US_ASCII);
+    for (int lane = 0; lane < token.length; lane++) {
+      byte saved = token[lane];
+      for (int value = 0; value < 256; value++) {
+        token[lane] = (byte) value;
+        Latin1JsonReader reference = newLatin1Reader(token);
+        Utf8JsonReader reader = newUtf8Reader(token);
+        YearMonth expected;
+        try {
+          expected = reference.readYearMonth();
+          reference.finish();
+        } catch (RuntimeException e) {
+          assertThrows(
+              RuntimeException.class,
+              () -> {
+                reader.readYearMonth();
+                reader.finish();
+              });
+          continue;
+        }
+        assertEquals(reader.readYearMonth(), expected);
+        reader.finish();
+      }
+      token[lane] = saved;
+    }
+    for (int offset = 0; offset < 8; offset++) {
+      byte[] bytes = new byte[offset + token.length + 8];
+      Arrays.fill(bytes, (byte) '9');
+      System.arraycopy(token, 0, bytes, offset, token.length);
+      Utf8JsonReader reader = newUtf8Reader(bytes);
+      for (int length = 0; length < token.length; length++) {
+        reader.reset(bytes, offset, length);
+        assertThrows(RuntimeException.class, reader::readYearMonth);
+      }
+      reader.reset(bytes, offset, token.length);
+      assertEquals(reader.readYearMonth(), YearMonth.of(2024, 12));
+      reader.finish();
+    }
+    assertEscapes(ScalarCodecs.YearMonthCodec.INSTANCE, YearMonth.of(2024, 12));
+  }
+
+  @Test
   public void readYearSlices() {
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);
     for (int value : new int[] {0, 1, 999, 1000, 2024, 9999}) {
@@ -923,6 +966,46 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readDurationComponents() {
+    for (String amount :
+        new String[] {
+          "99999999999999999",
+          "100000000000000000",
+          "999999999999999999",
+          "1000000000000000000",
+          "9223372036854775807",
+          "9223372036854775808"
+        }) {
+      for (String sign : new String[] {"", "-"}) {
+        for (String padding : new String[] {"", "0", "00000000000000000000"}) {
+          for (String unit : new String[] {"H", "M", "S", ".000000001S"}) {
+            byte[] token =
+                ("\"PT" + sign + padding + amount + unit + "\"")
+                    .getBytes(StandardCharsets.US_ASCII);
+            Latin1JsonReader reference = newLatin1Reader(token);
+            Utf8JsonReader reader = newUtf8Reader(token);
+            Duration expected;
+            try {
+              expected = reference.readDuration();
+              reference.finish();
+            } catch (RuntimeException e) {
+              assertThrows(
+                  RuntimeException.class,
+                  () -> {
+                    reader.readDuration();
+                    reader.finish();
+                  });
+              continue;
+            }
+            assertEquals(reader.readDuration(), expected);
+            reader.finish();
+          }
+        }
+      }
+    }
+  }
+
+  @Test
   public void readPeriodSlices() {
     int[] amounts = {Integer.MIN_VALUE, -1000000000, -1, 0, 1, 1000000000, Integer.MAX_VALUE};
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);
@@ -1066,6 +1149,58 @@ public class JsonTemporalTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readInstantFractions() {
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    for (int length = 0; length <= 9; length++) {
+      String fraction = "123456789".substring(0, length);
+      String text = "2024-02-29T23:59:59." + fraction + "Z";
+      Instant expected = Instant.parse(text);
+      byte[] token = ('"' + text + "\",17").getBytes(StandardCharsets.US_ASCII);
+      for (int offset = 0; offset < 8; offset++) {
+        byte[] bytes = new byte[offset + token.length];
+        System.arraycopy(token, 0, bytes, offset, token.length);
+        reader.reset(bytes, offset, token.length);
+        assertEquals(reader.readIsoInstant(), expected);
+        reader.expectNextToken(',');
+        assertEquals(reader.readInt(), 17);
+        reader.finish();
+        reader.reset(bytes, offset, token.length - 3);
+        assertEquals(reader.readIsoInstant(), expected);
+        reader.finish();
+        for (int end = 0; end < token.length - 3; end++) {
+          reader.reset(bytes, offset, end);
+          assertThrows(RuntimeException.class, reader::readIsoInstant);
+        }
+      }
+      byte[] exact = Arrays.copyOf(token, token.length - 3);
+      for (int lane = 21; lane < exact.length; lane++) {
+        byte original = exact[lane];
+        for (int value = 0; value < 256; value++) {
+          exact[lane] = (byte) value;
+          Latin1JsonReader reference = newLatin1Reader(exact);
+          reader.reset(exact);
+          Instant parsed;
+          try {
+            parsed = reference.readIsoInstant();
+            reference.finish();
+          } catch (RuntimeException e) {
+            assertThrows(
+                RuntimeException.class,
+                () -> {
+                  reader.readIsoInstant();
+                  reader.finish();
+                });
+            continue;
+          }
+          assertEquals(reader.readIsoInstant(), parsed);
+          reader.finish();
+        }
+        exact[lane] = original;
+      }
+    }
+  }
+
+  @Test
   public void readInstantClockRanges() {
     for (String clock : new String[] {"00:00:00", "23:59:59"}) {
       byte[] token = ('"' + "2024-02-29T" + clock + "Z\"").getBytes(StandardCharsets.US_ASCII);
@@ -1097,6 +1232,35 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         token[lane] = tens;
         token[lane + 1] = ones;
       }
+    }
+  }
+
+  @Test
+  public void readInstantDigits() {
+    byte[] token = "\"2024-02-29T23:59:59Z\"".getBytes(StandardCharsets.US_ASCII);
+    for (int lane : new int[] {1, 2, 3, 4, 6, 7, 9, 10, 12, 13, 15, 16, 18, 19}) {
+      byte original = token[lane];
+      for (int value = 0; value < 256; value++) {
+        token[lane] = (byte) value;
+        Latin1JsonReader reference = newLatin1Reader(token);
+        Utf8JsonReader reader = newUtf8Reader(token);
+        Instant expected;
+        try {
+          expected = reference.readIsoInstant();
+          reference.finish();
+        } catch (RuntimeException e) {
+          assertThrows(
+              RuntimeException.class,
+              () -> {
+                reader.readIsoInstant();
+                reader.finish();
+              });
+          continue;
+        }
+        assertEquals(reader.readIsoInstant(), expected);
+        reader.finish();
+      }
+      token[lane] = original;
     }
   }
 
@@ -1375,6 +1539,12 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         assertInstant(utf8, string, Instant.ofEpochSecond(start + day * 86400L, day));
       }
     }
+    // Exercise both edges of the positive 31-bit century numerator and neighboring midnights.
+    for (long day : new long[] {-719469, -719468, -719467, 536151442, 536151443, 536151444}) {
+      for (int second = -1; second <= 1; second++) {
+        assertInstant(utf8, string, Instant.ofEpochSecond(day * 86400L + second, 123456789));
+      }
+    }
     Random random = new Random(481907L);
     long minimum = Instant.MIN.getEpochSecond();
     long range = Instant.MAX.getEpochSecond() - minimum + 1;
@@ -1448,7 +1618,20 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         ScalarCodecs.YearCodec.INSTANCE.writeUtf8(writer, Year.of(year));
         assertEquals(
             new String(writer.toJsonBytes(), StandardCharsets.UTF_8), prefix + '"' + year + '"');
+        writer.writeComma(1);
+        writer.writeInt(17);
+        assertEquals(
+            new String(writer.toJsonBytes(), StandardCharsets.UTF_8),
+            prefix + '"' + year + "\",17");
       }
+    }
+    Utf8JsonWriter writer = newUtf8Writer(new byte[1]);
+    for (int year = 1000; year <= 9999; year++) {
+      writer.reset();
+      ScalarCodecs.YearCodec.INSTANCE.writeUtf8(writer, Year.of(year));
+      writer.writeComma(1);
+      writer.writeInt(17);
+      assertEquals(new String(writer.toJsonBytes(), StandardCharsets.UTF_8), "\"" + year + "\",17");
     }
   }
 

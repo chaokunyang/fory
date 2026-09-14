@@ -427,8 +427,12 @@ public final class ScalarCodecs {
 
     @Override
     public Integer readLatin1(Latin1JsonReader reader) {
+      // The primitive token reader rejects null without a separate nullable-word probe.
+      if (primitive) {
+        return reader.readIntValue();
+      }
       if (reader.tryReadNullToken()) {
-        return primitive ? primitiveNull(int.class) : null;
+        return null;
       }
       // The null-token probe already consumed whitespace for this concrete representation.
       return reader.readIntTokenValue();
@@ -436,8 +440,12 @@ public final class ScalarCodecs {
 
     @Override
     public Integer readUtf16(Utf16JsonReader reader) {
+      // The primitive token reader rejects null without a separate nullable-word probe.
+      if (primitive) {
+        return reader.readIntValue();
+      }
       if (reader.tryReadNullToken()) {
-        return primitive ? primitiveNull(int.class) : null;
+        return null;
       }
       // The null-token probe already consumed whitespace for this concrete representation.
       return reader.readIntTokenValue();
@@ -445,8 +453,12 @@ public final class ScalarCodecs {
 
     @Override
     public Integer readUtf8(Utf8JsonReader reader) {
+      // The primitive token reader rejects null without a separate nullable-word probe.
+      if (primitive) {
+        return reader.readIntValue();
+      }
       if (reader.tryReadNullToken()) {
-        return primitive ? primitiveNull(int.class) : null;
+        return null;
       }
       // The null-token probe already consumed whitespace for this concrete representation.
       return reader.readIntTokenValue();
@@ -1944,17 +1956,17 @@ public final class ScalarCodecs {
 
     @Override
     public Instant readUtf8(Utf8JsonReader reader) {
-      return reader.tryReadNextNullToken() ? null : reader.readIsoInstant();
+      return reader.readIsoInstant();
     }
 
     @Override
     public Instant readLatin1(Latin1JsonReader reader) {
-      return reader.tryReadNextNullToken() ? null : reader.readIsoInstant();
+      return reader.readIsoInstant();
     }
 
     @Override
     public Instant readUtf16(Utf16JsonReader reader) {
-      return reader.tryReadNextNullToken() ? null : reader.readIsoInstant();
+      return reader.readIsoInstant();
     }
   }
 
@@ -4066,7 +4078,7 @@ public final class ScalarCodecs {
     }
 
     public Object readUtf8Enum(Utf8JsonReader reader) {
-      return enumValue(reader.readPackedStringHash());
+      return enumValue(reader.readStringHash());
     }
 
     public Object readNextUtf8Enum(Utf8JsonReader reader) {

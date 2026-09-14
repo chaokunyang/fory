@@ -973,7 +973,10 @@ public abstract class JsonReader {
   }
 
   public Instant readIsoInstant() {
-    return parseInstantValue(readQuotedTextValue());
+    // The UTF-8 owner tries its complete timestamp first, so null probing stays off that hot path.
+    return peekToken() == 'n' && tryReadNullLiteral()
+        ? null
+        : parseInstantValue(readQuotedTextValue());
   }
 
   public Duration readDuration() {

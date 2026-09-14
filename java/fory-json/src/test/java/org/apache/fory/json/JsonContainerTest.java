@@ -133,7 +133,17 @@ public class JsonContainerTest extends ForyJsonTestModels {
     }
     for (String key :
         new String[] {
-          "", "-", "01", "-01", "2147483648", "-2147483649", "1e0", "1.0", "12345678901"
+          "",
+          "-",
+          "01",
+          "-01",
+          "2147483648",
+          "-2147483649",
+          "1e0",
+          "1.0",
+          "12345678901",
+          "\"1\"",
+          "-\"1\""
         }) {
       byte[] input = ("{\"" + key + "\":true}").getBytes(StandardCharsets.US_ASCII);
       assertThrows(RuntimeException.class, () -> json.fromJson(input, type));

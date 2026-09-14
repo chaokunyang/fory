@@ -177,7 +177,13 @@ public abstract class JsonWriter {
     // Floor division extends the March-based century decomposition to negative years while
     // keeping its remainder in [0, 146097). Valid Instant bounds keep all long products in range.
     long quarterDay = 4 * (Math.floorDiv(epochSecond, 86_400) + 719_468) + 3;
-    int century = (int) Math.floorDiv(quarterDay, 146_097);
+    int century;
+    if ((quarterDay & ~0x7fff_ffffL) == 0) {
+      // This reciprocal is exact over every quotient interval in the positive 31-bit range.
+      century = (int) (((int) quarterDay * 963_315_389L) >>> 47);
+    } else {
+      century = (int) Math.floorDiv(quarterDay, 146_097);
+    }
     int remainder = (int) (quarterDay - century * 146_097L);
     long yearProduct = 2_939_745L * (remainder | 3);
     int year = century * 100 + (int) (yearProduct >>> 32);

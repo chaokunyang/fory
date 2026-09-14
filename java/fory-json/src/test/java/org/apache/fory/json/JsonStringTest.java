@@ -316,6 +316,34 @@ public class JsonStringTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readFieldHashPrefixes() {
+    ForyJson json = newJson();
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    for (int prefix = 0; prefix <= 32; prefix++) {
+      for (String tail :
+          new String[] {
+            "", "abc", "\u00e9", "\u4f60\u597d", "\uD83D\uDE00", "\u0000", "\n", "\\", "\""
+          }) {
+        String name = repeat('a', prefix) + tail;
+        byte[] token = (json.toJson(name) + ":17").getBytes(StandardCharsets.UTF_8);
+        for (int offset = 0; offset < 8; offset++) {
+          byte[] bytes = new byte[offset + token.length + 8];
+          System.arraycopy(token, 0, bytes, offset, token.length);
+          reader.reset(bytes, offset, token.length);
+          assertEquals(reader.readFieldNameHash(), JsonFieldNameHash.hash(name));
+          reader.expectNextToken(':');
+          assertEquals(reader.readInt(), 17);
+          reader.finish();
+          for (int length = 0; length < token.length - 3; length++) {
+            reader.reset(bytes, offset, length);
+            assertThrows(RuntimeException.class, reader::readFieldNameHash);
+          }
+        }
+      }
+    }
+  }
+
+  @Test
   public void readUtf16FieldNameProbe() {
     long hash = JsonFieldNameHash.hash("duration");
     int length = "duration".length();

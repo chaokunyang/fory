@@ -216,9 +216,9 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   private void writeBooleanNoEnsure(boolean value) {
     int offset = position;
     LittleEndian.putInt32(buffer, offset, value ? 0x65757274 : 0x736c6166);
-    if (!value) {
-      buffer[offset + 4] = 'e';
-    }
+    // Both callers reserve five bytes. For true the last byte is outside the logical output
+    // and will be overwritten by the following value, avoiding a data-dependent tail store.
+    buffer[offset + 4] = 'e';
     position = offset + (value ? 4 : 5);
   }
 
@@ -629,8 +629,10 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       writeTemporal(value, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
       return;
     }
-    if (value.getOffset().getTotalSeconds() != 0) {
-      writeOffsetDateTimeValue(value);
+    ZoneOffset offset = value.getOffset();
+    if (offset.getTotalSeconds() != 0) {
+      // Carry the resolved components across the non-UTC call instead of reloading their owners.
+      writeOffsetDateTimeValue(date, value.toLocalTime(), offset);
       return;
     }
     int pos = position;
@@ -767,7 +769,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     position = pos;
   }
 
-  private void writeOffsetDateTimeValue(OffsetDateTime value) {
+  private void writeOffsetDateTimeValue(LocalDate date, LocalTime time, ZoneOffset offset) {
     int pos = position;
     if (pos + 40 > buffer.length) {
       grow(40);
@@ -776,9 +778,9 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     bytes[pos++] = '"';
     pos =
         writeLocalDateBytes(
-            bytes, pos, value.getYear(), value.getMonthValue(), value.getDayOfMonth(), 'T');
-    pos = writeIsoTimeBytes(bytes, pos, value.toLocalTime());
-    pos = writeOffsetBytes(bytes, pos, value.getOffset(), '"');
+            bytes, pos, date.getYear(), date.getMonthValue(), date.getDayOfMonth(), 'T');
+    pos = writeIsoTimeBytes(bytes, pos, time);
+    pos = writeOffsetBytes(bytes, pos, offset, '"');
     position = pos;
   }
 
@@ -793,7 +795,8 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     boolean region = !(value.getZone() instanceof ZoneOffset);
     String zoneId = value.getZone().getId();
     int zoneIdLength = zoneId.length();
-    int additional = 42 + zoneIdLength;
+    // The closing bracket/quote store writes two spare bytes beyond the logical value.
+    int additional = 44 + zoneIdLength;
     int pos = position;
     if (pos + additional > buffer.length) {
       grow(additional);
@@ -814,8 +817,8 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
           bytes[pos++] = (byte) zoneId.charAt(i);
         }
       }
-      bytes[pos++] = ']';
-      bytes[pos++] = '"';
+      LittleEndian.putInt32(bytes, pos, ']' | ('"' << 8));
+      pos += 2;
     }
     position = pos;
   }
@@ -1087,6 +1090,13 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       grow(12);
     }
     byte[] bytes = buffer;
+    if (year >= 1000 && year <= 9999) {
+      // A four-digit year and its quotes occupy six bytes. The complete-year reservation
+      // also covers the two spare bytes in this word, which are outside logical output.
+      LittleEndian.putInt64(bytes, pos, '"' | ((long) DIGIT_QUADS[year] << 8) | ((long) '"' << 40));
+      position = pos + 6;
+      return;
+    }
     bytes[pos++] = '"';
     if (year < 0) {
       bytes[pos++] = '-';

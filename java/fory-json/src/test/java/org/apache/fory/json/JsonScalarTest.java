@@ -26,6 +26,7 @@ import static org.apache.fory.json.JsonTestSupport.newUtf16Reader;
 import static org.apache.fory.json.JsonTestSupport.newUtf8Reader;
 import static org.apache.fory.json.JsonTestSupport.newUtf8Writer;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.expectThrows;
@@ -203,15 +204,18 @@ public class JsonScalarTest extends ForyJsonTestModels {
       writer.writeArrayEnd();
       assertEquals(new String(writer.toJsonBytes(), StandardCharsets.UTF_8), "[true,false,null]");
 
-      writer.reset();
-      writer.writeObjectStart();
-      writer.writeBooleanField(
-          "\"x\":".getBytes(StandardCharsets.UTF_8),
-          ",\"x\":".getBytes(StandardCharsets.UTF_8),
-          0,
-          false);
-      writer.writeObjectEnd();
-      assertEquals(new String(writer.toJsonBytes(), StandardCharsets.UTF_8), "{\"x\":false}");
+      for (boolean value : new boolean[] {true, false}) {
+        writer.reset();
+        writer.writeObjectStart();
+        writer.writeBooleanField(
+            "\"x\":".getBytes(StandardCharsets.UTF_8),
+            ",\"x\":".getBytes(StandardCharsets.UTF_8),
+            0,
+            value);
+        writer.writeObjectEnd();
+        assertEquals(
+            new String(writer.toJsonBytes(), StandardCharsets.UTF_8), "{\"x\":" + value + '}');
+      }
     }
   }
 
@@ -523,6 +527,35 @@ public class JsonScalarTest extends ForyJsonTestModels {
         UnicodeKind.values());
   }
 
+  @Test
+  public void readEnumNames() {
+    for (Class<?> enumType : new Class<?>[] {EnumName.class, UnicodeKind.class}) {
+      ScalarCodecs.EnumCodec codec = new ScalarCodecs.EnumCodec(enumType);
+      Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+      for (Enum<?> value : (Enum<?>[]) enumType.getEnumConstants()) {
+        String name = value.name();
+        for (int escape = -1; escape < name.length(); escape++) {
+          String text = name;
+          if (escape >= 0) {
+            text =
+                name.substring(0, escape)
+                    + String.format(java.util.Locale.ROOT, "\\u%04x", (int) name.charAt(escape))
+                    + name.substring(escape + 1);
+          }
+          byte[] token = ('"' + text + '"').getBytes(StandardCharsets.UTF_8);
+          for (int offset = 0; offset < 8; offset++) {
+            byte[] input = new byte[offset + token.length + 8];
+            Arrays.fill(input, (byte) '9');
+            System.arraycopy(token, 0, input, offset, token.length);
+            reader.reset(input, offset, token.length);
+            assertSame(codec.readUtf8(reader), value);
+            reader.finish();
+          }
+        }
+      }
+    }
+  }
+
   @Test(dataProvider = "enableCodegen")
   public void writeNaturalIntegers(boolean codegen) {
     ForyJson json =
@@ -719,6 +752,35 @@ public class JsonScalarTest extends ForyJsonTestModels {
     assertThrows(
         ForyJsonException.class,
         () -> newLatin1Reader(latin1Bytes("2147483648,0")).readIntTokenValue());
+  }
+
+  @Test
+  public void readIntTokenEnds() {
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    for (int value : new int[] {0, -1, 17, 123456789, Integer.MIN_VALUE, Integer.MAX_VALUE}) {
+      String number = Integer.toString(value);
+      for (String token : new String[] {number, '"' + number + '"'}) {
+        reader.reset((token + ",17").getBytes(StandardCharsets.US_ASCII));
+        assertEquals(reader.readIntTokenValue(), value);
+        reader.expectNextToken(',');
+        assertEquals(reader.readIntTokenValue(), 17);
+        reader.finish();
+      }
+      reader.reset(('"' + number + "\":17").getBytes(StandardCharsets.US_ASCII));
+      assertEquals(reader.readFieldNameInt(), value);
+      reader.expectNextToken(':');
+      assertEquals(reader.readIntTokenValue(), 17);
+      reader.finish();
+      for (String suffix : new String[] {".0", "e0", "E+1"}) {
+        String invalid = number + suffix;
+        for (String token : new String[] {invalid, '"' + invalid + '"'}) {
+          reader.reset(token.getBytes(StandardCharsets.US_ASCII));
+          assertThrows(RuntimeException.class, reader::readIntTokenValue);
+        }
+        reader.reset(('"' + invalid + '"').getBytes(StandardCharsets.US_ASCII));
+        assertThrows(RuntimeException.class, reader::readFieldNameInt);
+      }
+    }
   }
 
   @Test
@@ -1414,6 +1476,54 @@ public class JsonScalarTest extends ForyJsonTestModels {
           assertEquals(reader.readIntValue(), 123456789);
           reader.finish();
         }
+      }
+    }
+  }
+
+  @Test
+  public void readDecimalFractions() {
+    Utf8JsonReader reader = newUtf8Reader(new byte[0]);
+    for (String digits :
+        new String[] {
+          "1",
+          "99999999",
+          "12345678901234567",
+          "9223372036854775807",
+          "9223372036854775808",
+          "9999999999999999999999999999999999"
+        }) {
+      for (int point = 0; point < digits.length(); point++) {
+        String decimal =
+            (point == 0 ? "0" : digits.substring(0, point)) + '.' + digits.substring(point);
+        for (String sign : new String[] {"", "-"}) {
+          for (String exponent : new String[] {"", "e+19", "e-19"}) {
+            String token = sign + decimal + exponent;
+            BigDecimal expected = new BigDecimal(token);
+            assertBigDecimalReaders(token);
+            assertQuotedBigDecimalReaders(token);
+            byte[] value = token.getBytes(StandardCharsets.UTF_8);
+            for (int offset = 0; offset < 4; offset++) {
+              byte[] bytes = new byte[offset + value.length + 8];
+              Arrays.fill(bytes, (byte) '9');
+              System.arraycopy(value, 0, bytes, offset, value.length);
+              reader.reset(bytes, offset, value.length);
+              assertEquals(reader.readBigDecimal(), expected);
+              reader.finish();
+            }
+            reader.reset((token + ",123456789").getBytes(StandardCharsets.UTF_8));
+            assertEquals(reader.readBigDecimal(), expected);
+            reader.expectNextToken(',');
+            assertEquals(reader.readIntValue(), 123456789);
+            reader.finish();
+          }
+        }
+      }
+    }
+    for (int zeros : new int[] {0, 7, 8, 15, 16, 31, 1000, 9900}) {
+      for (String sign : new String[] {"", "-"}) {
+        String token = sign + "0." + repeat('0', zeros) + "12345e" + (zeros + 5);
+        assertBigDecimalReaders(token);
+        assertQuotedBigDecimalReaders(token);
       }
     }
   }

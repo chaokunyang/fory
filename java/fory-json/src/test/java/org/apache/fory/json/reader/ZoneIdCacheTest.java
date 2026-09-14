@@ -28,9 +28,11 @@ import static org.testng.Assert.assertTrue;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -57,6 +59,39 @@ public class ZoneIdCacheTest {
     assertEquals(read(other, "Europe/Vaduz", hash), ZoneId.of("Europe/Vaduz"));
     assertSame(read(other, "Europe/Paris", hash), paris);
     assertNotSame(read(other, "Europe/Vaduz", hash), read(other, "Europe/Vaduz", hash));
+  }
+
+  @Test
+  public void localEntries() {
+    ZoneIdCache cache = new ZoneIdCache();
+    ZoneId zeroHash = read(cache, "GMT", 0L);
+    List<String> ids = new ArrayList<>(ZoneId.getAvailableZoneIds());
+    // Other tests register custom providers, whose IDs are deliberately excluded from the cache.
+    // Keep only built-in IDs that ZoneId can parse; TimeZone also lists legacy short aliases.
+    ids.retainAll(Arrays.asList(TimeZone.getAvailableIDs()));
+    for (int quarter = -72; quarter <= 72; quarter++) {
+      String offset = ZoneOffset.ofTotalSeconds(quarter * 900).getId();
+      ids.add(offset);
+      for (String prefix : new String[] {"UT", "UTC", "GMT"}) {
+        ids.add(quarter == 0 ? prefix : prefix + offset);
+      }
+    }
+    // More than 1024 common IDs exercise growth and reads after local retention has stopped.
+    assertTrue(ids.size() > 1024);
+    ZoneIdCache other = new ZoneIdCache();
+    for (int pass = 0; pass < 2; pass++) {
+      for (String id : ids) {
+        long hash = ZoneIdCache.HASH_SEED;
+        for (int i = 0; i < id.length(); i++) {
+          hash = hash * ZoneIdCache.HASH_MULTIPLIER ^ id.charAt(i);
+        }
+        ZoneId expected = ZoneId.of(id);
+        ZoneId decoded = read(cache, id, hash);
+        assertEquals(decoded, expected);
+        assertSame(read(other, id, hash), decoded);
+      }
+    }
+    assertSame(read(cache, "GMT", 0L), zeroHash);
   }
 
   @Test

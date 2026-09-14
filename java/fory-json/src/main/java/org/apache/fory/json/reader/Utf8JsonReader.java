@@ -797,7 +797,8 @@ public final class Utf8JsonReader extends JsonReader {
   protected boolean tryReadNullLiteral() {
     byte[] bytes = input;
     int offset = position;
-    if (offset + 3 < inputLimit && LittleEndian.getInt32(bytes, offset) == NULL_LITERAL) {
+    // Use the same complete-word bound as scalar token readers so inlined probes share it.
+    if (offset <= inputLimit - 4 && LittleEndian.getInt32(bytes, offset) == NULL_LITERAL) {
       position = offset + 4;
       return true;
     }
@@ -898,10 +899,17 @@ public final class Utf8JsonReader extends JsonReader {
       }
       ch = bytes[offset];
     }
+    int result = readIntMagnitude(bytes, offset, inputLimit, ch, negative);
+    rejectFractionOrExponentFast();
+    return result;
+  }
+
+  // Scalar tokens reject fractions/exponents at their caller; field names instead require a quote.
+  // Keep that boundary validation out of the shared integer magnitude scan.
+  private int readIntMagnitude(byte[] bytes, int offset, int inputLimit, int ch, boolean negative) {
     if (ch == '0') {
       position = offset + 1;
       rejectLeadingDigitFast();
-      rejectFractionOrExponentFast();
       return 0;
     }
     if (ch < '1' || ch > '9') {
@@ -913,7 +921,9 @@ public final class Utf8JsonReader extends JsonReader {
     while (offset < safeEnd) {
       ch = bytes[offset];
       if (ch < '0' || ch > '9') {
-        break;
+        // A non-digit already ends the magnitude; only exhausting the digit bound needs the tail.
+        position = offset;
+        return negative ? -result : result;
       }
       result = result * 10 + (ch - '0');
       offset++;
@@ -925,7 +935,6 @@ public final class Utf8JsonReader extends JsonReader {
       }
     }
     position = offset;
-    rejectFractionOrExponentFast();
     return negative ? -result : result;
   }
 
@@ -948,7 +957,6 @@ public final class Utf8JsonReader extends JsonReader {
       }
     }
     position = offset;
-    rejectFractionOrExponentFast();
     return negative ? -result : result;
   }
 
@@ -1118,11 +1126,13 @@ public final class Utf8JsonReader extends JsonReader {
       } else {
         // A nonzero stop locates one of eight lanes; retain that bound for the power-table index.
         int count = (Long.numberOfTrailingZeros(stop) >>> 3) & 7;
-        // The first stop proves the preceding digit lanes. Right-align them among eight
-        // decimal places to convert a short prefix without rereading its individual bytes.
-        digits = (digits & ((1L << (count << 3)) - 1)) << ((Long.BYTES - count) << 3);
-        value = value * LONG_POWERS_OF_TEN[count] + combineEightDigits(digits);
-        offset += count;
+        // An immediate stop leaves the coefficient unchanged. For a nonempty prefix, the
+        // alignment shift discards every unvalidated lane without a separate dynamic mask.
+        if (count != 0) {
+          digits <<= (Long.BYTES - count) << 3;
+          value = value * LONG_POWERS_OF_TEN[count] + combineEightDigits(digits);
+          offset += count;
+        }
         break;
       }
     }
@@ -1590,6 +1600,24 @@ public final class Utf8JsonReader extends JsonReader {
     if (offset < inputLimit && bytes[offset] == '.') {
       offset++;
       int fractionStart = offset;
+      // This bound makes every eight-digit append Long-safe, including a short digit prefix
+      // ending inside the loaded word. The scalar tail retains exact overflow handling.
+      while (unscaled < LONG_MAX_DIV_EIGHT_DIGITS && offset <= inputLimit - Long.BYTES) {
+        long text = LittleEndian.getInt64(bytes, offset);
+        long digits = text - ASCII_ZEROES;
+        long stop = (digits | (ASCII_NINES - text)) & ASCII_HIGH_BITS;
+        if (stop != 0) {
+          int count = Long.numberOfTrailingZeros(stop) >>> 3;
+          digits = (digits & ((1L << (count << 3)) - 1)) << ((Long.BYTES - count) << 3);
+          unscaled = unscaled * LONG_POWERS_OF_TEN[count] + combineEightDigits(digits);
+          offset += count;
+          scale += count;
+          break;
+        }
+        unscaled = unscaled * EIGHT_DIGITS + combineEightDigits(digits);
+        offset += Long.BYTES;
+        scale += Long.BYTES;
+      }
       while (offset < inputLimit) {
         ch = bytes[offset];
         if (ch < '0' || ch > '9') {
@@ -1679,6 +1707,24 @@ public final class Utf8JsonReader extends JsonReader {
     if (offset < inputLimit && bytes[offset] == '.') {
       offset++;
       int fractionStart = offset;
+      // This bound makes every eight-digit append Long-safe, including a short digit prefix
+      // ending inside the loaded word. The scalar tail retains exact overflow handling.
+      while (unscaled < LONG_MAX_DIV_EIGHT_DIGITS && offset <= inputLimit - Long.BYTES) {
+        long text = LittleEndian.getInt64(bytes, offset);
+        long digits = text - ASCII_ZEROES;
+        long stop = (digits | (ASCII_NINES - text)) & ASCII_HIGH_BITS;
+        if (stop != 0) {
+          int count = Long.numberOfTrailingZeros(stop) >>> 3;
+          digits = (digits & ((1L << (count << 3)) - 1)) << ((Long.BYTES - count) << 3);
+          unscaled = unscaled * LONG_POWERS_OF_TEN[count] + combineEightDigits(digits);
+          offset += count;
+          scale += count;
+          break;
+        }
+        unscaled = unscaled * EIGHT_DIGITS + combineEightDigits(digits);
+        offset += Long.BYTES;
+        scale += Long.BYTES;
+      }
       while (offset < inputLimit) {
         ch = bytes[offset];
         if (ch < '0' || ch > '9') {
@@ -2020,28 +2066,16 @@ public final class Utf8JsonReader extends JsonReader {
     } else if (ch >= '1' && ch <= '9') {
       unscaled = ch - '0';
       offset++;
-      while (offset + 1 < inputLimit) {
-        int high = bytes[offset] - '0';
-        int low = bytes[offset + 1] - '0';
-        if ((high | low | (9 - high) | (9 - low)) < 0) {
+      while (offset < inputLimit) {
+        int digit = bytes[offset] - '0';
+        if (Integer.compareUnsigned(digit, 9) > 0) {
           break;
         }
-        int pair = high * 10 + low;
-        if (!canAppendTwoDigits(unscaled, pair)) {
+        if (!canAppendDigit(unscaled, digit)) {
           return readDoubleFallback(start);
         }
-        unscaled = unscaled * 100 + pair;
-        offset += 2;
-      }
-      if (offset < inputLimit) {
-        int digit = bytes[offset] - '0';
-        if (digit >= 0 && digit <= 9) {
-          if (!canAppendDigit(unscaled, digit)) {
-            return readDoubleFallback(start);
-          }
-          unscaled = unscaled * 10 + digit;
-          offset++;
-        }
+        unscaled = unscaled * 10 + digit;
+        offset++;
       }
     } else {
       return readDoubleFallback(start);
@@ -2134,28 +2168,16 @@ public final class Utf8JsonReader extends JsonReader {
     } else if (ch >= '1' && ch <= '9') {
       unscaled = ch - '0';
       offset++;
-      while (offset + 1 < inputLimit) {
-        int high = bytes[offset] - '0';
-        int low = bytes[offset + 1] - '0';
-        if ((high | low | (9 - high) | (9 - low)) < 0) {
+      while (offset < inputLimit) {
+        int digit = bytes[offset] - '0';
+        if (Integer.compareUnsigned(digit, 9) > 0) {
           break;
         }
-        int pair = high * 10 + low;
-        if (!canAppendTwoDigits(unscaled, pair)) {
+        if (!canAppendDigit(unscaled, digit)) {
           return readDoubleFallback(start);
         }
-        unscaled = unscaled * 100 + pair;
-        offset += 2;
-      }
-      if (offset < inputLimit) {
-        int digit = bytes[offset] - '0';
-        if (digit >= 0 && digit <= 9) {
-          if (!canAppendDigit(unscaled, digit)) {
-            return readDoubleFallback(start);
-          }
-          unscaled = unscaled * 10 + digit;
-          offset++;
-        }
+        unscaled = unscaled * 10 + digit;
+        offset++;
       }
     } else {
       return readDoubleFallback(start);
@@ -2279,7 +2301,8 @@ public final class Utf8JsonReader extends JsonReader {
       throw error("Expected string");
     }
     int digitStart = position;
-    if (digitStart < inputLimit && input[digitStart] == '-') {
+    boolean negative = digitStart < inputLimit && input[digitStart] == '-';
+    if (negative) {
       digitStart++;
     }
     if (digitStart >= inputLimit) {
@@ -2290,12 +2313,9 @@ public final class Utf8JsonReader extends JsonReader {
       position = nameStart;
       return super.readFieldNameInt();
     }
-    if (ch < '0' || ch > '9') {
-      throw error("Expected integer field name");
-    }
-    // Reuse the native token's bounded digit scan and overflow handling. Escaped member names
-    // still need the decoded-string path, and the closing quote belongs to this operation.
-    int result = readIntToken();
+    // Both entries resolve the sign and first byte before sharing digit accumulation and overflow
+    // handling. The magnitude reader cannot interpret another quote as a nested quoted scalar.
+    int result = readIntMagnitude(input, digitStart, inputLimit, ch, negative);
     if (position >= inputLimit) {
       throw error("Unterminated string");
     }
@@ -2536,10 +2556,42 @@ public final class Utf8JsonReader extends JsonReader {
   @Override
   public LocalTime readIsoLocalTime() {
     skipWhitespaceFast();
+    byte[] bytes = input;
+    int limit = inputLimit;
     int mark = position;
-    if (mark < inputLimit && input[mark] == '"') {
-      LocalTime value = tryReadTime(mark + 1);
-      if (value != null && position < inputLimit && input[position] == '"') {
+    int start = mark + 1;
+    // This owner validates a complete quoted time before constructing its result. The fractional
+    // reader may update position; date/time formats retain tryReadTime for unquoted components.
+    parse:
+    {
+      if (mark >= limit || bytes[mark] != '"') {
+        break parse;
+      }
+      if (start <= limit - 9) {
+        long text = LittleEndian.getInt64(bytes, start);
+        long digits = text - 0x30303a30303a3030L;
+        if (((digits | (0x39393a39393a3939L - text)) & ASCII_HIGH_BITS) == 0) {
+          int hour = (int) (digits & 0xff) * 10 + (int) ((digits >>> 8) & 0xff);
+          int minute = (int) ((digits >>> 24) & 0xff) * 10 + (int) ((digits >>> 32) & 0xff);
+          int second = (int) ((digits >>> 48) & 0xff) * 10 + (int) (digits >>> 56);
+          int end = start + 8;
+          int nano = 0;
+          if (bytes[end] == '.') {
+            nano = readFractionNanos(end + 1);
+            end = position;
+          }
+          if (hour > 23 || minute > 59 || second > 59) {
+            break parse;
+          }
+          if (end >= limit || bytes[end] != '"') {
+            break parse;
+          }
+          position = end + 1;
+          return localTime(hour, minute, second, nano);
+        }
+      }
+      LocalTime value = tryReadMinuteTime(start);
+      if (value != null && position < limit && bytes[position] == '"') {
         position++;
         return value;
       }
@@ -2593,8 +2645,12 @@ public final class Utf8JsonReader extends JsonReader {
         (datePrefix & 0xffffffffL)
             | ((datePrefix >>> 8) & 0xffff00000000L)
             | ((long) ((dateSuffix >>> 8) & 0xffff) << 48);
-    long dateDigits = dateText - ASCII_ZEROES;
-    if (((dateDigits | (ASCII_NINES - dateText)) & ASCII_HIGH_BITS) != 0) {
+    // ASCII digits have high nibble 3 and low nibble below 10. Adding six to each
+    // isolated low nibble exposes values 10 through 15 without carrying into another byte.
+    long dateDigits = dateText & 0x0f0f0f0f0f0f0f0fL;
+    if ((((dateText ^ ASCII_ZEROES) & 0xf0f0f0f0f0f0f0f0L)
+            | ((dateDigits + 0x0606060606060606L) & 0x1010101010101010L))
+        != 0) {
       return null;
     }
     long datePairs = ((dateDigits * (10 * 256 + 1)) >>> 8) & 0x00ff00ff00ff00ffL;
@@ -2607,8 +2663,10 @@ public final class Utf8JsonReader extends JsonReader {
             | ((timePrefix >>> 8) & 0xffff0000L)
             | ((timePrefix >>> 16) & 0xffff00000000L)
             | 0x3030000000000000L;
-    long timeDigits = timeText - ASCII_ZEROES;
-    if (((timeDigits | (ASCII_NINES - timeText)) & ASCII_HIGH_BITS) != 0) {
+    long timeDigits = timeText & 0x0f0f0f0f0f0f0f0fL;
+    if ((((timeText ^ ASCII_ZEROES) & 0xf0f0f0f0f0f0f0f0L)
+            | ((timeDigits + 0x0606060606060606L) & 0x1010101010101010L))
+        != 0) {
       return null;
     }
     // The three pairs fit in separate 16-bit lanes. Biasing by 32768 minus each bound
@@ -2634,24 +2692,61 @@ public final class Utf8JsonReader extends JsonReader {
     }
     int end = start + 19;
     int nano = 0;
-    position = end;
-    if (bytes[end] == '.') {
-      nano = readFractionNanos(end + 1);
-      end = position;
-    }
-    if (end > limit - 2 || bytes[end] != 'Z' || bytes[end + 1] != '"') {
-      return null;
+    ending:
+    {
+      if (bytes[end] == '.') {
+        int fractionStart = end + 1;
+        fraction:
+        {
+          if (fractionStart > limit - Long.BYTES) {
+            break fraction;
+          }
+          long text = LittleEndian.getInt64(bytes, fractionStart);
+          long digits = text - ASCII_ZEROES;
+          long stop = (digits | (ASCII_NINES - text)) & ASCII_HIGH_BITS;
+          int last = 0;
+          if (stop != 0) {
+            int count = Long.numberOfTrailingZeros(stop) >>> 3;
+            // A short fraction and both UTC delimiters fit in the word already read.
+            if (count > 6 || ((text >>> (count << 3)) & 0xffff) != 0x225a) {
+              break fraction;
+            }
+            digits &= (1L << (count << 3)) - 1;
+            end = fractionStart + count + 2;
+          } else {
+            if (fractionStart > limit - 11) {
+              break fraction;
+            }
+            // This word overlaps the eighth digit and includes the ninth digit plus Z and quote.
+            int tail = LittleEndian.getInt32(bytes, fractionStart + 7);
+            last = ((tail >>> 8) & 0xff) - '0';
+            if ((tail >>> 16) != 0x225a || Integer.compareUnsigned(last, 9) > 0) {
+              break fraction;
+            }
+            end = fractionStart + 11;
+          }
+          // Share one conversion call so both fraction widths contribute to its inline profile.
+          nano = combineEightDigits(digits) * 10 + last;
+          break ending;
+        }
+        nano = readFractionNanos(fractionStart);
+        end = position;
+      }
+      if (end > limit - 2 || bytes[end] != 'Z' || bytes[end + 1] != '"') {
+        return null;
+      }
+      end += 2;
     }
     int epochDay = epochDay(year, month, day);
     // The middle product is hour * 3600 + minute * 60 + second. Higher cross terms are
     // multiples of 60, so their low two bits are zero and cannot disturb its seventeenth bit.
     int secondOfDay = (int) ((timePairs * 0x0e10003c0001L) >>> 32) & 0x1ffff;
-    position = end + 2;
+    position = end;
     return instant(epochDay * 86400L + secondOfDay, nano);
   }
 
   private static int epochDay(int year, int month, int day) {
-    // The component parser proves a four-digit year. Neri and Schneider, Proposition 6.2:
+    // Both component parsers prove a four-digit year. Neri and Schneider, Proposition 6.2:
     // https://arxiv.org/abs/2102.06959.
     // Moving four-digit years forward one Gregorian cycle keeps January/February of year zero
     // nonnegative. The epoch adjustment removes that cycle, and every product fits an int.
@@ -2738,13 +2833,26 @@ public final class Utf8JsonReader extends JsonReader {
       }
       int start = offset;
       long component = 0;
-      while (offset < limit) {
+      // Eighteen decimal digits fit in a long, including a negative accumulator. Keep checked
+      // arithmetic for the nineteenth and later digits, including zero-padded components.
+      int prefixEnd = offset + Math.min(18, limit - offset);
+      while (offset < prefixEnd) {
         int digit = bytes[offset] - '0';
         if (digit < 0 || digit > 9) {
           break;
         }
-        component = Math.subtractExact(Math.multiplyExact(component, 10L), digit);
+        component = component * 10 - digit;
         offset++;
+      }
+      if (offset == prefixEnd) {
+        while (offset < limit) {
+          int digit = bytes[offset] - '0';
+          if (digit < 0 || digit > 9) {
+            break;
+          }
+          component = Math.subtractExact(Math.multiplyExact(component, 10L), digit);
+          offset++;
+        }
       }
       if (offset == start || offset == limit) {
         return null;
@@ -2869,6 +2977,14 @@ public final class Utf8JsonReader extends JsonReader {
     byte[] bytes = input;
     int limit = inputLimit;
     int mark = position;
+    if (mark <= limit - Long.BYTES) {
+      // A cache hit proves the complete quoted token, including its sign and separators.
+      ZoneOffset cached = ZoneIdCache.Offsets.get(LittleEndian.getInt64(bytes, mark));
+      if (cached != null) {
+        position = mark + Long.BYTES;
+        return cached;
+      }
+    }
     // Own the complete offset token and its closing quote here. A small suffix delegate can
     // pull the offset parser into array loops and make performance depend on C2 compilation order.
     parse:
@@ -2893,11 +3009,6 @@ public final class Utf8JsonReader extends JsonReader {
         }
         // The bounded word includes both separators and the character after HH:mm.
         long text = LittleEndian.getInt64(bytes, mark);
-        ZoneOffset cached = ZoneIdCache.Offsets.get(text);
-        if (cached != null) {
-          position = mark + 8;
-          return cached;
-        }
         if ((text & 0x000000ff000000ffL) != 0x0000003a00000022L) {
           break parse;
         }
@@ -3060,8 +3171,10 @@ public final class Utf8JsonReader extends JsonReader {
     }
     // The token's explicit offset identifies one instant, including either side of an overlap.
     // Zone rules change on whole seconds; the original local date/time retains the nanoseconds.
+    // tryReadDateTime proves a four-digit year, as required by the integer epoch-day conversion.
+    LocalDate date = dateTime.toLocalDate();
     long epochSecond =
-        dateTime.toLocalDate().toEpochDay() * 86400
+        epochDay(date.getYear(), date.getMonthValue(), date.getDayOfMonth()) * 86400L
             + dateTime.toLocalTime().toSecondOfDay()
             - offsetSeconds;
     ZoneOffset offset = zone.getRules().getOffset(Instant.ofEpochSecond(epochSecond));
@@ -3112,15 +3225,23 @@ public final class Utf8JsonReader extends JsonReader {
     skipWhitespaceFast();
     int offset = position;
     byte[] bytes = input;
-    if (offset <= inputLimit - 9
-        && bytes[offset] == '"'
-        && bytes[offset + 5] == '-'
-        && bytes[offset + 8] == '"') {
-      int year = parseFourDigits(bytes, offset + 1, inputLimit);
-      int month = parse2(bytes, offset + 6);
-      if (year >= 0 && month >= 0) {
-        position = offset + 9;
-        return yearMonth(year, month);
+    if (offset <= inputLimit - 9) {
+      long word = LittleEndian.getInt64(bytes, offset);
+      if ((word & 0x0000ff00000000ffL) == 0x00002d0000000022L && bytes[offset + 8] == '"') {
+        // The complete token bounds this word. Gather YYYY and MM into six digit lanes;
+        // the high/low nibble checks validate all digits without borrowing between bytes.
+        long text =
+            ((word >>> 8) & 0xffffffffL) | ((word >>> 16) & 0xffff00000000L) | 0x3030000000000000L;
+        long digits = text & 0x0f0f0f0f0f0f0f0fL;
+        if ((((text ^ ASCII_ZEROES) & 0xf0f0f0f0f0f0f0f0L)
+                | ((digits + 0x0606060606060606L) & 0x1010101010101010L))
+            == 0) {
+          long pairs = ((digits * (10 * 256 + 1)) >>> 8) & 0x00ff00ff00ff00ffL;
+          int year = (int) (pairs & 0xffff) * 100 + (int) ((pairs >>> 16) & 0xffff);
+          int month = (int) (pairs >>> 32);
+          position = offset + 9;
+          return yearMonth(year, month);
+        }
       }
     }
     return super.readYearMonth();
@@ -4120,6 +4241,17 @@ public final class Utf8JsonReader extends JsonReader {
     long value = 0;
     int nameLength = 0;
     boolean latin1 = true;
+    if (cursor < length - Long.BYTES && bytes[cursor + Long.BYTES] != '"') {
+      long word = LittleEndian.getInt64(bytes, cursor);
+      if (stringStopMask(word) == 0) {
+        // Long ASCII names use FNV rather than a packed key. Seed it without rebuilding the
+        // same eight-byte prefix one character at a time; short names retain their packed key.
+        hash = JsonFieldNameHash.hashPacked(word, Long.BYTES);
+        nameLength = Long.BYTES;
+        latin1 = false;
+        cursor += Long.BYTES;
+      }
+    }
     while (cursor < length) {
       int b = bytes[cursor++];
       if (b == '"') {

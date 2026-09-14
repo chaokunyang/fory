@@ -32,6 +32,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -65,6 +66,9 @@ public class ZoneIdCacheTest {
     ZoneIdCache cache = new ZoneIdCache();
     ZoneId zeroHash = read(cache, "GMT", 0L);
     List<String> ids = new ArrayList<>(ZoneId.getAvailableZoneIds());
+    // Other tests register custom providers, whose IDs are deliberately excluded from the cache.
+    // Keep only built-in IDs that ZoneId can parse; TimeZone also lists legacy short aliases.
+    ids.retainAll(Arrays.asList(TimeZone.getAvailableIDs()));
     for (int quarter = -72; quarter <= 72; quarter++) {
       String offset = ZoneOffset.ofTotalSeconds(quarter * 900).getId();
       ids.add(offset);

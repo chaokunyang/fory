@@ -246,6 +246,10 @@ The text of each license is the standard Apache 2.0 license.
     Files:
       bazel/cython_library.bzl
 
+* dataclasses (https://github.com/ericvsmith/dataclasses)
+    Files:
+      python/pyfory/type_util.py (dataslots function)
+
 * abseil-cpp (https://github.com/abseil/abseil-cpp)
     Files:
       cpp/fory/thirdparty/flat_hash_map.h

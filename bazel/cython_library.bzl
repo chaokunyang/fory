@@ -1,5 +1,20 @@
-# Adapted from cython/Tools/rules.bzl
-# Uses official Cython rules pattern from BCR
+# Copyright 2021 The gRPC Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Adapted with modifications from grpc/grpc v1.46.6 bazel/cython_library.bzl,
+# including Fory's cc_kwargs patch. The gRPC rule was adapted from
+# tensorflow/tensorflow/core/platform/default/build_config.bzl.
 """Custom rules for building Cython extensions"""
 
 def pyx_library(name, deps = [], cc_kwargs = {}, py_deps = [], srcs = [], **kwargs):

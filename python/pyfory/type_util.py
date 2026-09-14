@@ -579,6 +579,8 @@ def load_class(classname: str, policy=None):
 
 
 # This method is derived from https://github.com/ericvsmith/dataclasses/blob/5f6568c3468f872e8f447dc20666628387786397/dataclass_tools.py.
+# Copyright 2017-2022 Eric V. Smith, all rights reserved.
+# Licensed under the Apache License, Version 2.0.
 def dataslots(cls):
     # Need to create a new class, since we can't set __slots__
     #  after a class has been created.

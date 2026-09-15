@@ -23,9 +23,30 @@ import static org.testng.Assert.assertEquals;
 
 import java.nio.charset.StandardCharsets;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.memory.NativeByteOrder;
 import org.testng.annotations.Test;
 
 public class StringEncodingUtilsTest extends ForyTestBase {
+  @Test
+  public void testCharWords() {
+    char[] chars = new char[512];
+    for (int i = 0; i < chars.length; i++) {
+      chars[i] = (char) (i * 127 + 1);
+    }
+    long[] expected = new long[32];
+    for (int i = 0; i < expected.length; i++) {
+      for (int j = 0; j < 4; j++) {
+        int shift = NativeByteOrder.IS_LITTLE_ENDIAN ? j * 16 : (3 - j) * 16;
+        expected[i] |= (long) chars[i + j] << shift;
+      }
+    }
+    // Exercise the actual string access owner before and after C2 compilation.
+    for (int call = 0; call < 100_000; call++) {
+      int index = call & 31;
+      assertEquals(PlatformStringUtils.getCharsLong(chars, index), expected[index]);
+    }
+  }
+
   @Test
   public void testUTF8ToUTF16() {
     String input = "jbmbmner8 jhk hj \n \t üäßß@µ你好";

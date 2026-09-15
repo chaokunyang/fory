@@ -65,7 +65,11 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
             .build();
     new ObjectCodecBuilder(Foo.class, fory).genCode();
     // System.out.println(code);
-    new ObjectCodecBuilder(BeanA.class, fory).genCode();
+    String code = new ObjectCodecBuilder(BeanA.class, fory).genCode();
+    if (JdkVersion.JDK8_ARM && !compressNumber) {
+      Assert.assertTrue(code.contains("_UnsafeUtils.getLong("));
+      Assert.assertTrue(code.contains("_UnsafeUtils.putLong("));
+    }
     new ObjectCodecBuilder(BeanB.class, fory).genCode();
     new ObjectCodecBuilder(Struct.createStructClass("ObjectCodecBuilderTestStruct", 1), fory)
         .genCode();

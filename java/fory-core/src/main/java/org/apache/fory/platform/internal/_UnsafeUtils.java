@@ -48,6 +48,7 @@ public final class _UnsafeUtils {
   // wide Unsafe operation is insufficient: inlining recreates the faulty address expression.
   // The separate methods below share each computed address between two narrower accesses so C2
   // materializes the address instead of folding its scale into a single mismatched instruction.
+  // Hot callers branch on JDK8_ARM directly to avoid an extra wrapper consuming JIT inlining depth.
 
   /** Reads a native-order char at an unchecked object or native-memory byte offset. */
   public static char getChar(Object base, long offset) {
@@ -135,24 +136,28 @@ public final class _UnsafeUtils {
     }
   }
 
-  private static short getShortBytes(Object base, long offset) {
+  /** Reads a native-order short using two byte loads at an unchecked byte offset. */
+  public static short getShortBytes(Object base, long offset) {
     int value = (UNSAFE.getByte(base, offset) & 0xff) | (UNSAFE.getByte(base, offset + 1) << 8);
     return NativeByteOrder.IS_LITTLE_ENDIAN ? (short) value : Short.reverseBytes((short) value);
   }
 
-  private static int getIntFromShorts(Object base, long offset) {
+  /** Reads a native-order int using two short loads at an unchecked byte offset. */
+  public static int getIntFromShorts(Object base, long offset) {
     int first = UNSAFE.getShort(base, offset) & 0xffff;
     int second = UNSAFE.getShort(base, offset + 2) & 0xffff;
     return NativeByteOrder.IS_LITTLE_ENDIAN ? first | (second << 16) : (first << 16) | second;
   }
 
-  private static long getLongFromInts(Object base, long offset) {
+  /** Reads a native-order long using two int loads at an unchecked byte offset. */
+  public static long getLongFromInts(Object base, long offset) {
     long first = UNSAFE.getInt(base, offset) & 0xffffffffL;
     long second = UNSAFE.getInt(base, offset + 4) & 0xffffffffL;
     return NativeByteOrder.IS_LITTLE_ENDIAN ? first | (second << 32) : (first << 32) | second;
   }
 
-  private static void putShortBytes(Object base, long offset, short value) {
+  /** Writes a native-order short using two byte stores at an unchecked byte offset. */
+  public static void putShortBytes(Object base, long offset, short value) {
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       value = Short.reverseBytes(value);
     }
@@ -160,7 +165,8 @@ public final class _UnsafeUtils {
     UNSAFE.putByte(base, offset + 1, (byte) (value >>> 8));
   }
 
-  private static void putIntAsShorts(Object base, long offset, int value) {
+  /** Writes a native-order int using two short stores at an unchecked byte offset. */
+  public static void putIntAsShorts(Object base, long offset, int value) {
     if (NativeByteOrder.IS_LITTLE_ENDIAN) {
       UNSAFE.putShort(base, offset, (short) value);
       UNSAFE.putShort(base, offset + 2, (short) (value >>> 16));
@@ -170,7 +176,8 @@ public final class _UnsafeUtils {
     }
   }
 
-  private static void putLongAsInts(Object base, long offset, long value) {
+  /** Writes a native-order long using two int stores at an unchecked byte offset. */
+  public static void putLongAsInts(Object base, long offset, long value) {
     if (NativeByteOrder.IS_LITTLE_ENDIAN) {
       UNSAFE.putInt(base, offset, (int) value);
       UNSAFE.putInt(base, offset + 4, (int) (value >>> 32));

@@ -19,6 +19,8 @@
 
 package org.apache.fory.serializer;
 
+import static org.apache.fory.platform.JdkVersion.JDK8_ARM;
+
 import java.lang.reflect.Field;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
@@ -143,7 +145,11 @@ final class PlatformStringUtils {
         return (c0 << 48) | (c1 << 32) | (c2 << 16) | c3;
       }
     }
-    return _UnsafeUtils.getLong(chars, CHAR_ARRAY_OFFSET + ((long) charIndex << 1));
+    if (JDK8_ARM) {
+      return _UnsafeUtils.getLongFromInts(chars, CHAR_ARRAY_OFFSET + ((long) charIndex << 1));
+    } else {
+      return UNSAFE.getLong(chars, CHAR_ARRAY_OFFSET + ((long) charIndex << 1));
+    }
   }
 
   static long getBytesLong(byte[] bytes, int byteIndex) {
@@ -169,7 +175,11 @@ final class PlatformStringUtils {
       }
     }
     // Compute the absolute array offset in long so large indices cannot overflow the addition.
-    return _UnsafeUtils.getLong(bytes, (long) BYTE_ARRAY_OFFSET + byteIndex);
+    if (JDK8_ARM) {
+      return _UnsafeUtils.getLongFromInts(bytes, (long) BYTE_ARRAY_OFFSET + byteIndex);
+    } else {
+      return UNSAFE.getLong(bytes, (long) BYTE_ARRAY_OFFSET + byteIndex);
+    }
   }
 
   static char getBytesChar(byte[] bytes, int byteIndex) {
@@ -180,7 +190,11 @@ final class PlatformStringUtils {
         return (char) (((bytes[byteIndex] & 0xff) << 8) | (bytes[byteIndex + 1] & 0xff));
       }
     }
-    return _UnsafeUtils.getChar(bytes, (long) BYTE_ARRAY_OFFSET + byteIndex);
+    if (JDK8_ARM) {
+      return (char) _UnsafeUtils.getShortBytes(bytes, (long) BYTE_ARRAY_OFFSET + byteIndex);
+    } else {
+      return UNSAFE.getChar(bytes, (long) BYTE_ARRAY_OFFSET + byteIndex);
+    }
   }
 
   static void copyCharsToBytes(

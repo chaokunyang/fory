@@ -1,5 +1,7 @@
 package org.apache.fory.memory;
 
+import static org.apache.fory.platform.JdkVersion.JDK8_ARM;
+
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.internal._UnsafeUtils;
 import sun.misc.Unsafe;
@@ -81,7 +83,12 @@ public class LittleEndian {
       return MemoryOps.getInt64(o, index);
     }
     // Compute the absolute array offset in long so large indices cannot overflow the addition.
-    long v = _UnsafeUtils.getLong(o, (long) BYTE_ARRAY_OFFSET + index);
+    long v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getLongFromInts(o, (long) BYTE_ARRAY_OFFSET + index);
+    } else {
+      v = UNSAFE.getLong(o, (long) BYTE_ARRAY_OFFSET + index);
+    }
     return NativeByteOrder.IS_LITTLE_ENDIAN ? v : Long.reverseBytes(v);
   }
 
@@ -89,7 +96,12 @@ public class LittleEndian {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.getInt32(o, index);
     }
-    int v = _UnsafeUtils.getInt(o, (long) BYTE_ARRAY_OFFSET + index);
+    int v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getIntFromShorts(o, (long) BYTE_ARRAY_OFFSET + index);
+    } else {
+      v = UNSAFE.getInt(o, (long) BYTE_ARRAY_OFFSET + index);
+    }
     return NativeByteOrder.IS_LITTLE_ENDIAN ? v : Integer.reverseBytes(v);
   }
 
@@ -101,7 +113,11 @@ public class LittleEndian {
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       value = Integer.reverseBytes(value);
     }
-    _UnsafeUtils.putInt(o, (long) BYTE_ARRAY_OFFSET + index, value);
+    if (JDK8_ARM) {
+      _UnsafeUtils.putIntAsShorts(o, (long) BYTE_ARRAY_OFFSET + index, value);
+    } else {
+      UNSAFE.putInt(o, (long) BYTE_ARRAY_OFFSET + index, value);
+    }
   }
 
   public static void putInt64(byte[] o, int index, long value) {
@@ -113,6 +129,10 @@ public class LittleEndian {
       value = Long.reverseBytes(value);
     }
     // As in getInt64, widen before adding the array base offset.
-    _UnsafeUtils.putLong(o, (long) BYTE_ARRAY_OFFSET + index, value);
+    if (JDK8_ARM) {
+      _UnsafeUtils.putLongAsInts(o, (long) BYTE_ARRAY_OFFSET + index, value);
+    } else {
+      UNSAFE.putLong(o, (long) BYTE_ARRAY_OFFSET + index, value);
+    }
   }
 }

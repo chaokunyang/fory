@@ -143,7 +143,7 @@ final class PlatformStringUtils {
         return (c0 << 48) | (c1 << 32) | (c2 << 16) | c3;
       }
     }
-    return UNSAFE.getLong(chars, CHAR_ARRAY_OFFSET + ((long) charIndex << 1));
+    return _UnsafeUtils.getLong(chars, CHAR_ARRAY_OFFSET + ((long) charIndex << 1));
   }
 
   static long getBytesLong(byte[] bytes, int byteIndex) {
@@ -168,9 +168,8 @@ final class PlatformStringUtils {
             | ((long) bytes[byteIndex + 7] & 0xff);
       }
     }
-    // Unsafe object offsets are long. Keep the cast so JDK8-compiled bytecode calls
-    // getLong(Object, long) when the artifact runs on JDK9+.
-    return UNSAFE.getLong(bytes, (long) BYTE_ARRAY_OFFSET + byteIndex);
+    // Compute the absolute array offset in long so large indices cannot overflow the addition.
+    return _UnsafeUtils.getLong(bytes, (long) BYTE_ARRAY_OFFSET + byteIndex);
   }
 
   static char getBytesChar(byte[] bytes, int byteIndex) {
@@ -181,7 +180,7 @@ final class PlatformStringUtils {
         return (char) (((bytes[byteIndex] & 0xff) << 8) | (bytes[byteIndex + 1] & 0xff));
       }
     }
-    return UNSAFE.getChar(bytes, (long) BYTE_ARRAY_OFFSET + byteIndex);
+    return _UnsafeUtils.getChar(bytes, (long) BYTE_ARRAY_OFFSET + byteIndex);
   }
 
   static void copyCharsToBytes(

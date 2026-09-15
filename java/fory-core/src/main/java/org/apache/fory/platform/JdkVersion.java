@@ -19,11 +19,22 @@
 
 package org.apache.fory.platform;
 
-/** JDK version facts which are safe to load without initializing Unsafe-backed code. */
+import java.util.Locale;
+
+/** JDK runtime facts which are safe to load without initializing Unsafe-backed code. */
 public final class JdkVersion {
   public static final int MAJOR_VERSION = parseMajorVersion();
 
+  /** Whether indexed Unsafe accesses need the JDK 8 ARM compiler compatibility path. */
+  public static final boolean JDK8_ARM =
+      MAJOR_VERSION == 8 && isArm(System.getProperty("os.arch", ""));
+
   private JdkVersion() {}
+
+  private static boolean isArm(String arch) {
+    arch = arch.toLowerCase(Locale.ROOT);
+    return arch.startsWith("arm") || arch.startsWith("aarch64");
+  }
 
   private static int parseMajorVersion() {
     String version = System.getProperty("java.specification.version");

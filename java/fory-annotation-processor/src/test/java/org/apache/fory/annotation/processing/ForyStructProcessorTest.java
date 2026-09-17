@@ -71,7 +71,7 @@ public class ForyStructProcessorTest {
                 + "}\n");
     Assert.assertTrue(result.success, result.diagnostics());
     try (URLClassLoader loader = result.classLoader()) {
-      loader.setDefaultAssertionStatus(true);
+      loader.setDefaultAssertionStatus(false);
       Class<?> type = loader.loadClass("test.RequiredFields");
       for (boolean compatible : new boolean[] {false, true}) {
         Fory fory =
@@ -94,7 +94,7 @@ public class ForyStructProcessorTest {
           setField(type, value, name, null);
           SerializationException error =
               Assert.expectThrows(SerializationException.class, () -> fory.serialize(value));
-          Assert.assertTrue(error.getCause() instanceof AssertionError, error.toString());
+          Assert.assertTrue(error.getCause() instanceof IllegalArgumentException, error.toString());
           Assert.assertEquals(
               error.getCause().getMessage(),
               "Non-nullable field test.RequiredFields."

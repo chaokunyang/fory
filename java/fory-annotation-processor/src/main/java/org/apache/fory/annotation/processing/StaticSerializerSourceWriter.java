@@ -510,7 +510,7 @@ final class StaticSerializerSourceWriter {
   private void appendDirectWrite(SourceField field) {
     if (canEmitDirectStringField(field) || canEmitDirectArrayField(field)) {
       String fieldValue = "fieldValue" + field.id;
-      // Read once so record accessors and getters are not invoked again by the assertion.
+      // Read once so record accessors and getters are not invoked again by the null check.
       builder
           .append("          ")
           .append(field.erasedType)
@@ -520,11 +520,13 @@ final class StaticSerializerSourceWriter {
           .append(field.readExpression("value"))
           .append(";\n");
       builder
-          .append("          assert ")
+          .append("          if (")
           .append(fieldValue)
-          .append(" != null : \"Non-nullable field ")
+          .append(" == null) {\n")
+          .append("            throwNullFieldException(\"")
           .append(escape(field.declaringClass + "." + field.name))
-          .append(" is null. Use @Nullable on the field type to allow null values.\";\n");
+          .append("\");\n")
+          .append("          }\n");
       builder
           .append(
               canEmitDirectStringField(field)

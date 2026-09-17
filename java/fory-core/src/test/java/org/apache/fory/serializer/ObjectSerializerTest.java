@@ -97,9 +97,15 @@ public class ObjectSerializerTest extends ForyTestBase {
             field.set(value, null);
             SerializationException error =
                 Assert.expectThrows(SerializationException.class, () -> fory.serialize(value));
-            Assert.assertTrue(error.getCause() instanceof AssertionError, error.toString());
-            Assert.assertTrue(error.getCause().getMessage().contains("Non-nullable field"));
-            Assert.assertTrue(error.getCause().getMessage().contains("@Nullable"));
+            Assert.assertTrue(
+                error.getCause() instanceof IllegalArgumentException, error.toString());
+            Assert.assertEquals(
+                error.getCause().getMessage(),
+                "Non-nullable field "
+                    + RequiredFields.class.getName()
+                    + "."
+                    + field.getName()
+                    + " is null. Use @Nullable on the field type to allow null values.");
             field.set(value, previous);
             assertEquals(fory.deserialize(fory.serialize(value)), value);
           }

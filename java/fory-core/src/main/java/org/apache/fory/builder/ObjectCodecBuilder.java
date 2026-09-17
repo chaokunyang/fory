@@ -23,7 +23,7 @@ import static org.apache.fory.codegen.Code.LiteralValue.FalseLiteral;
 import static org.apache.fory.codegen.Expression.Invoke.inlineInvoke;
 import static org.apache.fory.codegen.ExpressionUtils.add;
 import static org.apache.fory.codegen.ExpressionUtils.cast;
-import static org.apache.fory.codegen.ExpressionUtils.neqNull;
+import static org.apache.fory.codegen.ExpressionUtils.eqNull;
 import static org.apache.fory.collection.Collections.ofHashSet;
 import static org.apache.fory.type.TypeUtils.OBJECT_ARRAY_TYPE;
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
@@ -67,6 +67,7 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.serializer.AbstractObjectSerializer;
 import org.apache.fory.serializer.GraphMemoryEstimates;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.type.BFloat16;
@@ -230,15 +231,14 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       return fieldValue;
     }
     // Check the actual value before unboxing or Unsafe string access. Schema non-nullability
-    // alone is not proof that a Java reference is non-null; keep validation assertion-only.
+    // alone is not proof that a Java reference is non-null, even when assertions are disabled.
     return new ListExpression(
-        new Expression.Assert(
-            neqNull(fieldValue),
-            "Non-nullable field "
-                + descriptor.getDeclaringClass()
-                + "."
-                + descriptor.getName()
-                + " is null. Use @Nullable on the field type to allow null values."),
+        new Expression.If(
+            eqNull(fieldValue),
+            new StaticInvoke(
+                AbstractObjectSerializer.class,
+                "throwNullFieldException",
+                Literal.ofString(descriptor.getDeclaringClass() + "." + descriptor.getName()))),
         fieldValue);
   }
 

@@ -167,8 +167,7 @@ public class Record {
 - Boxed types (`Integer`, `Long`, etc.) that can be null should use `@Nullable`.
 
 Serialization fails if a field without a null or reference flag contains null. The error identifies
-the field and recommends `@Nullable`. This check is always enabled and does not require JVM assertions
-(`-ea`).
+the field and recommends `@Nullable`.
 
 ## Reference Tracking (`@Ref`)
 

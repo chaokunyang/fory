@@ -743,6 +743,38 @@ public interface Expression {
     }
   }
 
+  class Assert extends AbstractExpression {
+    private Expression predicate;
+    private final String message;
+
+    public Assert(Expression predicate, String message) {
+      super(predicate);
+      checkArgument(predicate.type().equals(PRIMITIVE_BOOLEAN_TYPE));
+      this.predicate = predicate;
+      this.message = message;
+    }
+
+    @Override
+    public TypeRef<?> type() {
+      return PRIMITIVE_VOID_TYPE;
+    }
+
+    @Override
+    public ExprCode doGenCode(CodegenContext ctx) {
+      ExprCode condition = predicate.genCode(ctx);
+      StringBuilder code = new StringBuilder();
+      if (StringUtils.isNotBlank(condition.code())) {
+        code.append(condition.code()).append('\n');
+      }
+      code.append("assert ")
+          .append(condition.value())
+          .append(" : ")
+          .append(Literal.ofString(message).genCode(ctx).value())
+          .append(';');
+      return new ExprCode(code.toString(), null, null);
+    }
+  }
+
   class ForceEvaluate extends AbstractExpression {
     private Expression expression;
 

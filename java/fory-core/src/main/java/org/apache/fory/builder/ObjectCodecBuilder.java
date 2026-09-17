@@ -23,6 +23,7 @@ import static org.apache.fory.codegen.Code.LiteralValue.FalseLiteral;
 import static org.apache.fory.codegen.Expression.Invoke.inlineInvoke;
 import static org.apache.fory.codegen.ExpressionUtils.add;
 import static org.apache.fory.codegen.ExpressionUtils.cast;
+import static org.apache.fory.codegen.ExpressionUtils.neqNull;
 import static org.apache.fory.collection.Collections.ofHashSet;
 import static org.apache.fory.type.TypeUtils.OBJECT_ARRAY_TYPE;
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
@@ -220,6 +221,25 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       boolean inline = hasFewFields() || (group.size() == 1 && numGroups < 10);
       expressions.add(serializeGroup(group, bean, buffer, inline));
     }
+  }
+
+  @Override
+  protected Expression getFieldValue(Expression bean, Descriptor descriptor) {
+    Expression fieldValue = super.getFieldValue(bean, descriptor);
+    if (fieldValue.type().isPrimitive() || descriptor.isNullable() || descriptor.isTrackingRef()) {
+      return fieldValue;
+    }
+    // Check the actual value before unboxing or Unsafe string access. Schema non-nullability
+    // alone is not proof that a Java reference is non-null; keep validation assertion-only.
+    return new ListExpression(
+        new Expression.Assert(
+            neqNull(fieldValue),
+            "Non-nullable field "
+                + descriptor.getDeclaringClass()
+                + "."
+                + descriptor.getName()
+                + " is null. Use @Nullable on the field type to allow null values."),
+        fieldValue);
   }
 
   protected boolean hasFewFields() {

@@ -166,6 +166,10 @@ public class Record {
 - When a field is non-nullable, Fory skips writing the null flag.
 - Boxed types (`Integer`, `Long`, etc.) that can be null should use `@Nullable`.
 
+Run the JVM with `-ea` to diagnose null values in fields whose schema does not allow null. These
+assertions report a message recommending `@Nullable` before the field is serialized. Assertions
+are disabled by default; they do not make null values valid for non-nullable fields.
+
 ## Reference Tracking (`@Ref`)
 
 Enable reference tracking for fields that may be shared or circular:

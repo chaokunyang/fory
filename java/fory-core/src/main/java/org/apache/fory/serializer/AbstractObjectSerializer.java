@@ -130,6 +130,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       RefMode refMode,
       MemoryBuffer buffer,
       Object fieldValue) {
+    assert fieldValue != null || refMode != RefMode.NONE
+        : "Non-nullable field is null. Use @Nullable on the field type to allow null values.";
     if (fieldInfo.useDeclaredTypeInfo) {
       Serializer<Object> serializer = fieldInfo.typeInfo.getSerializer();
       if (refMode == RefMode.TRACKING) {
@@ -378,6 +380,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       MemoryBuffer buffer,
       Object fieldValue,
       SerializationFieldInfo fieldInfo) {
+    assert fieldValue != null
+        : "Non-nullable field is null. Use @Nullable on the field type to allow null values.";
     if (fieldValue == null) {
       throw new IllegalArgumentException(
           "Non-nullable field has null value. In xlang mode, fields are non-nullable by default. "
@@ -480,6 +484,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer,
       Object fieldValue) {
+    assert fieldValue != null || fieldInfo.refMode != RefMode.NONE
+        : "Non-nullable field is null. Use @Nullable on the field type to allow null values.";
     if (fieldInfo.refMode == RefMode.TRACKING) {
       if (refWriter.writeRefOrNull(buffer, fieldValue)) {
         return;

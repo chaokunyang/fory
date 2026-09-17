@@ -23,6 +23,7 @@ import static org.apache.fory.codegen.Code.LiteralValue.FalseLiteral;
 import static org.apache.fory.codegen.Expression.Invoke.inlineInvoke;
 import static org.apache.fory.codegen.ExpressionUtils.add;
 import static org.apache.fory.codegen.ExpressionUtils.cast;
+import static org.apache.fory.codegen.ExpressionUtils.eqNull;
 import static org.apache.fory.collection.Collections.ofHashSet;
 import static org.apache.fory.type.TypeUtils.OBJECT_ARRAY_TYPE;
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
@@ -66,6 +67,7 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.serializer.AbstractObjectSerializer;
 import org.apache.fory.serializer.GraphMemoryEstimates;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.type.BFloat16;
@@ -220,6 +222,24 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       boolean inline = hasFewFields() || (group.size() == 1 && numGroups < 10);
       expressions.add(serializeGroup(group, bean, buffer, inline));
     }
+  }
+
+  @Override
+  protected Expression getFieldValue(Expression bean, Descriptor descriptor) {
+    Expression fieldValue = super.getFieldValue(bean, descriptor);
+    if (fieldValue.type().isPrimitive() || descriptor.isNullable() || descriptor.isTrackingRef()) {
+      return fieldValue;
+    }
+    // Check the actual value before unboxing or Unsafe string access. Schema non-nullability
+    // alone is not proof that a Java reference is non-null, even when assertions are disabled.
+    return new ListExpression(
+        new Expression.If(
+            eqNull(fieldValue),
+            new StaticInvoke(
+                AbstractObjectSerializer.class,
+                "throwNullFieldException",
+                Literal.ofString(descriptor.getDeclaringClass() + "." + descriptor.getName()))),
+        fieldValue);
   }
 
   protected boolean hasFewFields() {

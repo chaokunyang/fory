@@ -47,6 +47,7 @@ import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Types;
@@ -55,6 +56,61 @@ import org.testng.SkipException;
 import org.testng.annotations.Test;
 
 public class ForyStructProcessorTest {
+  @Test
+  public void testNonNullableFields() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.RequiredFields",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ArrayType;\n"
+                + "import org.apache.fory.annotation.ForyField;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct public class RequiredFields {\n"
+                + "  @ForyField public String name = \"fory\";\n"
+                + "  @ForyField @ArrayType public int[] numbers = new int[] {1};\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    try (URLClassLoader loader = result.classLoader()) {
+      loader.setDefaultAssertionStatus(false);
+      Class<?> type = loader.loadClass("test.RequiredFields");
+      for (boolean compatible : new boolean[] {false, true}) {
+        Fory fory =
+            Fory.builder()
+                .withXlang(true)
+                .withCompatible(compatible)
+                .withClassLoader(loader)
+                .withCodegen(false)
+                .build();
+        fory.register(type);
+        fory.registerSerializer(
+            type,
+            loader.loadClass("test.RequiredFields_ForySerializer").asSubclass(Serializer.class));
+        Assert.assertTrue(
+            fory.getTypeResolver().getTypeInfo(type).getSerializer()
+                instanceof StaticGeneratedStructSerializer);
+        Object value = type.getConstructor().newInstance();
+        for (String name : new String[] {"name", "numbers"}) {
+          Object previous = getField(type, value, name);
+          setField(type, value, name, null);
+          SerializationException error =
+              Assert.expectThrows(SerializationException.class, () -> fory.serialize(value));
+          Assert.assertTrue(error.getCause() instanceof IllegalArgumentException, error.toString());
+          Assert.assertEquals(
+              error.getCause().getMessage(),
+              "Non-nullable field test.RequiredFields."
+                  + name
+                  + " is null. Use @Nullable on the field type to allow null values."
+                  + " For Java-only serialization, use Fory.builder().withXlang(false);"
+                  + " unannotated reference fields are nullable by default in this mode.");
+          setField(type, value, name, previous);
+          Object restored = fory.deserialize(fory.serialize(value));
+          Assert.assertEquals(getField(type, restored, "name"), "fory");
+          Assert.assertEquals(getField(type, restored, "numbers"), new int[] {1});
+        }
+      }
+    }
+  }
+
   @Test
   public void testStaticSerializerSelectedWithCodegenDisabled() throws Exception {
     CompilationResult result =

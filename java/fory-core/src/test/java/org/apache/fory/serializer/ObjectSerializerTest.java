@@ -26,12 +26,21 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.TestUtils;
+import org.apache.fory.annotation.ForyField;
+import org.apache.fory.annotation.Nullable;
+import org.apache.fory.annotation.Ref;
 import org.apache.fory.builder.CodecUtils;
+import org.apache.fory.exception.SerializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.platform.AndroidSupport;
@@ -42,6 +51,82 @@ import org.testng.annotations.Test;
 
 @SuppressWarnings("unchecked")
 public class ObjectSerializerTest extends ForyTestBase {
+
+  @Data
+  public static class RequiredFields {
+    @ForyField private Integer priority = 1;
+    @ForyField private String description = "rule";
+    @ForyField private List<String> names = new ArrayList<>();
+    @ForyField private Map<String, String> properties = new HashMap<>();
+    @ForyField private FieldValue child = new FieldValue();
+
+    @ForyField(dynamic = ForyField.Dynamic.TRUE)
+    private Object value = new FieldValue();
+  }
+
+  @Data
+  public static class FieldValue {
+    private int number;
+  }
+
+  @Data
+  public static class NullableFields {
+    @Nullable private Integer priority;
+    @Nullable private String description;
+    @Ref private FieldValue child;
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testNonNullableFields(boolean codegen) throws Exception {
+    for (boolean xlang : new boolean[] {false, true}) {
+      for (boolean compatible : new boolean[] {false, true}) {
+        for (boolean compressed : new boolean[] {false, true}) {
+          Fory fory =
+              Fory.builder()
+                  .withXlang(xlang)
+                  .withCompatible(compatible)
+                  .withCodegen(codegen)
+                  .withIntCompressed(compressed)
+                  .build();
+          fory.register(RequiredFields.class);
+          fory.register(FieldValue.class);
+          RequiredFields value = new RequiredFields();
+          for (Field field : RequiredFields.class.getDeclaredFields()) {
+            field.setAccessible(true);
+            Object previous = field.get(value);
+            field.set(value, null);
+            SerializationException error =
+                Assert.expectThrows(SerializationException.class, () -> fory.serialize(value));
+            Assert.assertTrue(
+                error.getCause() instanceof IllegalArgumentException, error.toString());
+            Assert.assertEquals(
+                error.getCause().getMessage(),
+                "Non-nullable field "
+                    + RequiredFields.class.getName()
+                    + "."
+                    + field.getName()
+                    + " is null. Use @Nullable on the field type to allow null values."
+                    + " For Java-only serialization, use Fory.builder().withXlang(false);"
+                    + " unannotated reference fields are nullable by default in this mode.");
+            field.set(value, previous);
+            assertEquals(fory.deserialize(fory.serialize(value)), value);
+          }
+        }
+      }
+    }
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testNullableFields(boolean codegen) {
+    for (boolean xlang : new boolean[] {false, true}) {
+      Fory fory =
+          Fory.builder().withXlang(xlang).withCodegen(codegen).withRefTracking(true).build();
+      fory.register(NullableFields.class);
+      fory.register(FieldValue.class);
+      NullableFields value = new NullableFields();
+      assertEquals(fory.deserialize(fory.serialize(value)), value);
+    }
+  }
 
   @Test
   public void testLocalClass() {

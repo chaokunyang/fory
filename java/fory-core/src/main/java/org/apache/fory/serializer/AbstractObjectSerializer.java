@@ -116,7 +116,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     throw new IllegalArgumentException(
         "Non-nullable field "
             + fieldName
-            + " is null. Use @Nullable on the field type to allow null values.");
+            + " is null. Use @Nullable on the field type to allow null values."
+            + " For Java-only serialization, use Fory.builder().withXlang(false);"
+            + " unannotated reference fields are nullable by default in this mode.");
   }
 
   static void writeField(

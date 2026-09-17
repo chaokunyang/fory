@@ -99,7 +99,9 @@ public class ForyStructProcessorTest {
               error.getCause().getMessage(),
               "Non-nullable field test.RequiredFields."
                   + name
-                  + " is null. Use @Nullable on the field type to allow null values.");
+                  + " is null. Use @Nullable on the field type to allow null values."
+                  + " For Java-only serialization, use Fory.builder().withXlang(false);"
+                  + " unannotated reference fields are nullable by default in this mode.");
           setField(type, value, name, previous);
           Object restored = fory.deserialize(fory.serialize(value));
           Assert.assertEquals(getField(type, restored, "name"), "fory");

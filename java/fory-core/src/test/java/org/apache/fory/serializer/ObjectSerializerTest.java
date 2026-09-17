@@ -105,7 +105,9 @@ public class ObjectSerializerTest extends ForyTestBase {
                     + RequiredFields.class.getName()
                     + "."
                     + field.getName()
-                    + " is null. Use @Nullable on the field type to allow null values.");
+                    + " is null. Use @Nullable on the field type to allow null values."
+                    + " For Java-only serialization, use Fory.builder().withXlang(false);"
+                    + " unannotated reference fields are nullable by default in this mode.");
             field.set(value, previous);
             assertEquals(fory.deserialize(fory.serialize(value)), value);
           }

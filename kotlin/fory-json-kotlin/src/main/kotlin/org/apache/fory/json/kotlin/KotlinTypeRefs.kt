@@ -34,9 +34,23 @@ import org.apache.fory.type.Types
 
 /** Returns a structural Fory JSON type token which preserves Kotlin nullability and value types. */
 @OptIn(ExperimentalStdlibApi::class)
+public inline fun <reified T> jsonTypeRef(): TypeRef<T> = jsonTypeRef(typeOf<T>())
+
+/**
+ * Returns a structural Fory JSON type token for a Kotlin type obtained at runtime.
+ *
+ * Use this overload in framework callbacks where a reified type argument is unavailable. [type]
+ * preserves nested nullability, unsigned types, and value classes. It must describe a complete
+ * Kotlin type without unresolved type parameters, star projections, or contravariant projections.
+ *
+ * [T] provides the caller's static view of the token; it is not inferred from [type] or checked
+ * against it. Use `Any?` when only the runtime type is known. Construct the token once and reuse
+ * it.
+ *
+ * @throws ForyJsonException if [type] does not describe a supported complete Kotlin type.
+ */
 @Suppress("UNCHECKED_CAST")
-public inline fun <reified T> jsonTypeRef(): TypeRef<T> =
-  KotlinTypeRefs.from(typeOf<T>()) as TypeRef<T>
+public fun <T> jsonTypeRef(type: KType): TypeRef<T> = KotlinTypeRefs.from(type) as TypeRef<T>
 
 /** Kotlin/JVM type-token conversion used by public reified roots and metadata model discovery. */
 @OptIn(ExperimentalUnsignedTypes::class)

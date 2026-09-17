@@ -69,6 +69,10 @@ Construct each `jsonTypeRef<T>()` once and reuse it. It preserves distinctions t
 cannot express, including occurrence nullability, unsigned semantics, value-class identity, and
 nested generic arguments such as `List<Account?>`.
 
+For framework callbacks with a runtime Kotlin `KType`, use `jsonTypeRef<Any?>(kType)`.
+See [Kotlin integration](../../docs/json/integration.md#kotlin-integration)
+for controller method discovery and request/response conversion.
+
 `ForyJsonKotlin.builder()` is equivalent to installing the module explicitly:
 
 ```kotlin

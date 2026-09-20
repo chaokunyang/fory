@@ -2169,9 +2169,21 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       Object[] array = (Object[]) value;
       Utf8WriterCodec<Object> codec = elementTypeInfo.utf8Writer();
       writer.writeArrayStart();
-      for (int i = 0; i < array.length; i++) {
-        writer.writeComma(i);
-        writeElement(writer, codec, array[i]);
+      if (array.length != 0) {
+        writeElement(writer, codec, array[0]);
+        int i = 1;
+        // The first element owns the separator-free case; the paired loop keeps each
+        // element's codec invocation and null policy in their original order.
+        for (; i + 1 < array.length; i += 2) {
+          writer.writeComma(1);
+          writeElement(writer, codec, array[i]);
+          writer.writeComma(1);
+          writeElement(writer, codec, array[i + 1]);
+        }
+        if (i < array.length) {
+          writer.writeComma(1);
+          writeElement(writer, codec, array[i]);
+        }
       }
       writer.writeArrayEnd();
     }

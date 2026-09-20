@@ -88,25 +88,27 @@ private[scala] object ScalaJsonCodecMacros {
     val singletonExpressions = caseExpressions.map(_._2)
     val nameExpressions = cases.map(child => Expr(child.name.stripSuffix("$")))
 
-    // Bound the generated identity chain; large schemas retain the table-based codec.
-    if (stringEnum && cases.size <= 8) {
+    val tokens = cases.map(child => "\"" + child.name.stripSuffix("$") + "\"")
+    val packed = tokens.forall(token =>
+      JsonAsciiToken.isLongPackable(token) && token.substring(1, token.length - 1).forall(ch =>
+        ch >= ' ' && ch < 0x7f && ch != '"' && ch != '\\'))
+    // Bound the generated identity chain; other schemas retain the table-based codec.
+    if (stringEnum && cases.size <= 8 && packed) {
       // Use the splice's Quotes so method parameters remain in their defining scope on Scala 3.9+.
-      def write(writer: Expr[Utf8JsonWriter], value: Expr[Object])(using Quotes): Expr[Unit] = {
+      def write(
+          value: Expr[Object],
+          prefix: Long => Expr[Unit],
+          suffix: Long => Expr[Unit],
+          length: Int => Expr[Unit]
+      )(using Quotes): Expr[Unit] = {
         val unknown = '{ throw new ForyJsonException("Unknown Scala enum value") }
-        cases.zip(singletonExpressions).foldRight[Expr[Unit]](unknown) {
-          case ((child, singleton), next) =>
-            val name = child.name.stripSuffix("$")
-            val token = "\"" + name + "\""
-            val output =
-              if (
-                JsonAsciiToken.isLongPackable(token) &&
-                name.forall(ch => ch >= ' ' && ch < 0x7f && ch != '"' && ch != '\\')
-              ) {
-                '{ $writer.writeRawValue(
-                  ${ Expr(JsonAsciiToken.prefix(token)) },
-                  ${ Expr(JsonAsciiToken.suffixLong(token)) },
-                  ${ Expr(token.length) }) }
-              } else '{ $writer.writeString(${ Expr(name) }) }
+        tokens.zip(singletonExpressions).foldRight[Expr[Unit]](unknown) {
+          case ((token, singleton), next) =>
+            val output = '{
+              ${ prefix(JsonAsciiToken.prefix(token)) }
+              ${ suffix(JsonAsciiToken.suffixLong(token)) }
+              ${ length(token.length) }
+            }
             '{ if ($value eq $singleton) $output else $next }
         }
       }
@@ -123,7 +125,15 @@ private[scala] object ScalaJsonCodecMacros {
           ): JsonValueCodec[_] = new ScalaEnumCodec(typeClass, values, labels) {
             override def writeUtf8(writer: Utf8JsonWriter, value: Object): Unit = {
               if (value == null) writer.writeNull()
-              else ${ write('writer, 'value) }
+              else {
+                var prefix = 0L
+                var suffix = 0L
+                var length = 0
+                ${ write('value, p => '{ prefix = ${ Expr(p) } },
+                  s => '{ suffix = ${ Expr(s) } }, n => '{ length = ${ Expr(n) } }) }
+                // A single call site keeps the packed write within the JIT's inlining budget.
+                writer.writeRawValue(prefix, suffix, length)
+              }
             }
           }
         }

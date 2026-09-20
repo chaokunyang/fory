@@ -75,9 +75,9 @@ object ManyCases {
 
 object PackedCases {
   sealed trait Value
+  case object Abcdefghijklmn extends Value
   case object A extends Value
   case object Abcdefg extends Value
-  case object Abcdefghijklmn extends Value
 }
 
 sealed trait MixedCard

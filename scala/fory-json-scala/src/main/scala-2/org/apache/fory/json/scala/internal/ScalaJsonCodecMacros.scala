@@ -75,6 +75,13 @@ private[scala] object ScalaJsonCodecMacros {
     // Bound the generated identity chain; other schemas retain the table-based codec.
     if (stringEnum && cases.size <= 8 && packed) {
       val unknown = q"throw new _root_.org.apache.fory.json.ForyJsonException(${"Unknown Scala enum value"})"
+      // Independent comparisons let the JIT select indices without an order-sensitive branch chain.
+      val indexChecks = singletons.zipWithIndex.map {
+        case (singleton, index) => q"if (value eq $singleton) index = $index"
+      }
+      val valueIndex = q"{ var index = -1; ..$indexChecks; if (index < 0) $unknown; index }"
+      // The generated indices and token table must share compiler order; the factory's runtime
+      // class-name sort can differ, especially for nested singleton hierarchies.
       val write = tokens.zip(singletons).foldRight[Tree](unknown) {
         case ((token, singleton), next) =>
           val output = q"""{
@@ -94,7 +101,11 @@ private[scala] object ScalaJsonCodecMacros {
               values: _root_.scala.Array[_root_.java.lang.Object],
               labels: _root_.scala.Array[_root_.java.lang.String]
           ): _root_.org.apache.fory.json.codec.JsonValueCodec[_] =
-            new _root_.org.apache.fory.json.scala.internal.ScalaEnumCodec(typeClass, values, labels) {
+            new _root_.org.apache.fory.json.scala.internal.ScalaEnumCodec(
+              typeClass, _root_.scala.Array[_root_.scala.AnyRef](..$singletons),
+              _root_.scala.Array[_root_.java.lang.String](..$names)) {
+              override protected def valueIndex(value: _root_.java.lang.Object): Int = $valueIndex
+
               override def writeUtf8(
                   writer: _root_.org.apache.fory.json.writer.Utf8JsonWriter,
                   value: _root_.java.lang.Object

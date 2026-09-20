@@ -94,6 +94,17 @@ private[scala] object ScalaJsonCodecMacros {
         ch >= ' ' && ch < 0x7f && ch != '"' && ch != '\\'))
     // Bound the generated identity chain; other schemas retain the table-based codec.
     if (stringEnum && cases.size <= 8 && packed) {
+      // The generated indices and token table must share compiler order; the factory's runtime
+      // class-name sort can differ, especially for nested singleton hierarchies.
+      def enumIndex(value: Expr[Object])(using Quotes): Expr[Int] = {
+        val unknown = '{ throw new ForyJsonException("Unknown Scala enum value") }
+        // Independent comparisons let the JIT select indices without an order-sensitive branch chain.
+        val selected = singletonExpressions.zipWithIndex.foldLeft[Expr[Int]](Expr(-1)) {
+          case (previous, (singleton, index)) =>
+            '{ val prior = $previous; if ($value eq $singleton) ${ Expr(index) } else prior }
+        }
+        '{ val index = $selected; if (index < 0) $unknown else index }
+      }
       // Use the splice's Quotes so method parameters remain in their defining scope on Scala 3.9+.
       def write(
           value: Expr[Object],
@@ -122,7 +133,11 @@ private[scala] object ScalaJsonCodecMacros {
         ) {
           override protected def stringEnumCodec(
               typeClass: Class[_], values: Array[Object], labels: Array[String]
-          ): JsonValueCodec[_] = new ScalaEnumCodec(typeClass, values, labels) {
+          ): JsonValueCodec[_] = new ScalaEnumCodec(
+            typeClass, Array[AnyRef](${ Varargs(singletonExpressions) }*),
+            Array[String](${ Varargs(nameExpressions) }*)) {
+            override protected def valueIndex(value: Object): Int = ${ enumIndex('value) }
+
             override def writeUtf8(writer: Utf8JsonWriter, value: Object): Unit = {
               if (value == null) writer.writeNull()
               else {

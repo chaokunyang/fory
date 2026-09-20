@@ -24,10 +24,10 @@ import java.util.{HashMap, IdentityHashMap}
 
 import org.apache.fory.annotation.Internal
 import org.apache.fory.json.ForyJsonException
-import org.apache.fory.json.codec.JsonValueCodec
+import org.apache.fory.json.codec.{JsonValueCodec, StringEnumCodec}
 import org.apache.fory.json.meta.JsonAsciiToken
 import org.apache.fory.json.reader.{Latin1JsonReader, Utf16JsonReader, Utf8JsonReader}
-import org.apache.fory.json.writer.{StringJsonWriter, Utf8JsonWriter}
+import org.apache.fory.json.writer.StringJsonWriter
 import org.apache.fory.reflect.TypeRef
 
 private[scala] object ScalaEnumCodec {
@@ -80,7 +80,7 @@ private[scala] object ScalaEnumCodec {
 class ScalaEnumCodec(
     typeClass: Class[_], values: Array[Object], names: Array[String]
 )
-    extends JsonValueCodec[Object] {
+    extends StringEnumCodec[Object](names) {
   private val byName = new HashMap[String, Object](values.length * 2)
   private val indexByValue = new IdentityHashMap[Object, Integer](values.length * 2)
   private val tokenPrefixes = new Array[Long](values.length)
@@ -96,7 +96,7 @@ class ScalaEnumCodec(
       throw new ForyJsonException(s"Duplicate Scala enum name $name on ${typeClass.getName}")
     indexByValue.put(value, Integer.valueOf(index))
     val token = "\"" + name + "\""
-    // Only complete, JSON-safe ASCII tokens can be shared by Latin1 input and raw UTF8 output.
+    // Only complete, JSON-safe ASCII tokens have identical Latin1 and UTF8 input bytes.
     // Escaped, longer and non-ASCII names keep the ordinary string codec's exact matching.
     if (
       JsonAsciiToken.isPackable(token) &&
@@ -109,7 +109,7 @@ class ScalaEnumCodec(
     }
   }
 
-  private def index(value: Object): Int = {
+  override protected def valueIndex(value: Object): Int = {
     val index = indexByValue.get(value)
     if (index == null) throw new ForyJsonException(s"Expected Scala enum ${typeClass.getName}")
     index.intValue()
@@ -122,17 +122,7 @@ class ScalaEnumCodec(
   }
 
   override def writeString(writer: StringJsonWriter, v: Object): Unit = {
-    if (v == null) writer.writeNull() else writer.writeString(names(index(v)))
-  }
-
-  override def writeUtf8(writer: Utf8JsonWriter, v: Object): Unit = {
-    if (v == null) writer.writeNull()
-    else {
-      val i = index(v)
-      val length = tokenLengths(i)
-      if (length != 0) writer.writeRawValue(tokenPrefixes(i), tokenSuffixes(i).toLong, length)
-      else writer.writeString(names(i))
-    }
+    if (v == null) writer.writeNull() else writer.writeString(names(valueIndex(v)))
   }
 
   override def readLatin1(reader: Latin1JsonReader): Object = {

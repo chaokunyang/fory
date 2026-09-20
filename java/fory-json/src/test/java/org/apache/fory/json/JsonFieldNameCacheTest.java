@@ -206,7 +206,7 @@ public class JsonFieldNameCacheTest {
         (Latin1JsonReader)
             JsonTestSupport.pooledStateField(
                 json, (homeIndex + 1) % JsonTestSupport.pooledStateCount(json), "latin1Reader");
-    String sharedName = other.reset(latin1Bytes("\"b\"")).readFieldName();
+    String sharedName = other.reset(latin1Bytes("\"b\""), new byte[1024]).readFieldName();
     CachedFieldName shared = registry.cachedFieldName(JsonFieldNameHash.hash("b"));
     assertNotNull(shared);
     assertSame(shared.name(), sharedName);
@@ -243,7 +243,7 @@ public class JsonFieldNameCacheTest {
         (Latin1JsonReader)
             JsonTestSupport.pooledStateField(
                 json, (homeIndex + 1) % JsonTestSupport.pooledStateCount(json), "latin1Reader");
-    String sharedName = other.reset(latin1Bytes("\"q\"")).readFieldName();
+    String sharedName = other.reset(latin1Bytes("\"q\""), new byte[1024]).readFieldName();
     CachedFieldName shared = registry.cachedFieldName(JsonFieldNameHash.hash("q"));
     assertNotNull(shared);
     assertSame(shared.name(), sharedName);
@@ -277,8 +277,8 @@ public class JsonFieldNameCacheTest {
             JsonTestSupport.pooledStateField(
                 json, (homeIndex + 1) % JsonTestSupport.pooledStateCount(json), "latin1Reader");
 
-    String first = current.reset(latin1Bytes("\"shared\"")).readFieldName();
-    String second = other.reset(latin1Bytes("\"shared\"")).readFieldName();
+    String first = current.reset(latin1Bytes("\"shared\""), new byte[1024]).readFieldName();
+    String second = other.reset(latin1Bytes("\"shared\""), new byte[1024]).readFieldName();
     assertSame(second, first);
   }
 

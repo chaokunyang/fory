@@ -69,7 +69,7 @@ public class JsonStringTest extends ForyJsonTestModels {
         for (int offset = 0; offset < 8; offset++) {
           byte[] input = new byte[offset + token.length + 8];
           System.arraycopy(token, 0, input, offset, token.length);
-          reader.reset(input, offset, token.length);
+          reader.reset(input, offset, token.length, reader.getStringDecodeBuffer());
           if (raw >= 0x20 && raw < 0x80 && raw != '"' && raw != '\\') {
             assertEquals(reader.readFieldNameHash(), JsonFieldNameHash.hash(prefix + (char) raw));
             reader.expectNextToken(':');
@@ -112,14 +112,14 @@ public class JsonStringTest extends ForyJsonTestModels {
           for (int offset = 0; offset < 8; offset++) {
             byte[] bytes = new byte[offset + encoded.length + 8];
             System.arraycopy(encoded, 0, bytes, offset, encoded.length);
-            reader.reset(bytes, offset, encoded.length);
+            reader.reset(bytes, offset, encoded.length, reader.getStringDecodeBuffer());
             assertEquals(reader.readFieldNameHash(), JsonFieldNameHash.hash(name.toString()));
             reader.expectNextToken(':');
             assertEquals(reader.readInt(), 17);
             reader.finish();
             if (mask == (1 << length) - 1) {
               for (int end = 0; end < nameEnd; end++) {
-                reader.reset(bytes, offset, end);
+                reader.reset(bytes, offset, end, reader.getStringDecodeBuffer());
                 assertThrows(ForyJsonException.class, reader::readFieldNameHash);
               }
             }
@@ -147,7 +147,7 @@ public class JsonStringTest extends ForyJsonTestModels {
           for (int offset = 0; offset < 8; offset++) {
             byte[] bytes = new byte[offset + encoded.length + 8];
             System.arraycopy(encoded, 0, bytes, offset, encoded.length);
-            reader.reset(bytes, offset, encoded.length);
+            reader.reset(bytes, offset, encoded.length, reader.getStringDecodeBuffer());
             assertEquals(reader.readFieldNameHash(), JsonFieldNameHash.hash(name));
             reader.expectNextToken(':');
             assertEquals(reader.readNextIntValue(), 17);
@@ -170,7 +170,7 @@ public class JsonStringTest extends ForyJsonTestModels {
       for (int lane = 0; lane < 4; lane++) {
         token[3 + lane] = (byte) digits.charAt((value >>> (12 - lane * 4)) & 15);
       }
-      reader.reset(token);
+      reader.reset(token, reader.getStringDecodeBuffer());
       assertEquals(reader.readString(), String.valueOf((char) value));
       reader.expectNextToken(',');
       assertEquals(reader.readInt(), 17);
@@ -180,7 +180,7 @@ public class JsonStringTest extends ForyJsonTestModels {
       for (int value = 0; value < 256; value++) {
         Arrays.fill(token, 3, 7, (byte) '0');
         token[3 + lane] = (byte) value;
-        reader.reset(token);
+        reader.reset(token, reader.getStringDecodeBuffer());
         int digit = value < 128 ? Character.digit((char) value, 16) : -1;
         if (digit < 0) {
           assertThrows(ForyJsonException.class, reader::readString);
@@ -207,17 +207,17 @@ public class JsonStringTest extends ForyJsonTestModels {
             byte[] bytes = new byte[offset + encoded.length + 8];
             System.arraycopy(encoded, 0, bytes, offset, encoded.length);
             for (int length = 0; length < encoded.length; length++) {
-              reader.reset(bytes, offset, length);
+              reader.reset(bytes, offset, length, reader.getStringDecodeBuffer());
               assertThrows(ForyJsonException.class, () -> reader.readString());
             }
-            reader.reset(bytes, offset, encoded.length);
+            reader.reset(bytes, offset, encoded.length, reader.getStringDecodeBuffer());
             assertEquals(reader.readString(), (prefix.isEmpty() ? "" : "\u0100") + value);
             reader.finish();
             for (int digit = 0; digit < 4; digit++) {
               int index = offset + prefix.length() + 3 + digit;
               byte saved = bytes[index];
               bytes[index] = 'x';
-              reader.reset(bytes, offset, encoded.length);
+              reader.reset(bytes, offset, encoded.length, reader.getStringDecodeBuffer());
               assertThrows(ForyJsonException.class, () -> reader.readString());
               bytes[index] = saved;
             }
@@ -240,10 +240,10 @@ public class JsonStringTest extends ForyJsonTestModels {
           byte[] bytes = new byte[offset + encoded.length + 8];
           System.arraycopy(encoded, 0, bytes, offset, encoded.length);
           for (int length = 0; length < encoded.length - 3; length++) {
-            reader.reset(bytes, offset, length);
+            reader.reset(bytes, offset, length, reader.getStringDecodeBuffer());
             assertThrows(ForyJsonException.class, reader::readString);
           }
-          reader.reset(bytes, offset, encoded.length);
+          reader.reset(bytes, offset, encoded.length, reader.getStringDecodeBuffer());
           assertEquals(reader.readString(), "\u0100" + first + second);
           reader.expectNextToken(',');
           assertEquals(reader.readInt(), 17);
@@ -253,7 +253,7 @@ public class JsonStringTest extends ForyJsonTestModels {
               int index = offset + 9 + escape * 6 + digit;
               byte saved = bytes[index];
               bytes[index] = 'x';
-              reader.reset(bytes, offset, encoded.length);
+              reader.reset(bytes, offset, encoded.length, reader.getStringDecodeBuffer());
               assertThrows(ForyJsonException.class, reader::readString);
               bytes[index] = saved;
             }
@@ -268,7 +268,9 @@ public class JsonStringTest extends ForyJsonTestModels {
         text.append("\\u20ac\\n\\u0000\\uD834\\uDD1E\\uabcd\\uFFFF");
         expected.append("\u20ac\n\u0000\uD834\uDD1E\uabcd\uFFFF");
       }
-      reader.reset(text.append('"').toString().getBytes(StandardCharsets.US_ASCII));
+      reader.reset(
+          text.append('"').toString().getBytes(StandardCharsets.US_ASCII),
+          reader.getStringDecodeBuffer());
       assertEquals(reader.readString(), expected.toString());
       reader.finish();
     }
@@ -317,7 +319,7 @@ public class JsonStringTest extends ForyJsonTestModels {
     String input = "\"music \uD834\uDD1E\"";
     byte[] bytes = new byte[input.length() << 1];
     StringSerializer.copyStringCharsToBytes(input, bytes);
-    Utf16JsonReader reader = newUtf16Reader().reset(input, bytes);
+    Utf16JsonReader reader = newUtf16Reader().reset(input, bytes, new byte[1024]);
     assertEquals(reader.readString(), "music \uD834\uDD1E");
     reader.finish();
   }
@@ -336,13 +338,13 @@ public class JsonStringTest extends ForyJsonTestModels {
         for (int offset = 0; offset < 8; offset++) {
           byte[] bytes = new byte[offset + token.length + 8];
           System.arraycopy(token, 0, bytes, offset, token.length);
-          reader.reset(bytes, offset, token.length);
+          reader.reset(bytes, offset, token.length, reader.getStringDecodeBuffer());
           assertEquals(reader.readFieldNameHash(), JsonFieldNameHash.hash(name));
           reader.expectNextToken(':');
           assertEquals(reader.readInt(), 17);
           reader.finish();
           for (int length = 0; length < token.length - 3; length++) {
-            reader.reset(bytes, offset, length);
+            reader.reset(bytes, offset, length, reader.getStringDecodeBuffer());
             assertThrows(RuntimeException.class, reader::readFieldNameHash);
           }
         }
@@ -599,12 +601,18 @@ public class JsonStringTest extends ForyJsonTestModels {
       assertEquals(utf8.readString(), "text\n");
       assertEquals(latin1.readString(), "text\n");
       assertEquals(utf16.readString(), "text\n");
+      byte[] utf8Buffer = utf8.getStringDecodeBuffer();
+      byte[] latin1Buffer = latin1.getStringDecodeBuffer();
+      byte[] utf16Buffer = utf16.getStringDecodeBuffer();
       utf8.clear();
       latin1.clear();
       utf16.clear();
-      utf8.reset(bytes);
-      latin1.reset(bytes);
-      utf16.reset(document);
+      utf8.reset(bytes, utf8Buffer);
+      latin1.reset(bytes, latin1Buffer);
+      utf16.reset(document, utf16Buffer);
+      assertSame(utf8.getStringDecodeBuffer(), utf8Buffer);
+      assertSame(latin1.getStringDecodeBuffer(), latin1Buffer);
+      assertSame(utf16.getStringDecodeBuffer(), utf16Buffer);
     }
   }
 
@@ -1033,7 +1041,7 @@ public class JsonStringTest extends ForyJsonTestModels {
   private static Utf16JsonReader utf16Reader(String input) {
     byte[] bytes = new byte[input.length() << 1];
     StringSerializer.copyStringCharsToBytes(input, bytes);
-    return newUtf16Reader().reset(input, bytes);
+    return newUtf16Reader().reset(input, bytes, new byte[1024]);
   }
 
   private static long packedNameMask(int length) {

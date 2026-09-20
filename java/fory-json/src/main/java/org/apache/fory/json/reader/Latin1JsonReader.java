@@ -52,8 +52,6 @@ import org.apache.fory.serializer.StringSerializer;
  */
 public final class Latin1JsonReader extends JsonReader {
   private static final byte[] EMPTY_BYTES = new byte[0];
-  private static final int INITIAL_STRING_DECODE_BUFFER_SIZE = 1024;
-
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
   private static final long BYTE_ONES = 0x0101010101010101L;
   private static final int INT_BYTE_ONES = 0x01010101;
@@ -79,6 +77,8 @@ public final class Latin1JsonReader extends JsonReader {
   // JSON syntax bytes are ASCII, so hot token checks can compare signed bytes directly.
   // Latin1 string content and field-name hashing must keep unsigned byte conversion.
   private byte[] input;
+  // The caller supplies decode storage on every reset; avoid a redundant null check or allocation
+  // on pooled root setup. Decoding owns any subsequent growth.
   private byte[] stringDecodeBuffer;
 
   // Keep the cache after hot representation fields; an inherited reference shifts their offsets.
@@ -362,30 +362,30 @@ public final class Latin1JsonReader extends JsonReader {
     return candidate;
   }
 
-  public Latin1JsonReader(JsonConfig config, JsonTypeResolver typeResolver, byte[] input) {
+  public Latin1JsonReader(
+      JsonConfig config, JsonTypeResolver typeResolver, byte[] input, byte[] decodeBuffer) {
     this(config, typeResolver);
-    reset(input);
+    reset(input, decodeBuffer);
   }
 
-  public Latin1JsonReader(JsonConfig config, JsonTypeResolver typeResolver, String input) {
+  public Latin1JsonReader(
+      JsonConfig config, JsonTypeResolver typeResolver, String input, byte[] decodeBuffer) {
     this(config, typeResolver);
-    reset(input);
+    reset(input, decodeBuffer);
   }
 
-  public Latin1JsonReader reset(byte[] input) {
-    if (stringDecodeBuffer == null) {
-      stringDecodeBuffer = new byte[INITIAL_STRING_DECODE_BUFFER_SIZE];
-    }
+  /** Resets the input and borrows the caller's non-null decode buffer until {@link #clear()}. */
+  public Latin1JsonReader reset(byte[] input, byte[] decodeBuffer) {
+    stringDecodeBuffer = decodeBuffer;
     this.input = input;
     position = 0;
     reset();
     return this;
   }
 
-  public Latin1JsonReader reset(String input) {
-    if (stringDecodeBuffer == null) {
-      stringDecodeBuffer = new byte[INITIAL_STRING_DECODE_BUFFER_SIZE];
-    }
+  /** Resets the input and borrows the caller's non-null decode buffer until {@link #clear()}. */
+  public Latin1JsonReader reset(String input, byte[] decodeBuffer) {
+    stringDecodeBuffer = decodeBuffer;
     if (!StringSerializer.isBytesBackedString()) {
       throw new IllegalStateException("Latin1JsonReader requires byte-backed strings");
     }
@@ -404,12 +404,6 @@ public final class Latin1JsonReader extends JsonReader {
     input = EMPTY_BYTES;
     position = 0;
     stringDecodeBuffer = null;
-  }
-
-  /** Borrows the owning execution state's decode storage for one root operation. */
-  @Internal
-  public void setStringDecodeBuffer(byte[] buffer) {
-    stringDecodeBuffer = buffer;
   }
 
   /** Returns the current storage, including any growth, before {@link #clear()} detaches it. */

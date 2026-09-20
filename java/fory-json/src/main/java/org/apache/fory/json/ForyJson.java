@@ -1069,16 +1069,14 @@ public final class ForyJson {
     }
 
     private Latin1JsonReader latin1Reader(String input) {
-      latin1Reader.setStringDecodeBuffer(buffer);
+      latin1Reader.reset(input, buffer);
       buffer = null;
-      latin1Reader.reset(input);
       return latin1Reader;
     }
 
     private Utf16JsonReader utf16Reader(String input) {
-      utf16Reader.setStringDecodeBuffer(buffer);
+      utf16Reader.reset(input, buffer);
       buffer = null;
-      utf16Reader.reset(input);
       return utf16Reader;
     }
 
@@ -1100,25 +1098,22 @@ public final class ForyJson {
       }
       // JDK 8 char[]-backed Strings are converted once so parsing still uses UTF16 byte loads.
       StringSerializer.copyStringCharsToBytes(input, bytes);
-      utf16Reader.setStringDecodeBuffer(buffer);
+      utf16Reader.reset(input, bytes, buffer);
       buffer = null;
-      utf16Reader.reset(input, bytes);
       return utf16Reader;
     }
 
     private Utf8JsonReader utf8Reader(byte[] input) {
       // Keep full-array roots on the direct reset so the existing hot path does not pay the range
       // validation branches.
-      utf8Reader.setStringDecodeBuffer(buffer);
+      utf8Reader.reset(input, buffer);
       buffer = null;
-      utf8Reader.reset(input);
       return utf8Reader;
     }
 
     private Utf8JsonReader utf8Reader(byte[] input, int offset, int length) {
-      utf8Reader.setStringDecodeBuffer(buffer);
+      utf8Reader.reset(input, offset, length, buffer);
       buffer = null;
-      utf8Reader.reset(input, offset, length);
       return utf8Reader;
     }
 

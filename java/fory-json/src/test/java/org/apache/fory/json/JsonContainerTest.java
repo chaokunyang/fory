@@ -126,7 +126,7 @@ public class JsonContainerTest extends ForyJsonTestModels {
         byte[] input = new byte[offset + token.length + 8];
         Arrays.fill(input, (byte) '9');
         System.arraycopy(token, 0, input, offset, token.length);
-        reader.reset(input, offset, token.length);
+        reader.reset(input, offset, token.length, reader.getStringDecodeBuffer());
         assertEquals(reader.readFieldNameInt(), value);
         reader.finish();
       }
@@ -187,7 +187,7 @@ public class JsonContainerTest extends ForyJsonTestModels {
         byte[] input = new byte[offset + token.length + 8];
         Arrays.fill(input, (byte) '9');
         System.arraycopy(token, 0, input, offset, token.length);
-        reader.reset(input, offset, token.length);
+        reader.reset(input, offset, token.length, reader.getStringDecodeBuffer());
         assertEquals(reader.readFieldNameLong(), value);
         reader.finish();
       }

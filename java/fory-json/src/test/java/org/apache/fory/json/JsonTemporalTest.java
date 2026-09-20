@@ -241,7 +241,7 @@ public class JsonTemporalTest extends ForyJsonTestModels {
     for (int month = 0; month <= 13; month++) {
       for (int day = 0; day <= 32; day++) {
         String token = String.format(Locale.ROOT, "\"--%02d-%02d\" 17", month, day);
-        reader.reset(token.getBytes(StandardCharsets.US_ASCII));
+        reader.reset(token.getBytes(StandardCharsets.US_ASCII), reader.getStringDecodeBuffer());
         MonthDay expected;
         try {
           expected = MonthDay.of(month, day);
@@ -263,13 +263,13 @@ public class JsonTemporalTest extends ForyJsonTestModels {
     for (int offset = 0; offset < 8; offset++) {
       byte[] bytes = new byte[offset + token.length + 8];
       System.arraycopy(token, 0, bytes, offset, token.length);
-      reader.reset(bytes, offset, token.length);
+      reader.reset(bytes, offset, token.length, reader.getStringDecodeBuffer());
       assertEquals(reader.readMonthDay(), MonthDay.of(12, 31));
       reader.expectNextToken(',');
       assertEquals(reader.readInt(), 17);
       reader.finish();
       for (int length = 0; length < 9; length++) {
-        reader.reset(bytes, offset, length);
+        reader.reset(bytes, offset, length, reader.getStringDecodeBuffer());
         assertThrows(RuntimeException.class, reader::readMonthDay);
       }
       for (int lane : new int[] {3, 4, 6, 7}) {
@@ -279,7 +279,7 @@ public class JsonTemporalTest extends ForyJsonTestModels {
             continue;
           }
           bytes[offset + lane] = (byte) value;
-          reader.reset(bytes, offset, token.length);
+          reader.reset(bytes, offset, token.length, reader.getStringDecodeBuffer());
           assertThrows(RuntimeException.class, reader::readMonthDay);
         }
         bytes[offset + lane] = saved;
@@ -312,7 +312,9 @@ public class JsonTemporalTest extends ForyJsonTestModels {
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);
     for (int year = 0; year <= 9999; year++) {
       YearMonth expected = YearMonth.of(year, 1 + year % 12);
-      reader.reset(('"' + expected.toString() + "\" 17").getBytes(StandardCharsets.US_ASCII));
+      reader.reset(
+          ('"' + expected.toString() + "\" 17").getBytes(StandardCharsets.US_ASCII),
+          reader.getStringDecodeBuffer());
       assertEquals(reader.readYearMonth(), expected);
       assertEquals(reader.readInt(), 17);
       reader.finish();
@@ -368,10 +370,10 @@ public class JsonTemporalTest extends ForyJsonTestModels {
       System.arraycopy(token, 0, bytes, offset, token.length);
       Utf8JsonReader reader = newUtf8Reader(bytes);
       for (int length = 0; length < token.length; length++) {
-        reader.reset(bytes, offset, length);
+        reader.reset(bytes, offset, length, reader.getStringDecodeBuffer());
         assertThrows(RuntimeException.class, reader::readYearMonth);
       }
-      reader.reset(bytes, offset, token.length);
+      reader.reset(bytes, offset, token.length, reader.getStringDecodeBuffer());
       assertEquals(reader.readYearMonth(), YearMonth.of(2024, 12));
       reader.finish();
     }
@@ -389,16 +391,16 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         byte[] bytes = new byte[offset + token.length + 8];
         System.arraycopy(token, 0, bytes, offset, token.length);
         for (int length = 0; length < token.length; length++) {
-          reader.reset(bytes, offset, length);
+          reader.reset(bytes, offset, length, reader.getStringDecodeBuffer());
           assertThrows(ForyJsonException.class, () -> reader.readYear());
         }
-        reader.reset(bytes, offset, token.length);
+        reader.reset(bytes, offset, token.length, reader.getStringDecodeBuffer());
         assertEquals(reader.readYear(), Year.of(value));
         reader.finish();
         for (int digit = 1; digit <= 4; digit++) {
           byte saved = bytes[offset + digit];
           bytes[offset + digit] = 'x';
-          reader.reset(bytes, offset, token.length);
+          reader.reset(bytes, offset, token.length, reader.getStringDecodeBuffer());
           assertThrows(ForyJsonException.class, () -> reader.readYear());
           bytes[offset + digit] = saved;
         }
@@ -417,7 +419,7 @@ public class JsonTemporalTest extends ForyJsonTestModels {
     for (int seconds = -64800; seconds <= 64800; seconds++) {
       ZoneOffset expected = ZoneOffset.ofTotalSeconds(seconds);
       byte[] token = ('"' + expected.getId() + '"').getBytes(StandardCharsets.UTF_8);
-      reader.reset(token);
+      reader.reset(token, reader.getStringDecodeBuffer());
       assertEquals(ScalarCodecs.ZoneOffsetCodec.INSTANCE.readUtf8(reader), expected);
       reader.finish();
     }
@@ -425,7 +427,9 @@ public class JsonTemporalTest extends ForyJsonTestModels {
       ZoneOffset expected = ZoneOffset.of(text);
       assertToken(ScalarCodecs.ZoneOffsetCodec.INSTANCE, text, expected);
       byte[] token = ('"' + text + '"').getBytes(StandardCharsets.UTF_8);
-      reader.reset((" \t\r\n\"" + text + "\",17").getBytes(StandardCharsets.US_ASCII));
+      reader.reset(
+          (" \t\r\n\"" + text + "\",17").getBytes(StandardCharsets.US_ASCII),
+          reader.getStringDecodeBuffer());
       assertEquals(reader.readZoneOffset(), expected);
       reader.expectNextToken(',');
       assertEquals(reader.readInt(), 17);
@@ -434,10 +438,10 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         byte[] bytes = new byte[offset + token.length + 8];
         System.arraycopy(token, 0, bytes, offset, token.length);
         for (int length = 0; length < token.length; length++) {
-          reader.reset(bytes, offset, length);
+          reader.reset(bytes, offset, length, reader.getStringDecodeBuffer());
           assertThrows(RuntimeException.class, () -> reader.readZoneOffset());
         }
-        reader.reset(bytes, offset, token.length);
+        reader.reset(bytes, offset, token.length, reader.getStringDecodeBuffer());
         assertEquals(reader.readZoneOffset(), expected);
         reader.finish();
       }
@@ -511,11 +515,11 @@ public class JsonTemporalTest extends ForyJsonTestModels {
           byte[] bytes = new byte[offset + token.length + 8];
           System.arraycopy(token, 0, bytes, offset, token.length);
           Utf8JsonReader reader = newUtf8Reader(bytes);
-          reader.reset(bytes, offset, token.length);
+          reader.reset(bytes, offset, token.length, reader.getStringDecodeBuffer());
           assertEquals(reader.readOffsetTime(), expected);
           reader.finish();
           for (int length = 0; length < token.length; length++) {
-            reader.reset(bytes, offset, length);
+            reader.reset(bytes, offset, length, reader.getStringDecodeBuffer());
             assertThrows(RuntimeException.class, reader::readOffsetTime);
           }
         }
@@ -530,7 +534,7 @@ public class JsonTemporalTest extends ForyJsonTestModels {
     for (int seconds = -64800; seconds <= 64800; seconds++) {
       OffsetTime expected = OffsetTime.of(time, ZoneOffset.ofTotalSeconds(seconds));
       byte[] token = ('"' + expected.toString() + "\",17").getBytes(StandardCharsets.US_ASCII);
-      reader.reset(token);
+      reader.reset(token, reader.getStringDecodeBuffer());
       assertEquals(reader.readOffsetTime(), expected);
       reader.expectNextToken(',');
       assertEquals(reader.readInt(), 17);
@@ -604,11 +608,11 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         byte saved = token[index];
         for (int digit = 0; digit < 256; digit++) {
           token[index] = (byte) digit;
-          reader.reset(token);
+          reader.reset(token, reader.getStringDecodeBuffer());
           // Preserve the unchanged text parser's grammar, including noncanonical offsets.
           ZoneOffset expected = null;
           try {
-            latin1.reset(token);
+            latin1.reset(token, latin1.getStringDecodeBuffer());
             expected = latin1.readZoneOffset();
             latin1.finish();
           } catch (RuntimeException e) {
@@ -640,7 +644,7 @@ public class JsonTemporalTest extends ForyJsonTestModels {
       for (int second : new int[] {'0', '9', 0, 47, 58, 127, 128, 255}) {
         token[4] = (byte) first;
         token[5] = (byte) second;
-        reader.reset(token);
+        reader.reset(token, reader.getStringDecodeBuffer());
         if (first >= '0' && first <= '5' && second >= '0' && second <= '9') {
           assertEquals(
               reader.readIsoLocalTime(), LocalTime.of(1, (first - '0') * 10 + second - '0'));
@@ -671,7 +675,7 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         String token = '"' + timeText + '"';
         // Trailing tokens provide eight readable bytes even for short fractional prefixes.
         byte[] bytes = (token + ",123456789").getBytes(StandardCharsets.UTF_8);
-        reader.reset(bytes);
+        reader.reset(bytes, reader.getStringDecodeBuffer());
         assertEquals(reader.readIsoLocalTime(), expected);
         reader.expectNextToken(',');
         assertEquals(reader.readInt(), 123456789);
@@ -679,10 +683,10 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         for (int offset = 0; offset < 4; offset++) {
           byte[] slice = new byte[offset + bytes.length];
           System.arraycopy(bytes, 0, slice, offset, bytes.length);
-          reader.reset(slice, offset, token.length());
+          reader.reset(slice, offset, token.length(), reader.getStringDecodeBuffer());
           assertEquals(reader.readIsoLocalTime(), expected);
           reader.finish();
-          reader.reset(slice, offset, token.length() - 1);
+          reader.reset(slice, offset, token.length() - 1, reader.getStringDecodeBuffer());
           assertThrows(RuntimeException.class, () -> reader.readIsoLocalTime());
         }
         assertToken(ScalarCodecs.LocalTimeCodec.INSTANCE, timeText, expected);
@@ -696,7 +700,7 @@ public class JsonTemporalTest extends ForyJsonTestModels {
       for (int value : new int[] {0, 31, 47, 58, 127, 128, 192, 255}) {
         byte[] bytes = "\"01:02:03.123456789\",123456789".getBytes(StandardCharsets.UTF_8);
         bytes[10 + position] = (byte) value;
-        reader.reset(bytes);
+        reader.reset(bytes, reader.getStringDecodeBuffer());
         assertThrows(RuntimeException.class, () -> reader.readIsoLocalTime());
       }
     }
@@ -710,12 +714,15 @@ public class JsonTemporalTest extends ForyJsonTestModels {
     LocalDate first = LocalDate.of(0, 3, 1);
     for (int day = 0; day < 146097; day++) {
       LocalDate expected = first.plusDays(day);
-      reader.reset(('"' + expected.toString() + '"').getBytes(StandardCharsets.US_ASCII));
+      reader.reset(
+          ('"' + expected.toString() + '"').getBytes(StandardCharsets.US_ASCII),
+          reader.getStringDecodeBuffer());
       assertEquals(reader.readIsoLocalDate(), expected);
       reader.finish();
       reader.reset(
           ('"' + expected.toString() + "T23:59:59.999999999\",17")
-              .getBytes(StandardCharsets.US_ASCII));
+              .getBytes(StandardCharsets.US_ASCII),
+          reader.getStringDecodeBuffer());
       assertEquals(reader.readIsoLocalDateTime(), expected.atTime(LocalTime.MAX));
       reader.expectNextToken(',');
       assertEquals(reader.readInt(), 17);
@@ -755,12 +762,12 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         byte[] bytes = new byte[start + token.length];
         System.arraycopy(token, 0, bytes, start, token.length);
         Utf8JsonReader reader = newUtf8Reader(bytes);
-        reader.reset(bytes, start, token.length);
+        reader.reset(bytes, start, token.length, reader.getStringDecodeBuffer());
         assertEquals(
             withTime ? reader.readIsoLocalDateTime() : reader.readIsoLocalDate(), expected);
         reader.finish();
         for (int length = 0; length < token.length; length++) {
-          reader.reset(bytes, start, length);
+          reader.reset(bytes, start, length, reader.getStringDecodeBuffer());
           assertThrows(
               RuntimeException.class,
               () -> {
@@ -855,7 +862,7 @@ public class JsonTemporalTest extends ForyJsonTestModels {
             LocalTime expected = LocalTime.of(hour, minute, second, nano);
             byte[] bytes =
                 ('"' + expected.toString() + "\",17").getBytes(StandardCharsets.US_ASCII);
-            reader.reset(bytes);
+            reader.reset(bytes, reader.getStringDecodeBuffer());
             assertEquals(reader.readIsoLocalTime(), expected);
             reader.expectNextToken(',');
             assertEquals(reader.readInt(), 17);
@@ -866,9 +873,12 @@ public class JsonTemporalTest extends ForyJsonTestModels {
     }
     for (String text :
         new String[] {"24:00:00", "00:60:00", "00:00:60", "99:99:99", "23:59:59.9999999999"}) {
-      reader.reset(('"' + text + '"').getBytes(StandardCharsets.US_ASCII));
+      reader.reset(
+          ('"' + text + '"').getBytes(StandardCharsets.US_ASCII), reader.getStringDecodeBuffer());
       assertThrows(RuntimeException.class, reader::readIsoLocalTime);
-      reader.reset("\"23:59:59.999999999\"".getBytes(StandardCharsets.US_ASCII));
+      reader.reset(
+          "\"23:59:59.999999999\"".getBytes(StandardCharsets.US_ASCII),
+          reader.getStringDecodeBuffer());
       assertEquals(reader.readIsoLocalTime(), LocalTime.MAX);
       reader.finish();
     }
@@ -922,15 +932,15 @@ public class JsonTemporalTest extends ForyJsonTestModels {
           byte[] input = new byte[offset + token.length + 8];
           System.arraycopy(token, 0, input, offset, token.length);
           for (int length = 0; length < token.length; length++) {
-            reader.reset(input, offset, length);
+            reader.reset(input, offset, length, reader.getStringDecodeBuffer());
             assertThrows(ForyJsonException.class, reader::readDuration);
           }
-          reader.reset(input, offset, token.length);
+          reader.reset(input, offset, token.length, reader.getStringDecodeBuffer());
           assertEquals(reader.readDuration(), expected);
           reader.finish();
         }
         byte[] adjacent = ('"' + text + "\" 17").getBytes(StandardCharsets.US_ASCII);
-        reader.reset(adjacent);
+        reader.reset(adjacent, reader.getStringDecodeBuffer());
         assertEquals(reader.readDuration(), expected);
         assertEquals(reader.readInt(), 17);
       }
@@ -1020,14 +1030,16 @@ public class JsonTemporalTest extends ForyJsonTestModels {
             byte[] input = new byte[offset + token.length + 8];
             System.arraycopy(token, 0, input, offset, token.length);
             for (int length = 0; length < token.length; length++) {
-              reader.reset(input, offset, length);
+              reader.reset(input, offset, length, reader.getStringDecodeBuffer());
               assertThrows(ForyJsonException.class, reader::readPeriod);
             }
-            reader.reset(input, offset, token.length);
+            reader.reset(input, offset, token.length, reader.getStringDecodeBuffer());
             assertEquals(reader.readPeriod(), expected);
             reader.finish();
           }
-          reader.reset(('"' + text + "\" 17").getBytes(StandardCharsets.US_ASCII));
+          reader.reset(
+              ('"' + text + "\" 17").getBytes(StandardCharsets.US_ASCII),
+              reader.getStringDecodeBuffer());
           assertEquals(reader.readPeriod(), expected);
           assertEquals(reader.readInt(), 17);
         }
@@ -1075,7 +1087,9 @@ public class JsonTemporalTest extends ForyJsonTestModels {
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);
     for (int second = 0; second < 86400; second++) {
       Instant expected = Instant.ofEpochSecond(second, second * 1001);
-      reader.reset(('"' + expected.toString() + "\",17").getBytes(StandardCharsets.US_ASCII));
+      reader.reset(
+          ('"' + expected.toString() + "\",17").getBytes(StandardCharsets.US_ASCII),
+          reader.getStringDecodeBuffer());
       assertEquals(reader.readIsoInstant(), expected);
       reader.expectNextToken(',');
       assertEquals(reader.readInt(), 17);
@@ -1098,7 +1112,9 @@ public class JsonTemporalTest extends ForyJsonTestModels {
                       (month + day) % 60,
                       nanos[(year + month + day) & 3])
                   .toInstant(ZoneOffset.UTC);
-          reader.reset(('"' + expected.toString() + '"').getBytes(StandardCharsets.US_ASCII));
+          reader.reset(
+              ('"' + expected.toString() + '"').getBytes(StandardCharsets.US_ASCII),
+              reader.getStringDecodeBuffer());
           assertEquals(reader.readIsoInstant(), expected);
           reader.finish();
         }
@@ -1113,10 +1129,10 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         byte[] bytes = new byte[offset + token.length + 8];
         System.arraycopy(token, 0, bytes, offset, token.length);
         for (int length = 0; length < token.length; length++) {
-          reader.reset(bytes, offset, length);
+          reader.reset(bytes, offset, length, reader.getStringDecodeBuffer());
           assertThrows(ForyJsonException.class, reader::readIsoInstant);
         }
-        reader.reset(bytes, offset, token.length);
+        reader.reset(bytes, offset, token.length, reader.getStringDecodeBuffer());
         assertEquals(reader.readIsoInstant(), Instant.parse(value));
         reader.finish();
       }
@@ -1159,16 +1175,16 @@ public class JsonTemporalTest extends ForyJsonTestModels {
       for (int offset = 0; offset < 8; offset++) {
         byte[] bytes = new byte[offset + token.length];
         System.arraycopy(token, 0, bytes, offset, token.length);
-        reader.reset(bytes, offset, token.length);
+        reader.reset(bytes, offset, token.length, reader.getStringDecodeBuffer());
         assertEquals(reader.readIsoInstant(), expected);
         reader.expectNextToken(',');
         assertEquals(reader.readInt(), 17);
         reader.finish();
-        reader.reset(bytes, offset, token.length - 3);
+        reader.reset(bytes, offset, token.length - 3, reader.getStringDecodeBuffer());
         assertEquals(reader.readIsoInstant(), expected);
         reader.finish();
         for (int end = 0; end < token.length - 3; end++) {
-          reader.reset(bytes, offset, end);
+          reader.reset(bytes, offset, end, reader.getStringDecodeBuffer());
           assertThrows(RuntimeException.class, reader::readIsoInstant);
         }
       }
@@ -1178,7 +1194,7 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         for (int value = 0; value < 256; value++) {
           exact[lane] = (byte) value;
           Latin1JsonReader reference = newLatin1Reader(exact);
-          reader.reset(exact);
+          reader.reset(exact, reader.getStringDecodeBuffer());
           Instant parsed;
           try {
             parsed = reference.readIsoInstant();
@@ -1297,11 +1313,11 @@ public class JsonTemporalTest extends ForyJsonTestModels {
         bytes[offset + token.length + 1] = '1';
         bytes[offset + token.length + 2] = '7';
         Utf8JsonReader reader = newUtf8Reader(bytes);
-        reader.reset(bytes, offset, token.length + 3);
+        reader.reset(bytes, offset, token.length + 3, reader.getStringDecodeBuffer());
         assertEquals(reader.readZonedDateTime(), expected);
         reader.expect(',');
         assertEquals(reader.readInt(), 17);
-        reader.reset(bytes, offset, token.length - 2);
+        reader.reset(bytes, offset, token.length - 2, reader.getStringDecodeBuffer());
         assertThrows(RuntimeException.class, reader::readZonedDateTime);
       }
     }

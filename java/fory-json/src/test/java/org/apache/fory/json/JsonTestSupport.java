@@ -109,15 +109,15 @@ final class JsonTestSupport {
   }
 
   static Utf8JsonReader newUtf8Reader(byte[] input) {
-    return new Utf8JsonReader(CONFIG, newResolver(), input);
+    return new Utf8JsonReader(CONFIG, newResolver(), input, new byte[1024]);
   }
 
   static Latin1JsonReader newLatin1Reader(byte[] input) {
-    return new Latin1JsonReader(CONFIG, newResolver(), input);
+    return new Latin1JsonReader(CONFIG, newResolver(), input, new byte[1024]);
   }
 
   static Latin1JsonReader newLatin1Reader(String input) {
-    return new Latin1JsonReader(CONFIG, newResolver(), input);
+    return new Latin1JsonReader(CONFIG, newResolver(), input, new byte[1024]);
   }
 
   static Utf16JsonReader newUtf16Reader() {
@@ -125,7 +125,7 @@ final class JsonTestSupport {
   }
 
   static Utf16JsonReader newUtf16Reader(String input) {
-    return new Utf16JsonReader(CONFIG, newResolver(), input);
+    return new Utf16JsonReader(CONFIG, newResolver(), input, new byte[1024]);
   }
 
   @SuppressWarnings("unchecked")

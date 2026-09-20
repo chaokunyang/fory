@@ -79,8 +79,6 @@ public final class Utf8JsonReader extends JsonReader {
   private static final int[] NANO_SCALE = {
     1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000
   };
-  private static final int INITIAL_STRING_DECODE_BUFFER_SIZE = 1024;
-
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
   private static final long BYTE_ONES = 0x0101010101010101L;
   private static final int INT_BYTE_ONES = 0x01010101;
@@ -125,6 +123,8 @@ public final class Utf8JsonReader extends JsonReader {
   // UTF-8 string decoding must keep unsigned byte conversion for non-ASCII content.
   private byte[] input;
   private int inputLimit;
+  // The caller supplies decode storage on every reset; avoid a redundant null check or allocation
+  // on pooled root setup. Decoding owns any subsequent growth.
   private byte[] stringDecodeBuffer;
 
   // Keep the cache after hot representation fields; an inherited reference shifts their offsets.
@@ -504,15 +504,15 @@ public final class Utf8JsonReader extends JsonReader {
     return candidate;
   }
 
-  public Utf8JsonReader(JsonConfig config, JsonTypeResolver typeResolver, byte[] input) {
+  public Utf8JsonReader(
+      JsonConfig config, JsonTypeResolver typeResolver, byte[] input, byte[] decodeBuffer) {
     this(config, typeResolver);
-    reset(input);
+    reset(input, decodeBuffer);
   }
 
-  public Utf8JsonReader reset(byte[] input) {
-    if (stringDecodeBuffer == null) {
-      stringDecodeBuffer = new byte[INITIAL_STRING_DECODE_BUFFER_SIZE];
-    }
+  /** Resets the input and borrows the caller's non-null decode buffer until {@link #clear()}. */
+  public Utf8JsonReader reset(byte[] input, byte[] decodeBuffer) {
+    stringDecodeBuffer = decodeBuffer;
     this.input = input;
     inputLimit = input.length;
     position = 0;
@@ -520,12 +520,10 @@ public final class Utf8JsonReader extends JsonReader {
     return this;
   }
 
-  /** Resets this reader to a logical range of a borrowed byte array. */
+  /** Resets to a logical input range and borrows the caller's non-null decode buffer. */
   @Internal
-  public Utf8JsonReader reset(byte[] input, int offset, int length) {
-    if (stringDecodeBuffer == null) {
-      stringDecodeBuffer = new byte[INITIAL_STRING_DECODE_BUFFER_SIZE];
-    }
+  public Utf8JsonReader reset(byte[] input, int offset, int length, byte[] decodeBuffer) {
+    stringDecodeBuffer = decodeBuffer;
     int inputLength = input.length;
     if ((offset | length) < 0 || offset > inputLength - length) {
       throwInvalidByteRange(offset, length);
@@ -548,12 +546,6 @@ public final class Utf8JsonReader extends JsonReader {
     inputLimit = 0;
     position = 0;
     stringDecodeBuffer = null;
-  }
-
-  /** Borrows the owning execution state's decode storage for one root operation. */
-  @Internal
-  public void setStringDecodeBuffer(byte[] buffer) {
-    stringDecodeBuffer = buffer;
   }
 
   /** Returns the current storage, including any growth, before {@link #clear()} detaches it. */

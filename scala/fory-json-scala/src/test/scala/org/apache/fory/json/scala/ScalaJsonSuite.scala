@@ -461,6 +461,15 @@ class ScalaJsonSuite extends AnyFunSuite {
     val optionType = new TypeRef[Option[Int]]() {}
     assert(json.fromJson("null", optionType) == None)
     assert(json.fromJson(json.toJson(None), classOf[None.type]) == None)
+
+    val optionsType = new TypeRef[List[Option[String]]]() {}
+    for (text <- Seq("ascii", "中文")) {
+      val input = "[null, \t\r\n\"" + text + "\", \nnull, \"null\"]"
+      val expected = List(None, Some(text), None, Some("null"))
+      assert(json.fromJson(input, optionsType) == expected)
+      assert(json.fromJson(input.getBytes(UTF_8), optionsType) == expected)
+    }
+    assertThrows[ForyJsonException](json.fromJson(" \t\r\nnull".getBytes(UTF_8), someType))
   }
 
   test("Either uses compact branch names and reads legacy names") {

@@ -845,6 +845,8 @@ public final class ForyJson {
   }
 
   private Object readJavaStringValue(String json, Class<?> type, JsonState state) {
+    // Older JDKs read the coder through Unsafe, which can crash on a null String.
+    Objects.requireNonNull(json, "json");
     if (StringSerializer.isBytesBackedString()) {
       byte coder = StringSerializer.getStringCoder(json);
       if (StringSerializer.isLatin1Coder(coder)) {
@@ -860,6 +862,8 @@ public final class ForyJson {
   }
 
   private Object readJavaStringValue(String json, TypeRef<?> type, JsonState state) {
+    // Validate before the Unsafe coder access, as in the Class-based root path.
+    Objects.requireNonNull(json, "json");
     if (StringSerializer.isBytesBackedString()) {
       byte coder = StringSerializer.getStringCoder(json);
       if (StringSerializer.isLatin1Coder(coder)) {

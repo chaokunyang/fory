@@ -37,6 +37,7 @@ import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import org.apache.fory.json.codec.AbstractJsonValueCodec;
+import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.data.CharValue;
 import org.apache.fory.json.data.Kind;
 import org.apache.fory.json.data.Nested;
@@ -55,6 +56,7 @@ import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.memory.NativeByteOrder;
+import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.StringSerializer;
 import org.testng.annotations.Test;
 
@@ -618,43 +620,95 @@ public class JsonStringTest extends ForyJsonTestModels {
 
   @Test(dataProvider = "enableCodegen")
   public void sharedBufferReuse(boolean codegen) {
+    BufferReuseCodec codec = new BufferReuseCodec();
     ForyJson json =
         ForyJson.builder()
             .withCodegen(codegen)
             .withAsyncCompilation(false)
             .withConcurrencyLevel(1)
+            .registerCodec(QuotedValue.class, codec)
             .build();
+    codec.buffer = sharedBuffer(json);
     String value = repeat('a', 9000) + "\n";
     String document = "\"" + repeat('a', 9000) + "\\n\"";
-    String decoded = json.fromJson(document.getBytes(StandardCharsets.UTF_8), String.class);
+    String decoded =
+        json.fromJson(document.getBytes(StandardCharsets.UTF_8), QuotedValue.class).text;
     byte[] grown = sharedBuffer(json);
+    assertSame(grown, codec.buffer);
     assertTrue(grown.length > 8192);
     assertEquals(decoded, value);
     assertBuffersDetached(json);
 
-    String encodedString = json.toJson(value);
+    String encodedString = json.toJson(new QuotedValue(value));
     assertEquals(encodedString, document);
-    assertSame(sharedBuffer(json), grown);
-    byte[] encodedBytes = json.toJsonBytes(value);
-    assertSame(sharedBuffer(json), grown);
-    assertEquals(json.fromJson(document, String.class), value);
-    assertSame(sharedBuffer(json), grown);
+    assertSame(sharedBuffer(json), codec.buffer);
+    byte[] encodedBytes = json.toJsonBytes(new QuotedValue(value));
+    assertSame(sharedBuffer(json), codec.buffer);
+    assertEquals(json.fromJson(document, QuotedValue.class).text, value);
+    assertSame(sharedBuffer(json), codec.buffer);
 
     // Widening swaps the String writer's main and scratch arrays. The state must reclaim the
     // new main array, while later reads must not change either detached result above.
     String unicode = "\u4e2d\u6587" + repeat('b', 9000) + "\n";
-    String unicodeDocument = json.toJson(unicode);
+    String unicodeDocument = json.toJson(new QuotedValue(unicode));
     byte[] widened = sharedBuffer(json);
-    assertEquals(json.fromJson(unicodeDocument, String.class), unicode);
+    assertSame(widened, codec.buffer);
+    assertEquals(json.fromJson(unicodeDocument, QuotedValue.class).text, unicode);
     assertSame(sharedBuffer(json), widened);
     assertEquals(
-        json.fromJson(unicodeDocument.getBytes(StandardCharsets.UTF_8), String.class), unicode);
+        json.fromJson(unicodeDocument.getBytes(StandardCharsets.UTF_8), QuotedValue.class).text,
+        unicode);
     assertSame(sharedBuffer(json), widened);
-    json.toJsonBytes("overwritten");
+    json.toJsonBytes(new QuotedValue("overwritten"));
+    assertSame(sharedBuffer(json), codec.buffer);
     assertEquals(decoded, value);
     assertEquals(encodedString, document);
     assertEquals(new String(encodedBytes, StandardCharsets.UTF_8), document);
     assertBuffersDetached(json);
+  }
+
+  private static final class BufferReuseCodec implements JsonValueCodec<QuotedValue> {
+    private byte[] buffer;
+
+    // Check the borrowed array before writing and the reclaimed array afterward. Java 8's
+    // char[] path reserves more space, and UTF16 widening can swap arrays even without growth.
+    @Override
+    public void writeString(StringJsonWriter writer, QuotedValue value) {
+      assertSame(writer.getBuffer(), buffer);
+      writer.writeString(value.text);
+      buffer = writer.getBuffer();
+    }
+
+    @Override
+    public void writeUtf8(Utf8JsonWriter writer, QuotedValue value) {
+      assertSame(writer.getBuffer(), buffer);
+      writer.writeString(value.text);
+      buffer = writer.getBuffer();
+    }
+
+    @Override
+    public QuotedValue readLatin1(Latin1JsonReader reader) {
+      assertSame(reader.getStringDecodeBuffer(), buffer);
+      String value = reader.readString();
+      buffer = reader.getStringDecodeBuffer();
+      return new QuotedValue(value);
+    }
+
+    @Override
+    public QuotedValue readUtf16(Utf16JsonReader reader) {
+      assertSame(reader.getStringDecodeBuffer(), buffer);
+      String value = reader.readString();
+      buffer = reader.getStringDecodeBuffer();
+      return new QuotedValue(value);
+    }
+
+    @Override
+    public QuotedValue readUtf8(Utf8JsonReader reader) {
+      assertSame(reader.getStringDecodeBuffer(), buffer);
+      String value = reader.readString();
+      buffer = reader.getStringDecodeBuffer();
+      return new QuotedValue(value);
+    }
   }
 
   @Test
@@ -685,6 +739,8 @@ public class JsonStringTest extends ForyJsonTestModels {
                   }
                 }));
     assertThrows(NullPointerException.class, () -> json.fromJson((String) null, String.class));
+    assertThrows(
+        NullPointerException.class, () -> json.fromJson((String) null, TypeRef.of(String.class)));
     assertThrows(NullPointerException.class, () -> json.fromJson((byte[]) null, String.class));
     assertEquals(sharedBuffer(json).length, 1024);
     assertEquals(json.fromJson(json.toJsonBytes("reused\n"), String.class), "reused\n");

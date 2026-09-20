@@ -80,6 +80,19 @@ object PackedCases {
   case object Abcdefg extends Value
 }
 
+object ReadTokenCases {
+  sealed trait Value
+  case object Abcdefghi extends Value
+  case object A extends Value
+  case object Abcdefgh extends Value
+  case object Abcdefg extends Value
+  case object Abcdefghij extends Value
+}
+
+case class ReadTokenValue(
+    @JsonProperty(include = JsonProperty.Include.ALWAYS) value: ReadTokenCases.Value,
+    label: String)
+
 sealed trait MixedCard
 case object EmptyCard extends MixedCard
 final case class NamedCard(name: String) extends MixedCard
@@ -252,6 +265,37 @@ class ScalaJsonEnumerationSuite extends AnyFunSuite {
     assert(new String(json.toJsonBytes(values, arrayType), UTF_8) == expected)
     assert(json.fromJson(expected, arrayType).sameElements(values))
     assert(json.fromJson(expected.getBytes(UTF_8), arrayType).sameElements(values))
+  }
+
+  test("derived enum readers match complete tokens") {
+    val values: Array[ReadTokenCases.Value] = Array(
+      ReadTokenCases.A, ReadTokenCases.Abcdefg, ReadTokenCases.Abcdefgh,
+      ReadTokenCases.Abcdefghi, ReadTokenCases.Abcdefghij, null)
+    val arrayType = ScalaTypeRef[Array[ReadTokenCases.Value]]
+    val expected = "[\"A\",\"Abcdefg\",\"Abcdefgh\",\"Abcdefghi\",\"Abcdefghij\",null]"
+    for (codegen <- Seq(false, true)) {
+      val json = ForyJsonScala.builder()
+        .registerCodec(classOf[ReadTokenCases.Value], ScalaJsonCodec.stringEnum[ReadTokenCases.Value])
+        .withCodegen(codegen).withAsyncCompilation(false).build()
+      for (text <- Seq(expected, expected.replace("\"A\"", " \"\\u0041\" "))) {
+        assert(json.fromJson(text, arrayType).sameElements(values))
+        assert(json.fromJson(text.getBytes(UTF_8), arrayType).sameElements(values))
+      }
+      for (value <- values) {
+        val scalar = json.toJson(value, classOf[ReadTokenCases.Value])
+        assert(json.fromJson(scalar, classOf[ReadTokenCases.Value]) eq value)
+        assert(json.fromJson(scalar.getBytes(UTF_8), classOf[ReadTokenCases.Value]) eq value)
+        val model = ReadTokenValue(value, "中文")
+        val text = json.toJson(model)
+        assert(json.fromJson(text, classOf[ReadTokenValue]) == model)
+        assert(json.fromJson(text.getBytes(UTF_8), classOf[ReadTokenValue]) == model)
+      }
+      for (text <- Seq("[\"Abcdefgx\"]", "[\"Abcdefghx\"]", "[\"Abcdefghix\"]", "[\"A")) {
+        assertThrows[ForyJsonException](json.fromJson(text, arrayType))
+        assertThrows[ForyJsonException](json.fromJson(text.getBytes(UTF_8), arrayType))
+      }
+      assert(json.fromJson(expected.getBytes(UTF_8), arrayType).sameElements(values))
+    }
   }
 
   test("derived enum writers grow at token boundaries") {

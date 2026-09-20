@@ -22,6 +22,7 @@ package org.apache.fory.json.scala.internal
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.codec.JsonValueCodec
 import org.apache.fory.json.meta.JsonAsciiToken
+import org.apache.fory.json.reader.{Latin1JsonReader, Utf8JsonReader}
 import org.apache.fory.json.scala.ScalaJsonCodec
 import org.apache.fory.json.writer.Utf8JsonWriter
 
@@ -105,6 +106,21 @@ private[scala] object ScalaJsonCodecMacros {
         }
         '{ val index = $selected; if (index < 0) $unknown else index }
       }
+      def read(reader: Expr[?])(using localQuotes: Quotes): Expr[Object] = {
+        import localQuotes.reflect.*
+        tokens.zip(singletonExpressions).filter(entry => JsonAsciiToken.isPackable(entry._1))
+          .foldRight[Expr[Object]]('{ null }) { case ((token, singleton), next) =>
+            val suffixLength = JsonAsciiToken.suffixLength(token.length)
+            val arguments = List(
+              Expr(JsonAsciiToken.prefix(token)).asTerm,
+              Expr(JsonAsciiToken.prefixMask(token.length)).asTerm) ++
+              (if (suffixLength == 0) Nil else List(Expr(JsonAsciiToken.suffix(token)).asTerm)) :+
+              Expr(token.length).asTerm
+            val matched = Select.unique(reader.asTerm, "tryReadNextStringToken" + suffixLength)
+              .appliedToArgs(arguments).asExprOf[Boolean]
+            '{ if ($matched) $singleton else $next }
+          }
+      }
       // Use the splice's Quotes so method parameters remain in their defining scope on Scala 3.9+.
       def write(
           value: Expr[Object],
@@ -137,6 +153,16 @@ private[scala] object ScalaJsonCodecMacros {
             typeClass, Array[AnyRef](${ Varargs(singletonExpressions) }*),
             Array[String](${ Varargs(nameExpressions) }*)) {
             override protected def valueIndex(value: Object): Int = ${ enumIndex('value) }
+
+            override def readLatin1(reader: Latin1JsonReader): Object = {
+              val value = ${ read('reader) }
+              if (value != null) value else super.readLatin1(reader)
+            }
+
+            override def readUtf8(reader: Utf8JsonReader): Object = {
+              val value = ${ read('reader) }
+              if (value != null) value else super.readUtf8(reader)
+            }
 
             override def writeUtf8(writer: Utf8JsonWriter, value: Object): Unit = {
               if (value == null) writer.writeNull()

@@ -80,6 +80,19 @@ private[scala] object ScalaJsonCodecMacros {
         case (singleton, index) => q"if (value eq $singleton) index = $index"
       }
       val valueIndex = q"{ var index = -1; ..$indexChecks; if (index < 0) $unknown; index }"
+      def read: Tree = {
+        tokens.zip(singletons).filter(entry => JsonAsciiToken.isPackable(entry._1))
+          .foldRight[Tree](q"null") { case ((token, singleton), next) =>
+            val suffixLength = JsonAsciiToken.suffixLength(token.length)
+            val method = TermName("tryReadNextStringToken" + suffixLength)
+            val prefix = JsonAsciiToken.prefix(token)
+            val mask = JsonAsciiToken.prefixMask(token.length)
+            val matched =
+              if (suffixLength == 0) q"reader.$method($prefix, $mask, ${token.length})"
+              else q"reader.$method($prefix, $mask, ${JsonAsciiToken.suffix(token)}, ${token.length})"
+            q"if ($matched) $singleton else $next"
+          }
+      }
       // The generated indices and token table must share compiler order; the factory's runtime
       // class-name sort can differ, especially for nested singleton hierarchies.
       val write = tokens.zip(singletons).foldRight[Tree](unknown) {
@@ -105,6 +118,20 @@ private[scala] object ScalaJsonCodecMacros {
               typeClass, _root_.scala.Array[_root_.scala.AnyRef](..$singletons),
               _root_.scala.Array[_root_.java.lang.String](..$names)) {
               override protected def valueIndex(value: _root_.java.lang.Object): Int = $valueIndex
+
+              override def readLatin1(
+                  reader: _root_.org.apache.fory.json.reader.Latin1JsonReader
+              ): _root_.java.lang.Object = {
+                val value = $read
+                if (value != null) value else super.readLatin1(reader)
+              }
+
+              override def readUtf8(
+                  reader: _root_.org.apache.fory.json.reader.Utf8JsonReader
+              ): _root_.java.lang.Object = {
+                val value = $read
+                if (value != null) value else super.readUtf8(reader)
+              }
 
               override def writeUtf8(
                   writer: _root_.org.apache.fory.json.writer.Utf8JsonWriter,

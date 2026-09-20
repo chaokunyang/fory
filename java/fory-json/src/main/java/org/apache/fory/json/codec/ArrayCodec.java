@@ -2174,7 +2174,9 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         int i = 1;
         // The first element owns the separator-free case; the paired loop keeps each
         // element's codec invocation and null policy in their original order.
-        for (; i + 1 < array.length; i += 2) {
+        // Use an invariant upper bound instead of adding to the induction variable in the test.
+        int pairedEnd = array.length - 1;
+        for (; i < pairedEnd; i += 2) {
           writer.writeComma(1);
           writeElement(writer, codec, array[i]);
           writer.writeComma(1);

@@ -504,53 +504,17 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
         } else {
           byte[] bytes = buffer;
           int pos = start;
-          bytes[pos++] = (byte) '"';
-          latin1:
-          {
-            long word = LittleEndian.getInt64(stringBytes, 0);
-            if (!isJsonAsciiWord(word)) {
-              break latin1;
-            }
-            LittleEndian.putInt64(bytes, pos, word);
-            pos += Long.BYTES;
-            int index = Long.BYTES;
-            if (index + Long.BYTES <= length) {
-              long tail = LittleEndian.getInt64(stringBytes, index);
-              if (!isJsonAsciiWord(tail)) {
-                break latin1;
-              }
-              LittleEndian.putInt64(bytes, pos, tail);
-              pos += Long.BYTES;
-              index += Long.BYTES;
-            }
-            if (index + Integer.BYTES <= length) {
-              int tail = LittleEndian.getInt32(stringBytes, index);
-              if (!isJsonAsciiInt(tail)) {
-                break latin1;
-              }
-              LittleEndian.putInt32(bytes, pos, tail);
-              pos += Integer.BYTES;
-              index += Integer.BYTES;
-            }
-            if (index + Short.BYTES <= length) {
-              int tail = (stringBytes[index] & 0xFF) | ((stringBytes[index + 1] & 0xFF) << 8);
-              if (!isJsonAsciiShort(tail)) {
-                break latin1;
-              }
-              bytes[pos] = (byte) tail;
-              bytes[pos + 1] = (byte) (tail >>> 8);
-              pos += Short.BYTES;
-              index += Short.BYTES;
-            }
-            if (index < length) {
-              byte tail = stringBytes[index];
-              if (!isJsonAsciiByte(tail)) {
-                break latin1;
-              }
-              bytes[pos++] = tail;
-            }
+          // For 8..16 bytes, overlapping first and last words cover the complete string without
+          // reading or writing outside it. The overlap removes the scalar tail dispatch.
+          long word = LittleEndian.getInt64(stringBytes, 0);
+          int tailOffset = length - Long.BYTES;
+          long tail = LittleEndian.getInt64(stringBytes, tailOffset);
+          if (JsonAsciiWordPredicates.isJsonAsciiWords(word, tail)) {
             bytes[pos++] = (byte) '"';
-            position = pos;
+            LittleEndian.putInt64(bytes, pos, word);
+            LittleEndian.putInt64(bytes, pos + tailOffset, tail);
+            bytes[pos + length] = (byte) '"';
+            position = pos + length + 1;
             return;
           }
         }

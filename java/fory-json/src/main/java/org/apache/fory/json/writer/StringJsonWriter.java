@@ -458,6 +458,21 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
         }
         byte[] bytes = buffer;
         int pos = position;
+        if (length >= Long.BYTES && length <= Long.BYTES * 2) {
+          // Both words stay within the string even when they overlap. Validate before storing so
+          // escaping and non-ASCII handling can resume at the unchanged writer position.
+          long word = LittleEndian.getInt64(stringBytes, 0);
+          int tailOffset = length - Long.BYTES;
+          long tail = LittleEndian.getInt64(stringBytes, tailOffset);
+          if (isJsonAsciiWords(word, tail)) {
+            bytes[pos++] = (byte) '"';
+            LittleEndian.putInt64(bytes, pos, word);
+            LittleEndian.putInt64(bytes, pos + tailOffset, tail);
+            bytes[pos + length] = (byte) '"';
+            position = pos + length + 1;
+            return;
+          }
+        }
         bytes[pos++] = (byte) '"';
         int i = 0;
         int upperBound = length & ~15;

@@ -1872,11 +1872,22 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   }
 
   public void writeRawValue(long prefix0, long prefix1, int prefixLength) {
-    int additional = packedPrefixSize(prefixLength);
-    if (position + additional > buffer.length) {
-      grow(additional);
+    int pos = position;
+    // Keep the reservation and stores in the same width branch so variable-length tokens do
+    // not classify their width twice and each branch has a constant-sized capacity proof.
+    if (prefixLength <= Long.BYTES) {
+      if (pos + Long.BYTES > buffer.length) {
+        grow(Long.BYTES);
+      }
+      LittleEndian.putInt64(buffer, pos, prefix0);
+    } else {
+      if (pos + Long.BYTES * 2 > buffer.length) {
+        grow(Long.BYTES * 2);
+      }
+      LittleEndian.putInt64(buffer, pos, prefix0);
+      LittleEndian.putInt64(buffer, pos + Long.BYTES, prefix1);
     }
-    writePackedRawNoEnsure(prefix0, prefix1, prefixLength);
+    position = pos + prefixLength;
   }
 
   public void writeRawValue(

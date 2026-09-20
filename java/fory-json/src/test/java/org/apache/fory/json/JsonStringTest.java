@@ -24,6 +24,7 @@ import static org.apache.fory.json.JsonTestSupport.newLatin1Reader;
 import static org.apache.fory.json.JsonTestSupport.newStringWriter;
 import static org.apache.fory.json.JsonTestSupport.newUtf16Reader;
 import static org.apache.fory.json.JsonTestSupport.newUtf8Reader;
+import static org.apache.fory.json.JsonTestSupport.newUtf8Writer;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNull;
@@ -47,6 +48,7 @@ import org.apache.fory.json.data.UnicodeFieldNames;
 import org.apache.fory.json.data.UnicodeKind;
 import org.apache.fory.json.data.UnicodeMatrix;
 import org.apache.fory.json.data.UnicodeValues;
+import org.apache.fory.json.meta.JsonAsciiToken;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.reader.Latin1JsonReader;
@@ -61,6 +63,25 @@ import org.apache.fory.serializer.StringSerializer;
 import org.testng.annotations.Test;
 
 public class JsonStringTest extends ForyJsonTestModels {
+  @Test
+  public void packedTokenWrites() {
+    for (int length = 1; length <= 16; length++) {
+      String token = "abcdefghijklmnop".substring(0, length);
+      for (int offset = 0; offset < 16; offset++) {
+        String padding = repeat(' ', offset);
+        for (int remaining : new int[] {0, length, 7, 8, 15, 16}) {
+          Utf8JsonWriter writer = newUtf8Writer(new byte[offset + remaining]);
+          writer.writeRawValue(padding);
+          writer.writeRawValue(
+              JsonAsciiToken.prefix(token), JsonAsciiToken.suffixLong(token), length);
+          writer.writeRawValue("!");
+          assertEquals(
+              writer.toJsonBytes(), (padding + token + "!").getBytes(StandardCharsets.US_ASCII));
+        }
+      }
+    }
+  }
+
   @Test
   public void readFieldHashBytes() {
     Utf8JsonReader reader = newUtf8Reader(new byte[0]);

@@ -508,14 +508,25 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
           // reading or writing outside it. The overlap removes the scalar tail dispatch.
           long word = LittleEndian.getInt64(stringBytes, 0);
           int tailOffset = length - Long.BYTES;
-          long tail = LittleEndian.getInt64(stringBytes, tailOffset);
-          if (JsonAsciiWordPredicates.isJsonAsciiWords(word, tail)) {
-            bytes[pos++] = (byte) '"';
-            LittleEndian.putInt64(bytes, pos, word);
-            LittleEndian.putInt64(bytes, pos + tailOffset, tail);
-            bytes[pos + length] = (byte) '"';
-            position = pos + length + 1;
-            return;
+          if (tailOffset == 0) {
+            // A complete word needs neither a duplicate load/store nor a two-word predicate.
+            if (isJsonAsciiWord(word)) {
+              bytes[pos++] = (byte) '"';
+              LittleEndian.putInt64(bytes, pos, word);
+              bytes[pos + length] = (byte) '"';
+              position = pos + length + 1;
+              return;
+            }
+          } else {
+            long tail = LittleEndian.getInt64(stringBytes, tailOffset);
+            if (JsonAsciiWordPredicates.isJsonAsciiWords(word, tail)) {
+              bytes[pos++] = (byte) '"';
+              LittleEndian.putInt64(bytes, pos, word);
+              LittleEndian.putInt64(bytes, pos + tailOffset, tail);
+              bytes[pos + length] = (byte) '"';
+              position = pos + length + 1;
+              return;
+            }
           }
         }
         position = start;

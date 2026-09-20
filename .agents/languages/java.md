@@ -24,6 +24,15 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - `fory-core` targets Java 8 bytecode and `fory-format` targets Java 11 bytecode. Do not use newer APIs in those modules.
 - `fory-json` must not depend on or reference `jdk.incubator.vector`, including production and
   multi-release sources, module descriptors, Maven wiring, and optional runtime paths.
+- Each Fory JSON `JsonState` owns one shared main byte buffer while idle and transfers it to the
+  selected concrete reader or writer for a root operation. Reclaim the latest grown or swapped
+  array before clearing that component's buffer reference, including on failure. Keep hot paths
+  on concrete byte-array fields; do not add a buffer holder, reader/writer backreference, or
+  per-value handoff. Preserve the separate UTF16 input mirror and String writer widening scratch
+  because they can be used at the same time as the main buffer.
+- JSON reader reset methods take the decode buffer explicitly and assign it directly. The caller
+  owns initial allocation; do not add a decode-buffer null check, fallback allocation, or separate
+  setter to root setup. Keep capacity growth in the existing decoding owner.
 - Put a `fory-json` optimization in the earliest multi-release overlay whose public JDK APIs
   support it. In particular, `Math.multiplyHigh` and `VarHandle` implementations belong in the
   Java 9 overlay, not the Java 25 overlay; keep only the Java 8 compatibility implementation in

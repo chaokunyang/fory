@@ -65,8 +65,8 @@ import org.apache.fory.serializer.StringSerializer;
  * and never retain the input or reusable decode buffer.
  *
  * <p>This concrete owner implements UTF-8 token probes, packed digit parsing, string decoding, and
- * field hashing. {@link #clear()} releases the input and bounds the retained decode workspace
- * before the owning pooled state is reused.
+ * field hashing. {@link #clear()} releases the input and decode workspace references after the
+ * owning pooled state has reclaimed the workspace.
  */
 public final class Utf8JsonReader extends JsonReader {
   private static final byte[] EMPTY_BYTES = new byte[0];
@@ -79,14 +79,6 @@ public final class Utf8JsonReader extends JsonReader {
   private static final int[] NANO_SCALE = {
     1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000
   };
-  private static final int INITIAL_STRING_DECODE_BUFFER_SIZE = 1024;
-
-  /** The floor the decode buffer is shrunk back to; it is kept until it is twice what is needed. */
-  private static final int RETAINED_STRING_DECODE_BUFFER_SIZE = 8192;
-
-  /** The ceiling on what a single document can keep alive in a pooled reader between parses. */
-  private static final int MAX_RETAINED_STRING_DECODE_BUFFER_SIZE = 1 << 17;
-
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
   private static final long BYTE_ONES = 0x0101010101010101L;
   private static final int INT_BYTE_ONES = 0x01010101;
@@ -131,13 +123,9 @@ public final class Utf8JsonReader extends JsonReader {
   // UTF-8 string decoding must keep unsigned byte conversion for non-ASCII content.
   private byte[] input;
   private int inputLimit;
-  private byte[] stringDecodeBuffer = new byte[INITIAL_STRING_DECODE_BUFFER_SIZE];
-
-  /**
-   * Bytes of the longest string decoded since the last {@link #clear()}, so a steady workload keeps
-   * them.
-   */
-  private int stringDecodeHighWater;
+  // The caller supplies decode storage on every reset; avoid a redundant null check or allocation
+  // on pooled root setup. Decoding owns any subsequent growth.
+  private byte[] stringDecodeBuffer;
 
   // Keep the cache after hot representation fields; an inherited reference shifts their offsets.
   private final FieldNameCache fieldNameCache;
@@ -392,7 +380,6 @@ public final class Utf8JsonReader extends JsonReader {
         out = putUtf16Char(outBytes, out, Character.lowSurrogate(codePoint));
       }
     }
-    recordStringDecodeUse(out);
     return decodedQuotedText(outBytes, out, true);
   }
 
@@ -517,12 +504,15 @@ public final class Utf8JsonReader extends JsonReader {
     return candidate;
   }
 
-  public Utf8JsonReader(JsonConfig config, JsonTypeResolver typeResolver, byte[] input) {
+  public Utf8JsonReader(
+      JsonConfig config, JsonTypeResolver typeResolver, byte[] input, byte[] decodeBuffer) {
     this(config, typeResolver);
-    reset(input);
+    reset(input, decodeBuffer);
   }
 
-  public Utf8JsonReader reset(byte[] input) {
+  /** Resets the input and borrows the caller's non-null decode buffer until {@link #clear()}. */
+  public Utf8JsonReader reset(byte[] input, byte[] decodeBuffer) {
+    stringDecodeBuffer = decodeBuffer;
     this.input = input;
     inputLimit = input.length;
     position = 0;
@@ -530,9 +520,10 @@ public final class Utf8JsonReader extends JsonReader {
     return this;
   }
 
-  /** Resets this reader to a logical range of a borrowed byte array. */
+  /** Resets to a logical input range and borrows the caller's non-null decode buffer. */
   @Internal
-  public Utf8JsonReader reset(byte[] input, int offset, int length) {
+  public Utf8JsonReader reset(byte[] input, int offset, int length, byte[] decodeBuffer) {
+    stringDecodeBuffer = decodeBuffer;
     int inputLength = input.length;
     if ((offset | length) < 0 || offset > inputLength - length) {
       throwInvalidByteRange(offset, length);
@@ -554,27 +545,13 @@ public final class Utf8JsonReader extends JsonReader {
     input = EMPTY_BYTES;
     inputLimit = 0;
     position = 0;
-    // Keep what the last document needed, so consecutive large documents stop re-growing the
-    // buffer, but never pin more than the ceiling in a pooled reader.
-    int keep =
-        Math.max(
-            RETAINED_STRING_DECODE_BUFFER_SIZE,
-            Math.min(stringDecodeHighWater, MAX_RETAINED_STRING_DECODE_BUFFER_SIZE));
-    if (stringDecodeBuffer.length > MAX_RETAINED_STRING_DECODE_BUFFER_SIZE
-        || stringDecodeBuffer.length - keep >= keep) {
-      stringDecodeBuffer = new byte[keep];
-    }
-    stringDecodeHighWater = 0;
+    stringDecodeBuffer = null;
   }
 
-  /**
-   * Both decode paths end here, so a buffer grown for quoted text is kept the same way a String's
-   * is.
-   */
-  private void recordStringDecodeUse(int length) {
-    if (length > stringDecodeHighWater) {
-      stringDecodeHighWater = length;
-    }
+  /** Returns the current storage, including any growth, before {@link #clear()} detaches it. */
+  @Internal
+  public byte[] getStringDecodeBuffer() {
+    return stringDecodeBuffer;
   }
 
   @Override
@@ -4738,7 +4715,6 @@ public final class Utf8JsonReader extends JsonReader {
   }
 
   private String finishDecodedString(byte[] bytes, int length, boolean utf16) {
-    recordStringDecodeUse(length);
     // Strings must not share the reader-owned decode buffer; the buffer is reused by later reads.
     byte[] result = new byte[length];
     System.arraycopy(bytes, 0, result, 0, length);

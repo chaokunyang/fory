@@ -91,20 +91,20 @@ public class ForyJsonByteRangeTest {
         }
         bytes[offset + length] = '{';
         bytes[offset + length + 1] = '}';
-        reader.reset(bytes, offset, length + 2);
+        reader.reset(bytes, offset, length + 2, reader.getStringDecodeBuffer());
         assertEquals(reader.consumeToken('{'), true);
         assertEquals(reader.position(), offset + length + 1);
         reader.expectNextToken('}');
         reader.finish();
 
-        reader.reset(bytes, offset, length);
+        reader.reset(bytes, offset, length, reader.getStringDecodeBuffer());
         assertEquals(reader.consumeToken('{'), false);
         assertEquals(reader.position(), offset + length);
       }
     }
     for (int value = 0; value < 256; value++) {
       byte[] bytes = {' ', (byte) value, '{'};
-      reader.reset(bytes);
+      reader.reset(bytes, reader.getStringDecodeBuffer());
       boolean space = value == ' ' || value == '\n' || value == '\r' || value == '\t';
       assertEquals(reader.consumeToken('{'), space || value == '{');
       assertEquals(reader.position(), space ? 3 : value == '{' ? 2 : 1);

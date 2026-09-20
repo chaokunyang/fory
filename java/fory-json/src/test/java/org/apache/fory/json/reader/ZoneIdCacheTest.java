@@ -105,9 +105,10 @@ public class ZoneIdCacheTest {
         byte[] bytes = new byte[start + length];
         Arrays.fill(bytes, (byte) '!');
         System.arraycopy(expected, 0, bytes, start, length);
-        Utf8JsonReader utf8 = new Utf8JsonReader(CONFIG, new JsonTypeResolver(REGISTRY), bytes);
+        Utf8JsonReader utf8 =
+            new Utf8JsonReader(CONFIG, new JsonTypeResolver(REGISTRY), bytes, new byte[1024]);
         Latin1JsonReader latin1 =
-            new Latin1JsonReader(CONFIG, new JsonTypeResolver(REGISTRY), bytes);
+            new Latin1JsonReader(CONFIG, new JsonTypeResolver(REGISTRY), bytes, new byte[1024]);
         for (JsonReader reader : new JsonReader[] {utf8, latin1}) {
           assertTrue(reader.matchesZoneId(start, bytes.length, expected));
           assertFalse(reader.matchesZoneId(start, bytes.length - 1, expected));
@@ -149,7 +150,10 @@ public class ZoneIdCacheTest {
   private static ZoneId read(ZoneIdCache cache, String id, long hash) {
     Utf8JsonReader reader =
         new Utf8JsonReader(
-            CONFIG, new JsonTypeResolver(REGISTRY), id.getBytes(StandardCharsets.UTF_8));
+            CONFIG,
+            new JsonTypeResolver(REGISTRY),
+            id.getBytes(StandardCharsets.UTF_8),
+            new byte[1024]);
     return cache.get(reader, 0, id.length(), hash);
   }
 

@@ -119,17 +119,17 @@ public class JsonScalarTest extends ForyJsonTestModels {
         Arrays.fill(bytes, (byte) 'x');
         System.arraycopy(encoded, 0, bytes, offset, encoded.length);
         for (int length = 0; length < encoded.length; length++) {
-          reader.reset(bytes, offset, length);
+          reader.reset(bytes, offset, length, reader.getStringDecodeBuffer());
           // A complete token remains in the backing array beyond the declared input slice.
           assertThrows(ForyJsonException.class, () -> reader.readBooleanValue());
         }
-        reader.reset(bytes, offset, encoded.length);
+        reader.reset(bytes, offset, encoded.length, reader.getStringDecodeBuffer());
         assertEquals(reader.readBooleanValue(), token.contains("true"));
         reader.finish();
         for (int index = 0; index < encoded.length; index++) {
           byte saved = bytes[offset + index];
           bytes[offset + index] = 'x';
-          reader.reset(bytes, offset, encoded.length);
+          reader.reset(bytes, offset, encoded.length, reader.getStringDecodeBuffer());
           assertThrows(
               ForyJsonException.class,
               () -> {
@@ -161,9 +161,9 @@ public class JsonScalarTest extends ForyJsonTestModels {
           byte[] sliced = new byte[offset + bytes.length + 8];
           System.arraycopy(bytes, 0, sliced, offset, bytes.length);
           Utf8JsonReader reader = newUtf8Reader(sliced);
-          reader.reset(sliced, offset, whitespace.length());
+          reader.reset(sliced, offset, whitespace.length(), reader.getStringDecodeBuffer());
           assertThrows(RuntimeException.class, reader::peekToken);
-          reader.reset(sliced, offset, bytes.length);
+          reader.reset(sliced, offset, bytes.length, reader.getStringDecodeBuffer());
           assertEquals(reader.peekToken(), token.charAt(0));
           assertEquals(reader.position(), offset + whitespace.length());
           reader.skipValue();
@@ -547,7 +547,7 @@ public class JsonScalarTest extends ForyJsonTestModels {
             byte[] input = new byte[offset + token.length + 8];
             Arrays.fill(input, (byte) '9');
             System.arraycopy(token, 0, input, offset, token.length);
-            reader.reset(input, offset, token.length);
+            reader.reset(input, offset, token.length, reader.getStringDecodeBuffer());
             assertSame(codec.readUtf8(reader), value);
             reader.finish();
           }
@@ -760,13 +760,16 @@ public class JsonScalarTest extends ForyJsonTestModels {
     for (int value : new int[] {0, -1, 17, 123456789, Integer.MIN_VALUE, Integer.MAX_VALUE}) {
       String number = Integer.toString(value);
       for (String token : new String[] {number, '"' + number + '"'}) {
-        reader.reset((token + ",17").getBytes(StandardCharsets.US_ASCII));
+        reader.reset(
+            (token + ",17").getBytes(StandardCharsets.US_ASCII), reader.getStringDecodeBuffer());
         assertEquals(reader.readIntTokenValue(), value);
         reader.expectNextToken(',');
         assertEquals(reader.readIntTokenValue(), 17);
         reader.finish();
       }
-      reader.reset(('"' + number + "\":17").getBytes(StandardCharsets.US_ASCII));
+      reader.reset(
+          ('"' + number + "\":17").getBytes(StandardCharsets.US_ASCII),
+          reader.getStringDecodeBuffer());
       assertEquals(reader.readFieldNameInt(), value);
       reader.expectNextToken(':');
       assertEquals(reader.readIntTokenValue(), 17);
@@ -774,10 +777,12 @@ public class JsonScalarTest extends ForyJsonTestModels {
       for (String suffix : new String[] {".0", "e0", "E+1"}) {
         String invalid = number + suffix;
         for (String token : new String[] {invalid, '"' + invalid + '"'}) {
-          reader.reset(token.getBytes(StandardCharsets.US_ASCII));
+          reader.reset(token.getBytes(StandardCharsets.US_ASCII), reader.getStringDecodeBuffer());
           assertThrows(RuntimeException.class, reader::readIntTokenValue);
         }
-        reader.reset(('"' + invalid + '"').getBytes(StandardCharsets.US_ASCII));
+        reader.reset(
+            ('"' + invalid + '"').getBytes(StandardCharsets.US_ASCII),
+            reader.getStringDecodeBuffer());
         assertThrows(RuntimeException.class, reader::readFieldNameInt);
       }
     }
@@ -812,11 +817,12 @@ public class JsonScalarTest extends ForyJsonTestModels {
           byte[] input = new byte[offset + bytes.length + 8];
           Arrays.fill(input, (byte) '9');
           System.arraycopy(bytes, 0, input, offset, bytes.length);
-          reader.reset(input, offset, bytes.length);
+          reader.reset(input, offset, bytes.length, reader.getStringDecodeBuffer());
           assertEquals(reader.readIntTokenValue(), expected);
           reader.finish();
         }
-        reader.reset((token + ",17").getBytes(StandardCharsets.US_ASCII));
+        reader.reset(
+            (token + ",17").getBytes(StandardCharsets.US_ASCII), reader.getStringDecodeBuffer());
         assertEquals(reader.readIntTokenValue(), expected);
         reader.expectNextToken(',');
         assertEquals(reader.readIntTokenValue(), 17);
@@ -900,10 +906,10 @@ public class JsonScalarTest extends ForyJsonTestModels {
             byte[] bytes = new byte[offset + encoded.length + 8];
             Arrays.fill(bytes, (byte) '9');
             System.arraycopy(encoded, 0, bytes, offset, encoded.length);
-            reader.reset(bytes, offset, token.length());
+            reader.reset(bytes, offset, token.length(), reader.getStringDecodeBuffer());
             assertEquals(reader.readLongValue(), expected);
             reader.finish();
-            reader.reset(bytes, offset, encoded.length);
+            reader.reset(bytes, offset, encoded.length, reader.getStringDecodeBuffer());
             assertEquals(reader.readLongValue(), expected);
             reader.expectNextToken(',');
             assertEquals(reader.readInt(), 17);
@@ -1465,12 +1471,12 @@ public class JsonScalarTest extends ForyJsonTestModels {
             byte[] bytes = new byte[offset + value.length + 8];
             Arrays.fill(bytes, (byte) '9');
             System.arraycopy(value, 0, bytes, offset, value.length);
-            reader.reset(bytes, offset, value.length);
+            reader.reset(bytes, offset, value.length, reader.getStringDecodeBuffer());
             assertEquals(reader.readBigDecimal(), expected);
             reader.finish();
           }
           byte[] sequence = (token + ",123456789").getBytes(StandardCharsets.UTF_8);
-          reader.reset(sequence);
+          reader.reset(sequence, reader.getStringDecodeBuffer());
           assertEquals(reader.readBigDecimal(), expected);
           reader.expectNextToken(',');
           assertEquals(reader.readIntValue(), 123456789);
@@ -1506,11 +1512,13 @@ public class JsonScalarTest extends ForyJsonTestModels {
               byte[] bytes = new byte[offset + value.length + 8];
               Arrays.fill(bytes, (byte) '9');
               System.arraycopy(value, 0, bytes, offset, value.length);
-              reader.reset(bytes, offset, value.length);
+              reader.reset(bytes, offset, value.length, reader.getStringDecodeBuffer());
               assertEquals(reader.readBigDecimal(), expected);
               reader.finish();
             }
-            reader.reset((token + ",123456789").getBytes(StandardCharsets.UTF_8));
+            reader.reset(
+                (token + ",123456789").getBytes(StandardCharsets.UTF_8),
+                reader.getStringDecodeBuffer());
             assertEquals(reader.readBigDecimal(), expected);
             reader.expectNextToken(',');
             assertEquals(reader.readIntValue(), 123456789);
@@ -1549,11 +1557,13 @@ public class JsonScalarTest extends ForyJsonTestModels {
           byte[] bytes = new byte[offset + value.length + 16];
           Arrays.fill(bytes, (byte) '9');
           System.arraycopy(value, 0, bytes, offset, value.length);
-          reader.reset(bytes, offset, value.length);
+          reader.reset(bytes, offset, value.length, reader.getStringDecodeBuffer());
           assertEquals(reader.readBigDecimal(), expected);
           reader.finish();
         }
-        reader.reset((token + ",123456789").getBytes(StandardCharsets.UTF_8));
+        reader.reset(
+            (token + ",123456789").getBytes(StandardCharsets.UTF_8),
+            reader.getStringDecodeBuffer());
         assertEquals(reader.readBigDecimal(), expected);
         reader.expectNextToken(',');
         assertEquals(reader.readIntValue(), 123456789);
@@ -1639,12 +1649,12 @@ public class JsonScalarTest extends ForyJsonTestModels {
           BigInteger value =
               boundary.add(BigInteger.valueOf(delta)).multiply(BigInteger.valueOf(sign));
           byte[] input = value.toString().getBytes(StandardCharsets.US_ASCII);
-          reader.reset(input, 0, input.length);
+          reader.reset(input, 0, input.length, reader.getStringDecodeBuffer());
           expected.add(value);
           actual.add(reader.readBigInteger());
           BigDecimal decimal = new BigDecimal(value, 7);
           input = decimal.toPlainString().getBytes(StandardCharsets.US_ASCII);
-          reader.reset(input, 0, input.length);
+          reader.reset(input, 0, input.length, reader.getStringDecodeBuffer());
           expected.add(value);
           actual.add(reader.readBigDecimal().unscaledValue());
         }
@@ -1674,7 +1684,7 @@ public class JsonScalarTest extends ForyJsonTestModels {
         Arrays.fill(input, (byte) '9');
         System.arraycopy(token, 0, input, offset, token.length);
         Utf8JsonReader reader = newUtf8Reader(input);
-        reader.reset(input, offset, token.length);
+        reader.reset(input, offset, token.length, reader.getStringDecodeBuffer());
         assertEquals(reader.readNumberAsString(), number);
       }
     }
@@ -1696,7 +1706,7 @@ public class JsonScalarTest extends ForyJsonTestModels {
           byte[] token = (number + ",17").getBytes(StandardCharsets.US_ASCII);
           byte[] bytes = new byte[offset + token.length];
           System.arraycopy(token, 0, bytes, offset, token.length);
-          reader.reset(bytes, offset, token.length);
+          reader.reset(bytes, offset, token.length, reader.getStringDecodeBuffer());
           assertEquals(reader.readNumberAsString(), number);
           reader.expect(',');
           assertEquals(reader.readInt(), 17);
@@ -1708,7 +1718,7 @@ public class JsonScalarTest extends ForyJsonTestModels {
         byte[] bytes = "1234567812345678,17".getBytes(StandardCharsets.US_ASCII);
         bytes[8 + lane] = (byte) ch;
         Latin1JsonReader reference = newLatin1Reader(bytes);
-        reader.reset(bytes);
+        reader.reset(bytes, reader.getStringDecodeBuffer());
         String expected;
         try {
           expected = reference.readNumberAsString();
@@ -1757,7 +1767,7 @@ public class JsonScalarTest extends ForyJsonTestModels {
         byte[] token = (value + ",17").getBytes(StandardCharsets.US_ASCII);
         byte[] bytes = new byte[offset + token.length + 8];
         System.arraycopy(token, 0, bytes, offset, token.length);
-        reader.reset(bytes, offset, token.length);
+        reader.reset(bytes, offset, token.length, reader.getStringDecodeBuffer());
         Number actual = reader.readNumber();
         assertEquals(actual.getClass(), expected.getClass());
         assertEquals(actual, expected);
@@ -1775,7 +1785,7 @@ public class JsonScalarTest extends ForyJsonTestModels {
         new String[] {"-9223372036854775808", "92233720368547758080", "1.25e-100", "-0.0"}) {
       byte[] bytes = value.getBytes(StandardCharsets.US_ASCII);
       for (int length = 0; length <= bytes.length; length++) {
-        reader.reset(bytes, 0, length);
+        reader.reset(bytes, 0, length, reader.getStringDecodeBuffer());
         Latin1JsonReader reference = newLatin1Reader(Arrays.copyOf(bytes, length));
         Number expected;
         try {
@@ -1807,7 +1817,7 @@ public class JsonScalarTest extends ForyJsonTestModels {
         byte[] bytes = "1234567812345678123,17".getBytes(StandardCharsets.US_ASCII);
         bytes[8 + lane] = (byte) ch;
         Latin1JsonReader reference = newLatin1Reader(bytes);
-        reader.reset(bytes);
+        reader.reset(bytes, reader.getStringDecodeBuffer());
         Number expected;
         try {
           expected = reference.readNumber();
@@ -1836,11 +1846,11 @@ public class JsonScalarTest extends ForyJsonTestModels {
           byte[] input = new byte[offset + token.length + 16];
           Arrays.fill(input, (byte) '9');
           System.arraycopy(token, 0, input, offset, token.length);
-          reader.reset(input, offset, token.length);
+          reader.reset(input, offset, token.length, reader.getStringDecodeBuffer());
           assertEquals(reader.readBigInteger(), expected);
           byte[] suffix = ",17        ".getBytes(StandardCharsets.US_ASCII);
           System.arraycopy(suffix, 0, input, offset + token.length, suffix.length);
-          reader.reset(input, offset, token.length + suffix.length);
+          reader.reset(input, offset, token.length + suffix.length, reader.getStringDecodeBuffer());
           assertEquals(reader.readBigInteger(), expected);
           reader.expectNextToken(',');
           assertEquals(reader.readInt(), 17);
@@ -3170,7 +3180,7 @@ public class JsonScalarTest extends ForyJsonTestModels {
           byte[] bytes = new byte[offset + token.length() + 3];
           byte[] value = (token + ",17").getBytes(StandardCharsets.US_ASCII);
           System.arraycopy(value, 0, bytes, offset, value.length);
-          reader.reset(bytes, offset, value.length);
+          reader.reset(bytes, offset, value.length, reader.getStringDecodeBuffer());
           assertEquals(Float.floatToRawIntBits(reader.readFloatTokenValue()), expected);
           reader.expect(',');
           assertEquals(reader.readInt(), 17);
@@ -3207,13 +3217,13 @@ public class JsonScalarTest extends ForyJsonTestModels {
                 byte[] input = (token + ",17        ").getBytes(StandardCharsets.US_ASCII);
                 byte[] bytes = new byte[offset + input.length];
                 System.arraycopy(input, 0, bytes, offset, input.length);
-                reader.reset(bytes, offset, input.length);
+                reader.reset(bytes, offset, input.length, reader.getStringDecodeBuffer());
                 assertEquals(
                     Double.doubleToRawLongBits(reader.readDoubleTokenValue()), expected, token);
                 reader.expectNextToken(',');
                 assertEquals(reader.readInt(), 17);
                 Arrays.fill(bytes, offset + token.length(), bytes.length, (byte) '9');
-                reader.reset(bytes, offset, token.length());
+                reader.reset(bytes, offset, token.length(), reader.getStringDecodeBuffer());
                 assertEquals(
                     Double.doubleToRawLongBits(reader.readDoubleTokenValue()), expected, token);
                 reader.finish();
@@ -3253,13 +3263,13 @@ public class JsonScalarTest extends ForyJsonTestModels {
                 byte[] input = (token + ",17        ").getBytes(StandardCharsets.US_ASCII);
                 byte[] bytes = new byte[offset + input.length];
                 System.arraycopy(input, 0, bytes, offset, input.length);
-                reader.reset(bytes, offset, input.length);
+                reader.reset(bytes, offset, input.length, reader.getStringDecodeBuffer());
                 assertEquals(
                     Float.floatToRawIntBits(reader.readFloatTokenValue()), expected, token);
                 reader.expectNextToken(',');
                 assertEquals(reader.readInt(), 17);
                 Arrays.fill(bytes, offset + token.length(), bytes.length, (byte) '9');
-                reader.reset(bytes, offset, token.length());
+                reader.reset(bytes, offset, token.length(), reader.getStringDecodeBuffer());
                 assertEquals(
                     Float.floatToRawIntBits(reader.readFloatTokenValue()), expected, token);
                 reader.finish();
@@ -4386,7 +4396,7 @@ public class JsonScalarTest extends ForyJsonTestModels {
   private static Utf16JsonReader utf16Reader(String input) {
     byte[] bytes = new byte[input.length() << 1];
     StringSerializer.copyStringCharsToBytes(input, bytes);
-    return newUtf16Reader().reset(input, bytes);
+    return newUtf16Reader().reset(input, bytes, new byte[1024]);
   }
 
   private static void assertGeneratedFloatingFields(GeneratedFloatingFields value) {

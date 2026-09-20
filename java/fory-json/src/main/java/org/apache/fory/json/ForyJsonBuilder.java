@@ -231,10 +231,10 @@ public final class ForyJsonBuilder {
   }
 
   /**
-   * Sets the maximum byte-buffer capacity retained by each pooled String and UTF-8 writer.
+   * Sets the maximum retained capacity of each reusable output or string-decoding byte buffer.
    *
-   * <p>This bounds reusable writer storage after a root operation; it does not limit JSON output
-   * size.
+   * <p>This bounds retained buffer capacity after a root operation; it does not limit JSON input or
+   * output size or the total memory used by this instance.
    */
   public ForyJsonBuilder withBufferSizeLimitBytes(int bufferSizeLimitBytes) {
     if (bufferSizeLimitBytes < 1) {

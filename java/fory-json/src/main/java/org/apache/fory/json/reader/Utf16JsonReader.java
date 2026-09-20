@@ -24,6 +24,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Arrays;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.JsonConfig;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldNameHash;
@@ -45,18 +46,10 @@ import org.apache.fory.serializer.StringSerializer;
  * available when no byte mirror exists. Returned values never retain the reusable decode buffer.
  *
  * <p>This concrete owner implements UTF16 token probes, packed digit parsing, string decoding, and
- * field hashing. {@link #clear()} releases both borrowed representations and bounds the retained
- * decode workspace before the pooled state is reused.
+ * field hashing. {@link #clear()} releases both borrowed representations and the decode workspace
+ * after the owning pooled state has reclaimed the workspace.
  */
 public final class Utf16JsonReader extends JsonReader {
-  private static final int INITIAL_STRING_DECODE_BUFFER_SIZE = 1024;
-
-  /** The floor the decode buffer is shrunk back to; it is kept until it is twice what is needed. */
-  private static final int RETAINED_STRING_DECODE_BUFFER_SIZE = 8192;
-
-  /** The ceiling on what a single document can keep alive in a pooled reader between parses. */
-  private static final int MAX_RETAINED_STRING_DECODE_BUFFER_SIZE = 1 << 17;
-
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
   private static final long BYTE_ONES = 0x0101010101010101L;
   private static final long BYTE_HIGH_BITS = 0x8080808080808080L;
@@ -81,13 +74,9 @@ public final class Utf16JsonReader extends JsonReader {
   private String input;
   private byte[] bytes;
   private int length;
-  private byte[] stringDecodeBuffer = new byte[INITIAL_STRING_DECODE_BUFFER_SIZE];
-
-  /**
-   * Bytes of the longest string decoded since the last {@link #clear()}, so a steady workload keeps
-   * them.
-   */
-  private int stringDecodeHighWater;
+  // The caller supplies decode storage on every reset; avoid a redundant null check or allocation
+  // on pooled root setup. Decoding owns any subsequent growth.
+  private byte[] stringDecodeBuffer;
 
   // Keep the cache after hot representation fields; an inherited reference shifts their offsets.
   private final FieldNameCache fieldNameCache;
@@ -284,7 +273,6 @@ public final class Utf16JsonReader extends JsonReader {
       outBytes = ensureStringDecodeCapacity(outBytes, out + 2);
       out = putUtf16Char(outBytes, out, ch);
     }
-    recordStringDecodeUse(out);
     return decodedQuotedText(outBytes, out, true);
   }
 
@@ -378,12 +366,15 @@ public final class Utf16JsonReader extends JsonReader {
     return candidate;
   }
 
-  public Utf16JsonReader(JsonConfig config, JsonTypeResolver typeResolver, String input) {
+  public Utf16JsonReader(
+      JsonConfig config, JsonTypeResolver typeResolver, String input, byte[] decodeBuffer) {
     this(config, typeResolver);
-    reset(input);
+    reset(input, decodeBuffer);
   }
 
-  public Utf16JsonReader reset(String input) {
+  /** Resets the input and borrows the caller's non-null decode buffer until {@link #clear()}. */
+  public Utf16JsonReader reset(String input, byte[] decodeBuffer) {
+    stringDecodeBuffer = decodeBuffer;
     this.input = input;
     if (StringSerializer.isBytesBackedString()) {
       byte coder = StringSerializer.getStringCoder(input);
@@ -403,13 +394,15 @@ public final class Utf16JsonReader extends JsonReader {
   }
 
   /**
-   * Resets this reader with a String and its exact native-layout UTF16 byte mirror.
+   * Resets this reader with a String, its exact native-layout UTF16 byte mirror, and the caller's
+   * non-null decode buffer.
    *
    * <p>The caller owns creating the mirror. Its first {@code input.length() * 2} bytes must encode
    * the same UTF16 code units in the layout used by {@link StringSerializer}; this method validates
    * capacity but does not compare the mirror on the hot setup path.
    */
-  public Utf16JsonReader reset(String input, byte[] bytes) {
+  public Utf16JsonReader reset(String input, byte[] bytes, byte[] decodeBuffer) {
+    stringDecodeBuffer = decodeBuffer;
     int length = input.length();
     if (length > (Integer.MAX_VALUE >>> 1)) {
       throw new IllegalArgumentException("String is too large");
@@ -431,27 +424,13 @@ public final class Utf16JsonReader extends JsonReader {
     bytes = null;
     length = 0;
     position = 0;
-    // Keep what the last document needed, so consecutive large documents stop re-growing the
-    // buffer, but never pin more than the ceiling in a pooled reader.
-    int keep =
-        Math.max(
-            RETAINED_STRING_DECODE_BUFFER_SIZE,
-            Math.min(stringDecodeHighWater, MAX_RETAINED_STRING_DECODE_BUFFER_SIZE));
-    if (stringDecodeBuffer.length > MAX_RETAINED_STRING_DECODE_BUFFER_SIZE
-        || stringDecodeBuffer.length - keep >= keep) {
-      stringDecodeBuffer = new byte[keep];
-    }
-    stringDecodeHighWater = 0;
+    stringDecodeBuffer = null;
   }
 
-  /**
-   * Both decode paths end here, so a buffer grown for quoted text is kept the same way a String's
-   * is.
-   */
-  private void recordStringDecodeUse(int length) {
-    if (length > stringDecodeHighWater) {
-      stringDecodeHighWater = length;
-    }
+  /** Returns the current storage, including any growth, before {@link #clear()} detaches it. */
+  @Internal
+  public byte[] getStringDecodeBuffer() {
+    return stringDecodeBuffer;
   }
 
   @Override
@@ -2265,7 +2244,6 @@ public final class Utf16JsonReader extends JsonReader {
   }
 
   private String finishDecodedString(byte[] outBytes, int length, boolean utf16) {
-    recordStringDecodeUse(length);
     // The decode buffer is reader-owned reusable storage; returned Strings must own exact bytes.
     byte[] result = new byte[length];
     System.arraycopy(outBytes, 0, result, 0, length);

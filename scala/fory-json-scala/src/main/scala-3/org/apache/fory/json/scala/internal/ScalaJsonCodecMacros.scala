@@ -24,7 +24,7 @@ import org.apache.fory.json.scala.ScalaJsonCodec
 import scala.quoted.*
 
 private[scala] object ScalaJsonCodecMacros {
-  def derive[T: Type](using quotes: Quotes): Expr[ScalaJsonCodec[T]] = {
+  def derive[T: Type](stringEnum: Boolean)(using quotes: Quotes): Expr[ScalaJsonCodec[T]] = {
     import quotes.reflect.*
 
     val root = TypeRepr.of[T].dealias.typeSymbol
@@ -63,11 +63,11 @@ private[scala] object ScalaJsonCodecMacros {
     val rootClass =
       Literal(ClassOfConstant(TypeRepr.of[T].dealias)).asExprOf[Class[?]]
     val caseExpressions = cases.map { child =>
-      if (child.primaryConstructor == Symbol.noSymbol) {
+      if (child.flags.is(Flags.Module) || child.primaryConstructor == Symbol.noSymbol) {
         val value =
           if (enumRoot) Select.unique(Ref(root.companionModule), child.name).asExpr
           else {
-            val module = child.companionModule
+            val module = if (child.isTerm) child else child.companionModule
             if (module == Symbol.noSymbol)
               report.errorAndAbort(s"Cannot resolve Scala singleton ${child.fullName}")
             Ref(module).asExpr
@@ -75,6 +75,8 @@ private[scala] object ScalaJsonCodecMacros {
         val singleton = '{ $value.asInstanceOf[AnyRef] }
         ('{ $singleton.getClass }, singleton)
       } else {
+        if (stringEnum)
+          report.errorAndAbort(s"String enum representation requires singleton cases: ${child.fullName}")
         (Literal(ClassOfConstant(child.typeRef)).asExprOf[Class[?]], '{ null })
       }
     }
@@ -87,7 +89,8 @@ private[scala] object ScalaJsonCodecMacros {
         $rootClass.asInstanceOf[Class[T]],
         Array[Class[_]](${ Varargs(classExpressions) }*),
         Array[String](${ Varargs(nameExpressions) }*),
-        Array[AnyRef](${ Varargs(singletonExpressions) }*)
+        Array[AnyRef](${ Varargs(singletonExpressions) }*),
+        ${ Expr(stringEnum) }
       )
     }
   }

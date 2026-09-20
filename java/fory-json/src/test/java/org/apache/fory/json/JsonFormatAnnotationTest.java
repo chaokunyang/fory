@@ -24,6 +24,8 @@ import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.expectThrows;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.time.Duration;
@@ -81,6 +83,122 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
   @Factory(dataProvider = "enableCodegen")
   public JsonFormatAnnotationTest(boolean codegen) {
     super(codegen);
+  }
+
+  @Test
+  public void scalarStrings() {
+    ForyJson json = newJson();
+    StringScalars value = new StringScalars();
+    String text = json.toJson(value);
+    assertTrue(text.contains("\"flag\":\"false\""), text);
+    assertTrue(text.contains("\"integer\":\"7\""), text);
+    assertTrue(text.contains("\"longValue\":\"9223372036854775807\""), text);
+    assertTrue(text.contains("\"decimal\":\"1.25\""), text);
+    assertTrue(text.contains("\"values\":[\"1\",\"2\"]"), text);
+    assertTrue(text.contains("\"nullable\":null"), text);
+    assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), text);
+    assertEquals(json.toJson(json.fromJson(text, StringScalars.class)), text);
+    assertEquals(
+        json.toJson(json.fromJson(text.getBytes(StandardCharsets.UTF_8), StringScalars.class)),
+        text);
+    String nativeText = text.replace("\"false\"", "false").replace("\"7\"", "7");
+    assertEquals(json.toJson(json.fromJson(nativeText, StringScalars.class)), text);
+    assertEquals(
+        json.toJson(
+            json.fromJson(nativeText.getBytes(StandardCharsets.UTF_8), StringScalars.class)),
+        text);
+    assertGeneratedWhenSupported(json, StringScalars.class);
+    ForyJson quotedLongs = newJsonBuilder().writeLongAsString(true).build();
+    assertEquals(quotedLongs.toJson(value), text);
+    for (double nonFinite :
+        new double[] {Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+      value.doubleValue = nonFinite;
+      value.floatValue = (float) nonFinite;
+      String encoded = json.toJson(value);
+      assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), encoded);
+      assertEquals(json.fromJson(encoded, StringScalars.class).doubleValue, nonFinite);
+      assertEquals(
+          json.fromJson(encoded.getBytes(StandardCharsets.UTF_8), StringScalars.class).floatValue,
+          (float) nonFinite);
+    }
+    assertThrows(
+        ForyJsonException.class, () -> json.fromJson("{\"flag\":null}", StringScalars.class));
+  }
+
+  @Test
+  public void scalarStringMixin() {
+    ForyJson json = newJsonBuilder().registerMixin(ScalarMixin.class).build();
+    ScalarTarget value = new ScalarTarget();
+    String expected = "{\"expired\":\"false\"}";
+    assertEquals(json.toJson(value), expected);
+    assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected);
+    assertEquals(json.fromJson(expected, ScalarTarget.class).expired, false);
+    assertEquals(
+        json.fromJson(expected.getBytes(StandardCharsets.UTF_8), ScalarTarget.class).expired,
+        false);
+    assertEquals(json.fromJson("{\"expired\":true}", ScalarTarget.class).expired, true);
+    assertEquals(newJson().toJson(value), "{\"expired\":false}");
+    assertGeneratedWhenSupported(json, ScalarTarget.class);
+    assertThrows(ForyJsonException.class, () -> json.toJson(new InvalidStringFormat()));
+    assertThrows(ForyJsonException.class, () -> json.toJson(new StringPattern()));
+  }
+
+  public static class StringScalars {
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public boolean flag;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public byte byteValue = -2;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public short shortValue = 32767;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public int integer = 7;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public long longValue = Long.MAX_VALUE;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public float floatValue = -0.0f;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public double doubleValue = 1.5;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public BigInteger big = new BigInteger("123456789012345678901");
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public BigDecimal decimal = new BigDecimal("1.25");
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    @JsonProperty(include = JsonProperty.Include.ALWAYS)
+    public Boolean nullable;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public int[] values = {1, 2};
+
+    public String label = "中文";
+  }
+
+  public static class ScalarTarget {
+    public boolean expired;
+  }
+
+  @JsonMixin(target = ScalarTarget.class)
+  public abstract static class ScalarMixin {
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    boolean expired;
+  }
+
+  public static class InvalidStringFormat {
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public String text;
+  }
+
+  public static class StringPattern {
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "0")
+    public int value;
   }
 
   @Test
@@ -204,6 +322,32 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
         json.fromJson("{\"value\":\"03/01/2024\"}", CreatorField.class).value,
         LocalDate.of(2024, 1, 3));
     assertGeneratedWhenSupported(json, CreatorField.class);
+  }
+
+  @Test
+  public void parameterFormats() {
+    ForyJson json = newJson();
+    LocalDate date = LocalDate.of(2024, 1, 2);
+    String text = "{\"value\":\"02/01/2024\"}";
+    byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+    assertEquals(json.toJson(new ListedParameter(date)), text);
+    assertEquals(json.fromJson(text, ListedParameter.class).value, date);
+    assertEquals(json.fromJson(bytes, ListedParameter.class).value, date);
+    assertEquals(json.toJson(new NamedParameter(date)), text);
+    assertEquals(json.fromJson(text, NamedParameter.class).value, date);
+    assertEquals(json.fromJson(bytes, NamedParameter.class).value, date);
+    assertEquals(json.fromJson(text, CreatorInput.class).result, date);
+    assertEquals(json.fromJson(bytes, CreatorInput.class).result, date);
+    SetterParameter setter = json.fromJson(text, SetterParameter.class);
+    assertEquals(setter.getValue(), date);
+    assertEquals(json.fromJson(bytes, SetterParameter.class).getValue(), date);
+    assertEquals(json.toJson(setter), text);
+    assertEquals(new String(json.toJsonBytes(setter), StandardCharsets.UTF_8), text);
+    assertGeneratedWhenSupported(json, ListedParameter.class);
+    assertGeneratedWhenSupported(json, NamedParameter.class);
+    assertGeneratedWhenSupported(json, CreatorInput.class);
+    assertGeneratedWhenSupported(json, SetterParameter.class);
+    assertThrows(ForyJsonException.class, () -> json.fromJson("{}", ConflictingParameter.class));
   }
 
   @Test
@@ -478,6 +622,56 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
     public CreatorField(LocalDate value) {
       this.value = value;
     }
+  }
+
+  public static final class ListedParameter {
+    public final LocalDate value;
+
+    @JsonCreator({"value"})
+    public ListedParameter(@JsonFormat(pattern = DATE_PATTERN) LocalDate value) {
+      this.value = value;
+    }
+  }
+
+  public static final class NamedParameter {
+    public final LocalDate value;
+
+    @JsonCreator
+    public NamedParameter(
+        @JsonProperty("value") @JsonFormat(pattern = DATE_PATTERN) LocalDate value) {
+      this.value = value;
+    }
+  }
+
+  public static final class CreatorInput {
+    public final LocalDate result;
+
+    @JsonCreator
+    public CreatorInput(
+        @JsonProperty("value") @JsonFormat(pattern = DATE_PATTERN) LocalDate value) {
+      result = value;
+    }
+  }
+
+  public static final class SetterParameter {
+    private LocalDate value;
+
+    public LocalDate getValue() {
+      return value;
+    }
+
+    public void setValue(@JsonFormat(pattern = DATE_PATTERN) LocalDate value) {
+      this.value = value;
+    }
+  }
+
+  public static final class ConflictingParameter {
+    @JsonCreator
+    public ConflictingParameter(
+        @JsonProperty("value")
+            @JsonFormat(shape = JsonFormat.Shape.STRING)
+            @JsonCodec(Base64ByteArrayCodec.class)
+            byte[] value) {}
   }
 
   public static final class MixinTarget {

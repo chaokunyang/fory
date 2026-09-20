@@ -19,8 +19,13 @@
 
 package org.apache.fory.json.scala
 
+import java.nio.charset.StandardCharsets.UTF_8
+
 import org.apache.fory.json.ForyJsonException
+import org.apache.fory.json.examples.EnumSchemas
+import org.apache.fory.exception.InsecureException
 import org.apache.fory.json.annotation.{JsonCodec, JsonProperty}
+import org.apache.fory.reflect.TypeRef
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.annotation.meta.{field, getter, param}
@@ -32,6 +37,22 @@ object AnnotatedWeekday extends Enumeration {
 object AnnotatedMonth extends Enumeration {
   val January, February = Value
 }
+
+case class EnumerationValues[T](values: List[T], label: String)
+
+object CardCases {
+  sealed trait Suit
+  case object Hearts extends Suit { override def toString: String = "overridden" }
+  sealed trait Dark extends Suit
+  case object Clubs extends Dark
+  case object 中文 extends Dark
+}
+
+case class CardValues(value: CardCases.Suit, values: List[CardCases.Suit])
+
+sealed trait MixedCard
+case object EmptyCard extends MixedCard
+final case class NamedCard(name: String) extends MixedCard
 
 final class AnnotatedWeekdayCodec extends ScalaEnumerationCodec(AnnotatedWeekday)
 
@@ -87,6 +108,80 @@ class ScalaJsonEnumerationSuite extends AnyFunSuite {
     ForyJsonScala.builder().withCodegen(false).build(),
     ForyJsonScala.builder().withAsyncCompilation(false).build()
   )
+
+  test("type tokens retain enumeration owners") {
+    val days = ScalaTypeRef[Array[AnnotatedWeekday.Value]]
+    val months = ScalaTypeRef[Array[AnnotatedMonth.Value]]
+    val nested = ScalaTypeRef[List[Option[AnnotatedWeekday.Value]]]
+    val model = ScalaTypeRef[EnumerationValues[AnnotatedMonth.Value]]
+    val weekday = AnnotatedWeekday
+    val alias = ScalaTypeRef[weekday.Value]
+    assert(alias == ScalaTypeRef[AnnotatedWeekday.Value])
+    assert(days != months)
+    for (json <- jsonInstances) {
+      val expected = "[\"Monday\",null,\"Tuesday\"]"
+      val values = Array(AnnotatedWeekday.Monday, null, AnnotatedWeekday.Tuesday)
+      assert(json.toJson(values, days) == expected)
+      assert(new String(json.toJsonBytes(values, days), UTF_8) == expected)
+      assert(json.fromJson(expected, days).sameElements(values))
+      assert(json.fromJson(expected.getBytes(UTF_8), days).sameElements(values))
+      assert(json.fromJson("[\"January\"]", months).sameElements(Array(AnnotatedMonth.January)))
+      assert(json.fromJson("[\"Monday\",null]", nested) == List(Some(AnnotatedWeekday.Monday), None))
+      val boxed = EnumerationValues(List(AnnotatedMonth.February), "中文")
+      val text = json.toJson(boxed, model)
+      assert(json.fromJson(text, model).values.sameElements(boxed.values))
+      assert(json.fromJson(text.getBytes(UTF_8), model).values.sameElements(boxed.values))
+      assertThrows[ForyJsonException](json.fromJson("[\"Monday\"]", months))
+      assertThrows[ForyJsonException](json.toJson(
+        Array(AnnotatedMonth.January.asInstanceOf[AnnotatedWeekday.Value]), days))
+      assertThrows[ForyJsonException](json.fromJson("\"Monday\"", new TypeRef[Enumeration#Value]() {}))
+    }
+  }
+
+  test("singleton ADTs use an explicit string representation") {
+    val factory = ScalaJsonCodec.stringEnum[CardCases.Suit]
+    val arrayType = ScalaTypeRef[Array[CardCases.Suit]]
+    for (codegen <- Seq(false, true)) {
+      val json = ForyJsonScala.builder()
+        .registerCodec(classOf[CardCases.Suit], factory)
+        .withCodegen(codegen).withAsyncCompilation(false).build()
+      val values: Array[CardCases.Suit] = Array(CardCases.Hearts, CardCases.Clubs, CardCases.中文, null)
+      val expected = "[\"Hearts\",\"Clubs\",\"中文\",null]"
+      assert(json.toJson(values, arrayType) == expected)
+      assert(new String(json.toJsonBytes(values, arrayType), UTF_8) == expected)
+      assert(json.fromJson(expected, arrayType).sameElements(values))
+      assert(json.fromJson(expected.getBytes(UTF_8), arrayType).sameElements(values))
+      assert(json.toJson(CardCases.Hearts) == "\"Hearts\"")
+      val model = CardValues(CardCases.Hearts, List(CardCases.Clubs))
+      val text = "{\"value\":\"Hearts\",\"values\":[\"Clubs\"]}"
+      assert(json.toJson(model) == text)
+      assert(new String(json.toJsonBytes(model), UTF_8) == text)
+      assert(json.fromJson(text, classOf[CardValues]) == model)
+      assert(json.fromJson(text.getBytes(UTF_8), classOf[CardValues]) == model)
+      assertThrows[ForyJsonException](json.fromJson("\"Unknown\"", classOf[CardCases.Suit]))
+      assertThrows[ForyJsonException](json.fromJson("{\"Hearts\":{}}", classOf[CardCases.Suit]))
+    }
+    val defaultJson = ForyJsonScala.builder()
+      .registerCodec(classOf[CardCases.Suit], ScalaJsonCodec.derived[CardCases.Suit]).build()
+    assert(defaultJson.toJson(CardCases.Hearts, classOf[CardCases.Suit]) == "{\"Hearts\":{}}")
+    assert(factory.factoryKey() != ScalaJsonCodec.derived[CardCases.Suit].factoryKey())
+  }
+
+  test("string enums require a closed singleton schema") {
+    assertDoesNotCompile("ScalaJsonCodec.stringEnum[MixedCard]")
+    assertDoesNotCompile("ScalaJsonCodec.stringEnum[Product]")
+    val json = ForyJsonScala.builder()
+      .registerCodec(classOf[CardCases.Suit], ScalaJsonCodec.stringEnum[CardCases.Suit])
+      .withTypeChecker((name, _) => name != CardCases.Clubs.getClass.getName).build()
+    assertThrows[InsecureException](json.fromJson("\"Clubs\"", classOf[CardCases.Suit]))
+  }
+
+  test("applications derive schemas outside the library package") {
+    val json = ForyJsonScala.builder()
+      .registerCodec(classOf[EnumSchemas.State], EnumSchemas.codec).build()
+    assert(json.toJson(EnumSchemas.Ready, classOf[EnumSchemas.State]) == "\"Ready\"")
+    assert(json.fromJson("\"Ready\"", classOf[EnumSchemas.State]) eq EnumSchemas.Ready)
+  }
 
   test("annotation binds direct and composite values") {
     val value = AnnotatedSchedule(

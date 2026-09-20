@@ -23,9 +23,9 @@ import java.lang.reflect.Modifier
 import java.util.{HashMap, IdentityHashMap}
 
 import org.apache.fory.json.ForyJsonException
-import org.apache.fory.json.codec.{AbstractJsonValueCodec, JsonValueCodec}
-import org.apache.fory.json.reader.JsonReader
-import org.apache.fory.json.writer.JsonWriter
+import org.apache.fory.json.codec.JsonValueCodec
+import org.apache.fory.json.reader.{Latin1JsonReader, Utf16JsonReader, Utf8JsonReader}
+import org.apache.fory.json.writer.{StringJsonWriter, Utf8JsonWriter}
 import org.apache.fory.reflect.TypeRef
 
 private[scala] object ScalaEnumCodec {
@@ -64,7 +64,8 @@ private[scala] object ScalaEnumCodec {
         throw ScalaTypeSupport.unsupported(typeRef, "enum values method is not public")
       }
       val values = valuesMethod.invoke(null).asInstanceOf[Array[Object]]
-      new ScalaEnumCodec(typeClass, values)
+      // productPrefix is the compiler-owned label, independent of application toString overrides.
+      new ScalaEnumCodec(typeClass, values, values.map(_.asInstanceOf[Product].productPrefix))
     } catch {
       case error: ReflectiveOperationException =>
         throw new ForyJsonException(s"Cannot resolve Scala enum ${typeClass.getName}", error)
@@ -72,35 +73,51 @@ private[scala] object ScalaEnumCodec {
   }
 }
 
-private final class ScalaEnumCodec(typeClass: Class[_], values: Array[Object])
-    extends AbstractJsonValueCodec[Object] {
+private[scala] final class ScalaEnumCodec(
+    typeClass: Class[_], values: Array[Object], names: Array[String]
+)
+    extends JsonValueCodec[Object] {
   private val byName = new HashMap[String, Object](values.length * 2)
   private val nameByValue = new IdentityHashMap[Object, String](values.length * 2)
-  values.foreach { value =>
+  values.indices.foreach { index =>
+    val value = values(index)
     if (!typeClass.isInstance(value))
       throw new ForyJsonException(s"Scala enum value is not a ${typeClass.getName}")
-    // productPrefix is the compiler-owned case label. Cache it by enum identity so an application
-    // toString override cannot change the JSON schema or add work to the writer hot path.
-    val name = value.asInstanceOf[Product].productPrefix
+    val name = names(index)
     if (byName.put(name, value) != null)
       throw new ForyJsonException(s"Duplicate Scala enum name $name on ${typeClass.getName}")
     nameByValue.put(value, name)
   }
 
-  override def write(writer: JsonWriter, value: Object): Unit = {
-    if (value == null) writer.writeNull()
-    else {
-      val name = nameByValue.get(value)
-      if (name == null) throw new ForyJsonException(s"Expected Scala enum ${typeClass.getName}")
-      writer.writeString(name)
-    }
+  private def name(value: Object): String = {
+    val name = nameByValue.get(value)
+    if (name == null) throw new ForyJsonException(s"Expected Scala enum ${typeClass.getName}")
+    name
   }
 
-  override def read(reader: JsonReader): Object = {
-    if (reader.tryReadNullToken()) return null
-    val name = reader.readString()
+  private def value(name: String): Object = {
     val value = byName.get(name)
     if (value == null) throw new ForyJsonException(s"Unknown Scala enum value $name")
     value
+  }
+
+  override def writeString(writer: StringJsonWriter, v: Object): Unit = {
+    if (v == null) writer.writeNull() else writer.writeString(name(v))
+  }
+
+  override def writeUtf8(writer: Utf8JsonWriter, v: Object): Unit = {
+    if (v == null) writer.writeNull() else writer.writeString(name(v))
+  }
+
+  override def readLatin1(reader: Latin1JsonReader): Object = {
+    if (reader.tryReadNextNullToken()) null else value(reader.readString())
+  }
+
+  override def readUtf16(reader: Utf16JsonReader): Object = {
+    if (reader.tryReadNextNullToken()) null else value(reader.readString())
+  }
+
+  override def readUtf8(reader: Utf8JsonReader): Object = {
+    if (reader.tryReadNextNullToken()) null else value(reader.readString())
   }
 }

@@ -50,6 +50,16 @@ object CardCases {
 
 case class CardValues(value: CardCases.Suit, values: List[CardCases.Suit])
 
+object TokenCases {
+  sealed trait Value
+  case object A extends Value
+  case object Abcdefg extends Value
+  case object Abcdefgh extends Value
+  case object Abcdefghi extends Value
+  case object Abcdefghij extends Value
+  case object 中文 extends Value
+}
+
 sealed trait MixedCard
 case object EmptyCard extends MixedCard
 final case class NamedCard(name: String) extends MixedCard
@@ -174,6 +184,40 @@ class ScalaJsonEnumerationSuite extends AnyFunSuite {
       .registerCodec(classOf[CardCases.Suit], ScalaJsonCodec.stringEnum[CardCases.Suit])
       .withTypeChecker((name, _) => name != CardCases.Clubs.getClass.getName).build()
     assertThrows[InsecureException](json.fromJson("\"Clubs\"", classOf[CardCases.Suit]))
+  }
+
+  test("string enum tokens preserve exact names") {
+    val arrayType = ScalaTypeRef[Array[TokenCases.Value]]
+    val values: Array[TokenCases.Value] = Array(
+      TokenCases.A, TokenCases.Abcdefg, TokenCases.Abcdefgh, TokenCases.Abcdefghi,
+      TokenCases.Abcdefghij, TokenCases.中文, null)
+    val expected = "[\"A\",\"Abcdefg\",\"Abcdefgh\",\"Abcdefghi\",\"Abcdefghij\",\"中文\",null]"
+    val escaped = "[\"\\u0041\", \"Abcdefg\",\"Abcdefgh\",\"Abcdefghi\",\"Abcdefghij\",\"中文\", null]"
+    for (codegen <- Seq(false, true)) {
+      val json = ForyJsonScala.builder()
+        .registerCodec(classOf[TokenCases.Value], ScalaJsonCodec.stringEnum[TokenCases.Value])
+        .withCodegen(codegen).withAsyncCompilation(false).build()
+      assert(json.toJson(values, arrayType) == expected)
+      assert(new String(json.toJsonBytes(values, arrayType), UTF_8) == expected)
+      for (text <- Seq(expected, escaped)) {
+        assert(json.fromJson(text, arrayType).sameElements(values))
+        assert(json.fromJson(text.getBytes(UTF_8), arrayType).sameElements(values))
+      }
+      // ASCII-only input exercises the Latin1 reader, including a token at the input boundary.
+      val ascii = "[\"A\",\"Abcdefg\",\"Abcdefgh\",\"Abcdefghi\",\"Abcdefghij\"]"
+      assert(json.fromJson(ascii, arrayType).sameElements(values.take(5)))
+      for (name <- Seq("A", "Abcdefg", "Abcdefgh", "Abcdefghi", "Abcdefghij")) {
+        val text = "\"" + name + "\""
+        val decoded = json.fromJson(text, classOf[TokenCases.Value])
+        assert(json.toJson(decoded, classOf[TokenCases.Value]) == text)
+        assert(json.fromJson(text.getBytes(UTF_8), classOf[TokenCases.Value]) eq decoded)
+      }
+      for (text <- Seq("[\"Abcdefgx\"]", "[\"Abcdefghx\"]", "[\"Abcdefghix\"]", "[\"A")) {
+        assertThrows[ForyJsonException](json.fromJson(text, arrayType))
+        assertThrows[ForyJsonException](json.fromJson(text.getBytes(UTF_8), arrayType))
+      }
+      assert(json.fromJson(ascii, arrayType).sameElements(values.take(5)))
+    }
   }
 
   test("applications derive schemas outside the library package") {

@@ -24,6 +24,7 @@ import java.util.{HashMap, IdentityHashMap}
 
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.codec.JsonValueCodec
+import org.apache.fory.json.meta.JsonAsciiToken
 import org.apache.fory.json.reader.{Latin1JsonReader, Utf16JsonReader, Utf8JsonReader}
 import org.apache.fory.json.writer.{StringJsonWriter, Utf8JsonWriter}
 import org.apache.fory.reflect.TypeRef
@@ -78,7 +79,11 @@ private[scala] final class ScalaEnumCodec(
 )
     extends JsonValueCodec[Object] {
   private val byName = new HashMap[String, Object](values.length * 2)
-  private val nameByValue = new IdentityHashMap[Object, String](values.length * 2)
+  private val indexByValue = new IdentityHashMap[Object, Integer](values.length * 2)
+  private val tokenPrefixes = new Array[Long](values.length)
+  private val tokenMasks = new Array[Long](values.length)
+  private val tokenSuffixes = new Array[Int](values.length)
+  private val tokenLengths = new Array[Int](values.length)
   values.indices.foreach { index =>
     val value = values(index)
     if (!typeClass.isInstance(value))
@@ -86,13 +91,25 @@ private[scala] final class ScalaEnumCodec(
     val name = names(index)
     if (byName.put(name, value) != null)
       throw new ForyJsonException(s"Duplicate Scala enum name $name on ${typeClass.getName}")
-    nameByValue.put(value, name)
+    indexByValue.put(value, Integer.valueOf(index))
+    val token = "\"" + name + "\""
+    // Only complete, JSON-safe ASCII tokens can be shared by Latin1 input and raw UTF8 output.
+    // Escaped, longer and non-ASCII names keep the ordinary string codec's exact matching.
+    if (
+      JsonAsciiToken.isPackable(token) &&
+      name.forall(ch => ch >= ' ' && ch < 0x7f && ch != '"' && ch != '\\')
+    ) {
+      tokenPrefixes(index) = JsonAsciiToken.prefix(token)
+      tokenMasks(index) = JsonAsciiToken.prefixMask(token.length)
+      tokenSuffixes(index) = JsonAsciiToken.suffix(token)
+      tokenLengths(index) = token.length
+    }
   }
 
-  private def name(value: Object): String = {
-    val name = nameByValue.get(value)
-    if (name == null) throw new ForyJsonException(s"Expected Scala enum ${typeClass.getName}")
-    name
+  private def index(value: Object): Int = {
+    val index = indexByValue.get(value)
+    if (index == null) throw new ForyJsonException(s"Expected Scala enum ${typeClass.getName}")
+    index.intValue()
   }
 
   private def value(name: String): Object = {
@@ -102,14 +119,37 @@ private[scala] final class ScalaEnumCodec(
   }
 
   override def writeString(writer: StringJsonWriter, v: Object): Unit = {
-    if (v == null) writer.writeNull() else writer.writeString(name(v))
+    if (v == null) writer.writeNull() else writer.writeString(names(index(v)))
   }
 
   override def writeUtf8(writer: Utf8JsonWriter, v: Object): Unit = {
-    if (v == null) writer.writeNull() else writer.writeString(name(v))
+    if (v == null) writer.writeNull()
+    else {
+      val i = index(v)
+      val length = tokenLengths(i)
+      if (length != 0) writer.writeRawValue(tokenPrefixes(i), tokenSuffixes(i).toLong, length)
+      else writer.writeString(names(i))
+    }
   }
 
   override def readLatin1(reader: Latin1JsonReader): Object = {
+    var i = 0
+    while (i < tokenLengths.length) {
+      val length = tokenLengths(i)
+      val matched = length match {
+        case 0 => false
+        case n if n <= 8 =>
+          reader.tryReadNextStringToken0(tokenPrefixes(i), tokenMasks(i), length)
+        case 9 =>
+          reader.tryReadNextStringToken1(tokenPrefixes(i), tokenMasks(i), tokenSuffixes(i), length)
+        case 10 =>
+          reader.tryReadNextStringToken2(tokenPrefixes(i), tokenMasks(i), tokenSuffixes(i), length)
+        case _ =>
+          reader.tryReadNextStringToken3(tokenPrefixes(i), tokenMasks(i), tokenSuffixes(i), length)
+      }
+      if (matched) return values(i)
+      i += 1
+    }
     if (reader.tryReadNextNullToken()) null else value(reader.readString())
   }
 
@@ -118,6 +158,23 @@ private[scala] final class ScalaEnumCodec(
   }
 
   override def readUtf8(reader: Utf8JsonReader): Object = {
+    var i = 0
+    while (i < tokenLengths.length) {
+      val length = tokenLengths(i)
+      val matched = length match {
+        case 0 => false
+        case n if n <= 8 =>
+          reader.tryReadNextStringToken0(tokenPrefixes(i), tokenMasks(i), length)
+        case 9 =>
+          reader.tryReadNextStringToken1(tokenPrefixes(i), tokenMasks(i), tokenSuffixes(i), length)
+        case 10 =>
+          reader.tryReadNextStringToken2(tokenPrefixes(i), tokenMasks(i), tokenSuffixes(i), length)
+        case _ =>
+          reader.tryReadNextStringToken3(tokenPrefixes(i), tokenMasks(i), tokenSuffixes(i), length)
+      }
+      if (matched) return values(i)
+      i += 1
+    }
     if (reader.tryReadNextNullToken()) null else value(reader.readString())
   }
 }

@@ -32,7 +32,7 @@ import org.apache.fory.reflect.TypeRef
 
 /** Factory instantiated by Scala macro expansions in application packages. */
 @Internal
-final class DerivedScalaJsonCodec[T](
+class DerivedScalaJsonCodec[T](
     rootType: Class[T],
     caseClasses: Array[Class[_]],
     caseNames: Array[String],
@@ -123,7 +123,7 @@ final class DerivedScalaJsonCodec[T](
     if (stringEnum) {
       if (rawType == rootType) {
         classes.foreach(resolver.checkSecure)
-        return new ScalaEnumCodec(rootType, singletons, names)
+        return stringEnumCodec(rootType, singletons, names)
       }
       val indexes = classes.indices.filter(classes(_) == rawType)
       if (indexes.isEmpty)
@@ -155,6 +155,10 @@ final class DerivedScalaJsonCodec[T](
     if (singleton == null) ScalaObjectModels.caseClassCodec(typeRef, resolver)
     else ScalaObjectModels.fixedCodec(typeRef, resolver, singleton)
   }
+
+  protected def stringEnumCodec(
+      typeClass: Class[_], values: Array[Object], labels: Array[String]
+  ): JsonValueCodec[_] = new ScalaEnumCodec(typeClass, values, labels)
 
   private def append(builder: StringBuilder, value: String): Unit =
     builder.append(value.length).append(':').append(value)

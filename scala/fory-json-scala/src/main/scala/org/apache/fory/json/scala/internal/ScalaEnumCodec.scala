@@ -22,6 +22,7 @@ package org.apache.fory.json.scala.internal
 import java.lang.reflect.Modifier
 import java.util.{HashMap, IdentityHashMap}
 
+import org.apache.fory.annotation.Internal
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.codec.JsonValueCodec
 import org.apache.fory.json.meta.JsonAsciiToken
@@ -74,7 +75,9 @@ private[scala] object ScalaEnumCodec {
   }
 }
 
-private[scala] final class ScalaEnumCodec(
+/** Base codec extended by compile-time string enum derivation. */
+@Internal
+class ScalaEnumCodec(
     typeClass: Class[_], values: Array[Object], names: Array[String]
 )
     extends JsonValueCodec[Object] {

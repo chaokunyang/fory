@@ -60,6 +60,26 @@ object TokenCases {
   case object 中文 extends Value
 }
 
+object ManyCases {
+  sealed trait Value
+  case object A extends Value
+  case object B extends Value
+  case object C extends Value
+  case object D extends Value
+  case object E extends Value
+  case object F extends Value
+  case object G extends Value
+  case object H extends Value
+  case object I extends Value
+}
+
+object PackedCases {
+  sealed trait Value
+  case object A extends Value
+  case object Abcdefg extends Value
+  case object Abcdefghijklmn extends Value
+}
+
 sealed trait MixedCard
 case object EmptyCard extends MixedCard
 final case class NamedCard(name: String) extends MixedCard
@@ -217,6 +237,37 @@ class ScalaJsonEnumerationSuite extends AnyFunSuite {
         assertThrows[ForyJsonException](json.fromJson(text.getBytes(UTF_8), arrayType))
       }
       assert(json.fromJson(ascii, arrayType).sameElements(values.take(5)))
+    }
+  }
+
+  test("larger string enums retain table lookup") {
+    val arrayType = ScalaTypeRef[Array[ManyCases.Value]]
+    val values: Array[ManyCases.Value] = Array(
+      ManyCases.A, ManyCases.B, ManyCases.C, ManyCases.D, ManyCases.E,
+      ManyCases.F, ManyCases.G, ManyCases.H, ManyCases.I, null)
+    val expected = "[\"A\",\"B\",\"C\",\"D\",\"E\",\"F\",\"G\",\"H\",\"I\",null]"
+    val json = ForyJsonScala.builder()
+      .registerCodec(classOf[ManyCases.Value], ScalaJsonCodec.stringEnum[ManyCases.Value]).build()
+    assert(json.toJson(values, arrayType) == expected)
+    assert(new String(json.toJsonBytes(values, arrayType), UTF_8) == expected)
+    assert(json.fromJson(expected, arrayType).sameElements(values))
+    assert(json.fromJson(expected.getBytes(UTF_8), arrayType).sameElements(values))
+  }
+
+  test("derived enum writers grow at token boundaries") {
+    val arrayType = ScalaTypeRef[Array[PackedCases.Value]]
+    val values: Array[PackedCases.Value] = Array.fill(32)(Array[PackedCases.Value](
+      PackedCases.A, PackedCases.Abcdefg, PackedCases.Abcdefghijklmn, null)).flatten
+    val expected = "[" + List.fill(32)("\"A\",\"Abcdefg\",\"Abcdefghijklmn\",null").mkString(",") + "]"
+    for (codegen <- Seq(false, true); capacity <- Seq(1, 3, 8, 15, 16, 31)) {
+      val json = ForyJsonScala.builder()
+        .registerCodec(classOf[PackedCases.Value], ScalaJsonCodec.stringEnum[PackedCases.Value])
+        .withBufferSizeLimitBytes(capacity).withCodegen(codegen).withAsyncCompilation(false).build()
+      for (_ <- 0 until 2) {
+        assert(new String(json.toJsonBytes(values, arrayType), UTF_8) == expected)
+        assert(json.toJson(values, arrayType) == expected)
+      }
+      assert(json.fromJson(expected.getBytes(UTF_8), arrayType).sameElements(values))
     }
   }
 

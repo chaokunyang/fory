@@ -19,7 +19,11 @@
 
 package org.apache.fory.json.scala.internal
 
+import org.apache.fory.json.ForyJsonException
+import org.apache.fory.json.codec.JsonValueCodec
+import org.apache.fory.json.meta.JsonAsciiToken
 import org.apache.fory.json.scala.ScalaJsonCodec
+import org.apache.fory.json.writer.Utf8JsonWriter
 
 import scala.quoted.*
 
@@ -84,6 +88,47 @@ private[scala] object ScalaJsonCodecMacros {
     val singletonExpressions = caseExpressions.map(_._2)
     val nameExpressions = cases.map(child => Expr(child.name.stripSuffix("$")))
 
+    // Bound the generated identity chain; large schemas retain the table-based codec.
+    if (stringEnum && cases.size <= 8) {
+      // Use the splice's Quotes so method parameters remain in their defining scope on Scala 3.9+.
+      def write(writer: Expr[Utf8JsonWriter], value: Expr[Object])(using Quotes): Expr[Unit] = {
+        val unknown = '{ throw new ForyJsonException("Unknown Scala enum value") }
+        cases.zip(singletonExpressions).foldRight[Expr[Unit]](unknown) {
+          case ((child, singleton), next) =>
+            val name = child.name.stripSuffix("$")
+            val token = "\"" + name + "\""
+            val output =
+              if (
+                JsonAsciiToken.isLongPackable(token) &&
+                name.forall(ch => ch >= ' ' && ch < 0x7f && ch != '"' && ch != '\\')
+              ) {
+                '{ $writer.writeRawValue(
+                  ${ Expr(JsonAsciiToken.prefix(token)) },
+                  ${ Expr(JsonAsciiToken.suffixLong(token)) },
+                  ${ Expr(token.length) }) }
+              } else '{ $writer.writeString(${ Expr(name) }) }
+            '{ if ($value eq $singleton) $output else $next }
+        }
+      }
+      return '{
+        new DerivedScalaJsonCodec[T](
+          $rootClass.asInstanceOf[Class[T]],
+          Array[Class[_]](${ Varargs(classExpressions) }*),
+          Array[String](${ Varargs(nameExpressions) }*),
+          Array[AnyRef](${ Varargs(singletonExpressions) }*),
+          true
+        ) {
+          override protected def stringEnumCodec(
+              typeClass: Class[_], values: Array[Object], labels: Array[String]
+          ): JsonValueCodec[_] = new ScalaEnumCodec(typeClass, values, labels) {
+            override def writeUtf8(writer: Utf8JsonWriter, value: Object): Unit = {
+              if (value == null) writer.writeNull()
+              else ${ write('writer, 'value) }
+            }
+          }
+        }
+      }
+    }
     '{
       new DerivedScalaJsonCodec[T](
         $rootClass.asInstanceOf[Class[T]],

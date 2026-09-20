@@ -19,6 +19,7 @@
 
 package org.apache.fory.json.scala.internal
 
+import org.apache.fory.json.meta.JsonAsciiToken
 import org.apache.fory.json.scala.ScalaJsonCodec
 
 import scala.reflect.macros.blackbox
@@ -67,6 +68,43 @@ private[scala] object ScalaJsonCodecMacros {
     val classes = entries.map(_._1).toList
     val singletons = entries.map(_._2).toList
     val names = cases.map(child => Literal(Constant(child.name.decodedName.toString.stripSuffix("$")))).toList
+    // Bound the generated identity chain; large schemas retain the table-based codec.
+    if (stringEnum && cases.size <= 8) {
+      val unknown = q"throw new _root_.org.apache.fory.json.ForyJsonException(${"Unknown Scala enum value"})"
+      val write = cases.zip(singletons).foldRight[Tree](unknown) {
+        case ((child, singleton), next) =>
+          val name = child.name.decodedName.toString.stripSuffix("$")
+          val token = "\"" + name + "\""
+          val output =
+            if (
+              JsonAsciiToken.isLongPackable(token) &&
+              name.forall(ch => ch >= ' ' && ch < 0x7f && ch != '"' && ch != '\\')
+            ) {
+              q"writer.writeRawValue(${JsonAsciiToken.prefix(token)}, ${JsonAsciiToken.suffixLong(token)}, ${token.length})"
+            } else q"writer.writeString($name)"
+          q"if (value eq $singleton) $output else $next"
+      }
+      return c.Expr[ScalaJsonCodec[T]](
+        q"""new _root_.org.apache.fory.json.scala.internal.DerivedScalaJsonCodec[$rootType](
+          classOf[$rootType], _root_.scala.Array[_root_.java.lang.Class[_]](..$classes),
+          _root_.scala.Array[_root_.java.lang.String](..$names),
+          _root_.scala.Array[_root_.scala.AnyRef](..$singletons), true) {
+          override protected def stringEnumCodec(
+              typeClass: _root_.java.lang.Class[_],
+              values: _root_.scala.Array[_root_.java.lang.Object],
+              labels: _root_.scala.Array[_root_.java.lang.String]
+          ): _root_.org.apache.fory.json.codec.JsonValueCodec[_] =
+            new _root_.org.apache.fory.json.scala.internal.ScalaEnumCodec(typeClass, values, labels) {
+              override def writeUtf8(
+                  writer: _root_.org.apache.fory.json.writer.Utf8JsonWriter,
+                  value: _root_.java.lang.Object
+              ): Unit = {
+                if (value == null) writer.writeNull() else $write
+              }
+            }
+        }"""
+      )
+    }
     c.Expr[ScalaJsonCodec[T]](
       q"""new _root_.org.apache.fory.json.scala.internal.DerivedScalaJsonCodec[$rootType](
         classOf[$rootType], _root_.scala.Array[_root_.java.lang.Class[_]](..$classes),

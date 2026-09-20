@@ -364,7 +364,8 @@ cdef class TypeResolver:
                 if previous_user_type_id != <uint32_t>NO_USER_TYPE_ID:
                     self._c_user_type_id_to_type_info[previous_user_type_id] = NULL
             elif previous_type_id > 0 and previous_type_id < self._c_registered_id_to_type_info.size():
-                self._c_registered_id_to_type_info[previous_type_id] = NULL
+                if self._c_registered_id_to_type_info[previous_type_id] == <PyObject*>typeinfo:
+                    self._c_registered_id_to_type_info[previous_type_id] = NULL
         self._populate_type_info(typeinfo)
 
     cpdef inline TypeInfo get_type_info(self, cls, create=True):

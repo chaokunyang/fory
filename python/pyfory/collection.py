@@ -16,17 +16,23 @@
 # under the License.
 
 """
-Pure Python collection serializers for debugging and Python-only execution.
+Collection serializers using the Python container interfaces.
 
-In Cython mode the active collection serializers live in `collection.pxi` and
-are imported through `pyfory.serialization`. This module is the pure-Python
-fallback only.
+ABCs and native subclasses reuse these codecs in both runtime modes. Exact
+built-ins select the specialized Cython codecs at the import boundary below.
 """
 
 import struct
+import types
+from collections import abc
 
 from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
-from pyfory._serializer import Serializer, StringSerializer
+
+if ENABLE_FORY_CYTHON_SERIALIZATION:
+    from pyfory.serialization import Serializer, StringSerializer
+else:
+    from pyfory._serializer import Serializer, StringSerializer
+from pyfory.policy import DEFAULT_POLICY
 from pyfory.resolver import NOT_NULL_VALUE_FLAG, NULL_FLAG
 from pyfory.types import TypeId
 
@@ -40,6 +46,7 @@ _REFERENCE_BYTES = struct.calcsize("P")
 # slots are charged separately by count below; these are not Fory wire header sizes.
 _LIST_OWNER_BYTES = 4 * _REFERENCE_BYTES
 _TUPLE_OWNER_BYTES = 3 * _REFERENCE_BYTES
+_SET_OWNER_BYTES = 6 * _REFERENCE_BYTES
 _DICT_OWNER_BYTES = 8 * _REFERENCE_BYTES
 _UNBACKED_CONTAINER_CHECK_INTERVAL = 1024
 
@@ -73,6 +80,8 @@ def _needs_element_type_info(type_id):
 
 class CollectionSerializer(Serializer):
     owner_bytes = _LIST_OWNER_BYTES
+    _iterate = staticmethod(iter)
+    _length = staticmethod(len)
 
     __slots__ = (
         "elem_serializer",
@@ -105,7 +114,7 @@ class CollectionSerializer(Serializer):
         has_null = False
         has_same_type = True
         if elem_type is None:
-            for item in value:
+            for item in self._iterate(value):
                 if item is None:
                     has_null = True
                     continue
@@ -121,7 +130,7 @@ class CollectionSerializer(Serializer):
             collect_flag |= COLL_IS_SAME_TYPE
             if not _needs_element_type_info(elem_type_info.type_id):
                 collect_flag |= COLL_IS_DECL_ELEMENT_TYPE
-            for item in value:
+            for item in self._iterate(value):
                 if item is None:
                     has_null = True
                     break
@@ -134,14 +143,14 @@ class CollectionSerializer(Serializer):
             elif self.elem_tracking_ref == -1:
                 if not has_same_type or elem_type_info.serializer.need_to_write_ref:
                     collect_flag |= COLL_TRACKING_REF
-        write_context.write_var_uint32(len(value))
+        write_context.write_var_uint32(self._length(value))
         write_context.write_int8(collect_flag)
         if has_same_type and (collect_flag & COLL_IS_DECL_ELEMENT_TYPE) == 0:
             self.type_resolver.write_type_info(write_context, elem_type_info)
         return collect_flag, elem_type_info
 
     def write(self, write_context, value):
-        if len(value) == 0:
+        if self._length(value) == 0:
             write_context.write_var_uint32(0)
             return
         collect_flag, typeinfo = self.write_header(write_context, value)
@@ -159,11 +168,11 @@ class CollectionSerializer(Serializer):
             self._write_different_types(write_context, value, collect_flag)
 
     def _write_same_type_no_ref(self, write_context, value, serializer):
-        for item in value:
+        for item in self._iterate(value):
             serializer.write(write_context, item)
 
     def _write_same_type_has_null(self, write_context, value, serializer):
-        for item in value:
+        for item in self._iterate(value):
             if item is None:
                 write_context.write_int8(NULL_FLAG)
             else:
@@ -171,29 +180,27 @@ class CollectionSerializer(Serializer):
                 serializer.write(write_context, item)
 
     def _write_same_type_ref(self, write_context, value, serializer):
-        ref_writer = write_context.ref_writer
-        for item in value:
-            if not ref_writer.write_ref_or_null(write_context, item):
+        for item in self._iterate(value):
+            if not write_context.write_ref_or_null(item):
                 serializer.write(write_context, item)
 
     def _write_different_types(self, write_context, value, collect_flag=0):
         tracking_ref = (collect_flag & COLL_TRACKING_REF) != 0
         has_null = (collect_flag & COLL_HAS_NULL) != 0
-        ref_writer = write_context.ref_writer
         if tracking_ref:
-            for item in value:
-                if not ref_writer.write_ref_or_null(write_context, item):
+            for item in self._iterate(value):
+                if not write_context.write_ref_or_null(item):
                     typeinfo = self.type_resolver.get_type_info(type(item))
                     self.type_resolver.write_type_info(write_context, typeinfo)
                     typeinfo.serializer.write(write_context, item)
             return
         if not has_null:
-            for item in value:
+            for item in self._iterate(value):
                 typeinfo = self.type_resolver.get_type_info(type(item))
                 self.type_resolver.write_type_info(write_context, typeinfo)
                 typeinfo.serializer.write(write_context, item)
             return
-        for item in value:
+        for item in self._iterate(value):
             if item is None:
                 write_context.write_int8(NULL_FLAG)
             else:
@@ -285,14 +292,13 @@ class CollectionSerializer(Serializer):
 
     def _read_same_type_ref(self, read_context, length, collection_, serializer):
         read_context.increase_depth()
-        ref_reader = read_context.ref_reader
         for _ in range(length):
-            ref_id = ref_reader.try_preserve_ref_id(read_context)
+            ref_id = read_context.try_preserve_ref_id()
             if ref_id < NOT_NULL_VALUE_FLAG:
-                obj = ref_reader.get_read_ref()
+                obj = read_context.get_read_ref()
             else:
                 obj = serializer.read(read_context)
-                ref_reader.set_read_ref(ref_id, obj)
+                read_context.set_read_ref(ref_id, obj)
             self._add_element(collection_, obj)
         read_context.decrease_depth()
 
@@ -323,7 +329,7 @@ class CollectionSerializer(Serializer):
         read_context.decrease_depth()
 
 
-class ListSerializer(CollectionSerializer):
+class SequenceSerializer(CollectionSerializer):
     def new_instance(self, read_context, type_):
         instance = []
         read_context.reference(instance)
@@ -346,12 +352,14 @@ class TupleSerializer(CollectionSerializer):
         return tuple(super().read(read_context))
 
 
-class StringArraySerializer(ListSerializer):
+class StringArraySerializer(SequenceSerializer):
     def __init__(self, type_resolver, type_):
         super().__init__(type_resolver, type_, StringSerializer(type_resolver, str))
 
 
-class SetSerializer(CollectionSerializer):
+class SetCollectionSerializer(CollectionSerializer):
+    owner_bytes = _SET_OWNER_BYTES
+
     def new_instance(self, read_context, type_):
         instance = set()
         read_context.reference(instance)
@@ -362,13 +370,12 @@ class SetSerializer(CollectionSerializer):
 
 
 def get_next_element(read_context):
-    ref_reader = read_context.ref_reader
-    ref_id = ref_reader.try_preserve_ref_id(read_context)
+    ref_id = read_context.try_preserve_ref_id()
     if ref_id < NOT_NULL_VALUE_FLAG:
-        return ref_reader.get_read_ref()
+        return read_context.get_read_ref()
     typeinfo = read_context.type_resolver.read_type_info(read_context)
     obj = typeinfo.serializer.read(read_context)
-    ref_reader.set_read_ref(ref_id, obj)
+    read_context.set_read_ref(ref_id, obj)
     return obj
 
 
@@ -386,7 +393,13 @@ NULL_VALUE_KEY_DECL_TYPE = VALUE_HAS_NULL | KEY_DECL_TYPE
 NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF = VALUE_HAS_NULL | KEY_DECL_TYPE | TRACKING_KEY_REF
 
 
-class MapSerializer(Serializer):
+class MappingSerializer(Serializer):
+    _length = staticmethod(len)
+
+    @staticmethod
+    def _items(value):
+        return value.items()
+
     def __init__(
         self,
         type_resolver,
@@ -418,16 +431,15 @@ class MapSerializer(Serializer):
                 self.value_tracking_ref = bool(value_tracking_ref) and type_resolver.track_ref
 
     def write(self, write_context, obj):
-        length = len(obj)
+        length = self._length(obj)
         write_context.write_var_uint32(length)
         if length == 0:
             return
         type_resolver = self.type_resolver
-        ref_writer = write_context.ref_writer
         key_serializer = self.key_write_serializer
         value_serializer = self.value_write_serializer
 
-        items_iter = iter(obj.items())
+        items_iter = iter(self._items(obj))
         key, value = next(items_iter)
         has_next = True
         while has_next:
@@ -439,7 +451,7 @@ class MapSerializer(Serializer):
                         key_write_ref = self.key_tracking_ref
                         if key_write_ref:
                             write_context.write_int8(NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF)
-                            if not ref_writer.write_ref_or_null(write_context, key):
+                            if not write_context.write_ref_or_null(key):
                                 self._write_obj(key_serializer, write_context, key)
                         else:
                             write_context.write_int8(NULL_VALUE_KEY_DECL_TYPE)
@@ -453,7 +465,7 @@ class MapSerializer(Serializer):
                             value_write_ref = self.value_tracking_ref
                             if value_write_ref:
                                 write_context.write_int8(NULL_KEY_VALUE_DECL_TYPE_TRACKING_REF)
-                                if not ref_writer.write_ref_or_null(write_context, value):
+                                if not write_context.write_ref_or_null(value):
                                     value_serializer.write(write_context, value)
                             else:
                                 write_context.write_int8(NULL_KEY_VALUE_DECL_TYPE)
@@ -506,9 +518,9 @@ class MapSerializer(Serializer):
             while chunk_size < MAX_CHUNK_SIZE:
                 if key is None or value is None or type(key) is not key_cls or type(value) is not value_cls:
                     break
-                if not key_write_ref or not ref_writer.write_ref_or_null(write_context, key):
+                if not key_write_ref or not write_context.write_ref_or_null(key):
                     self._write_obj(key_serializer, write_context, key)
-                if not value_write_ref or not ref_writer.write_ref_or_null(write_context, value):
+                if not value_write_ref or not write_context.write_ref_or_null(value):
                     self._write_obj(value_serializer, write_context, value)
                 chunk_size += 1
                 try:
@@ -536,9 +548,7 @@ class MapSerializer(Serializer):
                 read_context.check_readable_bytes(size)
             else:
                 _ensure_container_allocation(read_context, size)
-        map_ = {}
-        ref_reader = read_context.ref_reader
-        read_context.reference(map_)
+        map_ = self.new_instance(read_context, self.type_)
         chunk_header = read_context.read_uint8() if size != 0 else 0
         key_serializer = self.key_serializer
         value_serializer = self.value_serializer
@@ -553,34 +563,34 @@ class MapSerializer(Serializer):
                     track_key_ref = (chunk_header & TRACKING_KEY_REF) != 0
                     if (chunk_header & KEY_DECL_TYPE) != 0:
                         if track_key_ref:
-                            ref_id = ref_reader.try_preserve_ref_id(read_context)
+                            ref_id = read_context.try_preserve_ref_id()
                             if ref_id < NOT_NULL_VALUE_FLAG:
-                                key = ref_reader.get_read_ref()
+                                key = read_context.get_read_ref()
                             else:
                                 key = self._read_obj(key_serializer, read_context)
-                                ref_reader.set_read_ref(ref_id, key)
+                                read_context.set_read_ref(ref_id, key)
                         else:
                             key = self._read_obj_no_ref(key_serializer, read_context)
                     else:
                         key = read_context.read_ref()
-                    map_[key] = None
+                    dict.__setitem__(map_, key, None)
                 elif not value_has_null:
                     track_value_ref = (chunk_header & TRACKING_VALUE_REF) != 0
                     if (chunk_header & VALUE_DECL_TYPE) != 0:
                         if track_value_ref:
-                            ref_id = ref_reader.try_preserve_ref_id(read_context)
+                            ref_id = read_context.try_preserve_ref_id()
                             if ref_id < NOT_NULL_VALUE_FLAG:
-                                value = ref_reader.get_read_ref()
+                                value = read_context.get_read_ref()
                             else:
                                 value = self._read_obj(value_serializer, read_context)
-                                ref_reader.set_read_ref(ref_id, value)
+                                read_context.set_read_ref(ref_id, value)
                         else:
                             value = self._read_obj_no_ref(value_serializer, read_context)
                     else:
                         value = read_context.read_ref()
-                    map_[None] = value
+                    dict.__setitem__(map_, None, value)
                 else:
-                    map_[None] = None
+                    dict.__setitem__(map_, None, None)
                 size -= 1
                 if size == 0:
                     read_context.decrease_depth()
@@ -610,24 +620,24 @@ class MapSerializer(Serializer):
                 chunk_start = read_context.get_reader_index()
             for _ in range(chunk_size):
                 if track_key_ref:
-                    ref_id = ref_reader.try_preserve_ref_id(read_context)
+                    ref_id = read_context.try_preserve_ref_id()
                     if ref_id < NOT_NULL_VALUE_FLAG:
-                        key = ref_reader.get_read_ref()
+                        key = read_context.get_read_ref()
                     else:
                         key = self._read_obj(key_serializer, read_context)
-                        ref_reader.set_read_ref(ref_id, key)
+                        read_context.set_read_ref(ref_id, key)
                 else:
                     key = self._read_obj_no_ref(key_serializer, read_context)
                 if track_value_ref:
-                    ref_id = ref_reader.try_preserve_ref_id(read_context)
+                    ref_id = read_context.try_preserve_ref_id()
                     if ref_id < NOT_NULL_VALUE_FLAG:
-                        value = ref_reader.get_read_ref()
+                        value = read_context.get_read_ref()
                     else:
                         value = self._read_obj(value_serializer, read_context)
-                        ref_reader.set_read_ref(ref_id, value)
+                        read_context.set_read_ref(ref_id, value)
                 else:
                     value = self._read_obj_no_ref(value_serializer, read_context)
-                map_[key] = value
+                dict.__setitem__(map_, key, value)
                 size -= 1
             if not entry_read_always_advances:
                 _settle_unbacked_container_items(read_context, chunk_size, chunk_start)
@@ -635,6 +645,11 @@ class MapSerializer(Serializer):
                 chunk_header = read_context.read_uint8()
         read_context.decrease_depth()
         return map_
+
+    def new_instance(self, read_context, type_):
+        instance = {}
+        read_context.reference(instance)
+        return instance
 
     def _write_obj(self, serializer, write_context, obj):
         serializer.write(write_context, obj)
@@ -646,7 +661,143 @@ class MapSerializer(Serializer):
         return read_context.read_no_ref(serializer=serializer)
 
 
-SubMapSerializer = MapSerializer
+class _ContainerSubclassSerializer:
+    """Restore native container storage and instance state into one reference owner."""
+
+    def __init__(self, type_resolver, type_):
+        super().__init__(type_resolver, type_)
+        self._getstate = getattr(type_, "__getstate__", None)
+        self._setstate = getattr(type_, "__setstate__", None)
+        self._state_hook = self._setstate is not None or self._getstate is not getattr(self._base_type, "__getstate__", None)
+        self._slots = tuple(
+            (name, descriptor)
+            for cls in reversed(type_.__mro__)
+            for name, descriptor in vars(cls).items()
+            if isinstance(descriptor, types.MemberDescriptorType)
+        )
+
+    def new_instance(self, read_context, type_):
+        read_context.policy.authorize_instantiation(type_)
+        read_context.reserve_graph_memory(max(0, type_.__basicsize__ - self._base_type.__basicsize__))
+        instance = self._base_type.__new__(type_)
+        # Publish the final subclass before reading its contents or state. A
+        # temporary built-in followed by conversion would break cycles.
+        read_context.reference(instance)
+        return instance
+
+    def write(self, write_context, value):
+        super().write(write_context, value)
+        if self._state_hook:
+            if self._getstate is not None:
+                state = self._getstate(value)
+            else:
+                # Python before 3.11 has no object.__getstate__ implementation.
+                state = getattr(value, "__dict__", None)
+                slots = {}
+                for name, descriptor in self._slots:
+                    try:
+                        slots[name] = descriptor.__get__(value)
+                    except AttributeError:
+                        pass
+                if slots:
+                    state = (state, slots)
+            write_context.write_ref(state)
+            return
+        write_context.write_ref(getattr(value, "__dict__", None))
+        for _name, descriptor in self._slots:
+            try:
+                field_value = descriptor.__get__(value)
+            except AttributeError:
+                write_context.write_bool(False)
+            else:
+                write_context.write_bool(True)
+                write_context.write_ref(field_value)
+
+    def read(self, read_context):
+        instance = super().read(read_context)
+        state = read_context.read_ref()
+        if self._state_hook:
+            if state is not None:
+                read_context.policy.intercept_setstate(instance, state)
+                if self._setstate is not None:
+                    self._setstate(instance, state)
+                else:
+                    slots = None
+                    if isinstance(state, tuple):
+                        state, slots = state
+                    if state is not None:
+                        instance.__dict__ = state
+                    if slots is not None:
+                        for name, value in slots.items():
+                            setattr(instance, name, value)
+            return instance
+        if state is not None:
+            read_context.policy.intercept_setstate(instance, state)
+            instance.__dict__ = state
+        for name, descriptor in self._slots:
+            if read_context.read_bool():
+                field_value = read_context.read_ref()
+                if read_context.policy is not DEFAULT_POLICY:
+                    state = {name: field_value}
+                    read_context.policy.intercept_setstate(instance, state)
+                    field_value = state[name]
+                descriptor.__set__(instance, field_value)
+        return instance
+
+
+class ListSubclassSerializer(_ContainerSubclassSerializer, SequenceSerializer):
+    # Native reconstruction restores base storage without reapplying overridden
+    # iteration or mutation methods; those can depend on not-yet-restored state.
+    _base_type = list
+    _iterate = staticmethod(list.__iter__)
+    _length = staticmethod(list.__len__)
+
+    def _add_element(self, collection_, element):
+        list.append(collection_, element)
+
+
+class SetSubclassSerializer(_ContainerSubclassSerializer, SetCollectionSerializer):
+    _base_type = set
+    _iterate = staticmethod(set.__iter__)
+    _length = staticmethod(set.__len__)
+
+    def _add_element(self, collection_, element):
+        set.add(collection_, element)
+
+
+class DictSubclassSerializer(_ContainerSubclassSerializer, MappingSerializer):
+    _base_type = dict
+    _length = staticmethod(dict.__len__)
+    _items = staticmethod(dict.items)
+
+
+def _create_collection_serializer(type_resolver, cls):
+    """Select a data-only xlang codec on the resolver's type-cache miss path."""
+    if not isinstance(cls, type):
+        return None
+    if issubclass(cls, abc.Mapping):
+        return MappingSerializer(type_resolver, dict)
+    if issubclass(cls, abc.Set):
+        return SetCollectionSerializer(type_resolver, set)
+    if issubclass(cls, abc.Sequence) and not issubclass(cls, (str, bytes, bytearray)):
+        return SequenceSerializer(type_resolver, list)
+    return None
+
+
+def _create_container_subclass_serializer(type_resolver, cls):
+    """Select native built-in storage only when no custom reconstruction is required."""
+    if not isinstance(cls, type):
+        return None
+    for base, serializer in ((list, ListSubclassSerializer), (set, SetSubclassSerializer), (dict, DictSubclassSerializer)):
+        if cls is base or not issubclass(cls, base):
+            continue
+        for name in ("__reduce__", "__reduce_ex__"):
+            if getattr(cls, name, None) is not getattr(base, name, None):
+                return None
+        if cls.__new__ is not base.__new__ or hasattr(cls, "__getnewargs__") or hasattr(cls, "__getnewargs_ex__"):
+            raise TypeError(f"{cls} requires an explicit serializer or reduce hook for its custom construction")
+        return serializer(type_resolver, cls)
+    return None
 
 
 if ENABLE_FORY_CYTHON_SERIALIZATION:
@@ -666,3 +817,8 @@ if ENABLE_FORY_CYTHON_SERIALIZATION:
     SetSerializer = CythonSetSerializer
     MapSerializer = CythonMapSerializer
     SubMapSerializer = CythonMapSerializer
+else:
+    ListSerializer = SequenceSerializer
+    SetSerializer = SetCollectionSerializer
+    MapSerializer = MappingSerializer
+    SubMapSerializer = MappingSerializer

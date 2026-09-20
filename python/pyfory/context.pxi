@@ -789,7 +789,7 @@ cdef class ReadContext:
     cdef int64_t max_graph_memory_bytes
     cdef int64_t remaining_graph_memory_bytes
     cdef int64_t max_unbacked_container_items
-    cdef int64_t remaining_unbacked_container_items
+    cdef readonly int64_t remaining_unbacked_container_items
     cdef readonly RefReader ref_reader
     cdef readonly MetaStringReader meta_string_reader
     cdef readonly MetaShareReadContext meta_share_context

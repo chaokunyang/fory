@@ -29,8 +29,9 @@ import math
 import os
 import decimal
 import array
+from collections import UserDict, UserList
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set
+from typing import AbstractSet, Any, Dict, List, Mapping, Optional, Sequence, Set
 
 import pyfory
 from pyfory import Ref
@@ -52,6 +53,30 @@ def debug_print(*params):
 def get_data_file() -> str:
     """Get the data file path from environment variable."""
     return os.environ["DATA_FILE"]
+
+
+@dataclass
+class AbcContainers:
+    sequence: Sequence[str]
+    values: AbstractSet[str]
+    mapping: Mapping[str, Sequence[pyfory.Int64]]
+
+
+def test_abc_containers(compatible=False):
+    fory = pyfory.Fory(xlang=True, compatible=compatible)
+    fory.register(AbcContainers, type_id=901)
+    with open(get_data_file(), "rb") as stream:
+        value = fory.loads(stream.read())
+    assert value == AbcContainers(["a", "b"], {"a", "b"}, {"items": [1, 2]})
+    value.sequence = UserList(value.sequence)
+    value.values = frozenset(value.values)
+    value.mapping = UserDict({"items": UserList(value.mapping["items"])})
+    with open(get_data_file(), "wb") as stream:
+        stream.write(fory.dumps(value))
+
+
+def test_abc_containers_compatible():
+    test_abc_containers(compatible=True)
 
 
 def decimal_from_parts(unscaled: int, scale: int) -> decimal.Decimal:

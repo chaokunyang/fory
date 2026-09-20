@@ -236,6 +236,17 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   }
 
   @Override
+  public void writeBooleanAsString(boolean value) {
+    int offset = position;
+    // Reserve the full word, including bytes beyond the six- or seven-byte logical token.
+    if (offset + Long.BYTES > buffer.length) {
+      grow(Long.BYTES);
+    }
+    LittleEndian.putInt64(buffer, offset, value ? 0x0000226575727422L : 0x002265736c616622L);
+    position = offset + (value ? 6 : 7);
+  }
+
+  @Override
   public void writeInt(int value) {
     if (position + 11 > buffer.length) {
       grow(11);

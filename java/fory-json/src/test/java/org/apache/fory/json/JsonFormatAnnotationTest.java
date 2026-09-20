@@ -20,6 +20,7 @@
 package org.apache.fory.json;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.expectThrows;
@@ -64,10 +65,13 @@ import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonMixinRemove;
 import org.apache.fory.json.annotation.JsonProperty;
+import org.apache.fory.json.annotation.JsonPropertyOrder;
 import org.apache.fory.json.annotation.JsonRawValue;
 import org.apache.fory.json.annotation.JsonUnwrapped;
 import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.Base64ByteArrayCodec;
+import org.apache.fory.json.codegen.JsonCodegen;
+import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.platform.JdkVersion;
 import org.testng.SkipException;
 import org.testng.annotations.Factory;
@@ -141,6 +145,143 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
     assertGeneratedWhenSupported(json, ScalarTarget.class);
     assertThrows(ForyJsonException.class, () -> json.toJson(new InvalidStringFormat()));
     assertThrows(ForyJsonException.class, () -> json.toJson(new StringPattern()));
+  }
+
+  @Test
+  public void booleanStrings() {
+    ForyJson json = newJson();
+    BooleanStrings value = new BooleanStrings();
+    for (String label : new String[] {"ascii", "中文"}) {
+      value.label = label;
+      for (boolean flag : new boolean[] {false, true}) {
+        value.flag = flag;
+        for (Boolean boxed : new Boolean[] {false, true, null}) {
+          value.boxed = boxed;
+          String expected =
+              "{\"label\":\""
+                  + label
+                  + "\",\"flag\":\""
+                  + flag
+                  + "\""
+                  + (boxed == null ? "" : ",\"boxed\":\"" + boxed + "\"")
+                  + ",\"always\":null,\"nonEmpty\":\"false\",\"ordinary\":false"
+                  + ",\"number\":\"7\",\"values\":[\"true\",\"false\",null]"
+                  + ",\"flags\":[\"true\",\"false\"]}";
+          assertEquals(json.toJson(value), expected);
+          assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected);
+          assertEquals(json.toJson(json.fromJson(expected, BooleanStrings.class)), expected);
+          assertEquals(
+              json.toJson(
+                  json.fromJson(expected.getBytes(StandardCharsets.UTF_8), BooleanStrings.class)),
+              expected);
+        }
+      }
+    }
+    assertGeneratedWhenSupported(json, BooleanStrings.class);
+    for (JsonFieldInfo field :
+        JsonTestSupport.currentTypeResolver(json)
+            .getObjectCodec(BooleanStrings.class)
+            .writeFields()) {
+      if (field.writeRawType() == boolean.class && !field.name().equals("ordinary")
+          || field.writeRawType() == Boolean.class) {
+        assertTrue(field.writesBooleanAsString());
+        assertFalse(JsonCodegen.usesWriteCodec(field));
+      }
+    }
+  }
+
+  @Test
+  public void booleanStringAccessors() {
+    ForyJson json = newJsonBuilder().registerMixin(BooleanAccessorsMixin.class).build();
+    BooleanAccessors value = new BooleanAccessors();
+    for (boolean flag : new boolean[] {true, false}) {
+      value.setActive(flag);
+      for (Boolean boxed : new Boolean[] {true, false, null}) {
+        value.setBoxed(boxed);
+        String text = json.toJson(value);
+        assertTrue(text.contains("\"active\":\"" + flag + "\""), text);
+        assertEquals(text.contains("\"boxed\""), boxed != null);
+        assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), text);
+        assertEquals(json.fromJson(text, BooleanAccessors.class).getBoxed(), boxed);
+        assertEquals(
+            json.fromJson(text.getBytes(StandardCharsets.UTF_8), BooleanAccessors.class).isActive(),
+            flag);
+      }
+    }
+    assertEquals(
+        json.fromJson("{\"active\":true,\"boxed\":false}", BooleanAccessors.class).getBoxed(),
+        Boolean.FALSE);
+    assertGeneratedWhenSupported(json, BooleanAccessors.class);
+  }
+
+  @JsonPropertyOrder({
+    "label",
+    "flag",
+    "boxed",
+    "always",
+    "nonEmpty",
+    "ordinary",
+    "number",
+    "values",
+    "flags"
+  })
+  public static class BooleanStrings {
+    public String label;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public boolean flag;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public Boolean boxed;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    @JsonProperty(include = JsonProperty.Include.ALWAYS)
+    public Boolean always;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    @JsonProperty(include = JsonProperty.Include.NON_EMPTY)
+    public Boolean nonEmpty = false;
+
+    public boolean ordinary;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public int number = 7;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public Boolean[] values = {true, false, null};
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    public boolean[] flags = {true, false};
+  }
+
+  public static class BooleanAccessors {
+    private boolean active;
+    private Boolean boxed;
+
+    public boolean isActive() {
+      return active;
+    }
+
+    public void setActive(boolean active) {
+      this.active = active;
+    }
+
+    public Boolean getBoxed() {
+      return boxed;
+    }
+
+    public void setBoxed(Boolean boxed) {
+      this.boxed = boxed;
+    }
+  }
+
+  @JsonMixin(target = BooleanAccessors.class)
+  public abstract static class BooleanAccessorsMixin {
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    boolean active;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    Boolean boxed;
   }
 
   public static class StringScalars {

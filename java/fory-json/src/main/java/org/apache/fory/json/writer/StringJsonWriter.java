@@ -200,6 +200,28 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
   }
 
   @Override
+  public void writeBooleanAsString(boolean value) {
+    int offset = position;
+    // Wide stores include padding outside the logical token, so reserve the complete words.
+    if (coder == LATIN1) {
+      if (offset + Long.BYTES > buffer.length) {
+        grow(Long.BYTES);
+      }
+      LittleEndian.putInt64(buffer, offset, value ? 0x0000226575727422L : 0x002265736c616622L);
+      position = offset + (value ? 6 : 7);
+      return;
+    }
+    if (offset + Long.BYTES * 2 > buffer.length) {
+      grow(Long.BYTES * 2);
+    }
+    long first = value ? 0x0075007200740022L : 0x006c006100660022L;
+    long last = value ? 0x0000000000220065L : 0x0000002200650073L;
+    LittleEndian.putInt64(buffer, offset, LITTLE_ENDIAN ? first : first << 8);
+    LittleEndian.putInt64(buffer, offset + Long.BYTES, LITTLE_ENDIAN ? last : last << 8);
+    position = offset + (value ? 12 : 14);
+  }
+
+  @Override
   public void writeInt(int value) {
     if (coder == LATIN1) {
       if (position + 11 > buffer.length) {

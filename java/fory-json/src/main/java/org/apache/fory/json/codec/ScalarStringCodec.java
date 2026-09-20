@@ -31,17 +31,49 @@ import org.apache.fory.json.writer.Utf8JsonWriter;
 
 /** Field-format codec which quotes the existing boolean or numeric token representation. */
 @Internal
-public final class ScalarStringCodec implements JsonValueCodec<Object> {
+public class ScalarStringCodec implements JsonValueCodec<Object> {
   private final JsonTypeInfo scalar;
   private final boolean alreadyQuoted;
   private final boolean floating;
 
-  public ScalarStringCodec(JsonTypeInfo scalar) {
+  private ScalarStringCodec(JsonTypeInfo scalar) {
     this.scalar = scalar;
     alreadyQuoted = ScalarCodecs.LongAsStringCodec.class.isInstance(scalar.stringWriter());
     Class<?> type = scalar.rawType();
     floating =
         type == float.class || type == Float.class || type == double.class || type == Double.class;
+  }
+
+  /** Selects the writer once while retaining the existing scalar readers. */
+  public static ScalarStringCodec create(JsonTypeInfo scalar) {
+    Class<?> type = scalar.rawType();
+    return type == boolean.class || type == Boolean.class
+        ? new BooleanCodec(scalar)
+        : new ScalarStringCodec(scalar);
+  }
+
+  private static final class BooleanCodec extends ScalarStringCodec {
+    private BooleanCodec(JsonTypeInfo scalar) {
+      super(scalar);
+    }
+
+    @Override
+    public void writeString(StringJsonWriter writer, Object value) {
+      if (value == null) {
+        writer.writeNull();
+      } else {
+        writer.writeBooleanAsString((Boolean) value);
+      }
+    }
+
+    @Override
+    public void writeUtf8(Utf8JsonWriter writer, Object value) {
+      if (value == null) {
+        writer.writeNull();
+      } else {
+        writer.writeBooleanAsString((Boolean) value);
+      }
+    }
   }
 
   public static boolean supports(Class<?> type) {

@@ -683,7 +683,7 @@ public final class JsonTypeResolver {
             rawType, "string shape requires a default boolean or numeric codec");
       }
       return newTypeInfo(
-          type, JsonFieldKind.OBJECT, new ScalarStringCodec(getTypeInfo(type)), true);
+          type, JsonFieldKind.OBJECT, ScalarStringCodec.create(getTypeInfo(type)), true);
     }
     JsonValueCodec<?> codec =
         ScalarCodecs.dateTimeFormatCodec(rawType, annotation.pattern(), annotation.timezone());

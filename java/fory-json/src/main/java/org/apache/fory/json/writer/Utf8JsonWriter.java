@@ -163,7 +163,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   @Override
   public void reset() {
     super.reset();
-    if (buffer.length > bufferSizeLimitBytes) {
+    if (buffer != null && buffer.length > bufferSizeLimitBytes) {
       buffer = new byte[bufferSizeLimitBytes];
     }
     position = 0;
@@ -172,6 +172,19 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   @Internal
   public byte[] getBuffer() {
     return buffer;
+  }
+
+  /** Borrows the owning execution state's output storage for one root operation. */
+  @Internal
+  public void setBuffer(byte[] buffer) {
+    this.buffer = buffer;
+  }
+
+  /** Resets operation state and detaches storage after the execution state has reclaimed it. */
+  @Internal
+  public void clear() {
+    buffer = null;
+    reset();
   }
 
   @Internal

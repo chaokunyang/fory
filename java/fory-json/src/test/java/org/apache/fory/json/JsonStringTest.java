@@ -26,12 +26,17 @@ import static org.apache.fory.json.JsonTestSupport.newUtf16Reader;
 import static org.apache.fory.json.JsonTestSupport.newUtf8Reader;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertNull;
+import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import org.apache.fory.json.codec.AbstractJsonValueCodec;
 import org.apache.fory.json.data.CharValue;
 import org.apache.fory.json.data.Kind;
 import org.apache.fory.json.data.Nested;
@@ -42,9 +47,11 @@ import org.apache.fory.json.data.UnicodeKind;
 import org.apache.fory.json.data.UnicodeMatrix;
 import org.apache.fory.json.data.UnicodeValues;
 import org.apache.fory.json.meta.JsonFieldNameHash;
+import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Utf16JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
+import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.memory.NativeByteOrder;
@@ -503,17 +510,25 @@ public class JsonStringTest extends ForyJsonTestModels {
             .build();
 
     String value = repeat('a', bufferLimit + 1);
-    StringJsonWriter stringWriter = (StringJsonWriter) currentStateField(json, "stringWriter");
-    stringWriter.writeString(value);
-    assertTrue(writerBufferLength(stringWriter) > bufferLimit);
-    stringWriter.reset();
-    assertEquals(writerBufferLength(stringWriter), bufferLimit);
+    assertEquals(json.toJson(value), "\"" + value + "\"");
+    assertEquals(sharedBuffer(json).length, bufferLimit);
+    assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), "\"" + value + "\"");
+    assertEquals(sharedBuffer(json).length, bufferLimit);
+    assertEquals(json.fromJson("\"\\n" + value + "\"", String.class), "\n" + value);
+    assertEquals(sharedBuffer(json).length, bufferLimit);
+    assertBuffersDetached(json);
 
-    Utf8JsonWriter utf8Writer = (Utf8JsonWriter) currentStateField(json, "utf8Writer");
-    utf8Writer.writeString(value);
-    assertTrue(writerBufferLength(utf8Writer) > bufferLimit);
-    utf8Writer.reset();
-    assertEquals(writerBufferLength(utf8Writer), bufferLimit);
+    for (int limit : new int[] {1, 17}) {
+      ForyJson small =
+          ForyJson.builder().withConcurrencyLevel(1).withBufferSizeLimitBytes(limit).build();
+      for (int i = 0; i < 2; i++) {
+        assertEquals(small.toJson(1.25), "1.25");
+        assertEquals(small.fromJson(small.toJsonBytes("text\n"), String.class), "text\n");
+        assertEquals(small.toJson("\u4e2d"), "\"\u4e2d\"");
+        assertEquals(sharedBuffer(small).length, limit);
+        assertBuffersDetached(small);
+      }
+    }
 
     ForyJson defaults = ForyJson.builder().build();
     assertEquals(writerBufferLimit(currentStateField(defaults, "stringWriter")), 2 * 1024 * 1024);
@@ -573,74 +588,143 @@ public class JsonStringTest extends ForyJsonTestModels {
     assertThrows(ForyJsonException.class, () -> json.fromJson("\"\\uD83D\"", String.class));
   }
 
-  /**
-   * A buffer the recent documents needed is kept, so a stream of large strings stops re-growing it,
-   * and it is released once a later document no longer needs it.
-   */
   @Test
-  public void readerDecodeBufferIsKeptWhileNeeded() throws Exception {
-    String latin1Input = "\"" + repeat('a', 9000) + "\\n\"";
-    String smallInput = "\"" + repeat('a', 8) + "\\n\"";
-    if (StringSerializer.isBytesBackedString()
-        && StringSerializer.isLatin1Coder(StringSerializer.getStringCoder(latin1Input))) {
-      Latin1JsonReader latin1Reader = newLatin1Reader(latin1Input);
-      assertEquals(latin1Reader.readString(), repeat('a', 9000) + "\n");
-      int grown = readerBufferLength(latin1Reader);
-      assertTrue(grown > 8192);
-      latin1Reader.clear();
-      assertEquals(readerBufferLength(latin1Reader), grown);
-      latin1Reader.reset(latin1Input);
-      assertEquals(latin1Reader.readString(), repeat('a', 9000) + "\n");
-      assertEquals(readerBufferLength(latin1Reader), grown);
-      latin1Reader.clear();
-      latin1Reader.reset(smallInput);
-      assertEquals(latin1Reader.readString(), repeat('a', 8) + "\n");
-      latin1Reader.clear();
-      assertEquals(readerBufferLength(latin1Reader), 8192);
+  public void readerResetAfterClear() {
+    String document = "\"text\\n\"";
+    byte[] bytes = document.getBytes(StandardCharsets.UTF_8);
+    Utf8JsonReader utf8 = newUtf8Reader(bytes);
+    Latin1JsonReader latin1 = newLatin1Reader(bytes);
+    Utf16JsonReader utf16 = newUtf16Reader(document);
+    for (int i = 0; i < 2; i++) {
+      assertEquals(utf8.readString(), "text\n");
+      assertEquals(latin1.readString(), "text\n");
+      assertEquals(utf16.readString(), "text\n");
+      utf8.clear();
+      latin1.clear();
+      utf16.clear();
+      utf8.reset(bytes);
+      latin1.reset(bytes);
+      utf16.reset(document);
     }
+  }
 
-    // A buffer no document should pin: it is released whatever the shrink threshold says.
-    String hugeInput = "\"\\n" + repeat('a', 200000) + "\"";
-    Latin1JsonReader hugeReader = newLatin1Reader(hugeInput.getBytes(StandardCharsets.ISO_8859_1));
-    assertEquals(hugeReader.readString(), "\n" + repeat('a', 200000));
-    int hugeGrown = readerBufferLength(hugeReader);
-    assertTrue(hugeGrown > 131072 && hugeGrown < 262144);
-    hugeReader.clear();
-    assertTrue(readerBufferLength(hugeReader) <= 131072);
+  @Test(dataProvider = "enableCodegen")
+  public void sharedBufferReuse(boolean codegen) {
+    ForyJson json =
+        ForyJson.builder()
+            .withCodegen(codegen)
+            .withAsyncCompilation(false)
+            .withConcurrencyLevel(1)
+            .build();
+    String value = repeat('a', 9000) + "\n";
+    String document = "\"" + repeat('a', 9000) + "\\n\"";
+    String decoded = json.fromJson(document.getBytes(StandardCharsets.UTF_8), String.class);
+    byte[] grown = sharedBuffer(json);
+    assertTrue(grown.length > 8192);
+    assertEquals(decoded, value);
+    assertBuffersDetached(json);
 
-    // The quoted text view shares the same buffer, so growing it there has to count the same way.
-    Utf8JsonReader quotedReader = newUtf8Reader(latin1Input.getBytes(StandardCharsets.UTF_8));
-    assertEquals(quotedReader.readQuotedText().toString(), repeat('a', 9000) + "\n");
-    int quotedGrown = readerBufferLength(quotedReader);
-    assertTrue(quotedGrown > 8192);
-    quotedReader.clear();
-    assertEquals(readerBufferLength(quotedReader), quotedGrown);
+    String encodedString = json.toJson(value);
+    assertEquals(encodedString, document);
+    assertSame(sharedBuffer(json), grown);
+    byte[] encodedBytes = json.toJsonBytes(value);
+    assertSame(sharedBuffer(json), grown);
+    assertEquals(json.fromJson(document, String.class), value);
+    assertSame(sharedBuffer(json), grown);
 
-    Utf8JsonReader utf8Reader = newUtf8Reader(latin1Input.getBytes(StandardCharsets.UTF_8));
-    assertEquals(utf8Reader.readString(), repeat('a', 9000) + "\n");
-    int utf8Grown = readerBufferLength(utf8Reader);
-    assertTrue(utf8Grown > 8192);
-    utf8Reader.clear();
-    assertEquals(readerBufferLength(utf8Reader), utf8Grown);
-    utf8Reader.reset(smallInput.getBytes(StandardCharsets.UTF_8));
-    assertEquals(utf8Reader.readString(), repeat('a', 8) + "\n");
-    utf8Reader.clear();
-    assertEquals(readerBufferLength(utf8Reader), 8192);
+    // Widening swaps the String writer's main and scratch arrays. The state must reclaim the
+    // new main array, while later reads must not change either detached result above.
+    String unicode = "\u4e2d\u6587" + repeat('b', 9000) + "\n";
+    String unicodeDocument = json.toJson(unicode);
+    byte[] widened = sharedBuffer(json);
+    assertEquals(json.fromJson(unicodeDocument, String.class), unicode);
+    assertSame(sharedBuffer(json), widened);
+    assertEquals(
+        json.fromJson(unicodeDocument.getBytes(StandardCharsets.UTF_8), String.class), unicode);
+    assertSame(sharedBuffer(json), widened);
+    json.toJsonBytes("overwritten");
+    assertEquals(decoded, value);
+    assertEquals(encodedString, document);
+    assertEquals(new String(encodedBytes, StandardCharsets.UTF_8), document);
+    assertBuffersDetached(json);
+  }
 
-    String utf16Input = "\"\u4e2d\u6587" + repeat('b', 9000) + "\\n\"";
-    Utf16JsonReader utf16Reader = newUtf16Reader(utf16Input);
-    assertEquals(utf16Reader.readString(), "\u4e2d\u6587" + repeat('b', 9000) + "\n");
-    int grown = readerBufferLength(utf16Reader);
-    assertTrue(grown > 8192);
-    utf16Reader.clear();
-    assertEquals(readerBufferLength(utf16Reader), grown);
-    String smallUtf16 = "\"\u4e2d" + repeat('b', 8) + "\\n\"";
-    byte[] smallUtf16Bytes = new byte[smallUtf16.length() << 1];
-    StringSerializer.copyStringCharsToBytes(smallUtf16, smallUtf16Bytes);
-    utf16Reader.reset(smallUtf16, smallUtf16Bytes);
-    assertEquals(utf16Reader.readString(), "\u4e2d" + repeat('b', 8) + "\n");
-    utf16Reader.clear();
-    assertEquals(readerBufferLength(utf16Reader), 8192);
+  @Test
+  public void sharedBufferFailureCleanup() {
+    ForyJson json =
+        ForyJson.builder().withConcurrencyLevel(1).withBufferSizeLimitBytes(1024).build();
+    String malformed = "\"\\n" + repeat('a', 9000);
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson(malformed.getBytes(StandardCharsets.UTF_8), String.class));
+    assertEquals(sharedBuffer(json).length, 1024);
+    assertBuffersDetached(json);
+    assertThrows(ForyJsonException.class, () -> json.fromJson(malformed, String.class));
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson("\"\\n\u4e2d" + repeat('a', 9000), String.class));
+    assertThrows(ForyJsonException.class, () -> json.toJson(repeat('b', 9000) + "\uD800"));
+    assertThrows(ForyJsonException.class, () -> json.toJsonBytes(repeat('b', 9000) + "\uD800"));
+    assertThrows(
+        ForyJsonException.class,
+        () ->
+            json.writeJsonTo(
+                repeat('c', 9000),
+                new OutputStream() {
+                  @Override
+                  public void write(int value) throws IOException {
+                    throw new IOException("Stream failure");
+                  }
+                }));
+    assertThrows(NullPointerException.class, () -> json.fromJson((String) null, String.class));
+    assertThrows(NullPointerException.class, () -> json.fromJson((byte[]) null, String.class));
+    assertEquals(sharedBuffer(json).length, 1024);
+    assertEquals(json.fromJson(json.toJsonBytes("reused\n"), String.class), "reused\n");
+    assertBuffersDetached(json);
+  }
+
+  @Test
+  public void quotedTextBufferReuse() {
+    ForyJson json =
+        ForyJson.builder()
+            .withConcurrencyLevel(1)
+            .withBufferSizeLimitBytes(32768)
+            .registerCodec(
+                QuotedValue.class,
+                new AbstractJsonValueCodec<QuotedValue>() {
+                  @Override
+                  public void write(JsonWriter writer, QuotedValue value) {
+                    writer.writeString(value.text);
+                  }
+
+                  @Override
+                  public QuotedValue read(JsonReader reader) {
+                    return new QuotedValue(reader.readQuotedText().toString());
+                  }
+                })
+            .build();
+    for (String prefix : new String[] {"", "\u4e2d"}) {
+      String document = "\"" + prefix + repeat('a', 20000) + "\\n\"";
+      assertEquals(
+          json.fromJson(document, QuotedValue.class).text, prefix + repeat('a', 20000) + "\n");
+      assertEquals(sharedBuffer(json).length, 32768);
+      assertEquals(
+          json.fromJson(document.getBytes(StandardCharsets.UTF_8), QuotedValue.class).text,
+          prefix + repeat('a', 20000) + "\n");
+      byte[] retained = sharedBuffer(json);
+      assertEquals(retained.length, 32768);
+      assertEquals(json.toJson(new QuotedValue("small")), "\"small\"");
+      assertSame(sharedBuffer(json), retained);
+      assertBuffersDetached(json);
+    }
+  }
+
+  private static final class QuotedValue {
+    private final String text;
+
+    private QuotedValue(String text) {
+      this.text = text;
+    }
   }
 
   /**
@@ -911,10 +995,8 @@ public class JsonStringTest extends ForyJsonTestModels {
         () -> json.fromJson("\"" + Character.toString('\uD800') + "\"", String.class));
   }
 
-  private static int writerBufferLength(Object writer) throws Exception {
-    Field field = writer.getClass().getDeclaredField("buffer");
-    field.setAccessible(true);
-    return ((byte[]) field.get(writer)).length;
+  private static byte[] sharedBuffer(ForyJson json) {
+    return (byte[]) currentStateField(json, "buffer");
   }
 
   private static int writerBufferLimit(Object writer) throws Exception {
@@ -923,10 +1005,13 @@ public class JsonStringTest extends ForyJsonTestModels {
     return field.getInt(writer);
   }
 
-  private static int readerBufferLength(Object reader) throws Exception {
-    Field field = reader.getClass().getDeclaredField("stringDecodeBuffer");
-    field.setAccessible(true);
-    return ((byte[]) field.get(reader)).length;
+  private static void assertBuffersDetached(ForyJson json) {
+    assertNull(((Utf8JsonWriter) currentStateField(json, "utf8Writer")).getBuffer());
+    assertNull(((StringJsonWriter) currentStateField(json, "stringWriter")).getBuffer());
+    assertNull(((Utf8JsonReader) currentStateField(json, "utf8Reader")).getStringDecodeBuffer());
+    assertNull(
+        ((Latin1JsonReader) currentStateField(json, "latin1Reader")).getStringDecodeBuffer());
+    assertNull(((Utf16JsonReader) currentStateField(json, "utf16Reader")).getStringDecodeBuffer());
   }
 
   private static String readUtf8String(ForyJson json, String input) {

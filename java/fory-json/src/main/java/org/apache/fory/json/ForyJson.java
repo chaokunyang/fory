@@ -170,7 +170,7 @@ public final class ForyJson {
   public String toJson(Object value) {
     PooledState entry = acquire();
     JsonState state = entry.state;
-    StringJsonWriter writer = state.stringWriter;
+    StringJsonWriter writer = state.stringWriter();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -186,7 +186,8 @@ public final class ForyJson {
       return writer.toJson();
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -236,7 +237,7 @@ public final class ForyJson {
   public byte[] toJsonBytes(Object value) {
     PooledState entry = acquire();
     JsonState state = entry.state;
-    Utf8JsonWriter writer = state.utf8Writer;
+    Utf8JsonWriter writer = state.utf8Writer();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -252,7 +253,8 @@ public final class ForyJson {
       return writer.toJsonBytes();
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -299,7 +301,7 @@ public final class ForyJson {
     Objects.requireNonNull(output, "output");
     PooledState entry = acquire();
     JsonState state = entry.state;
-    Utf8JsonWriter writer = state.utf8Writer;
+    Utf8JsonWriter writer = state.utf8Writer();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -316,7 +318,8 @@ public final class ForyJson {
       writer.writeTo(output);
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -354,7 +357,7 @@ public final class ForyJson {
   private String toJsonDeclared(Object value, Class<?> type) {
     PooledState entry = acquire();
     JsonState state = entry.state;
-    StringJsonWriter writer = state.stringWriter;
+    StringJsonWriter writer = state.stringWriter();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -365,7 +368,8 @@ public final class ForyJson {
       return writer.toJson();
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -375,7 +379,7 @@ public final class ForyJson {
   private String toJsonDeclared(Object value, TypeRef<?> type) {
     PooledState entry = acquire();
     JsonState state = entry.state;
-    StringJsonWriter writer = state.stringWriter;
+    StringJsonWriter writer = state.stringWriter();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -386,7 +390,8 @@ public final class ForyJson {
       return writer.toJson();
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -396,7 +401,7 @@ public final class ForyJson {
   private byte[] toJsonBytesDeclared(Object value, Class<?> type) {
     PooledState entry = acquire();
     JsonState state = entry.state;
-    Utf8JsonWriter writer = state.utf8Writer;
+    Utf8JsonWriter writer = state.utf8Writer();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -408,7 +413,8 @@ public final class ForyJson {
       return writer.toJsonBytes();
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -418,7 +424,7 @@ public final class ForyJson {
   private byte[] toJsonBytesDeclared(Object value, TypeRef<?> type) {
     PooledState entry = acquire();
     JsonState state = entry.state;
-    Utf8JsonWriter writer = state.utf8Writer;
+    Utf8JsonWriter writer = state.utf8Writer();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -429,7 +435,8 @@ public final class ForyJson {
       return writer.toJsonBytes();
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -440,7 +447,7 @@ public final class ForyJson {
     Objects.requireNonNull(output, "output");
     PooledState entry = acquire();
     JsonState state = entry.state;
-    Utf8JsonWriter writer = state.utf8Writer;
+    Utf8JsonWriter writer = state.utf8Writer();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -451,7 +458,8 @@ public final class ForyJson {
       writer.writeTo(output);
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -462,7 +470,7 @@ public final class ForyJson {
     Objects.requireNonNull(output, "output");
     PooledState entry = acquire();
     JsonState state = entry.state;
-    Utf8JsonWriter writer = state.utf8Writer;
+    Utf8JsonWriter writer = state.utf8Writer();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -473,7 +481,8 @@ public final class ForyJson {
       writer.writeTo(output);
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -779,7 +788,14 @@ public final class ForyJson {
   }
 
   private void release(PooledState entry) {
-    entry.release();
+    try {
+      JsonState state = entry.state;
+      if (state.buffer.length > state.bufferSizeLimitBytes) {
+        state.buffer = new byte[state.bufferSizeLimitBytes];
+      }
+    } finally {
+      entry.release();
+    }
   }
 
   private PooledState acquireContended(int slotIndex) {
@@ -1012,6 +1028,12 @@ public final class ForyJson {
     private final Utf8JsonReader utf8Reader;
     private final Latin1JsonReader latin1Reader;
     private final Utf16JsonReader utf16Reader;
+    // Only the leased root's concrete reader or writer holds this array while active. Reclaim
+    // its latest array before clearing it; an idle component must not retain an old growth array.
+    // Keep the UTF16 input mirror and String writer's widening scratch separate: each can be live
+    // alongside the main workspace. No buffer holder or reader/writer backreference is needed.
+    private byte[] buffer;
+    private final int bufferSizeLimitBytes;
     private byte[] charBackedUtf16Bytes;
     private Class<?> lastRuntimeRootType;
     private JsonTypeInfo lastRuntimeRootInfo;
@@ -1024,20 +1046,38 @@ public final class ForyJson {
 
     private JsonState(JsonConfig config, JsonSharedRegistry sharedRegistry) {
       typeResolver = new JsonTypeResolver(sharedRegistry);
-      utf8Writer = new Utf8JsonWriter(config, typeResolver, new byte[INITIAL_BUFFER_SIZE]);
-      stringWriter = new StringJsonWriter(config, typeResolver, new byte[INITIAL_BUFFER_SIZE]);
+      bufferSizeLimitBytes = config.bufferSizeLimitBytes();
+      buffer = new byte[Math.min(INITIAL_BUFFER_SIZE, bufferSizeLimitBytes)];
+      utf8Writer = new Utf8JsonWriter(config, typeResolver, null);
+      stringWriter = new StringJsonWriter(config, typeResolver, null);
       utf8Reader = new Utf8JsonReader(config, typeResolver);
       latin1Reader = new Latin1JsonReader(config, typeResolver);
       utf16Reader = new Utf16JsonReader(config, typeResolver);
       charBackedUtf16Bytes = EMPTY_BYTES;
     }
 
+    private Utf8JsonWriter utf8Writer() {
+      utf8Writer.setBuffer(buffer);
+      buffer = null;
+      return utf8Writer;
+    }
+
+    private StringJsonWriter stringWriter() {
+      stringWriter.setBuffer(buffer);
+      buffer = null;
+      return stringWriter;
+    }
+
     private Latin1JsonReader latin1Reader(String input) {
+      latin1Reader.setStringDecodeBuffer(buffer);
+      buffer = null;
       latin1Reader.reset(input);
       return latin1Reader;
     }
 
     private Utf16JsonReader utf16Reader(String input) {
+      utf16Reader.setStringDecodeBuffer(buffer);
+      buffer = null;
       utf16Reader.reset(input);
       return utf16Reader;
     }
@@ -1060,6 +1100,8 @@ public final class ForyJson {
       }
       // JDK 8 char[]-backed Strings are converted once so parsing still uses UTF16 byte loads.
       StringSerializer.copyStringCharsToBytes(input, bytes);
+      utf16Reader.setStringDecodeBuffer(buffer);
+      buffer = null;
       utf16Reader.reset(input, bytes);
       return utf16Reader;
     }
@@ -1067,11 +1109,15 @@ public final class ForyJson {
     private Utf8JsonReader utf8Reader(byte[] input) {
       // Keep full-array roots on the direct reset so the existing hot path does not pay the range
       // validation branches.
+      utf8Reader.setStringDecodeBuffer(buffer);
+      buffer = null;
       utf8Reader.reset(input);
       return utf8Reader;
     }
 
     private Utf8JsonReader utf8Reader(byte[] input, int offset, int length) {
+      utf8Reader.setStringDecodeBuffer(buffer);
+      buffer = null;
       utf8Reader.reset(input, offset, length);
       return utf8Reader;
     }
@@ -1079,11 +1125,24 @@ public final class ForyJson {
     // Clear only readers reset by the current public parse entry; clearing the unused readers shows
     // up on small byte-input parses and does not release additional retained input.
     private void clearStringReaders() {
+      // Only the selected representation borrowed the workspace. Setup can fail before either
+      // reader is selected, in which case the state still owns its array.
+      byte[] latin1Bytes = latin1Reader.getStringDecodeBuffer();
+      byte[] utf16Bytes = utf16Reader.getStringDecodeBuffer();
+      if (latin1Bytes != null) {
+        buffer = latin1Bytes;
+      } else if (utf16Bytes != null) {
+        buffer = utf16Bytes;
+      }
       latin1Reader.clear();
       utf16Reader.clear();
     }
 
     private void clearUtf8Reader() {
+      byte[] bytes = utf8Reader.getStringDecodeBuffer();
+      if (bytes != null) {
+        buffer = bytes;
+      }
       utf8Reader.clear();
     }
 

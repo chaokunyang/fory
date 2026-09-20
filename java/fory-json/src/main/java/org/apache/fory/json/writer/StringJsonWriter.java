@@ -36,6 +36,7 @@ import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.JsonConfig;
 import org.apache.fory.json.meta.JsonFieldInfo;
@@ -131,8 +132,8 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
 
   public StringJsonWriter(JsonConfig config, JsonTypeResolver typeResolver, byte[] buffer) {
     super(config, typeResolver);
-    this.buffer = initialBuffer(buffer);
-    scratch = new byte[this.buffer.length];
+    this.buffer = buffer == null ? null : initialBuffer(buffer);
+    scratch = new byte[buffer == null ? 0 : this.buffer.length];
     bufferSizeLimitBytes = config.bufferSizeLimitBytes();
     decimalBuilder = newDecimalBuilder();
   }
@@ -140,7 +141,7 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
   @Override
   public void reset() {
     super.reset();
-    if (buffer.length > bufferSizeLimitBytes) {
+    if (buffer != null && buffer.length > bufferSizeLimitBytes) {
       buffer = new byte[bufferSizeLimitBytes];
     }
     if (scratch.length > bufferSizeLimitBytes) {
@@ -149,6 +150,25 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
     coder = nextCoder;
     latin1Output = coder == UTF16;
     position = 0;
+  }
+
+  /** Borrows the owning execution state's output storage for one root operation. */
+  @Internal
+  public void setBuffer(byte[] buffer) {
+    this.buffer = buffer;
+  }
+
+  /** Returns the current output storage after growth or a UTF16 widening swap. */
+  @Internal
+  public byte[] getBuffer() {
+    return buffer;
+  }
+
+  /** Resets operation state and detaches storage after the execution state has reclaimed it. */
+  @Internal
+  public void clear() {
+    buffer = null;
+    reset();
   }
 
   public String toJson() {

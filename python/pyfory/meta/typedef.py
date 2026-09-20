@@ -18,6 +18,7 @@
 import enum
 import array
 import typing
+from collections import abc
 from typing import List
 from pyfory.annotation import ArrayMeta
 from pyfory.types import TypeId, is_polymorphic_type, is_union_type
@@ -26,6 +27,7 @@ from pyfory.serialization import Buffer
 from pyfory.type_util import get_homogeneous_tuple_elem_type, infer_field
 from pyfory.meta.metastring import Encoding
 from pyfory.type_util import infer_field_types
+from pyfory.type_util import _SEQUENCE_TYPES, _SET_TYPES, _MAPPING_TYPES
 from pyfory.lib.mmh3 import hash_buffer
 from pyfory.field import MAX_FIELD_ID
 
@@ -553,8 +555,16 @@ class CollectionFieldType(FieldType):
         if self.type_id == TypeId.LIST:
             if declared_root_type in (tuple, typing.Tuple):
                 return TupleSerializer(resolver, tuple, elem_serializer, elem_override)
+            if declared_root_type in (abc.Sequence, abc.MutableSequence):
+                from pyfory.collection import SequenceSerializer
+
+                return SequenceSerializer(resolver, list, elem_serializer, elem_override)
             return ListSerializer(resolver, list, elem_serializer, elem_override)
         elif self.type_id == TypeId.SET:
+            if declared_root_type in (abc.Set, abc.MutableSet):
+                from pyfory.collection import SetCollectionSerializer
+
+                return SetCollectionSerializer(resolver, set, elem_serializer, elem_override)
             return SetSerializer(resolver, set, elem_serializer, elem_override)
         else:
             raise ValueError(f"Unknown collection type: {self.type_id}")
@@ -591,6 +601,10 @@ class MapFieldType(FieldType):
         value_override = getattr(self.value_type, "tracking_ref_override", None)
         from pyfory.serializer import MapSerializer
 
+        if type_ and type_[0] in (abc.Mapping, abc.MutableMapping):
+            from pyfory.collection import MappingSerializer
+
+            MapSerializer = MappingSerializer
         return MapSerializer(
             resolver,
             dict,
@@ -1360,7 +1374,7 @@ def build_field_type_from_type_ids_with_ref(
         elem_ref_override = None
         if type_hint is not None:
             origin = typing.get_origin(type_hint) if hasattr(typing, "get_origin") else getattr(type_hint, "__origin__", None)
-            if origin in (list, typing.List, set, typing.Set):
+            if origin in _SEQUENCE_TYPES + _SET_TYPES:
                 args = typing.get_args(type_hint) if hasattr(typing, "get_args") else getattr(type_hint, "__args__", ())
                 if args:
                     elem_hint, elem_ref_override = unwrap_ref(args[0])
@@ -1394,7 +1408,7 @@ def build_field_type_from_type_ids_with_ref(
         value_ref_override = None
         if type_hint is not None:
             origin = typing.get_origin(type_hint) if hasattr(typing, "get_origin") else getattr(type_hint, "__origin__", None)
-            if origin in (dict, typing.Dict):
+            if origin in _MAPPING_TYPES:
                 args = typing.get_args(type_hint) if hasattr(typing, "get_args") else getattr(type_hint, "__args__", ())
                 if len(args) >= 2:
                     key_hint, key_ref_override = unwrap_ref(args[0])
@@ -1480,7 +1494,7 @@ def build_field_type_from_type_ids(type_resolver, field_name: str, type_ids, vis
         elem_nullable = False
         if type_hint is not None:
             origin = typing.get_origin(type_hint) if hasattr(typing, "get_origin") else getattr(type_hint, "__origin__", None)
-            if origin in (list, typing.List, set, typing.Set):
+            if origin in _SEQUENCE_TYPES + _SET_TYPES:
                 args = typing.get_args(type_hint) if hasattr(typing, "get_args") else getattr(type_hint, "__args__", ())
                 if args:
                     elem_hint, _ = unwrap_ref(args[0])
@@ -1506,7 +1520,7 @@ def build_field_type_from_type_ids(type_resolver, field_name: str, type_ids, vis
         value_nullable = False
         if type_hint is not None:
             origin = typing.get_origin(type_hint) if hasattr(typing, "get_origin") else getattr(type_hint, "__origin__", None)
-            if origin in (dict, typing.Dict):
+            if origin in _MAPPING_TYPES:
                 args = typing.get_args(type_hint) if hasattr(typing, "get_args") else getattr(type_hint, "__args__", ())
                 if len(args) >= 2:
                     key_hint, _ = unwrap_ref(args[0])

@@ -28,6 +28,7 @@ import reprlib
 import struct
 import sys
 import typing
+from collections import abc
 from typing import List, Dict
 
 from pyfory.annotation import (
@@ -44,6 +45,9 @@ from pyfory.types import (
     is_union_type,
 )
 from pyfory.type_util import (
+    _SEQUENCE_TYPES,
+    _SET_TYPES,
+    _MAPPING_TYPES,
     TypeVisitor,
     _get_args,
     _get_origin,
@@ -493,8 +497,9 @@ def _extract_field_infos(
         is_abstract = _is_abstract_type(unwrapped_type)
         if fory.compatible and runtime_ref and is_polymorphic_type(type_id):
             effective_dynamic = True
-        elif is_abstract:
-            # Abstract classes always need type info
+        elif is_abstract and type_id not in (TypeId.LIST, TypeId.SET, TypeId.MAP):
+            # Container ABCs already select a concrete wire kind and built-in
+            # read owner. Other abstract classes need dynamic type information.
             effective_dynamic = True
         elif meta.dynamic is not None:
             # Explicit configuration takes precedence
@@ -552,11 +557,11 @@ def resolve_missing_field_default(
             if members:
                 default_value = members[0]
                 return lambda value=default_value: value
-        if origin is list or origin == typing.List:
+        if origin in _SEQUENCE_TYPES:
             return lambda: []
-        if origin is set or origin == typing.Set:
+        if origin in _SET_TYPES:
             return lambda: set()
-        if origin is dict or origin == typing.Dict:
+        if origin in _MAPPING_TYPES:
             return lambda: {}
         if unwrapped_type is bool:
             return lambda: False
@@ -1099,6 +1104,11 @@ class StructFieldSerializerVisitor(TypeVisitor):
         # Infer type recursively for type such as List[Dict[str, str]]
         elem_type, elem_ref_override = unwrap_ref(elem_type)
         elem_serializer = infer_field("item", elem_type, self, types_path=types_path)
+        origin = _get_origin(types_path[-1]) or types_path[-1]
+        if origin in (abc.Sequence, abc.MutableSequence):
+            from pyfory.collection import SequenceSerializer
+
+            return SequenceSerializer(self.type_resolver, list, elem_serializer, elem_ref_override)
         return ListSerializer(self.type_resolver, list, elem_serializer, elem_ref_override)
 
     def visit_set(self, field_name, elem_type, types_path=None):
@@ -1108,6 +1118,11 @@ class StructFieldSerializerVisitor(TypeVisitor):
         # Infer type recursively for type such as Set[Dict[str, str]]
         elem_type, elem_ref_override = unwrap_ref(elem_type)
         elem_serializer = infer_field("item", elem_type, self, types_path=types_path)
+        origin = _get_origin(types_path[-1]) or types_path[-1]
+        if origin in (abc.Set, abc.MutableSet):
+            from pyfory.collection import SetCollectionSerializer
+
+            return SetCollectionSerializer(self.type_resolver, set, elem_serializer, elem_ref_override)
         return SetSerializer(self.type_resolver, set, elem_serializer, elem_ref_override)
 
     def visit_tuple(self, field_name, elem_types, types_path=None):
@@ -1130,6 +1145,11 @@ class StructFieldSerializerVisitor(TypeVisitor):
         value_type, value_ref_override = unwrap_ref(value_type)
         key_serializer = infer_field("key", key_type, self, types_path=types_path)
         value_serializer = infer_field("value", value_type, self, types_path=types_path)
+        origin = _get_origin(types_path[-1]) or types_path[-1]
+        if origin in (abc.Mapping, abc.MutableMapping):
+            from pyfory.collection import MappingSerializer
+
+            MapSerializer = MappingSerializer
         return MapSerializer(
             self.type_resolver,
             dict,
@@ -1371,6 +1391,11 @@ def _build_schema_fingerprint_type(type_resolver, type_hint, nullable, track_ref
     nullable = nullable or is_optional
     origin = _get_origin(unwrapped_type) or getattr(unwrapped_type, "__origin__", unwrapped_type)
     args = _get_args(unwrapped_type)
+    if not args:
+        if origin in (abc.Sequence, abc.MutableSequence, abc.Set, abc.MutableSet):
+            args = (typing.Any,)
+        elif origin in (abc.Mapping, abc.MutableMapping):
+            args = (typing.Any, typing.Any)
 
     ref_flag = "1" if track_ref else "0"
     nullable_flag = "1" if include_nullable and nullable else "0"
@@ -1381,7 +1406,7 @@ def _build_schema_fingerprint_type(type_resolver, type_hint, nullable, track_ref
         return f"{type_id},{ref_flag},{nullable_flag}"
 
     if args:
-        if origin is list or origin == typing.List:
+        if origin in _SEQUENCE_TYPES:
             elem_type = args[0]
             child = _build_schema_fingerprint_type(
                 type_resolver,
@@ -1392,7 +1417,7 @@ def _build_schema_fingerprint_type(type_resolver, type_hint, nullable, track_ref
                 include_nullable=False,
             )
             return f"{TypeId.LIST},{ref_flag},{nullable_flag}[{child}]"
-        if origin is set or origin == typing.Set:
+        if origin in _SET_TYPES:
             elem_type = args[0]
             child = _build_schema_fingerprint_type(
                 type_resolver,
@@ -1417,7 +1442,7 @@ def _build_schema_fingerprint_type(type_resolver, type_hint, nullable, track_ref
                     include_nullable=False,
                 )
             return f"{TypeId.LIST},{ref_flag},{nullable_flag}[{child}]"
-        if origin is dict or origin == typing.Dict:
+        if origin in _MAPPING_TYPES:
             key_type, value_type = args
             key = _build_schema_fingerprint_type(
                 type_resolver,
@@ -1545,12 +1570,14 @@ class StructTypeVisitor(TypeVisitor):
     def visit_list(self, field_name, elem_type, types_path=None):
         # Infer type recursively for type such as List[Dict[str, str]]
         elem_types = infer_field("item", elem_type, self, types_path=types_path)
-        return typing.List, elem_types
+        origin = _get_origin(types_path[-1]) or types_path[-1]
+        return (origin if origin in (abc.Sequence, abc.MutableSequence) else typing.List), elem_types
 
     def visit_set(self, field_name, elem_type, types_path=None):
         # Infer type recursively for type such as Set[Dict[str, str]]
         elem_types = infer_field("item", elem_type, self, types_path=types_path)
-        return typing.Set, elem_types
+        origin = _get_origin(types_path[-1]) or types_path[-1]
+        return (origin if origin in (abc.Set, abc.MutableSet) else typing.Set), elem_types
 
     def visit_tuple(self, field_name, elem_types, types_path=None):
         elem_type = get_homogeneous_tuple_elem_type(elem_types)
@@ -1563,7 +1590,8 @@ class StructTypeVisitor(TypeVisitor):
         # Infer type recursively for type such as Dict[str, Dict[str, str]]
         key_types = infer_field("key", key_type, self, types_path=types_path)
         value_types = infer_field("value", value_type, self, types_path=types_path)
-        return typing.Dict, key_types, value_types
+        origin = _get_origin(types_path[-1]) or types_path[-1]
+        return (origin if origin in (abc.Mapping, abc.MutableMapping) else typing.Dict), key_types, value_types
 
     def visit_customized(self, field_name, type_, types_path=None):
         return [type_]

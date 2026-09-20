@@ -90,6 +90,7 @@ from pyfory.serializer import (
     fory_array_serializer_type,
 )
 from pyfory.policy import DEFAULT_POLICY
+from pyfory.collection import _ContainerSubclassSerializer, _create_collection_serializer, _create_container_subclass_serializer
 from pyfory.serialization import (
     Serializer as CythonSerializer,
 )
@@ -660,6 +661,21 @@ class TypeResolver:
             and user_type_id in {None, NO_USER_TYPE_ID}
         ):
             return self._types_info[cls]
+        if serializer is None and self.xlang:
+            serializer_cls = self._subclass_serializer_type(cls)
+            if serializer_cls is not None:
+                serializer = serializer_cls(self._actual_type_resolver, cls)
+        if serializer is None and self.xlang and cls not in self._types_info:
+            collection_info = self._collection_type_info(cls)
+            if collection_info is not None:
+                if type_id is not None or typename is not None or namespace is not None:
+                    self._types_info.pop(cls)
+                    raise TypeError("Xlang collections use built-in type IDs; use an explicit serializer for a named or numbered extension")
+                return collection_info
+        if serializer is None and not self.xlang and isinstance(cls, type) and issubclass(cls, (list, set, dict)):
+            # Select before assigning the registration kind, including inherited
+            # custom codecs and reconstruction hooks, so these owners use EXT.
+            serializer = self._create_serializer(cls)
         if serializer is None and not self.xlang and issubclass(cls, tuple) and hasattr(cls, "_fields"):
             serializer = self._create_serializer(cls)
         n_params = len({typename, type_id, None}) - 1
@@ -821,11 +837,15 @@ class TypeResolver:
         if cls not in self._types_info:
             raise TypeUnregisteredError(f"{cls} not registered")
         typeinfo = self._types_info[cls]
+        if typeinfo.serializer is serializer:
+            return
         prev_type_id = typeinfo.type_id
         prev_user_type_id = typeinfo.user_type_id
         if needs_user_type_id(prev_type_id) and prev_user_type_id not in {None, NO_USER_TYPE_ID}:
             self._user_type_id_to_type_info.pop(prev_user_type_id, None)
-        else:
+        elif self._type_id_to_type_info.get(prev_type_id) is typeinfo:
+            # Collection aliases share a built-in wire ID, whose reader must
+            # survive promotion of the concrete class to an extension.
             self._type_id_to_type_info.pop(prev_type_id, None)
         if typeinfo.serializer is not serializer:
             if typeinfo.typename_bytes is not None:
@@ -833,6 +853,9 @@ class TypeResolver:
                 typeinfo.user_type_id = NO_USER_TYPE_ID
             else:
                 typeinfo.type_id = TypeId.EXT
+                if typeinfo.user_type_id in {None, NO_USER_TYPE_ID}:
+                    typeinfo.user_type_id = self._next_type_id()
+                    self._used_user_type_ids.add(typeinfo.user_type_id)
             typeinfo.serializer = serializer
         if needs_user_type_id(typeinfo.type_id) and typeinfo.user_type_id not in {None, NO_USER_TYPE_ID}:
             self._user_type_id_to_type_info[typeinfo.user_type_id] = typeinfo
@@ -860,6 +883,10 @@ class TypeResolver:
             return None
         if cls is NonExistEnum:
             return self._get_nonexist_enum_type_info()
+        if self.xlang:
+            collection_info = self._collection_type_info(cls)
+            if collection_info is not None:
+                return collection_info
         if self.require_registration and not issubclass(cls, Enum):
             raise TypeUnregisteredError(f"{cls} not registered")
         logger.info("Type %s not registered", cls)
@@ -868,7 +895,7 @@ class TypeResolver:
         if not self.xlang:
             if isinstance(serializer, EnumSerializer):
                 type_id = TypeId.NAMED_ENUM
-            elif isinstance(serializer, (ObjectSerializer, StatefulSerializer, NamedTupleSerializer)):
+            elif isinstance(serializer, (ObjectSerializer, StatefulSerializer, NamedTupleSerializer, _ContainerSubclassSerializer)):
                 type_id = TypeId.NAMED_EXT
             elif self._internal_py_serializer_map.get(type(serializer)) is not None:
                 type_id = self._internal_py_serializer_map.get(type(serializer))[1]
@@ -894,6 +921,19 @@ class TypeResolver:
             typename=cls.__qualname__,
             serializer=serializer,
         )
+
+    def _collection_type_info(self, cls):
+        if self._subclass_serializer_type(cls) is not None:
+            return None
+        serializer = _create_collection_serializer(self._actual_type_resolver, cls)
+        if serializer is None:
+            return None
+        builtin_info = self._types_info[serializer.type_]
+        # Only the writer's concrete-type cache gets this entry. The wire ID
+        # still resolves to the built-in owner, never an arbitrary ABC class.
+        typeinfo = TypeInfo(cls, builtin_info.type_id, NO_USER_TYPE_ID, serializer, None, None, False)
+        self._types_info[cls] = typeinfo
+        return typeinfo
 
     def _set_type_info(self, typeinfo):
         serializer_type_resolver = self._actual_type_resolver
@@ -929,6 +969,13 @@ class TypeResolver:
 
         return typeinfo
 
+    def _subclass_serializer_type(self, cls):
+        for base in getattr(cls, "__mro__", ()):
+            typeinfo = self._types_info.get(base)
+            if typeinfo is not None and typeinfo.serializer is not None and typeinfo.serializer.support_subclass():
+                return type(typeinfo.serializer)
+        return None
+
     def _create_serializer(self, cls):
         serializer_type_resolver = self._actual_type_resolver
         use_default_policy = serializer_type_resolver.policy is DEFAULT_POLICY
@@ -949,12 +996,14 @@ class TypeResolver:
                 # Real union with multiple alternatives
                 return UnionSerializer(serializer_type_resolver, cls, alternative_types)
 
-        for clz in cls.__mro__:
-            type_info = self._types_info.get(clz)
-            if type_info and type_info.serializer and type_info.serializer.support_subclass():
-                serializer = type(type_info.serializer)(serializer_type_resolver, cls)
-                break
+        serializer_cls = self._subclass_serializer_type(cls)
+        if serializer_cls is not None:
+            serializer = serializer_cls(serializer_type_resolver, cls)
         else:
+            if not self.xlang:
+                serializer = _create_container_subclass_serializer(serializer_type_resolver, cls)
+                if serializer is not None:
+                    return serializer
             if cls is types.FunctionType:
                 # Use FunctionSerializer for function types (including lambdas)
                 serializer = FunctionSerializer(serializer_type_resolver, cls)

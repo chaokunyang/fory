@@ -28,7 +28,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.ForyStruct;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.test.TestUtils;
 import org.testng.Assert;
@@ -38,6 +40,38 @@ import org.testng.annotations.Test;
 /** Executes cross-language tests against the Python implementation. */
 @Test
 public class PythonXlangTest extends XlangTestBase {
+  @ForyStruct
+  public static class AbcContainers {
+    public List<String> sequence;
+    public Set<String> values;
+    public Map<String, List<Long>> mapping;
+  }
+
+  @Test(dataProvider = "enableCodegenParallel")
+  public void testAbcContainers(boolean enableCodegen) throws IOException {
+    for (boolean compatible : new boolean[] {false, true}) {
+      Fory fory =
+          Fory.builder()
+              .withXlang(true)
+              .withCompatible(compatible)
+              .withCodegen(enableCodegen)
+              .build();
+      fory.register(AbcContainers.class, 901);
+      AbcContainers value = new AbcContainers();
+      value.sequence = Arrays.asList("a", "b");
+      value.values = new HashSet<>(value.sequence);
+      value.mapping = new HashMap<>();
+      value.mapping.put("items", Arrays.asList(1L, 2L));
+      String caseName = compatible ? "test_abc_containers_compatible" : "test_abc_containers";
+      ExecutionContext ctx = prepareExecution(caseName, fory.serialize(value));
+      runPeer(ctx);
+      AbcContainers result = (AbcContainers) fory.deserialize(readBytes(ctx.dataFile()));
+      Assert.assertEquals(result.sequence, value.sequence);
+      Assert.assertEquals(result.values, value.values);
+      Assert.assertEquals(result.mapping, value.mapping);
+    }
+  }
+
   private static final String PYTHON_EXECUTABLE = "python";
   private static final String PYTHON_MODULE = "pyfory.tests.xlang_test_main";
 

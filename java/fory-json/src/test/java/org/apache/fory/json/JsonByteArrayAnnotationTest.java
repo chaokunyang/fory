@@ -282,6 +282,9 @@ public class JsonByteArrayAnnotationTest extends ForyJsonTestModels {
         array.append('"').append(expected[i]).append('"');
       }
       String text = array.append(']').toString();
+      String compact = Arrays.toString(expected).replace(" ", "");
+      assertEquals(new String(json.toJsonBytes(expected), StandardCharsets.UTF_8), compact);
+      assertEquals(json.fromJson(json.toPrettyJsonBytes(expected), byte[].class), expected);
       byte[] first = json.fromJson(text, byte[].class);
       byte[] second = json.fromJson(text.getBytes(StandardCharsets.UTF_8), byte[].class);
       String nested = "{\"ignored\":\"汉\\u6c49\",\"bytes\":" + text + "}";

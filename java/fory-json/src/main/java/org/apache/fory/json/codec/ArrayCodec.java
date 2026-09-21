@@ -1248,11 +1248,28 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
   public abstract static class ByteArrayCodec extends ArrayCodec<byte[]> {
     // Built-in byte elements parse directly from input, including quoted scalars. They cannot
     // borrow the string decode buffer, so arrays may use it until the detached result is copied.
+    private static final long[] SIGNED_TOKENS = decimalTokens(false);
+    private static final long[] UNSIGNED_TOKENS = decimalTokens(true);
     private static final ByteArrayCodec SIGNED = new SignedByteArrayCodec();
     private static final ByteArrayCodec UNSIGNED = new UnsignedByteArrayCodec();
+    private final long[] tokens;
 
-    private ByteArrayCodec() {
+    private ByteArrayCodec(long[] tokens) {
       super(byte.class);
+      this.tokens = tokens;
+    }
+
+    private static long[] decimalTokens(boolean unsigned) {
+      long[] tokens = new long[256];
+      for (int i = 0; i < tokens.length; i++) {
+        String text = Integer.toString(unsigned ? i : (byte) i) + ',';
+        long token = (long) text.length() << 56;
+        for (int j = 0; j < text.length(); j++) {
+          token |= (long) text.charAt(j) << (j << 3);
+        }
+        tokens[i] = token;
+      }
+      return tokens;
     }
 
     abstract void writeElement(StringJsonWriter writer, byte value);
@@ -1288,10 +1305,34 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       }
       byte[] array = value;
       writer.writeArrayStart();
-      for (int i = 0; i < array.length; i++) {
-        writer.writeComma(i);
-        writeElement(writer, array[i]);
+      if (writer.prettyPrint()) {
+        for (int i = 0; i < array.length; i++) {
+          writer.writeComma(i);
+          writeElement(writer, array[i]);
+        }
+        writer.writeArrayEnd();
+        return;
       }
+      byte[] bytes = writer.getBuffer();
+      int pos = writer.getPosition();
+      long[] tokens = this.tokens;
+      int i = 0;
+      while (i < array.length) {
+        int end = i + Math.min(64, array.length - i);
+        // Five bytes cover a signed byte and comma; the last wide store needs seven spare bytes.
+        int additional = (end - i) * 5 + Long.BYTES - 1;
+        if (additional > bytes.length - pos) {
+          writer.setPosition(pos);
+          writer.grow(additional);
+          bytes = writer.getBuffer();
+        }
+        for (; i < end; i++) {
+          long token = tokens[array[i] & 255];
+          LittleEndian.putInt64(bytes, pos, token);
+          pos += (int) (token >>> 56);
+        }
+      }
+      writer.setPosition(array.length == 0 ? pos : pos - 1);
       writer.writeArrayEnd();
     }
 
@@ -1379,7 +1420,9 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
 
   /** A complete {@code byte[]} codec using a JSON array of signed byte values. */
   public static final class SignedByteArrayCodec extends ByteArrayCodec {
-    public SignedByteArrayCodec() {}
+    public SignedByteArrayCodec() {
+      super(ByteArrayCodec.SIGNED_TOKENS);
+    }
 
     @Override
     void writeElement(StringJsonWriter writer, byte value) {
@@ -1408,6 +1451,10 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
   }
 
   private static final class UnsignedByteArrayCodec extends ByteArrayCodec {
+    private UnsignedByteArrayCodec() {
+      super(ByteArrayCodec.UNSIGNED_TOKENS);
+    }
+
     @Override
     void writeElement(StringJsonWriter writer, byte value) {
       writer.writeInt(Byte.toUnsignedInt(value));

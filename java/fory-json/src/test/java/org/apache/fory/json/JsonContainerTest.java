@@ -326,6 +326,31 @@ public class JsonContainerTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void byteArrayTokens() {
+    JsonValueCodec<byte[]> codec =
+        ArrayCodec.createUnsignedPrimitive(byte[].class, Types.UINT8_ARRAY, false);
+    for (int size : new int[] {0, 1, 63, 64, 65, 257}) {
+      byte[] values = new byte[size];
+      StringBuilder expected = new StringBuilder("[[");
+      for (int i = 0; i < size; i++) {
+        values[i] = (byte) i;
+        if (i != 0) {
+          expected.append(',');
+        }
+        expected.append(i & 255);
+      }
+      expected.append("],\"tail\"]");
+      Utf8JsonWriter writer = newUtf8Writer(new byte[1]);
+      writer.writeArrayStart();
+      codec.writeUtf8(writer, values);
+      writer.writeComma(1);
+      writer.writeString("tail");
+      writer.writeArrayEnd();
+      assertEquals(new String(writer.toJsonBytes(), StandardCharsets.UTF_8), expected.toString());
+    }
+  }
+
+  @Test
   public void readTypeRefList() {
     ForyJson json = newJson();
     List<TokenValues> values =

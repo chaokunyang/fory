@@ -30,6 +30,7 @@ import java.lang.reflect.WildcardType;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.reflect.TypeRef;
 
@@ -43,6 +44,7 @@ public final class JsonObjectModel {
   private final Method[] accessors;
   private final Method[] defaultMethods;
   private final Object defaultsReceiver;
+  private final Supplier<?>[] defaultFactories;
   private final int[] defaultMaskBits;
   private final boolean[] parameterNullable;
   private final TypeRef<?>[] parameterTypes;
@@ -76,6 +78,7 @@ public final class JsonObjectModel {
         accessors,
         defaultMethods,
         null,
+        null,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -90,7 +93,10 @@ public final class JsonObjectModel {
    * {@code defaultsReceiver}. Scala emits {@code $lessinit$greater$default$N} on the companion
    * singleton and mirrors it as a static forwarder on the case class only for a top-level
    * companion, so a case class declared inside an {@code object} binds its defaults on that
-   * singleton. Pass {@code null} when the defaults are static members of the created type.
+   * singleton. A language module may also select a zero-argument static factory on the parameter's
+   * value type for an implicit default. Static defaults do not use {@code defaultsReceiver}; pass
+   * {@code null} when no instance default needs it. Type-default factories are evaluated only for
+   * missing parameters without a constructor default; mutable values must be newly allocated.
    */
   public JsonObjectModel(
       Constructor<?> constructor,
@@ -99,6 +105,7 @@ public final class JsonObjectModel {
       Method[] accessors,
       Method[] defaultMethods,
       Object defaultsReceiver,
+      Supplier<?>[] defaultFactories,
       int[] defaultMaskBits,
       boolean[] parameterNullable,
       TypeRef<?>[] parameterTypes,
@@ -114,6 +121,7 @@ public final class JsonObjectModel {
         accessors,
         defaultMethods,
         defaultsReceiver,
+        defaultFactories,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -148,6 +156,7 @@ public final class JsonObjectModel {
         accessors,
         defaultMethods,
         null,
+        null,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -175,7 +184,8 @@ public final class JsonObjectModel {
       Method[] propertySetters,
       TypeRef<?>[] propertyTypes,
       boolean[] propertyReconstructible,
-      boolean[] propertyRequired) {
+      boolean[] propertyRequired,
+      Supplier<?>[] defaultFactories) {
     this(
         creator,
         invocationCreator,
@@ -184,6 +194,7 @@ public final class JsonObjectModel {
         accessors,
         defaultMethods,
         null,
+        defaultFactories,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -203,6 +214,7 @@ public final class JsonObjectModel {
       Method[] accessors,
       Method[] defaultMethods,
       Object defaultsReceiver,
+      Supplier<?>[] defaultFactories,
       int[] defaultMaskBits,
       boolean[] parameterNullable,
       TypeRef<?>[] parameterTypes,
@@ -219,6 +231,7 @@ public final class JsonObjectModel {
     this.accessors = accessors.clone();
     this.defaultMethods = defaultMethods.clone();
     this.defaultsReceiver = defaultsReceiver;
+    this.defaultFactories = defaultFactories == null ? null : defaultFactories.clone();
     this.defaultMaskBits = defaultMaskBits.clone();
     this.parameterNullable = parameterNullable.clone();
     this.parameterTypes = parameterTypes.clone();
@@ -247,6 +260,7 @@ public final class JsonObjectModel {
     accessors = new Method[0];
     defaultMethods = new Method[0];
     defaultsReceiver = null;
+    defaultFactories = null;
     defaultMaskBits = new int[0];
     parameterNullable = new boolean[0];
     parameterTypes = new TypeRef<?>[0];
@@ -330,6 +344,7 @@ public final class JsonObjectModel {
     if (parameterNames.length != count
         || accessors.length != count
         || defaultMethods.length != count
+        || defaultFactories != null && defaultFactories.length != count
         || defaultMaskBits.length != count
         || parameterNullable.length != count
         || parameterTypes.length != count) {
@@ -372,7 +387,7 @@ public final class JsonObjectModel {
       }
     }
     HashSet<String> names = new HashSet<>();
-    boolean hasDefaultMethod = false;
+    boolean hasInstanceDefault = false;
     for (int i = 0; i < parameterNames.length; i++) {
       String name = parameterNames[i];
       if (name == null || name.isEmpty() || !names.add(name)) {
@@ -382,21 +397,15 @@ public final class JsonObjectModel {
       if (defaultMethods[i] != null && defaultMaskBits[i] >= 0) {
         throw new IllegalArgumentException("A constructor parameter has two default mechanisms");
       }
-      if (defaultMethods[i] != null
-          && Modifier.isStatic(defaultMethods[i].getModifiers()) == (defaultsReceiver != null)) {
-        throw new IllegalArgumentException(
-            "A JSON constructor default receiver is required exactly for instance defaults "
-                + defaultMethods[i]);
+      if (defaultMethods[i] != null && !Modifier.isStatic(defaultMethods[i].getModifiers())) {
+        if (!defaultMethods[i].getDeclaringClass().isInstance(defaultsReceiver)) {
+          throw new IllegalArgumentException(
+              "JSON constructor default receiver does not own " + defaultMethods[i]);
+        }
+        hasInstanceDefault = true;
       }
-      if (defaultsReceiver != null
-          && defaultMethods[i] != null
-          && !defaultMethods[i].getDeclaringClass().isInstance(defaultsReceiver)) {
-        throw new IllegalArgumentException(
-            "JSON constructor default receiver does not own " + defaultMethods[i]);
-      }
-      hasDefaultMethod |= defaultMethods[i] != null;
     }
-    if (defaultsReceiver != null && !hasDefaultMethod) {
+    if (defaultsReceiver != null && !hasInstanceDefault) {
       throw new IllegalArgumentException(
           "A JSON constructor default receiver requires at least one instance default");
     }
@@ -489,6 +498,13 @@ public final class JsonObjectModel {
   /** Returns the receiver of instance constructor-default methods, or null when they are static. */
   public Object defaultsReceiver() {
     return defaultsReceiver;
+  }
+
+  /**
+   * Returns type-default factories selected by the language module, or null if none are supplied.
+   */
+  public Supplier<?>[] defaultFactories() {
+    return defaultFactories == null ? null : defaultFactories.clone();
   }
 
   public int[] defaultMaskBits() {

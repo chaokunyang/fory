@@ -104,23 +104,42 @@ final class JsonGeneratedCodecBuilder extends CodecBuilder {
 
   Expression fieldValue(JsonFieldInfo property, Expression object) {
     Method getter = property.writeGetter();
+    Expression value;
     if (getter != null) {
+      // Scala 3 can emit a BoxedUnit descriptor with a void generic return signature.
+      TypeRef<?> returnType =
+          TypeRef.of(
+              getter.getGenericReturnType() == void.class
+                  ? getter.getReturnType()
+                  : getter.getGenericReturnType());
       // JSON writers check the returned member value directly. Requesting expression-level null
       // state here only emits an unused boolean for each nullable getter and bloats generated
       // object writers enough to hurt C2 inlining.
+      Expression invocation;
       if (DirectMethodCodegen.sourceNameable(getter)) {
-        return new Expression.Invoke(
-            object,
-            getter.getName(),
-            property.name(),
-            TypeRef.of(getter.getGenericReturnType()),
-            false);
+        invocation =
+            new Expression.Invoke(object, getter.getName(), property.name(), returnType, false);
+      } else {
+        String name = DirectMethodCodegen.getterName(getter);
+        addDirectMethod(name, getter.getReturnType(), getter.getDeclaringClass(), "target");
+        invocation = directInvoke(name, property.name(), returnType, object);
       }
-      String name = DirectMethodCodegen.getterName(getter);
-      addDirectMethod(name, getter.getReturnType(), getter.getDeclaringClass(), "target");
-      return directInvoke(name, property.name(), TypeRef.of(getter.getGenericReturnType()), object);
+      // Scala Unit getters can return void. Match reflective access, which adapts their absent
+      // result to null for the logical Unit codec, rather than generating a cast from void.
+      value =
+          getter.getReturnType() == void.class
+              ? new Expression.ListExpression(
+                  invocation, new Expression.Null(TypeRef.of(property.writeRawType()), false))
+              : invocation;
+    } else {
+      value = getFieldValue(object, writeDescriptor(property));
     }
-    return getFieldValue(object, writeDescriptor(property));
+    // A resolved primitive type argument still has an erased Object accessor or field.
+    // Adapt it here so both fused object-start writes and ordinary fields receive primitives.
+    Class<?> writeType = property.writeRawType();
+    return writeType.isPrimitive() && writeType != void.class && !value.type().isPrimitive()
+        ? new Expression.Cast(value, TypeRef.of(writeType))
+        : value;
   }
 
   Expression anyValue(Field field, Expression object) {

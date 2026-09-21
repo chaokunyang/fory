@@ -29,6 +29,7 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Supplier;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.json.ForyJsonException;
@@ -69,6 +70,7 @@ public final class JsonCreatorInfo {
   private final GeneratedJsonCodec<?> generatedCodec;
   private final Method[] defaultMethods;
   private final Object defaultsReceiver;
+  private final Supplier<?>[] defaultFactories;
   private final MethodHandle[] defaultInvokers;
   private final Constructor<?> defaultConstructor;
   private final MethodHandle defaultConstructorInvoker;
@@ -100,6 +102,7 @@ public final class JsonCreatorInfo {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -113,6 +116,7 @@ public final class JsonCreatorInfo {
       GeneratedJsonCodec<?> generatedCodec,
       Method[] defaultMethods,
       Object defaultsReceiver,
+      Supplier<?>[] defaultFactories,
       String[] parameterNames,
       Constructor<?> defaultConstructor,
       int[] defaultMaskBits,
@@ -126,6 +130,7 @@ public final class JsonCreatorInfo {
         generatedCodec,
         defaultMethods,
         defaultsReceiver,
+        defaultFactories,
         parameterNames,
         defaultConstructor,
         defaultMaskBits,
@@ -141,6 +146,7 @@ public final class JsonCreatorInfo {
         null,
         new JsonCreatorFieldInfo[0],
         new Object[0],
+        null,
         null,
         null,
         null,
@@ -166,6 +172,7 @@ public final class JsonCreatorInfo {
       GeneratedJsonCodec<?> generatedCodec,
       Method[] defaultMethods,
       Object defaultsReceiver,
+      Supplier<?>[] defaultFactories,
       String[] parameterNames,
       Constructor<?> defaultConstructor,
       int[] defaultMaskBits,
@@ -186,6 +193,7 @@ public final class JsonCreatorInfo {
     this.parameterNames = parameterNames == null ? null : parameterNames.clone();
     this.defaultMethods = defaultMethods == null ? null : defaultMethods.clone();
     this.defaultsReceiver = defaultsReceiver;
+    this.defaultFactories = defaultFactories == null ? null : defaultFactories.clone();
     defaultInvokers =
         this.defaultMethods == null
             ? null
@@ -225,6 +233,7 @@ public final class JsonCreatorInfo {
     generatedCodec = source.generatedCodec;
     defaultMethods = source.defaultMethods;
     defaultsReceiver = source.defaultsReceiver;
+    defaultFactories = source.defaultFactories;
     defaultInvokers = source.defaultInvokers;
     defaultConstructor = source.defaultConstructor;
     defaultConstructorInvoker = source.defaultConstructorInvoker;
@@ -455,7 +464,8 @@ public final class JsonCreatorInfo {
   @Internal
   public boolean hasDefault(int index) {
     return defaultInvokers != null && defaultInvokers[index] != null
-        || defaultMaskBits != null && defaultMaskBits[index] >= 0;
+        || defaultMaskBits != null && defaultMaskBits[index] >= 0
+        || defaultFactories != null && defaultFactories[index] != null;
   }
 
   /** Returns one prevalidated language-defined constructor default method. */
@@ -475,6 +485,9 @@ public final class JsonCreatorInfo {
   public Object defaultValue(int index, Object[] arguments) {
     MethodHandle invoker = defaultInvokers == null ? null : defaultInvokers[index];
     if (invoker == null) {
+      if (defaultFactories != null && defaultFactories[index] != null) {
+        return defaultFactories[index].get();
+      }
       throw missingArgument(index);
     }
     try {
@@ -562,9 +575,10 @@ public final class JsonCreatorInfo {
       if (argument == MISSING) {
         int bit = defaultMaskBits[i];
         if (bit < 0) {
-          throw missingArgument(i);
+          arguments[i] = defaultValue(i, arguments);
+        } else {
+          useDefault = true;
         }
-        useDefault = true;
       } else if (argument == null
           && parameterNullable != null
           && !parameterNullable[i]
@@ -668,16 +682,22 @@ public final class JsonCreatorInfo {
       if (method == null) {
         continue;
       }
-      // A default is either a static member of the created type or an instance member of the
-      // language singleton that owns it, such as a Scala companion of a nested case class.
+      // Language modules select defaults during schema construction. Compiler defaults belong to
+      // the creator or its companion; implicit defaults can use a value type's static factory,
+      // such as Option.empty, alongside those compiler defaults.
       boolean instanceDefault = !java.lang.reflect.Modifier.isStatic(method.getModifiers());
       Class<?> declaringClass = method.getDeclaringClass();
-      if ((instanceDefault
-              ? defaultsReceiver == null
-                  || !declaringClass.isInstance(defaultsReceiver)
-                  || !declaringClass.getName().equals(ownerType.getName() + "$")
-              : defaultsReceiver != null || declaringClass != ownerType)
-          || !method.getName().equals("$lessinit$greater$default$" + (i + 1))
+      boolean constructorDefault =
+          method.getName().equals("$lessinit$greater$default$" + (i + 1))
+              && (instanceDefault
+                  ? declaringClass.isInstance(defaultsReceiver)
+                      && declaringClass.getName().equals(ownerType.getName() + "$")
+                  : declaringClass == ownerType);
+      boolean valueFactory =
+          !instanceDefault
+              && method.getParameterCount() == 0
+              && method.getReturnType() == declaringClass;
+      if ((!constructorDefault && !valueFactory)
           || method.getParameterCount() > i
           || !java.lang.reflect.Modifier.isPublic(method.getModifiers())
           || !boxed(parameterTypes[i]).isAssignableFrom(boxed(method.getReturnType()))) {

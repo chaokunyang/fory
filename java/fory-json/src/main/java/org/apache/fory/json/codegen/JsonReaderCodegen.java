@@ -260,7 +260,7 @@ abstract class JsonReaderCodegen {
     this.any = any;
     ownerType = type;
     storesSelfReader =
-        JsonCodegen.storesSelfReader(type, properties, creatorInfo != null, any, resolver);
+        JsonCodegen.storesSelfReader(owner, properties, creatorInfo != null, any, resolver);
     if (creatorInfo != null) {
       return genAnyCreatorReaderCode(builder, type, creatorInfo);
     }
@@ -1494,11 +1494,13 @@ abstract class JsonReaderCodegen {
       if (method == null) {
         int maskBit = creator.defaultMaskBit(i);
         if (maskBit < 0) {
-          body.append("throw ")
-              .append(creatorExpression)
-              .append(".missingArgument(")
+          body.append("arguments[")
               .append(i)
-              .append(");\n");
+              .append("] = ")
+              .append(creatorExpression)
+              .append(".defaultValue(")
+              .append(i)
+              .append(", arguments);\n");
         } else {
           body.append("arguments[")
               .append(i)
@@ -1625,7 +1627,11 @@ abstract class JsonReaderCodegen {
     if (type == char.class) {
       return Expression.Literal.ofChar((char) 0);
     }
-    return new Expression.Literal(type == float.class ? 0F : 0D, TypeRef.of(type));
+    // A numeric conditional would promote 0F to Double before boxing the literal.
+    if (type == float.class) {
+      return new Expression.Literal(0F, TypeRef.of(type));
+    }
+    return new Expression.Literal(0D, TypeRef.of(type));
   }
 
   private Expression readCreatorValue(
@@ -4159,8 +4165,8 @@ abstract class JsonReaderCodegen {
   }
 
   private boolean storesAnyReader(Class<?> type) {
-    return resolver.canonicalObjectCodec(any.valueTypeInfo()) == null
-        || any.valueTypeInfo().rawType() != type;
+    return any.valueTypeInfo().rawType() != type
+        || resolver.canonicalObjectCodec(any.valueTypeInfo()) != objectOwner;
   }
 
   private Expression anyReaderRef() {
@@ -4571,7 +4577,9 @@ abstract class JsonReaderCodegen {
 
   final boolean storesReadObjectCodec(Class<?> type, JsonFieldInfo property) {
     Class<?> nestedType = readNestedType(property);
-    return nestedType != null && nestedType != type;
+    return nestedType != null
+        && (nestedType != type
+            || resolver.canonicalObjectCodec(property.readTypeInfo()) != objectOwner);
   }
 
   private Expression readField(
@@ -4845,6 +4853,7 @@ abstract class JsonReaderCodegen {
   final Expression readObjectValue(Class<?> type, JsonFieldInfo property, int id) {
     Expression codec =
         property.readRawType() == type
+                && resolver.canonicalObjectCodec(property.readTypeInfo()) == objectOwner
             ? nestedSelfReaderRef()
             : usesReaderSlot(property.readTypeInfo())
                 ? readerFromSlot(fieldRef("o" + id, JsonTypeInfo.class))

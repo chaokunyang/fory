@@ -24,7 +24,7 @@ import java.util.{HashMap, IdentityHashMap}
 
 import org.apache.fory.annotation.Internal
 import org.apache.fory.json.ForyJsonException
-import org.apache.fory.json.codec.{JsonValueCodec, StringEnumCodec}
+import org.apache.fory.json.codec.{MapKeyCodec, StringEnumCodec}
 import org.apache.fory.json.meta.JsonAsciiToken
 import org.apache.fory.json.reader.{Latin1JsonReader, Utf16JsonReader, Utf8JsonReader}
 import org.apache.fory.json.writer.StringJsonWriter
@@ -59,7 +59,7 @@ private[scala] object ScalaEnumCodec {
     null
   }
 
-  def create(typeClass: Class[_], typeRef: TypeRef[_]): JsonValueCodec[_] = {
+  def create(typeClass: Class[_], typeRef: TypeRef[_]): ScalaEnumCodec = {
     try {
       val valuesMethod = typeClass.getMethod("values")
       if (!Modifier.isPublic(valuesMethod.getModifiers) || !Modifier.isStatic(valuesMethod.getModifiers)) {
@@ -80,7 +80,7 @@ private[scala] object ScalaEnumCodec {
 class ScalaEnumCodec(
     typeClass: Class[_], values: Array[Object], names: Array[String]
 )
-    extends StringEnumCodec[Object](names) {
+    extends StringEnumCodec[Object](names) with MapKeyCodec {
   private val byName = new HashMap[String, Object](values.length * 2)
   private val indexByValue = new IdentityHashMap[Object, Integer](values.length * 2)
   private val tokenPrefixes = new Array[Long](values.length)
@@ -120,6 +120,10 @@ class ScalaEnumCodec(
     if (value == null) throw new ForyJsonException(s"Unknown Scala enum value $name")
     value
   }
+
+  override final def toName(key: Object): String = names(valueIndex(key))
+
+  override final def fromName(name: String): Object = value(name)
 
   override def writeString(writer: StringJsonWriter, v: Object): Unit = {
     if (v == null) writer.writeNull() else writer.writeString(names(valueIndex(v)))

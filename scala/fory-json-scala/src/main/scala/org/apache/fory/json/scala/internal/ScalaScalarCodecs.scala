@@ -199,7 +199,8 @@ private[scala] final class ScalaDurationCodec(finiteOnly: Boolean)
       case scala.concurrent.duration.Duration.MinusInf =>
         writer.writeFieldName("special")
         writer.writeString("MINUS_INF")
-      case scala.concurrent.duration.Duration.Undefined =>
+      // Undefined.equals is always false, so a stable-identifier pattern fails on Scala 2.
+      case undefined if undefined eq scala.concurrent.duration.Duration.Undefined =>
         writer.writeFieldName("special")
         writer.writeString("UNDEFINED")
       case _ => throw invalidDuration()

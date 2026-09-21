@@ -33,6 +33,11 @@ private[scala] object ScalaTypeRefMacros {
 
     def typeRefExpr(tpe: TypeRepr): Expr[org.apache.fory.reflect.TypeRef[?]] = {
       val normalized = tpe.dealias
+      // Unit data uses BoxedUnit; classOf[Unit] is JVM void and selects the wrong codec,
+      // including when it occurs inside a generic argument or an array component.
+      if (normalized =:= TypeRepr.of[Unit]) {
+        return '{ org.apache.fory.reflect.TypeRef.of(classOf[scala.runtime.BoxedUnit]) }
+      }
       val raw = normalized.classSymbol.getOrElse {
         report.errorAndAbort(s"${normalized.show} has no runtime class")
       }

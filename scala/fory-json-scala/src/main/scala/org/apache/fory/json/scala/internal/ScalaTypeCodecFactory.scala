@@ -20,6 +20,7 @@
 package org.apache.fory.json.scala.internal
 
 import java.lang.reflect.Modifier
+import java.util.function.Supplier
 
 import org.apache.fory.json.JsonCodecFactory
 import org.apache.fory.json.codec.JsonValueCodec
@@ -157,6 +158,26 @@ private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
     if (!runtimeType && !Modifier.isPublic(rawType.getModifiers)) {
       throw ScalaTypeSupport.unsupported(typeRef, "non-public implementation is write-only")
     }
+  }
+
+  def collectionDefault(typeRef: TypeRef[_]): Supplier[_] = {
+    val rawType = typeRef.getRawType
+    if (rawType == classOf[List[_]] || rawType == Nil.getClass) return () => Nil
+    if (rawType == classOf[scala.collection.immutable.BitSet])
+      return () => scala.collection.immutable.BitSet.empty
+    if (rawType == classOf[scala.collection.mutable.BitSet])
+      return () => scala.collection.mutable.BitSet.empty
+    val selection =
+      if (classOf[scala.collection.Map[_, _]].isAssignableFrom(rawType)) mapKind(rawType, false)
+      else if (classOf[scala.collection.Iterable[_]].isAssignableFrom(rawType)) iterableKind(rawType, false)
+      else null
+    if (selection == null) return null
+    val kind = selection._1
+    val tag =
+      if (kind == ScalaCollectionCodecs.ImmutableArraySeqKind || kind == ScalaCollectionCodecs.MutableArraySeqKind)
+        ScalaTypeSupport.classTag(ScalaTypeSupport.rawType(ScalaTypeSupport.arguments(typeRef, 1, "Scala collection")(0)))
+      else null
+    () => ScalaCollectionCodecs.emptyValue(kind, tag)
   }
 
   private def iterableKind(rawType: Class[_], runtimeWrite: Boolean): (Int, Class[_]) = {

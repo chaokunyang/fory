@@ -1134,10 +1134,9 @@ public final class JsonCodegen {
         return false;
       }
       Method defaultMethod = creator.defaultMethod(i);
-      // JsonCreatorInfo guarantees that a default method belongs to the creator owner, or to the
-      // language singleton that owns instance defaults, and that its dependency types are the
-      // preceding creator parameters. The generated reader invokes that exact method on that exact
-      // declaring class, so validate its access from the final definition context as well.
+      // JsonCreatorInfo validates compiler defaults and module-selected value factories. Their
+      // dependencies, if any, are preceding creator parameters. The generated reader invokes that
+      // exact method on its declaring class, so validate access from the final definition context.
       if (defaultMethod != null && !canCall(defaultMethod)) {
         return false;
       }
@@ -1346,14 +1345,15 @@ public final class JsonCodegen {
     if (any == null || any.readField() == null && any.readSetter() == null) {
       return false;
     }
-    if (storesSelfReader(
-        owner.type(), owner.readFields(), owner.creatorInfo() != null, any, resolver)) {
+    if (storesSelfReader(owner, owner.readFields(), owner.creatorInfo() != null, any, resolver)) {
       return true;
     }
     JsonUnwrappedInfo unwrapped = owner.unwrappedInfo();
     if (unwrapped != null) {
       for (JsonUnwrappedInfo.ReadRoute route : unwrapped.readRoutes()) {
-        if (route.field() != null && readNestedType(route.field(), resolver) == owner.type()) {
+        if (route.field() != null
+            && readNestedType(route.field(), resolver) != null
+            && resolver.canonicalObjectCodec(route.field().readTypeInfo()) == owner) {
           return true;
         }
       }
@@ -1362,19 +1362,20 @@ public final class JsonCodegen {
   }
 
   static boolean storesSelfReader(
-      Class<?> type,
+      ObjectCodec<?> owner,
       JsonFieldInfo[] properties,
       boolean creator,
       AnyInfo any,
       JsonTypeResolver resolver) {
-    if (any.valueRawType() == type && resolver.canonicalObjectCodec(any.valueTypeInfo()) != null) {
+    if (resolver.canonicalObjectCodec(any.valueTypeInfo()) == owner) {
       return true;
     }
     if (creator) {
       return false;
     }
     for (JsonFieldInfo property : properties) {
-      if (readNestedType(property, resolver) == type) {
+      if (readNestedType(property, resolver) != null
+          && resolver.canonicalObjectCodec(property.readTypeInfo()) == owner) {
         return true;
       }
     }

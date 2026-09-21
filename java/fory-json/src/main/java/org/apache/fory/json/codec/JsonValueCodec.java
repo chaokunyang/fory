@@ -19,6 +19,8 @@
 
 package org.apache.fory.json.codec;
 
+import org.apache.fory.json.writer.JsonWriter;
+
 /**
  * A streaming codec for one complete JSON value of type {@code T}.
  *
@@ -43,4 +45,18 @@ public interface JsonValueCodec<T>
         Utf8WriterCodec<T>,
         Latin1ReaderCodec<T>,
         Utf16ReaderCodec<T>,
-        Utf8ReaderCodec<T> {}
+        Utf8ReaderCodec<T> {
+  /**
+   * Tests a non-null value for {@code NON_EMPTY} property omission. The default returns false;
+   * custom codecs may override it without writing any output. The writer supplies the current
+   * operation's context for codecs that dispatch by runtime type.
+   *
+   * <p>Field handling checks Java strings, arrays, collections, maps, and Optional values directly
+   * before calling this method. Their built-in emptiness rules cannot be overridden. Root values
+   * and container elements are never filtered, and present wrapper contents are not recursively
+   * considered empty.
+   */
+  default boolean isEmpty(JsonWriter writer, T value) {
+    return false;
+  }
+}

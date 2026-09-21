@@ -122,6 +122,32 @@ public class JsonAsyncCompilationTest {
   }
 
   @Test
+  public void naturalCacheTracksCompilation() throws Exception {
+    ControlledJson controlled = controlledJson();
+    JsonTypeResolver resolver = currentTypeResolver(controlled.json);
+    JsonValueCodec<Object> natural = resolver.getTypeInfo(Object.class, Object.class).valueCodec();
+    StringJsonWriter writer = new StringJsonWriter(controlled.json.config(), resolver);
+    AsyncChild value = child("cached", 1);
+    assertFalse(natural.isEmpty(writer, value));
+    JsonTypeInfo info = resolver.getRuntimeTypeInfo(AsyncChild.class);
+    ObjectCodec<?> owner = resolver.canonicalObjectCodec(info);
+    assertSame(info.stringWriter(), owner);
+    Field cached = ScalarCodecs.NaturalCodec.class.getDeclaredField("cachedTypeInfo");
+    cached.setAccessible(true);
+    assertSame(cached.get(natural), info);
+
+    controlled.executor.runAll();
+    assertNotSame(info.stringWriter(), owner);
+    assertNotSame(info.utf8Writer(), owner);
+    natural.writeString(writer, value);
+    assertEquals(writer.toJson(), "{\"id\":1,\"name\":\"cached\"}");
+    Utf8JsonWriter bytes = new Utf8JsonWriter(controlled.json.config(), resolver);
+    natural.writeUtf8(bytes, value);
+    assertEquals(new String(bytes.toJsonBytes(), StandardCharsets.UTF_8), writer.toJson());
+    assertSame(cached.get(natural), info);
+  }
+
+  @Test
   public void closedSubtypeBranchesInstall() throws Exception {
     ControlledJson controlled = controlledJson();
     ForyJson json = controlled.json;

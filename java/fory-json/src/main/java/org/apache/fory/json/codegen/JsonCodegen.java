@@ -326,8 +326,11 @@ public final class JsonCodegen {
       for (JsonFieldInfo field : unwrapped.writeFields()) {
         addWriteInvocations(invocations, field);
       }
-      for (JsonUnwrappedInfo.Group group : unwrapped.groups()) {
-        JsonFieldAccessor accessor = group.declaration().writeAccessor();
+      for (JsonUnwrappedInfo.WriteEntry step : unwrapped.writeSteps()) {
+        if (step.kind() != JsonUnwrappedInfo.GROUP) {
+          continue;
+        }
+        JsonFieldAccessor accessor = step.group().declaration().writeAccessor();
         Method getter = accessor == null ? null : accessor.getter();
         if (getter != null && !DirectMethodCodegen.sourceNameable(getter)) {
           addInvocation(invocations, DirectMethodCodegen.getterInvocation(getter));
@@ -348,6 +351,12 @@ public final class JsonCodegen {
     Method getter = field.writeGetter();
     if (getter != null && !DirectMethodCodegen.sourceNameable(getter)) {
       addInvocation(invocations, DirectMethodCodegen.getterInvocation(getter));
+    }
+    // Default dependencies need the same JVM-name bridges as ordinary property getters.
+    for (Method dependency : field.defaultDependencies()) {
+      if (!DirectMethodCodegen.sourceNameable(dependency)) {
+        addInvocation(invocations, DirectMethodCodegen.getterInvocation(dependency));
+      }
     }
     if (field.writeDirectUnboxedValueCodec() != null) {
       addInvocation(
@@ -1396,6 +1405,16 @@ public final class JsonCodegen {
     }
     if (property.writeGetter() != null && !canCall(property.writeGetter())) {
       return false;
+    }
+    if (property.defaultMethod() != null) {
+      if (!canCall(property.defaultMethod())) {
+        return false;
+      }
+      for (Method dependency : property.defaultDependencies()) {
+        if (!canCall(dependency)) {
+          return false;
+        }
+      }
     }
     if (field != null && !canCompileField(field)) {
       return false;

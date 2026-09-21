@@ -58,6 +58,7 @@ final class JsonMixinAnnotations {
   private static final String JSON_CREATOR = JSON_PACKAGE + ".annotation.JsonCreator";
   private static final String JSON_FORMAT = JSON_PACKAGE + ".annotation.JsonFormat";
   private static final String JSON_IGNORE = JSON_PACKAGE + ".annotation.JsonIgnore";
+  private static final String JSON_INCLUDE = JSON_PACKAGE + ".annotation.JsonInclude";
   private static final String JSON_PROPERTY = JSON_PACKAGE + ".annotation.JsonProperty";
   private static final String JSON_PROPERTY_ORDER = JSON_PACKAGE + ".annotation.JsonPropertyOrder";
   private static final String JSON_RAW_VALUE = JSON_PACKAGE + ".annotation.JsonRawValue";
@@ -78,6 +79,7 @@ final class JsonMixinAnnotations {
                   JSON_CREATOR,
                   JSON_FORMAT,
                   JSON_IGNORE,
+                  JSON_INCLUDE,
                   JSON_PROPERTY,
                   JSON_PROPERTY_ORDER,
                   JSON_RAW_VALUE,

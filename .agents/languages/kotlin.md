@@ -10,7 +10,14 @@ Load this file when changing `kotlin/` or compiler code that generates Kotlin so
 - Fory JSON Kotlin property inclusion follows the configured global or property-level rule,
   independently of constructor defaults and deferred initializers. Do not override or reject
   `NON_NULL` or `NON_EMPTY` to guarantee round trips. Missing-property defaults and nullability
-  remain reader-owned; serialization must not evaluate default expressions.
+  remain reader-owned.
+- `NON_DEFAULT` requires explicit property or class authorization; global use is invalid. Kotlin
+  defaults use one reference object per model metadata only when the selected constructor has no
+  required parameters. Never fabricate required arguments, change creator selection, or construct
+  a comparison object on each write. Authorization covers constructor and initializer execution;
+  the caller owns stable defaults and consistent missing-field recovery, including dependencies.
+  Metadata does not prove default expression purity. Do not add bytecode analysis or plugins to
+  infer it, and never share reference defaults with deserialization results.
 - Run Kotlin Maven commands from within `kotlin/`.
 - Kotlin serializers build on the Java implementation. If Java changed and the updated Java artifacts are not installed yet, run `cd ../java && mvn -T16 install -DskipTests` first.
 - KSP `@ForyStruct` serializers that use a primary constructor map constructor parameters to

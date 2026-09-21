@@ -115,15 +115,7 @@ final class JsonGeneratedCodecBuilder extends CodecBuilder {
       // JSON writers check the returned member value directly. Requesting expression-level null
       // state here only emits an unused boolean for each nullable getter and bloats generated
       // object writers enough to hurt C2 inlining.
-      Expression invocation;
-      if (DirectMethodCodegen.sourceNameable(getter)) {
-        invocation =
-            new Expression.Invoke(object, getter.getName(), property.name(), returnType, false);
-      } else {
-        String name = DirectMethodCodegen.getterName(getter);
-        addDirectMethod(name, getter.getReturnType(), getter.getDeclaringClass(), "target");
-        invocation = directInvoke(name, property.name(), returnType, object);
-      }
+      Expression invocation = getterValue(getter, property.name(), returnType, object);
       // Scala Unit getters can return void. Match reflective access, which adapts their absent
       // result to null for the logical Unit codec, rather than generating a cast from void.
       value =
@@ -149,20 +141,20 @@ final class JsonGeneratedCodecBuilder extends CodecBuilder {
   Expression unwrappedValue(Declaration declaration, Expression object) {
     Method getter = declaration.writeAccessor().getter();
     if (getter != null) {
-      if (!DirectMethodCodegen.sourceNameable(getter)) {
-        String name = DirectMethodCodegen.getterName(getter);
-        addDirectMethod(name, getter.getReturnType(), getter.getDeclaringClass(), "target");
-        return directInvoke(
-            name, declaration.javaName(), TypeRef.of(getter.getGenericReturnType()), object);
-      }
-      return new Expression.Invoke(
-          object,
-          getter.getName(),
-          declaration.javaName(),
-          TypeRef.of(getter.getGenericReturnType()),
-          false);
+      return getterValue(
+          getter, declaration.javaName(), TypeRef.of(getter.getGenericReturnType()), object);
     }
     return getFieldValue(object, writeDescriptor(declaration.writeAccessor().field()));
+  }
+
+  Expression getterValue(
+      Method getter, String valueName, TypeRef<?> returnType, Expression object) {
+    if (DirectMethodCodegen.sourceNameable(getter)) {
+      return new Expression.Invoke(object, getter.getName(), valueName, returnType, false);
+    }
+    String name = DirectMethodCodegen.getterName(getter);
+    addDirectMethod(name, getter.getReturnType(), getter.getDeclaringClass(), "target");
+    return directInvoke(name, valueName, returnType, object);
   }
 
   Expression newObject() {

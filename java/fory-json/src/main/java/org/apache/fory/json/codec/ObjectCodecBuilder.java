@@ -48,6 +48,7 @@ import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.annotation.JsonIgnore;
+import org.apache.fory.json.annotation.JsonInclude;
 import org.apache.fory.json.annotation.JsonProperty;
 import org.apache.fory.json.annotation.JsonProperty.Include;
 import org.apache.fory.json.annotation.JsonPropertyOrder;
@@ -105,6 +106,10 @@ final class ObjectCodecBuilder {
       JsonObjectModel objectModel) {
     Class<?> type = ownerType.getRawType();
     Annotations annotations = new Annotations(type, sharedRegistry);
+    JsonInclude classInclusion = annotations.get(type, JsonInclude.class);
+    if (classInclusion != null && classInclusion.value() != Include.DEFAULT) {
+      defaultPropertyInclusion = classInclusion.value();
+    }
     boolean record =
         generatedCodec == null ? RecordUtils.isRecord(type) : generatedCodec.validatedRecord();
     boolean hasAnyField =
@@ -198,6 +203,7 @@ final class ObjectCodecBuilder {
     boolean anyWrites = anyBuilder != null && anyBuilder.anyWriteEnabled();
     boolean orderWrites = propertyOrder != null || hasIndexedProperty(builders) || anyWrites;
     List<JsonFieldInfo> writes = new ArrayList<>();
+    List<JsonFieldInfo> referenceDefaults = new ArrayList<>();
     List<FieldBuilder> writeBuilders = orderWrites ? new ArrayList<>(builders.size()) : null;
     List<UnwrappedWriteBuilder> unwrappedWrites =
         hasUnwrapped ? new ArrayList<>(builders.size() + 1) : null;
@@ -297,6 +303,15 @@ final class ObjectCodecBuilder {
                 propertyNamingStrategy,
                 defaultPropertyInclusion,
                 generatedCodec);
+        configureInclusion(
+            property,
+            builder,
+            builders,
+            creatorInfo,
+            objectModel,
+            defaultPropertyInclusion,
+            referenceDefaults,
+            type);
         markRequiredWrite(property, builder, creatorInfo, objectModel);
         int unwrappedConstructionIndex = -1;
         if (creatorInfo != null && builder.creatorArgumentIndex >= 0) {
@@ -329,6 +344,15 @@ final class ObjectCodecBuilder {
       JsonFieldInfo field =
           builder.build(
               record, ownerType, propertyNamingStrategy, defaultPropertyInclusion, generatedCodec);
+      configureInclusion(
+          field,
+          builder,
+          builders,
+          creatorInfo,
+          objectModel,
+          defaultPropertyInclusion,
+          referenceDefaults,
+          type);
       markRequiredWrite(field, builder, creatorInfo, objectModel);
       if (!hasAny) {
         FieldBuilder priorProperty = canonicalNames.put(field.name(), builder);
@@ -404,6 +428,17 @@ final class ObjectCodecBuilder {
               : orderWriteFields(type, propertyOrder, writeBuilders, writes);
     }
     JsonFieldInfo[] readArray = reads.toArray(new JsonFieldInfo[0]);
+    ObjectInstantiator<?> instantiator =
+        creatorInfo == null
+            ? GraalvmSupport.isGraalRuntime()
+                ? ObjectInstantiators.getObjectInstantiator(type)
+                : ObjectInstantiators.createObjectInstantiator(type)
+            : null;
+    if (!referenceDefaults.isEmpty()) {
+      // Reference construction uses constructor defaults only. Required deferred properties
+      // validate JSON input; they need not be initialized on the comparison object.
+      initializeDefaults(type, creatorInfo, instantiator, referenceDefaults);
+    }
     if (objectModel != null && !deferredFields.isEmpty()) {
       creatorInfo =
           creatorInfo.withDeferredFields(
@@ -434,12 +469,6 @@ final class ObjectCodecBuilder {
                 generatedCodec,
                 annotations)
             : null;
-    ObjectInstantiator<?> instantiator =
-        creatorInfo == null
-            ? GraalvmSupport.isGraalRuntime()
-                ? ObjectInstantiators.getObjectInstantiator(type)
-                : ObjectInstantiators.createObjectInstantiator(type)
-            : null;
     String[] skipped = hasAny ? skippedNames.toArray(new String[0]) : null;
     JsonUnwrappedInfo unwrappedInfo =
         hasUnwrapped
@@ -456,6 +485,107 @@ final class ObjectCodecBuilder {
         unwrappedInfo,
         instantiator,
         validatorInfo);
+  }
+
+  private static void configureInclusion(
+      JsonFieldInfo field,
+      FieldBuilder builder,
+      Map<String, FieldBuilder> builders,
+      JsonCreatorInfo creator,
+      JsonObjectModel model,
+      Include defaultInclusion,
+      List<JsonFieldInfo> referenceDefaults,
+      Class<?> type) {
+    Include inclusion =
+        builder.explicitInclude == Include.DEFAULT ? defaultInclusion : builder.explicitInclude;
+    if (inclusion != Include.NON_DEFAULT || !builder.hasWriteSource()) {
+      return;
+    }
+    int index = builder.creatorArgumentIndex;
+    field.includeNullWrite();
+    if (creator != null && index >= 0 && creator.defaultMethod(index) != null) {
+      Method method = creator.defaultMethod(index);
+      Method[] dependencies = Arrays.copyOf(model.accessors(), method.getParameterCount());
+      for (FieldBuilder dependency : builders.values()) {
+        int argumentIndex = dependency.creatorArgumentIndex;
+        if (argumentIndex >= 0
+            && argumentIndex < dependencies.length
+            && !dependency.hasWriteSource()) {
+          dependencies[argumentIndex] = null;
+        }
+      }
+      for (Method dependency : dependencies) {
+        if (dependency == null) {
+          throw unsupportedDefault(type, field, "a constructor-default dependency is not writable");
+        }
+      }
+      field.bindDefault(method, creator.defaultsReceiver(), dependencies);
+    } else {
+      // Authorization never turns reader type fallbacks into declared defaults. Only the
+      // selected no-arg/all-default construction path can supply a reference value.
+      if (model != null && !model.referenceDefaults()) {
+        throw unsupportedDefault(type, field, "the property has no declared constructor default");
+      }
+      referenceDefaults.add(field);
+    }
+  }
+
+  private static void initializeDefaults(
+      Class<?> type,
+      JsonCreatorInfo creator,
+      ObjectInstantiator<?> instantiator,
+      List<JsonFieldInfo> fields) {
+    JsonFieldInfo first = fields.get(0);
+    Object reference;
+    try {
+      if (creator == null) {
+        try {
+          type.getDeclaredConstructor();
+        } catch (NoSuchMethodException e) {
+          throw unsupportedDefault(type, first, "no callable no-argument constructor");
+        }
+        // Match the ordinary reader's constructor. Never use its allocation-without-construction
+        // alternative to invent a default baseline from JVM zero values.
+        reference = instantiator.newInstance();
+      } else {
+        if (!(creator.executable() instanceof Constructor)) {
+          throw unsupportedDefault(type, first, "the selected creator is not a constructor");
+        }
+        for (int i = 0; i < creator.argumentCount(); i++) {
+          if (creator.defaultMaskBit(i) < 0) {
+            throw unsupportedDefault(
+                type,
+                first,
+                "the selected constructor has a required parameter or no supported reference default");
+          }
+        }
+        reference = creator.create(creator.newArguments());
+      }
+    } catch (RuntimeException cause) {
+      throw new ForyJsonException(
+          "Cannot initialize NON_DEFAULT for "
+              + type.getName()
+              + "."
+              + first.name()
+              + ": "
+              + cause.getMessage(),
+          cause);
+    }
+    for (JsonFieldInfo field : fields) {
+      try {
+        field.bindDefaultValue(reference);
+      } catch (RuntimeException cause) {
+        throw new ForyJsonException(
+            "Cannot read NON_DEFAULT reference property " + type.getName() + "." + field.name(),
+            cause);
+      }
+    }
+  }
+
+  private static ForyJsonException unsupportedDefault(
+      Class<?> type, JsonFieldInfo field, String reason) {
+    return new ForyJsonException(
+        "Unsupported NON_DEFAULT for " + type.getName() + "." + field.name() + ": " + reason);
   }
 
   private static void markRequiredWrite(
@@ -1594,7 +1724,8 @@ final class ObjectCodecBuilder {
                     null,
                     false,
                     true,
-                    i));
+                    i,
+                    null));
           }
         } else {
           fields.add(
@@ -3189,7 +3320,9 @@ final class ObjectCodecBuilder {
                 + "."
                 + name);
       }
-      if (explicitInclude != JsonProperty.Include.DEFAULT) {
+      if (explicitInclude != Include.DEFAULT
+          && explicitInclude != Include.ALWAYS
+          && explicitInclude != Include.NON_DEFAULT) {
         throw new ForyJsonException(
             "@JsonUnwrapped property cannot declare an inclusion policy: "
                 + type.getName()
@@ -3241,7 +3374,8 @@ final class ObjectCodecBuilder {
           property.readAccessor(),
           hasWriteSource(),
           creatorParent ? constructionIndex >= 0 : hasReadSink(),
-          constructionIndex);
+          constructionIndex,
+          property);
     }
 
     private JsonCodec codecAnnotation() {
@@ -3318,7 +3452,10 @@ final class ObjectCodecBuilder {
           explicitNameSource = source;
         }
       }
-      JsonProperty.Include declaredInclude = property.include();
+      mergeInclusion(property.include(), source);
+    }
+
+    private void mergeInclusion(Include declaredInclude, AnnotatedElement source) {
       if (declaredInclude != JsonProperty.Include.DEFAULT) {
         if (explicitInclude != JsonProperty.Include.DEFAULT && explicitInclude != declaredInclude) {
           throw new ForyJsonException(
@@ -3377,10 +3514,7 @@ final class ObjectCodecBuilder {
           explicitIndexSource = parameter;
         }
       }
-      if (property.include() != JsonProperty.Include.DEFAULT) {
-        throw new ForyJsonException(
-            "@JsonUnwrapped property cannot declare an inclusion policy: " + name);
-      }
+      mergeInclusion(property.include(), parameter);
     }
 
     private void mergeIgnore(AnnotatedElement source) {

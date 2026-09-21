@@ -682,9 +682,8 @@ public final class JsonCreatorInfo {
       if (method == null) {
         continue;
       }
-      // Language modules select defaults during schema construction. Compiler defaults belong to
-      // the creator or its companion; implicit defaults can use a value type's static factory,
-      // such as Option.empty, alongside those compiler defaults.
+      // Only declared compiler defaults belong here. Reader type fallbacks use defaultFactories
+      // and cannot authorize NON_DEFAULT omission.
       boolean instanceDefault = !java.lang.reflect.Modifier.isStatic(method.getModifiers());
       Class<?> declaringClass = method.getDeclaringClass();
       boolean constructorDefault =
@@ -693,11 +692,7 @@ public final class JsonCreatorInfo {
                   ? declaringClass.isInstance(defaultsReceiver)
                       && declaringClass.getName().equals(ownerType.getName() + "$")
                   : declaringClass == ownerType);
-      boolean valueFactory =
-          !instanceDefault
-              && method.getParameterCount() == 0
-              && method.getReturnType() == declaringClass;
-      if ((!constructorDefault && !valueFactory)
+      if (!constructorDefault
           || method.getParameterCount() > i
           || !java.lang.reflect.Modifier.isPublic(method.getModifiers())
           || !boxed(parameterTypes[i]).isAssignableFrom(boxed(method.getReturnType()))) {

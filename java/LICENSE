@@ -239,6 +239,7 @@ details. The text of each license is the standard Apache 2.0 license included ab
       fory-json/src/main/java/org/apache/fory/json/annotation/JsonCreator.java
       fory-json/src/main/java/org/apache/fory/json/annotation/JsonFormat.java
       fory-json/src/main/java/org/apache/fory/json/annotation/JsonIgnore.java
+      fory-json/src/main/java/org/apache/fory/json/annotation/JsonInclude.java
       fory-json/src/main/java/org/apache/fory/json/annotation/JsonProperty.java
       fory-json/src/main/java/org/apache/fory/json/annotation/JsonPropertyOrder.java
       fory-json/src/main/java/org/apache/fory/json/annotation/JsonRawValue.java

@@ -73,7 +73,6 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.regex.Pattern;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
-import org.apache.fory.json.JsonConfig;
 import org.apache.fory.json.meta.JsonAsciiToken;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.reader.JsonReader;
@@ -123,19 +122,47 @@ public final class ScalarCodecs {
   }
 
   public static final class NaturalCodec implements JsonValueCodec<Object> {
-    public static final NaturalCodec INSTANCE = new NaturalCodec();
-
     private final boolean scalarMixins;
+    private Class<?> cachedClass;
+    private JsonTypeInfo cachedTypeInfo;
 
-    private NaturalCodec() {
-      scalarMixins = false;
+    /** Creates a dynamic codec owned exclusively by one resolver. */
+    @Internal
+    public NaturalCodec(boolean scalarMixins) {
+      this.scalarMixins = scalarMixins;
     }
 
-    /** Creates the dynamic codec for an instance with configured Mixin annotations. */
+    /** Returns whether collections may use the built-in Boolean writer directly. */
     @Internal
-    public NaturalCodec(JsonConfig config) {
-      scalarMixins =
-          config.mixins().containsKey(Boolean.class) || config.mixins().containsKey(Integer.class);
+    public boolean writesBooleanDirectly() {
+      return !scalarMixins;
+    }
+
+    /** Drops metadata that may belong to a rolled-back resolution. */
+    @Internal
+    public void clearCache() {
+      cachedClass = null;
+      cachedTypeInfo = null;
+    }
+
+    private JsonTypeInfo runtimeTypeInfo(JsonWriter writer, Class<?> type) {
+      if (cachedClass == type) {
+        return cachedTypeInfo;
+      }
+      JsonTypeInfo typeInfo = writer.typeResolver().getRuntimeTypeInfo(type);
+      // Share this slot between emptiness and writing. Retain the owner, not its writer, so
+      // later JIT publication remains visible. The resolver's root lock protects both.
+      cachedClass = type;
+      cachedTypeInfo = typeInfo;
+      return typeInfo;
+    }
+
+    @Override
+    public boolean isEmpty(JsonWriter writer, Object value) {
+      if (value.getClass() == Object.class) {
+        return false;
+      }
+      return runtimeTypeInfo(writer, value.getClass()).valueCodec().isEmpty(writer, value);
     }
 
     @Override
@@ -146,15 +173,16 @@ public final class ScalarCodecs {
       }
       // Registration cannot replace these built-ins, but a Mixin can attach a custom codec.
       // Keep Mixin resolution and its type checks on the ordinary runtime dispatch path.
-      if (value instanceof Boolean && !scalarMixins) {
+      Class<?> type = value.getClass();
+      if (type == Boolean.class && !scalarMixins) {
         writer.writeBoolean((Boolean) value);
         return;
       }
-      if (value instanceof Integer && !scalarMixins) {
+      if (type == Integer.class && !scalarMixins) {
         writer.writeInt((Integer) value);
         return;
       }
-      JsonTypeInfo typeInfo = writer.typeResolver().getRuntimeTypeInfo(value.getClass());
+      JsonTypeInfo typeInfo = runtimeTypeInfo(writer, type);
       typeInfo.stringWriter().writeString(writer, value);
     }
 
@@ -166,15 +194,16 @@ public final class ScalarCodecs {
       }
       // Registration cannot replace these built-ins, but a Mixin can attach a custom codec.
       // Keep Mixin resolution and its type checks on the ordinary runtime dispatch path.
-      if (value instanceof Boolean && !scalarMixins) {
+      Class<?> type = value.getClass();
+      if (type == Boolean.class && !scalarMixins) {
         writer.writeBoolean((Boolean) value);
         return;
       }
-      if (value instanceof Integer && !scalarMixins) {
+      if (type == Integer.class && !scalarMixins) {
         writer.writeInt((Integer) value);
         return;
       }
-      JsonTypeInfo typeInfo = writer.typeResolver().getRuntimeTypeInfo(value.getClass());
+      JsonTypeInfo typeInfo = runtimeTypeInfo(writer, type);
       typeInfo.utf8Writer().writeUtf8(writer, value);
     }
 

@@ -22,11 +22,13 @@ package org.apache.fory.json.scala.internal
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.codec.JsonValueCodec
 import org.apache.fory.json.reader.{JsonReader, Latin1JsonReader, Utf16JsonReader, Utf8JsonReader}
-import org.apache.fory.json.writer.{StringJsonWriter, Utf8JsonWriter}
+import org.apache.fory.json.writer.{JsonWriter, StringJsonWriter, Utf8JsonWriter}
 import org.apache.fory.serializer.GraphMemoryEstimates
 
 private[scala] final class ScalaBitSetCodec(mutableResult: Boolean)
     extends JsonValueCodec[scala.collection.BitSet] {
+  override def isEmpty(writer: JsonWriter, value: scala.collection.BitSet): Boolean = value.isEmpty
+
   private val OwnerBytes = GraphMemoryEstimates.shallowObjectBytes(
     if (mutableResult) classOf[scala.collection.mutable.BitSet]
     else classOf[scala.collection.immutable.BitSet]

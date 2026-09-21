@@ -22,6 +22,11 @@ Load this file when changing `scala/`.
 - Scala supports the JVM and GraalVM Native Image, not Android. Do not add Android-specific Scala
   sources, tests, resources, R8 metadata, compiler plugins, macros, dependencies, or compatibility
   design.
+- JSON `NON_DEFAULT` requires explicit property or class authorization. Only declared compiler
+  default methods are omission sources; reader type fallbacks must stay distinct. Evaluate dependent
+  defaults with actual preceding object properties and reject missing dependencies. Do not infer
+  purity from method availability or use a default reference object for parameter-dependent Scala
+  defaults. Missing-field recovery remains reader-owned.
 
 ## Commands
 

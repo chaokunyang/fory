@@ -86,6 +86,7 @@ internal object KotlinProductCodecs {
       arrayOfNulls(names.size),
       null,
       Array(names.size) { KotlinMetadataModels.typeDefault(types[it]) },
+      false,
       IntArray(names.size) { -1 },
       BooleanArray(names.size) { nullable(types[it]) },
       types,

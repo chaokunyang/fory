@@ -21,8 +21,188 @@ package org.apache.fory.json.kotlin
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotSame
+import org.apache.fory.json.ForyJson
+import org.apache.fory.json.ForyJsonException
+import org.apache.fory.json.annotation.JsonCreator
+import org.apache.fory.json.annotation.JsonInclude
+import org.apache.fory.json.annotation.JsonMixin
+import org.apache.fory.json.annotation.JsonProperty
+import org.apache.fory.json.annotation.JsonProperty.Include
+import org.apache.fory.json.resolver.JsonTypeResolver
+import org.apache.fory.reflect.ReflectionUtils
 
 class KotlinDefaultArgumentsTest {
+  private fun assertWriterGeneration(json: ForyJson, model: Class<*>, enabled: Boolean) {
+    val slots = ReflectionUtils.getObjectFieldValue(json, "slots") as Array<*>
+    val state = ReflectionUtils.getObjectFieldValue(slots[0], "state")
+    val resolver = ReflectionUtils.getObjectFieldValue(state, "typeResolver") as JsonTypeResolver
+    resolver.lockJIT()
+    try {
+      val info = resolver.getRuntimeTypeInfo(model)
+      val owner = resolver.canonicalObjectCodec(info)
+      assertEquals(enabled, info.stringWriter() !== owner)
+      assertEquals(enabled, info.utf8Writer() !== owner)
+    } finally {
+      resolver.unlockJIT()
+    }
+  }
+
+  @JsonInclude(Include.NON_DEFAULT)
+  data class Limits(
+    val low: Int = 1,
+    @JsonProperty(include = Include.ALWAYS) val high: Int = low + 1
+  )
+
+  @JsonInclude(Include.NON_DEFAULT)
+  data class ReferenceDefault(
+    val value: Int = 1,
+    val label: String? = "new",
+    val values: MutableList<Int> = mutableListOf(1)
+  ) {
+    init {
+      constructions++
+    }
+
+    companion object {
+      var constructions = 0
+    }
+  }
+
+  data class RequiredDefault(
+    val required: Int,
+    @JsonProperty(include = Include.NON_DEFAULT) val value: Int = 1
+  )
+
+  @JsonInclude(Include.NON_DEFAULT)
+  class DeferredDefault(val count: Int = 3) {
+    @JsonProperty(include = Include.ALWAYS) lateinit var required: String
+  }
+
+  data class PlainDefault(val value: Int = 1) {
+    init {
+      constructions++
+    }
+
+    companion object {
+      var constructions = 0
+    }
+  }
+
+  @JsonMixin(target = PlainDefault::class) @JsonInclude(Include.NON_DEFAULT) interface DefaultMixin
+
+  @JsonInclude(Include.NON_DEFAULT)
+  class FailingDefault(val value: Int = 1) {
+    init {
+      check(!fail) { "constructor failed" }
+    }
+
+    companion object {
+      var fail = false
+    }
+  }
+
+  @JsonInclude(Include.NON_DEFAULT)
+  class SelectedCreator @JsonCreator("value") constructor(val value: Int) {
+    constructor() : this(1)
+  }
+
+  @Test
+  fun defaultInclusion() {
+    for (codegen in listOf(false, true)) {
+      val json = ForyJsonKotlin.builder().withCodegen(codegen).withAsyncCompilation(false).build()
+      assertEquals("{\"high\":2}", json.toJson(Limits()))
+      assertEquals("{\"low\":5,\"high\":2}", json.toJson(Limits(5, 2)))
+      assertEquals("{\"low\":5,\"high\":2}", json.toJsonBytes(Limits(5, 2)).decodeToString())
+      assertEquals(Limits(5, 6), json.fromJson("{\"low\":5}", Limits::class.java))
+      assertEquals(
+        Limits(5, 2),
+        json.fromJson("{\"low\":5,\"high\":2}".encodeToByteArray(), Limits::class.java)
+      )
+      val value = ReferenceDefault(label = null)
+      val constructions = ReferenceDefault.constructions
+      val expected = "{\"label\":null}"
+      assertEquals(expected, json.toJson(value))
+      assertEquals(expected, json.toJsonBytes(value).decodeToString())
+      assertEquals("{\n  \"label\" : null\n}", json.toPrettyJson(value))
+      assertEquals(json.toPrettyJson(value), json.toPrettyJsonBytes(value).decodeToString())
+      assertEquals(constructions + 1, ReferenceDefault.constructions)
+      assertWriterGeneration(json, ReferenceDefault::class.java, codegen)
+      val first = json.fromJson("{}", ReferenceDefault::class.java)
+      // Declared reading and dynamic writing own distinct language-model metadata.
+      val afterRead = ReferenceDefault.constructions
+      val second = json.fromJson("{}".encodeToByteArray(), ReferenceDefault::class.java)
+      assertNotSame(first.values, second.values)
+      first.values += 2
+      assertEquals(listOf(1), second.values)
+      assertEquals("{}", json.toJson(second))
+      assertEquals(afterRead + 1, ReferenceDefault.constructions)
+      assertFailsWith<ForyJsonException> {
+        json.fromJson("{\"value\":null}", ReferenceDefault::class.java)
+      }
+      assertFailsWith<ForyJsonException> {
+        json.fromJson("{\"values\":null}".encodeToByteArray(), ReferenceDefault::class.java)
+      }
+      assertFailsWith<ForyJsonException> { json.toJson(RequiredDefault(1)) }
+      assertFailsWith<ForyJsonException> { json.toJson(SelectedCreator()) }
+      val failing = FailingDefault()
+      FailingDefault.fail = true
+      try {
+        assertFailsWith<ForyJsonException> { json.toJson(failing) }
+        assertFailsWith<ForyJsonException> { json.toJsonBytes(failing) }
+      } finally {
+        FailingDefault.fail = false
+      }
+      val plain = PlainDefault()
+      val calls = PlainDefault.constructions
+      assertEquals("{\"value\":1}", json.toJson(plain))
+      assertEquals(calls, PlainDefault.constructions)
+      val mixed =
+        ForyJsonKotlin.builder()
+          .withCodegen(codegen)
+          .withAsyncCompilation(false)
+          .registerMixin(DefaultMixin::class.java)
+          .build()
+      assertEquals("{}", mixed.toJson(plain))
+      assertEquals("{}", mixed.toJsonBytes(plain).decodeToString())
+      assertEquals(calls + 1, PlainDefault.constructions)
+    }
+  }
+
+  @Test
+  fun deferredDefaultInclusion() {
+    for (codegen in listOf(false, true)) {
+      val json = ForyJsonKotlin.builder().withCodegen(codegen).withAsyncCompilation(false).build()
+      for (count in listOf(3, 4)) {
+        val value = DeferredDefault(count).apply { required = "ready" }
+        val expected =
+          if (count == 3) "{\"required\":\"ready\"}" else "{\"count\":4,\"required\":\"ready\"}"
+        val pretty =
+          if (count == 3) "{\n  \"required\" : \"ready\"\n}"
+          else "{\n  \"count\" : 4,\n  \"required\" : \"ready\"\n}"
+        assertEquals(expected, json.toJson(value))
+        assertEquals(expected, json.toJsonBytes(value).decodeToString())
+        assertEquals(pretty, json.toPrettyJson(value))
+        assertEquals(pretty, json.toPrettyJsonBytes(value).decodeToString())
+        for (decoded in
+          listOf(
+            json.fromJson(expected, DeferredDefault::class.java),
+            json.fromJson(pretty.encodeToByteArray(), DeferredDefault::class.java)
+          )) {
+          assertEquals(count, decoded.count)
+          assertEquals("ready", decoded.required)
+        }
+      }
+      assertWriterGeneration(json, DeferredDefault::class.java, codegen)
+      assertFailsWith<ForyJsonException> { json.fromJson("{}", DeferredDefault::class.java) }
+      assertFailsWith<ForyJsonException> {
+        json.fromJson("{}".encodeToByteArray(), DeferredDefault::class.java)
+      }
+    }
+  }
+
+  @JsonInclude(Include.NON_DEFAULT)
   class MaskDefaults(
     val p0: Int = 0,
     val p1: Int = 1,
@@ -99,6 +279,12 @@ class KotlinDefaultArgumentsTest {
     assertMaskValues(fory.fromJson(latin1, type))
     assertMaskValues(fory.fromJson(latin1.dropLast(1) + ",\"ignored\":\"漢\"}", type))
     assertMaskValues(fory.fromJson(latin1.toByteArray(), type))
+    assertEquals("{}", fory.toJson(MaskDefaults()))
+    val value = fory.fromJson(latin1, type)
+    assertEquals(latin1, fory.toJson(value))
+    assertEquals(latin1, fory.toJsonBytes(value).decodeToString())
+    assertMaskValues(fory.fromJson(fory.toPrettyJson(value), type))
+    assertMaskValues(fory.fromJson(fory.toPrettyJsonBytes(value), type))
   }
 
   private fun assertMaskValues(value: MaskDefaults) {

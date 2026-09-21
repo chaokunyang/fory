@@ -128,6 +128,17 @@ final class GeneratedCodecKeyBuilder {
     if (unwrapped == null) {
       return;
     }
+    if (!JsonTypeResolver.readerKind(kind)) {
+      JsonUnwrappedInfo.WriteEntry[] steps = unwrapped.writeSteps();
+      for (int i = 0; i < steps.length; i++) {
+        if (steps[i].kind() == JsonUnwrappedInfo.GROUP) {
+          ObjectCodec<?> child = steps[i].group().childCodec();
+          add(Part.UNWRAPPED_FACTORY, i, resolver.factoryKey(child));
+          add(Part.UNWRAPPED_MIXIN, i, registry.mixinType(child.type()));
+        }
+      }
+      return;
+    }
     JsonUnwrappedInfo.Group[] groups = unwrapped.groups();
     for (int i = 0; i < groups.length; i++) {
       ObjectCodec<?> child = groups[i].childCodec();
@@ -146,9 +157,9 @@ final class GeneratedCodecKeyBuilder {
         addRegistration(field.writeTypeInfo());
       }
       if (owner.unwrappedInfo() != null) {
-        for (JsonUnwrappedInfo.Group group : owner.unwrappedInfo().groups()) {
-          if (group.declaration().writeProperty() != null) {
-            addWriteInclusion(group.declaration().writeProperty());
+        for (JsonUnwrappedInfo.WriteEntry step : owner.unwrappedInfo().writeSteps()) {
+          if (step.kind() == JsonUnwrappedInfo.GROUP) {
+            addWriteInclusion(step.group().declaration().writeProperty());
           }
         }
       }

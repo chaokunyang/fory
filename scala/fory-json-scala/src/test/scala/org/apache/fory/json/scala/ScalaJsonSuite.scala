@@ -166,6 +166,11 @@ case class HiddenDependency(@JsonIgnore a: Int = 5)(
 @JsonInclude(JsonProperty.Include.NON_DEFAULT)
 case class MissingDeclaredDefault(value: Option[Int])
 
+@JsonInclude(JsonProperty.Include.NON_DEFAULT)
+case class BodyDefault() {
+  var count: Int = 3
+}
+
 case class UnitDefault(@JsonProperty(include = JsonProperty.Include.NON_DEFAULT) value: Unit = ())
 
 object ObservedDefault {
@@ -868,6 +873,8 @@ class ScalaJsonSuite extends AnyFunSuite {
       assert(new String(mixin.toJsonBytes(MixinDefaults()), UTF_8) == text)
       intercept[ForyJsonException](json.toJson(HiddenDependency()()))
       intercept[ForyJsonException](json.toJson(MissingDeclaredDefault(None)))
+      intercept[ForyJsonException](json.toJson(BodyDefault()))
+      intercept[ForyJsonException](json.toJsonBytes(BodyDefault()))
       // A JVM void default is not a callable value source in the current constructor model.
       intercept[ForyJsonException](json.toJson(UnitDefault()))
       intercept[ForyJsonException](json.toJsonBytes(UnitDefault()))

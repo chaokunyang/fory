@@ -120,9 +120,9 @@ public final class JsonUnwrappedInfo {
   /** Returns whether a generated writer needs parent-property metadata for group omission. */
   public boolean hasDefaultGroups() {
     requireResolved();
-    for (Group group : groups) {
-      JsonFieldInfo property = group.declaration().writeProperty();
-      if (property != null && property.omitDefault()) {
+    // Read groups exclude write-only properties. Writer construction must use the write graph.
+    for (WriteEntry step : writeSteps) {
+      if (step.kind == GROUP && step.group.declaration().writeProperty().omitDefault()) {
         return true;
       }
     }

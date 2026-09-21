@@ -326,8 +326,11 @@ public final class JsonCodegen {
       for (JsonFieldInfo field : unwrapped.writeFields()) {
         addWriteInvocations(invocations, field);
       }
-      for (JsonUnwrappedInfo.Group group : unwrapped.groups()) {
-        JsonFieldAccessor accessor = group.declaration().writeAccessor();
+      for (JsonUnwrappedInfo.WriteEntry step : unwrapped.writeSteps()) {
+        if (step.kind() != JsonUnwrappedInfo.GROUP) {
+          continue;
+        }
+        JsonFieldAccessor accessor = step.group().declaration().writeAccessor();
         Method getter = accessor == null ? null : accessor.getter();
         if (getter != null && !DirectMethodCodegen.sourceNameable(getter)) {
           addInvocation(invocations, DirectMethodCodegen.getterInvocation(getter));

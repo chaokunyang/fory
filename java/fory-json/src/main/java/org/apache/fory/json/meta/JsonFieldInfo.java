@@ -1434,7 +1434,7 @@ public final class JsonFieldInfo {
       writer.writeFieldName(this, index);
       if (writesUnboxedValue()) {
         writeUnboxedValueCodec.writeStringCarrier(writer, value);
-      } else if (value == null) {
+      } else if (value == null && writesRawString()) {
         writer.writeNull();
       } else if (writesRawString()) {
         writer.writeRawValue((String) value);
@@ -1561,7 +1561,7 @@ public final class JsonFieldInfo {
       writer.writeFieldName(this, index);
       if (writesUnboxedValue()) {
         writeUnboxedValueCodec.writeUtf8Carrier(writer, value);
-      } else if (value == null) {
+      } else if (value == null && writesRawString()) {
         writer.writeNull();
       } else if (writesRawString()) {
         writer.writeRawValue((String) value);

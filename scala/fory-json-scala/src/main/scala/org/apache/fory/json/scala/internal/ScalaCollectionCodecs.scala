@@ -49,6 +49,7 @@ private[scala] final class ScalaListCodec(
   override def isEmpty(writer: JsonWriter, value: List[Any]): Boolean = value.isEmpty
 
   private var elementInfo: JsonTypeInfo = _
+  private var booleanElements = false
 
   override def resolveTypes(typeRef: TypeRef[_], resolver: JsonTypeResolver): Unit = {
     if (nilOnly) {
@@ -62,6 +63,7 @@ private[scala] final class ScalaListCodec(
       )
       elementInfo = resolver.getTypeInfo(arguments(0), ScalaTypeSupport.rawType(arguments(0)))
     }
+    booleanElements = ScalaCollectionCodecs.writesBooleanDirectly(elementInfo)
   }
 
   override def resolveTypes(
@@ -76,6 +78,7 @@ private[scala] final class ScalaListCodec(
       ScalaTypeSupport.rawType(arguments(0)),
       childCodecs.elementCodec()
     )
+    booleanElements = ScalaCollectionCodecs.writesBooleanDirectly(elementInfo)
   }
 
   override def writeString(writer: StringJsonWriter, value: List[Any]): Unit = {
@@ -103,9 +106,7 @@ private[scala] final class ScalaListCodec(
       return
     }
     val codec = elementInfo.utf8Writer()
-    val booleanElements = !writer.prettyPrint() &&
-      ((codec eq ScalarCodecs.NaturalCodec.INSTANCE) ||
-        (codec eq ScalarCodecs.BooleanCodec.PRIMITIVE) || (codec eq ScalarCodecs.BooleanCodec.BOXED))
+    val writeBooleans = booleanElements && !writer.prettyPrint()
     writer.writeArrayStart()
     var current = value
     if (current ne Nil) {
@@ -117,7 +118,7 @@ private[scala] final class ScalaListCodec(
       val node = current.asInstanceOf[scala.collection.immutable.::[Any]]
       val element = node.head
       val tail = node.tail
-      if (booleanElements && element.isInstanceOf[java.lang.Boolean]) {
+      if (writeBooleans && element.isInstanceOf[java.lang.Boolean]) {
         val first = element.asInstanceOf[java.lang.Boolean].booleanValue()
         if ((tail ne Nil) && tail.head.isInstanceOf[java.lang.Boolean]) {
           ScalaCollectionCodecs.writeBooleanPair(
@@ -243,6 +244,7 @@ private[scala] final class ScalaIterableCodec(
   private var elementClassTag: ClassTag[Any] = _
   private var booleanArrayCodec: JsonValueCodec[Array[Boolean]] = _
   private var intArrayCodec: JsonValueCodec[Array[Int]] = _
+  private var booleanElements = false
 
   override def resolveTypes(typeRef: TypeRef[_], resolver: JsonTypeResolver): Unit = {
     val arguments = ScalaTypeSupport.runtimeArguments(
@@ -252,6 +254,7 @@ private[scala] final class ScalaIterableCodec(
       runtimeType
     )
     elementInfo = resolver.getTypeInfo(arguments(0), ScalaTypeSupport.rawType(arguments(0)))
+    booleanElements = ScalaCollectionCodecs.writesBooleanDirectly(elementInfo)
     if (
       kind == ScalaCollectionCodecs.ImmutableArraySeqKind ||
       kind == ScalaCollectionCodecs.MutableArraySeqKind
@@ -265,11 +268,7 @@ private[scala] final class ScalaIterableCodec(
       resolver
     )
     if (kind == ScalaCollectionCodecs.ImmutableArraySeqKind) {
-      val codec = elementInfo.stringWriter()
-      if (
-        codec == ScalarCodecs.NaturalCodec.INSTANCE ||
-        codec == ScalarCodecs.BooleanCodec.PRIMITIVE || codec == ScalarCodecs.BooleanCodec.BOXED
-      ) booleanArrayCodec = ArrayCodec.create(
+      if (booleanElements) booleanArrayCodec = ArrayCodec.create(
         classOf[Array[Boolean]],
         TypeRef.of(classOf[Array[Boolean]]),
         resolver
@@ -286,6 +285,7 @@ private[scala] final class ScalaIterableCodec(
     val arguments = ScalaTypeSupport.arguments(typeRef, 1, "Scala collection")
     val rawType = ScalaTypeSupport.rawType(arguments(0))
     elementInfo = resolver.getTypeInfo(arguments(0), rawType, childCodecs.elementCodec())
+    booleanElements = ScalaCollectionCodecs.writesBooleanDirectly(elementInfo)
     if (
       kind == ScalaCollectionCodecs.ImmutableArraySeqKind ||
       kind == ScalaCollectionCodecs.MutableArraySeqKind
@@ -335,9 +335,7 @@ private[scala] final class ScalaIterableCodec(
     val codec = elementInfo.utf8Writer()
     // Sets have at most two Boolean values and keep their ordinary element loop.
     if (
-      sequence && !writer.prettyPrint() &&
-      ((codec eq ScalarCodecs.NaturalCodec.INSTANCE) ||
-        (codec eq ScalarCodecs.BooleanCodec.PRIMITIVE) || (codec eq ScalarCodecs.BooleanCodec.BOXED))
+      sequence && booleanElements && !writer.prettyPrint()
     ) {
       writeSequence(writer, value.asInstanceOf[scala.collection.Seq[Object]], codec)
       return
@@ -1223,6 +1221,13 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int, runtimeType
 }
 
 private[scala] object ScalaCollectionCodecs {
+  def writesBooleanDirectly(info: JsonTypeInfo): Boolean = {
+    val codec = info.valueCodec()
+    (codec eq ScalarCodecs.BooleanCodec.PRIMITIVE) || (codec eq ScalarCodecs.BooleanCodec.BOXED) ||
+    (codec.getClass == classOf[ScalarCodecs.NaturalCodec] &&
+      codec.asInstanceOf[ScalarCodecs.NaturalCodec].writesBooleanDirectly())
+  }
+
   val ListKind = 0
   val VectorKind = 1
   val ImmutableQueueKind = 2

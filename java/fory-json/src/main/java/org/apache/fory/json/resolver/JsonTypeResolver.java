@@ -106,6 +106,7 @@ public final class JsonTypeResolver {
   private final Map<Object, JsonTypeInfo> typeInfos;
   private final IdentityHashMap<Class<?>, JsonTypeInfo> runtimeTypeInfos;
   private final JsonSharedRegistry sharedRegistry;
+  private final ScalarCodecs.NaturalCodec naturalCodec;
   private final JsonCodegen codegen;
   private final JsonJITContext jitContext;
   private final IdentityMap<ObjectCodec<?>, JsonTypeInfo> canonicalObjectTypeInfos;
@@ -122,6 +123,10 @@ public final class JsonTypeResolver {
 
   public JsonTypeResolver(JsonSharedRegistry sharedRegistry) {
     this.sharedRegistry = sharedRegistry;
+    naturalCodec =
+        new ScalarCodecs.NaturalCodec(
+            sharedRegistry.mixinType(Boolean.class) != null
+                || sharedRegistry.mixinType(Integer.class) != null);
     objectCodecs = new HashMap<>();
     typeInfos = new HashMap<>();
     runtimeTypeInfos = new IdentityHashMap<>();
@@ -137,6 +142,10 @@ public final class JsonTypeResolver {
   @Internal
   public JsonSharedRegistry sharedRegistry() {
     return sharedRegistry;
+  }
+
+  ScalarCodecs.NaturalCodec naturalCodec() {
+    return naturalCodec;
   }
 
   /** Returns whether this runtime writes default 64-bit integral values as JSON strings. */
@@ -848,6 +857,7 @@ public final class JsonTypeResolver {
     if (snapshot == null) {
       return;
     }
+    naturalCodec.clearCache();
     // Metadata created anywhere in a failed recursive graph may retain a provisional parent.
     // Remove every new owner while preserving metadata and active JIT work that predated the
     // outermost cold lookup.

@@ -521,6 +521,9 @@ final class ObjectCodecBuilder {
     } else {
       // Authorization never turns reader type fallbacks into declared defaults. Only the
       // selected no-arg/all-default construction path can supply a reference value.
+      if (model != null && !model.referenceDefaults()) {
+        throw unsupportedDefault(type, field, "the property has no declared constructor default");
+      }
       referenceDefaults.add(field);
     }
   }

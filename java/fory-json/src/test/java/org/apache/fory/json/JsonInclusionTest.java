@@ -28,8 +28,10 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertThrows;
 
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -48,6 +50,8 @@ import org.apache.fory.json.annotation.JsonRawValue;
 import org.apache.fory.json.annotation.JsonUnwrapped;
 import org.apache.fory.json.codec.AbstractJsonValueCodec;
 import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.resolver.JsonTypeInfo;
+import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.JsonWriter;
 import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
@@ -155,6 +159,104 @@ public class JsonInclusionTest extends ForyJsonTestModels {
     assertEquals(PlainDefault.calls, calls + 1);
     ForyJson overridden = newJsonBuilder().registerMixin(DefaultOverrideMixin.class).build();
     assertJson(overridden, new Initialized(), "{\"count\":3,\"retained\":1}");
+  }
+
+  @Test
+  public void defaultNullCodec() {
+    ForyJson json = newJson();
+    NullDefault value = new NullDefault();
+    assertJson(json, value, "{}");
+    value.value = null;
+    assertJson(json, value, "{\"value\":\"absent\"}");
+    String pretty = "{\n  \"value\" : \"absent\"\n}";
+    assertEquals(json.toPrettyJson(value), pretty);
+    assertEquals(new String(json.toPrettyJsonBytes(value), StandardCharsets.UTF_8), pretty);
+    assertGeneratedWhenSupported(json, NullDefault.class, codegenEnabled());
+  }
+
+  @Test
+  public void writeOnlyDefaultGroup() {
+    ForyJson json = newJson();
+    WriteOnlyDefault value = new WriteOnlyDefault();
+    assertJson(json, value, "{}");
+    value.value = new Positions();
+    value.value.a = "漢";
+    assertJson(json, value, "{\"a\":\"漢\"}");
+    String pretty = "{\n  \"a\" : \"漢\"\n}";
+    assertEquals(json.toPrettyJson(value), pretty);
+    assertEquals(new String(json.toPrettyJsonBytes(value), StandardCharsets.UTF_8), pretty);
+    assertGeneratedWhenSupported(json, WriteOnlyDefault.class, codegenEnabled());
+  }
+
+  @Test
+  public void dynamicCodecCache() throws Exception {
+    ForyJson json =
+        newJsonBuilder()
+            .defaultPropertyInclusion(Include.NON_EMPTY)
+            .registerCodec(EmptyObject.class, new EmptyObjectCodec())
+            .build();
+    JsonTypeResolver resolver = JsonTestSupport.currentTypeResolver(json);
+    Field runtimeTypes = JsonTypeResolver.class.getDeclaredField("runtimeTypeInfos");
+    runtimeTypes.setAccessible(true);
+    RuntimeLookups lookups = new RuntimeLookups();
+    runtimeTypes.set(resolver, lookups);
+    Dynamic value = new Dynamic();
+    value.value = new EmptyObject();
+    assertJson(json, value, "{\"value\":\"\"}");
+    String pretty = "{\n  \"value\" : \"\"\n}";
+    assertEquals(json.toPrettyJson(value), pretty);
+    assertEquals(new String(json.toPrettyJsonBytes(value), StandardCharsets.UTF_8), pretty);
+    assertEquals(lookups.calls, 1);
+    JsonTypeInfo natural = resolver.getTypeInfo(Object.class, Object.class);
+    JsonTypeResolver other = new JsonTypeResolver(resolver.sharedRegistry());
+    assertNotSame(natural.valueCodec(), other.getTypeInfo(Object.class, Object.class).valueCodec());
+
+    value.value = "different";
+    assertJson(json, value, "{\"value\":\"different\"}");
+    value.value = new EmptyObject();
+    assertJson(json, value, "{\"value\":\"\"}");
+    assertEquals(lookups.calls, 2);
+    assertThrows(ForyJsonException.class, () -> resolver.getObjectCodec(RequiredConstructor.class));
+    assertJson(json, value, "{\"value\":\"\"}");
+    assertEquals(lookups.calls, 3);
+    assertGeneratedWhenSupported(json, Dynamic.class, codegenEnabled());
+  }
+
+  private static final class RuntimeLookups extends IdentityHashMap<Class<?>, JsonTypeInfo> {
+    private int calls;
+
+    @Override
+    public JsonTypeInfo get(Object type) {
+      if (type == EmptyObject.class) {
+        calls++;
+      }
+      return super.get(type);
+    }
+  }
+
+  public static final class NullDefault {
+    @JsonProperty(include = Include.NON_DEFAULT)
+    @JsonCodec(NullTextCodec.class)
+    public String value = "initial";
+  }
+
+  public static final class NullTextCodec extends AbstractJsonValueCodec<String> {
+    @Override
+    public void write(JsonWriter writer, String value) {
+      writer.writeString(value == null ? "absent" : value);
+    }
+
+    @Override
+    public String read(JsonReader reader) {
+      return reader.readString();
+    }
+  }
+
+  public static final class WriteOnlyDefault {
+    @JsonUnwrapped
+    @JsonIgnore(ignoreRead = true, ignoreWrite = false)
+    @JsonProperty(include = Include.NON_DEFAULT)
+    public Positions value;
   }
 
   @JsonInclude(Include.NON_DEFAULT)

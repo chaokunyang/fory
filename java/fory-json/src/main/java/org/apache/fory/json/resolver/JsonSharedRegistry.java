@@ -272,7 +272,7 @@ public final class JsonSharedRegistry {
         codegenEnabled && GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && !hostedCodegen;
     asyncCompilationEnabled = createCompiler && !hostedCodegen && config.asyncCompilationEnabled();
     this.compilationService = compilationService;
-    registerExactCodecs(config);
+    registerExactCodecs();
   }
 
   /** Creates the transient synchronous compiler registry owned by Native Image hosted analysis. */
@@ -982,6 +982,9 @@ public final class JsonSharedRegistry {
     JsonValueCodec<?> codec = exactCodecs.get(rawType);
     if (codec != null) {
       return new ResolvedCodec(codec, null);
+    }
+    if (rawType == Object.class) {
+      return new ResolvedCodec(localResolver.naturalCodec(), null);
     }
     if (rawType == Class.class) {
       // JSON strings must not be treated as class-loading authority by the default codecs.
@@ -2073,7 +2076,7 @@ public final class JsonSharedRegistry {
     DisallowedList.checkNotInDisallowedList(className);
     // Built-in codec exemption follows the same Class identity key as exact codec dispatch. A
     // same-named class from another loader must still pass the configured checker.
-    if (exactCodecs.containsKey(type) && customCodecs.get(type) == null) {
+    if ((type == Object.class || exactCodecs.containsKey(type)) && customCodecs.get(type) == null) {
       return true;
     }
     JsonTypeChecker checker = typeChecker;
@@ -2107,7 +2110,7 @@ public final class JsonSharedRegistry {
     DisallowedList.checkNotInDisallowedList(className);
     // A JsonValueCodec registration has no authority over a map-key occurrence. Preserve the
     // ordinary exact built-in exemption even when the same raw class has a registered value codec.
-    if (exactCodecs.containsKey(type)) {
+    if (type == Object.class || exactCodecs.containsKey(type)) {
       return true;
     }
     JsonTypeChecker checker = typeChecker;
@@ -2150,12 +2153,7 @@ public final class JsonSharedRegistry {
         String.format("Class %s is forbidden for Fory JSON serialization.", className));
   }
 
-  private void registerExactCodecs(JsonConfig config) {
-    exactCodecs.put(
-        Object.class,
-        config.mixins().isEmpty()
-            ? ScalarCodecs.NaturalCodec.INSTANCE
-            : new ScalarCodecs.NaturalCodec(config));
+  private void registerExactCodecs() {
     exactCodecs.put(void.class, ScalarCodecs.VoidCodec.INSTANCE);
     exactCodecs.put(Void.class, ScalarCodecs.VoidCodec.INSTANCE);
     exactCodecs.put(Number.class, ScalarCodecs.NumberCodec.INSTANCE);

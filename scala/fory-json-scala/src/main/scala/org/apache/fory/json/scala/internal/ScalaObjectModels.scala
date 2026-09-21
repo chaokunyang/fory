@@ -139,6 +139,7 @@ private[scala] object ScalaObjectModels {
         defaults,
         defaultsReceiver,
         defaultFactories,
+        false,
         Array.fill(names.length)(-1),
         Array.fill(names.length)(true),
         logicalParameterTypes,

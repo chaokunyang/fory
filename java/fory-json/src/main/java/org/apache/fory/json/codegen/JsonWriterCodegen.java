@@ -30,7 +30,6 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
@@ -860,21 +859,28 @@ abstract class JsonWriterCodegen {
         }
         Expression include = ne(child, new Expression.Null(TypeRef.of(childType), false));
         if (group.declaration().writeProperty().omitDefault()) {
-          int metadataIndex = Arrays.asList(objectOwner.unwrappedInfo().groups()).indexOf(group);
+          WriteEntry[] steps = objectOwner.unwrappedInfo().writeSteps();
+          int metadataIndex = 0;
+          while (steps[metadataIndex].group() != group) {
+            metadataIndex++;
+          }
           Expression metadata =
               new Expression.Invoke(
-                  new Expression.Invoke(
-                      new Expression.ArrayValue(
+                  new Expression.ArrayValue(
+                      new Expression.Invoke(
                           new Expression.Invoke(
-                              new Expression.Invoke(
-                                  fieldRef("owner", ObjectCodec.class),
-                                  "unwrappedInfo",
-                                  TypeRef.of(JsonUnwrappedInfo.class)),
-                              "groups",
-                              TypeRef.of(Group[].class)),
-                          Expression.Literal.ofInt(metadataIndex)),
-                      "declaration",
-                      TypeRef.of(JsonUnwrappedInfo.Declaration.class)),
+                              fieldRef("owner", ObjectCodec.class),
+                              "unwrappedInfo",
+                              TypeRef.of(JsonUnwrappedInfo.class)),
+                          "writeSteps",
+                          TypeRef.of(WriteEntry[].class)),
+                      Expression.Literal.ofInt(metadataIndex)),
+                  "group",
+                  TypeRef.of(Group.class));
+          metadata =
+              new Expression.Invoke(
+                  new Expression.Invoke(
+                      metadata, "declaration", TypeRef.of(JsonUnwrappedInfo.Declaration.class)),
                   "writeProperty",
                   TypeRef.of(JsonFieldInfo.class));
           include =
@@ -1581,6 +1587,13 @@ abstract class JsonWriterCodegen {
                   writeFieldName(property, id, commaKnown, index, writer),
                   writeCodec(property, id, value, writer))
               : writePrimitive(property, id, value, commaKnown, index, writer);
+    } else if (usesWriteCodec(property)
+        && resolver.canonicalObjectCodec(property.writeTypeInfo()) == null) {
+      // Inclusion decides whether to emit the property; retained nulls still belong to its codec.
+      write =
+          new Expression.ListExpression(
+              writeFieldName(property, id, commaKnown, index, writer),
+              writeCodec(property, id, value, writer));
     } else {
       Expression nonNullWrite =
           isPrefixValue(property.writeKind())

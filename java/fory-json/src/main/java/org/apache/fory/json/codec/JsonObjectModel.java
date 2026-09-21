@@ -45,6 +45,7 @@ public final class JsonObjectModel {
   private final Method[] defaultMethods;
   private final Object defaultsReceiver;
   private final Supplier<?>[] defaultFactories;
+  private final boolean referenceDefaults;
   private final int[] defaultMaskBits;
   private final boolean[] parameterNullable;
   private final TypeRef<?>[] parameterTypes;
@@ -79,6 +80,7 @@ public final class JsonObjectModel {
         defaultMethods,
         null,
         null,
+        true,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -93,10 +95,12 @@ public final class JsonObjectModel {
    * {@code defaultsReceiver}. Scala emits {@code $lessinit$greater$default$N} on the companion
    * singleton and mirrors it as a static forwarder on the case class only for a top-level
    * companion, so a case class declared inside an {@code object} binds its defaults on that
-   * singleton. A language module may also select a zero-argument static factory on the parameter's
-   * value type for an implicit default. Static defaults do not use {@code defaultsReceiver}; pass
-   * {@code null} when no instance default needs it. Type-default factories are evaluated only for
-   * missing parameters without a constructor default; mutable values must be newly allocated.
+   * singleton. Only declared compiler defaults belong in {@code defaultMethods}. Static defaults do
+   * not use {@code defaultsReceiver}; pass {@code null} when no instance default needs it.
+   * Type-default factories are evaluated only for missing parameters without a constructor default;
+   * mutable values must be newly allocated. Set {@code referenceDefaults} to false when the
+   * language requires a declared compiler default for omission, including for zero-argument models
+   * and body properties.
    */
   public JsonObjectModel(
       Constructor<?> constructor,
@@ -106,6 +110,7 @@ public final class JsonObjectModel {
       Method[] defaultMethods,
       Object defaultsReceiver,
       Supplier<?>[] defaultFactories,
+      boolean referenceDefaults,
       int[] defaultMaskBits,
       boolean[] parameterNullable,
       TypeRef<?>[] parameterTypes,
@@ -122,6 +127,7 @@ public final class JsonObjectModel {
         defaultMethods,
         defaultsReceiver,
         defaultFactories,
+        referenceDefaults,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -157,6 +163,7 @@ public final class JsonObjectModel {
         defaultMethods,
         null,
         null,
+        true,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -195,6 +202,7 @@ public final class JsonObjectModel {
         defaultMethods,
         null,
         defaultFactories,
+        true,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -215,6 +223,7 @@ public final class JsonObjectModel {
       Method[] defaultMethods,
       Object defaultsReceiver,
       Supplier<?>[] defaultFactories,
+      boolean referenceDefaults,
       int[] defaultMaskBits,
       boolean[] parameterNullable,
       TypeRef<?>[] parameterTypes,
@@ -232,6 +241,7 @@ public final class JsonObjectModel {
     this.defaultMethods = defaultMethods.clone();
     this.defaultsReceiver = defaultsReceiver;
     this.defaultFactories = defaultFactories == null ? null : defaultFactories.clone();
+    this.referenceDefaults = referenceDefaults;
     this.defaultMaskBits = defaultMaskBits.clone();
     this.parameterNullable = parameterNullable.clone();
     this.parameterTypes = parameterTypes.clone();
@@ -261,6 +271,7 @@ public final class JsonObjectModel {
     defaultMethods = new Method[0];
     defaultsReceiver = null;
     defaultFactories = null;
+    referenceDefaults = false;
     defaultMaskBits = new int[0];
     parameterNullable = new boolean[0];
     parameterTypes = new TypeRef<?>[0];
@@ -497,6 +508,11 @@ public final class JsonObjectModel {
    */
   public Method[] defaultMethods() {
     return defaultMethods.clone();
+  }
+
+  /** Returns whether this model permits constructor reference values for authorized properties. */
+  public boolean referenceDefaults() {
+    return referenceDefaults;
   }
 
   /** Returns the receiver of instance constructor-default methods, or null when they are static. */

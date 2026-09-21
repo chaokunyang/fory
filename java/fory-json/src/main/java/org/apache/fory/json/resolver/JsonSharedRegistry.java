@@ -102,6 +102,7 @@ import org.apache.fory.json.JsonConfig;
 import org.apache.fory.json.JsonTypeCheckContext;
 import org.apache.fory.json.JsonTypeChecker;
 import org.apache.fory.json.PropertyNamingStrategy;
+import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonProperty.Include;
 import org.apache.fory.json.annotation.JsonSubTypes;
@@ -189,6 +190,7 @@ public final class JsonSharedRegistry {
   private final PropertyNamingStrategy propertyNamingStrategy;
   private final Include defaultPropertyInclusion;
   private final boolean writeLongAsString;
+  private final JsonByteArray.Format byteArrayFormat;
   private final ClassLoader classLoader;
   private final JsonMixinAnnotations mixinAnnotations;
   private final IdentityHashMap<Class<?>, JsonSubTypesInfo> subTypesCache;
@@ -246,6 +248,7 @@ public final class JsonSharedRegistry {
     propertyNamingStrategy = config.propertyNamingStrategy();
     defaultPropertyInclusion = config.defaultPropertyInclusion();
     writeLongAsString = config.writeLongAsString();
+    byteArrayFormat = config.byteArrayFormat();
     classLoader = config.classLoader();
     mixinAnnotations = new JsonMixinAnnotations(config);
     exactCodecs = new IdentityHashMap<>();
@@ -1225,6 +1228,12 @@ public final class JsonSharedRegistry {
 
   boolean writeLongAsString() {
     return writeLongAsString;
+  }
+
+  /** Returns the default representation used when selecting ordinary byte-array codecs. */
+  @Internal
+  public JsonByteArray.Format byteArrayFormat() {
+    return byteArrayFormat;
   }
 
   ClassLoader classLoader() {

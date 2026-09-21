@@ -3573,7 +3573,9 @@ final class ObjectCodecBuilder {
         Class<? extends JsonValueCodec<?>> codecClass =
             byteArray.value() == JsonByteArray.Format.ARRAY
                 ? ArrayCodec.SignedByteArrayCodec.class
-                : Base64ByteArrayCodec.class;
+                : byteArray.value() == JsonByteArray.Format.BASE16
+                    ? Base16ByteArrayCodec.class
+                    : Base64ByteArrayCodec.class;
         if (valueCodecClass != null && valueCodecClass != codecClass) {
           throw new ForyJsonException(
               "Conflicting @JsonByteArray declarations for property " + name);

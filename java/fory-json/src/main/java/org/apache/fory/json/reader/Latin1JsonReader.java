@@ -165,6 +165,11 @@ public final class Latin1JsonReader extends JsonReader {
   }
 
   @Override
+  public byte[] readBase16() {
+    return readBase16(input);
+  }
+
+  @Override
   protected long scanStringHash(int start, int end) {
     long hash = JsonFieldNameHash.MAGIC_HASH_CODE;
     long value = 0;

@@ -1924,6 +1924,34 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     }
   }
 
+  /** Writes a byte array as a quoted lowercase hexadecimal string without intermediate storage. */
+  public void writeBase16(byte[] value) {
+    int pos = position;
+    long additional = value.length * 2L + 2;
+    if (additional > Integer.MAX_VALUE - (long) pos) {
+      throw new ForyJsonException("Byte array is too large for Base16 JSON output");
+    }
+    if (pos + additional > buffer.length) {
+      grow((int) additional);
+    }
+    byte[] target = buffer;
+    target[pos++] = '"';
+    int[] words = HexDigits.QUADS;
+    int index = 0;
+    for (; index <= value.length - 2; index += 2) {
+      int bits = (value[index] & 0xff) | ((value[index + 1] & 0xff) << 8);
+      LittleEndian.putInt32(target, pos, words[bits]);
+      pos += 4;
+    }
+    if (index < value.length) {
+      int pair = HEX_PAIRS[value[index] & 0xff];
+      target[pos++] = (byte) pair;
+      target[pos++] = (byte) (pair >>> 8);
+    }
+    target[pos++] = '"';
+    position = pos;
+  }
+
   /** Writes a byte array as a quoted Base64 JSON string without an intermediate String. */
   public void writeBase64(byte[] value) {
     int encodedLength = base64Length(value.length);

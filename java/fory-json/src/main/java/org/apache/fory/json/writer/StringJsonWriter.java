@@ -80,6 +80,7 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
   private static final long DECIMAL_8 = 100_000_000L;
   private static final int[] DIGIT_TRIPLES = new int[1000];
   private static final int[] DIGIT_QUADS = new int[10000];
+  private static final int[] HEX_PAIRS = new int[256];
   private static final long[] UTF16_DIGIT_QUADS = new long[10000];
   private static final long UTF16_BYTE_MASK = 0x00FF00FF00FF00FFL;
   private static final long UTF16_PAIR_MASK = 0x0000FFFF0000FFFFL;
@@ -96,6 +97,10 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
 
   static {
+    String hexDigits = "0123456789abcdef";
+    for (int i = 0; i < HEX_PAIRS.length; i++) {
+      HEX_PAIRS[i] = hexDigits.charAt(i >>> 4) | (hexDigits.charAt(i & 15) << 8);
+    }
     for (int i = 0; i < 1000; i++) {
       int c0 = '0' + i / 100;
       int c1 = '0' + (i / 10) % 10;
@@ -1558,6 +1563,54 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
       return;
     }
     writeRawUtf16Value(index == 0 ? utf16NamePrefix : utf16CommaNamePrefix);
+  }
+
+  /** Writes a byte array as a quoted lowercase hexadecimal string without intermediate storage. */
+  public void writeBase16(byte[] value) {
+    int pos = position;
+    long additional = (value.length * 2L + 2) << coder;
+    if (additional > Integer.MAX_VALUE - (long) pos) {
+      throw new ForyJsonException("Byte array is too large for Base16 JSON output");
+    }
+    if (pos + additional > buffer.length) {
+      grow((int) additional);
+    }
+    byte[] target = buffer;
+    int[] words = HexDigits.QUADS;
+    if (coder == LATIN1) {
+      target[pos++] = '"';
+      int index = 0;
+      for (; index <= value.length - 2; index += 2) {
+        int bits = (value[index] & 0xff) | ((value[index + 1] & 0xff) << 8);
+        LittleEndian.putInt32(target, pos, words[bits]);
+        pos += 4;
+      }
+      if (index < value.length) {
+        int pair = HEX_PAIRS[value[index] & 0xff];
+        target[pos++] = (byte) pair;
+        target[pos++] = (byte) (pair >>> 8);
+      }
+      target[pos++] = '"';
+    } else {
+      pos = putUtf16Byte(target, pos, (byte) '"');
+      int index = 0;
+      for (; index <= value.length - 2; index += 2) {
+        int bits = (value[index] & 0xff) | ((value[index + 1] & 0xff) << 8);
+        long chars = words[bits] & 0xffffffffL;
+        chars = (chars | (chars << 16)) & 0x0000ffff0000ffffL;
+        chars = (chars | (chars << 8)) & 0x00ff00ff00ff00ffL;
+        LittleEndian.putInt64(target, pos, LITTLE_ENDIAN ? chars : chars << 8);
+        pos += 8;
+      }
+      if (index < value.length) {
+        int pair = HEX_PAIRS[value[index] & 0xff];
+        int chars = (pair & 0xff) | ((pair & 0xff00) << 8);
+        LittleEndian.putInt32(target, pos, LITTLE_ENDIAN ? chars : chars << 8);
+        pos += 4;
+      }
+      pos = putUtf16Byte(target, pos, (byte) '"');
+    }
+    position = pos;
   }
 
   /** Writes a byte array as a quoted Base64 JSON string without an intermediate String. */

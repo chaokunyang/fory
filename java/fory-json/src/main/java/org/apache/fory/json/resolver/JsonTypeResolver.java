@@ -558,7 +558,8 @@ public final class JsonTypeResolver {
       TypeRef<?> elementType = typeRef.getComponentType();
       requireConcreteChild(elementType.getType(), rawType, "elementCodec");
       JsonTypeInfo elementInfo = annotationTypeInfo(elementType, elementCodec);
-      return newTypeInfo(declaredType, ArrayCodec.create(rawType, elementInfo));
+      return newTypeInfo(
+          declaredType, ArrayCodec.create(rawType, elementInfo, sharedRegistry.byteArrayFormat()));
     }
     if (rawType == AtomicReferenceArray.class) {
       requireSlots(rawType, hasElement, !hasContent && !hasKey && !hasMapValue, "elementCodec");
@@ -643,7 +644,8 @@ public final class JsonTypeResolver {
       TypeRef<?> elementType = typeRef.getComponentType();
       requireConcreteChild(elementType.getType(), rawType, "element", "@JsonFormat");
       JsonTypeInfo elementInfo = formatTypeInfo(elementType, annotation);
-      return newTypeInfo(declaredType, ArrayCodec.create(rawType, elementInfo));
+      return newTypeInfo(
+          declaredType, ArrayCodec.create(rawType, elementInfo, sharedRegistry.byteArrayFormat()));
     }
     if (rawType == AtomicReferenceArray.class) {
       TypeRef<?> elementType = directElementType(typeRef, rawType, "element", "@JsonFormat");

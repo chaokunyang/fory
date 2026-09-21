@@ -61,6 +61,7 @@ import org.apache.fory.json.annotation.JsonUnwrapped;
 import org.apache.fory.json.annotation.JsonValidator;
 import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.ArrayCodec;
+import org.apache.fory.json.codec.Base16ByteArrayCodec;
 import org.apache.fory.json.codec.Base64ByteArrayCodec;
 import org.apache.fory.json.codec.JsonUnwrappedInfo;
 import org.apache.fory.json.codec.ObjectCodec;
@@ -1005,7 +1006,9 @@ final class ForyJsonGraalVMFeature implements Feature {
       registerCodec(
           byteArray.value() == JsonByteArray.Format.ARRAY
               ? ArrayCodec.SignedByteArrayCodec.class
-              : Base64ByteArrayCodec.class);
+              : byteArray.value() == JsonByteArray.Format.BASE16
+                  ? Base16ByteArrayCodec.class
+                  : Base64ByteArrayCodec.class);
     }
   }
 

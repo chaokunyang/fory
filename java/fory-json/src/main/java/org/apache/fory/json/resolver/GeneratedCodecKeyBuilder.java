@@ -77,6 +77,8 @@ final class GeneratedCodecKeyBuilder {
       keyParts.add(registry.defaultPropertyInclusion());
       keyParts.add(registry.writeLongAsString());
     }
+    // Both readers and writers store concrete byte-array codecs selected by this default.
+    keyParts.add(registry.byteArrayFormat());
     keyParts.add(registry.propertyDiscoveryEnabled());
     keyParts.add(registry.propertyNamingStrategy());
     addModelInputs(typeInfo, owner.unwrappedInfo(), registry);

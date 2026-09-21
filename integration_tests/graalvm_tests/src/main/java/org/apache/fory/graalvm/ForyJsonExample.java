@@ -104,6 +104,7 @@ public final class ForyJsonExample {
     testInclusion();
     testCodecs();
     testValueAnnotations();
+    testByteArrayFormats();
     testSubtypes();
     testSubtypeMixin();
     testContainerRoots();
@@ -594,6 +595,53 @@ public final class ForyJsonExample {
             json.fromJson("{\"value\":\"AQID\"}", Base64Bytes.class).value, new byte[] {1, 2, 3}));
   }
 
+  private static void testByteArrayFormats() {
+    byte[] bytes = {1, -2, 3};
+    JsonByteArray.Format[] formats = JsonByteArray.Format.values();
+    String[] encodings = {"\"Af4D\"", "[1,-2,3]", "\"01fe03\""};
+    for (int i = 0; i < formats.length; i++) {
+      ForyJson json = ForyJson.builder().byteArrayFormat(formats[i]).build();
+      String encoded = encodings[i];
+      Preconditions.checkArgument(json.toJson(bytes).equals(encoded));
+      Preconditions.checkArgument(
+          new String(json.toJsonBytes(bytes), StandardCharsets.UTF_8).equals(encoded));
+      Preconditions.checkArgument(Arrays.equals(json.fromJson(encoded, byte[].class), bytes));
+      Preconditions.checkArgument(
+          Arrays.equals(json.fromJson(json.toPrettyJsonBytes(bytes), byte[].class), bytes));
+      if (GraalvmSupport.isGraalRuntime()) {
+        CodegenProbeCodec.expect(CodegenProbeModel.class, true, true);
+        CodegenProbeModel model = new CodegenProbeModel();
+        model.bytes = bytes;
+        for (String probe : new String[] {"probe", "汉"}) {
+          model.probe = new CodegenProbeValue(probe);
+          String text = json.toJson(model);
+          Preconditions.checkArgument(text.contains("\"bytes\":" + encoded));
+          Preconditions.checkArgument(
+              new String(json.toJsonBytes(model), StandardCharsets.UTF_8).equals(text));
+          Preconditions.checkArgument(
+              Arrays.equals(json.fromJson(text, CodegenProbeModel.class).bytes, bytes));
+          Preconditions.checkArgument(
+              Arrays.equals(
+                  json.fromJson(json.toPrettyJsonBytes(model), CodegenProbeModel.class).bytes,
+                  bytes));
+        }
+      }
+    }
+    HexBytes value = new HexBytes();
+    value.value = bytes;
+    for (boolean codegen : new boolean[] {false, true}) {
+      ForyJson json = ForyJson.builder().withCodegen(codegen).withAsyncCompilation(false).build();
+      String encoded = "{\"value\":\"01fe03\"}";
+      Preconditions.checkArgument(json.toJson(value).equals(encoded));
+      Preconditions.checkArgument(
+          new String(json.toJsonBytes(value), StandardCharsets.UTF_8).equals(encoded));
+      Preconditions.checkArgument(
+          Arrays.equals(json.fromJson(encoded, HexBytes.class).value, bytes));
+      Preconditions.checkArgument(
+          Arrays.equals(json.fromJson(json.toPrettyJsonBytes(value), HexBytes.class).value, bytes));
+    }
+  }
+
   private static void testSubtypes() {
     ForyJson json = ForyJson.builder().build();
     Shape value = new Circle(9);
@@ -879,6 +927,14 @@ public final class ForyJsonExample {
     default ForyJson nonEmptyConfiguration() {
       return ForyJson.builder().defaultPropertyInclusion(JsonProperty.Include.NON_EMPTY).build();
     }
+
+    default ForyJson base16Configuration() {
+      return ForyJson.builder().byteArrayFormat(JsonByteArray.Format.BASE16).build();
+    }
+
+    default ForyJson byteArrayConfiguration() {
+      return ForyJson.builder().byteArrayFormat(JsonByteArray.Format.ARRAY).build();
+    }
   }
 
   @JsonType
@@ -893,6 +949,7 @@ public final class ForyJsonExample {
   @JsonType
   public static final class CodegenProbeModel {
     public int id;
+    public byte[] bytes;
 
     @JsonCodec(CodegenProbeCodec.class)
     public CodegenProbeValue probe;
@@ -1469,6 +1526,12 @@ public final class ForyJsonExample {
   @JsonType
   public static final class Base64Bytes {
     @JsonByteArray(JsonByteArray.Format.BASE64)
+    public byte[] value;
+  }
+
+  @JsonType
+  public static final class HexBytes {
+    @JsonByteArray(JsonByteArray.Format.BASE16)
     public byte[] value;
   }
 

@@ -89,6 +89,7 @@ public class KspRetentionResourceTest {
       root,
     )
     assertConstructor(root, "org.apache.fory.json.codec.Base64ByteArrayCodec")
+    assertConstructor(root, "org.apache.fory.json.codec.Base16ByteArrayCodec")
     assertConstructor(root, "org.apache.fory.json.codec.ArrayCodec\$SignedByteArrayCodec")
     assertConstructor(
       rules("PlatformDirectOverride"),

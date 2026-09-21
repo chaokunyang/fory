@@ -27,7 +27,8 @@ import java.lang.annotation.Target;
 
 /**
  * Selects the JSON representation of one exact {@code byte[]} field or getter for both reading and
- * writing. Unannotated byte arrays use a quoted standard Base64 string.
+ * writing. Overrides {@link org.apache.fory.json.ForyJsonBuilder#byteArrayFormat(Format)}, whose
+ * default is a quoted standard Base64 string.
  *
  * <p>Null inclusion and omission follow the property's normal configuration, and an included null
  * is written as JSON {@code null}. This annotation cannot be combined with {@link JsonCodec} on the
@@ -45,6 +46,8 @@ public @interface JsonByteArray {
     /** A quoted standard Base64 string with padding. */
     BASE64,
     /** A JSON array of signed byte values in the range {@code [-128, 127]}. */
-    ARRAY
+    ARRAY,
+    /** A quoted lowercase hexadecimal string. Reading also accepts uppercase hexadecimal digits. */
+    BASE16
   }
 }

@@ -20,10 +20,14 @@
 package org.apache.fory.json;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertThrows;
 
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.text.DecimalFormat;
 import org.apache.fory.json.annotation.JsonProperty;
+import org.apache.fory.json.data.BeanProperties;
 import org.apache.fory.json.data.BeanProperties.BooleanBean;
 import org.apache.fory.json.data.BeanProperties.ConflictingTypesBean;
 import org.apache.fory.json.data.BeanProperties.DuplicateGetterBean;
@@ -80,6 +84,77 @@ public class JsonPropertyTest extends ForyJsonTestModels {
     assertEquals(format.isGroupingUsed(), false);
     setter.putBoolean(format, true);
     assertEquals(format.isGroupingUsed(), true);
+  }
+
+  @Test
+  public void methodLoaderVisibility() throws Exception {
+    try (PropertyClassLoader visible = new PropertyClassLoader(true);
+        PropertyClassLoader isolated = new PropertyClassLoader(false)) {
+      // Equal custom loaders still have independent class visibility.
+      assertEquals(visible, isolated);
+      for (PropertyClassLoader loader : new PropertyClassLoader[] {visible, isolated}) {
+        Class<?> getterType = loader.loadClass(GetterBean.class.getName());
+        Class<?> setterType = loader.loadClass(SetterBean.class.getName());
+        assertSame(getterType.getClassLoader(), loader);
+        assertSame(setterType.getClassLoader(), loader);
+        for (int i = 0; i < 2; i++) {
+          JsonFieldAccessor getter = JsonFieldAccessor.forGetter(getterType.getMethod("getId"));
+          assertEquals(getter.getInt(getterType.getConstructor().newInstance()), 17);
+          JsonFieldAccessor setter =
+              JsonFieldAccessor.forSetter(setterType.getMethod("setId", int.class));
+          Object value = setterType.getConstructor().newInstance();
+          setter.putInt(value, 42);
+          assertEquals(setterType.getMethod("id", setterType).invoke(null, value), 43);
+        }
+        // Both declaring classes and both accessor kinds share one visibility result.
+        assertEquals(loader.visibilityChecks, 1);
+      }
+    }
+  }
+
+  private static final class PropertyClassLoader extends URLClassLoader {
+    private final boolean foryVisible;
+    private int visibilityChecks;
+
+    private PropertyClassLoader(boolean foryVisible) {
+      super(
+          new URL[] {BeanProperties.class.getProtectionDomain().getCodeSource().getLocation()},
+          JsonFieldAccessor.class.getClassLoader());
+      this.foryVisible = foryVisible;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return other instanceof PropertyClassLoader;
+    }
+
+    @Override
+    public int hashCode() {
+      return 1;
+    }
+
+    @Override
+    protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+      synchronized (getClassLoadingLock(name)) {
+        if (name.equals(JsonFieldAccessor.class.getName())) {
+          visibilityChecks++;
+          if (!foryVisible) {
+            throw new ClassNotFoundException(name);
+          }
+        }
+        if (name.startsWith(BeanProperties.class.getName() + "$")) {
+          Class<?> type = findLoadedClass(name);
+          if (type == null) {
+            type = findClass(name);
+          }
+          if (resolve) {
+            resolveClass(type);
+          }
+          return type;
+        }
+        return super.loadClass(name, resolve);
+      }
+    }
   }
 
   @Test

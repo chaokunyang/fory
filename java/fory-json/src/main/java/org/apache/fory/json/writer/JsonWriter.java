@@ -57,6 +57,22 @@ import org.apache.fory.json.resolver.JsonTypeResolver;
  * reparsing.
  */
 public abstract class JsonWriter {
+  // Initialized only for Base16 writes, and shared by both output representations.
+  protected static final class HexDigits {
+    static final int[] QUADS = new int[65536];
+
+    static {
+      String digits = "0123456789abcdef";
+      for (int i = 0; i < QUADS.length; i++) {
+        QUADS[i] =
+            digits.charAt((i >>> 4) & 15)
+                | (digits.charAt(i & 15) << 8)
+                | (digits.charAt(i >>> 12) << 16)
+                | (digits.charAt((i >>> 8) & 15) << 24);
+      }
+    }
+  }
+
   private static final long MIN_ISO_INSTANT_SECOND = -31_557_014_167_219_200L;
   private static final long MAX_ISO_INSTANT_SECOND = 31_556_889_864_403_199L;
   private final JsonTypeResolver typeResolver;

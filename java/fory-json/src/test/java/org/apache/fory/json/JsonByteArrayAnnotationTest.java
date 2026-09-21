@@ -153,13 +153,15 @@ public class JsonByteArrayAnnotationTest extends ForyJsonTestModels {
   @Test
   public void base16Contents() {
     ForyJson json = newJsonBuilder().byteArrayFormat(JsonByteArray.Format.BASE16).build();
-    for (int size : new int[] {0, 1, 2, 255, 256, 257, 1025}) {
+    for (int size : new int[] {0, 1, 2, 3, 4, 7, 8, 9, 255, 256, 257, 1025, 131072}) {
       byte[] bytes = new byte[size];
       StringBuilder expected = new StringBuilder("\"");
       for (int i = 0; i < size; i++) {
-        bytes[i] = (byte) i;
-        expected.append(Character.forDigit((i & 255) >>> 4, 16));
-        expected.append(Character.forDigit(i & 15, 16));
+        // Cover every two-byte combination as well as odd tails and buffer growth.
+        int value = size == 131072 ? (i >>> ((i & 1) == 0 ? 1 : 9)) & 255 : i & 255;
+        bytes[i] = (byte) value;
+        expected.append(Character.forDigit(value >>> 4, 16));
+        expected.append(Character.forDigit(value & 15, 16));
       }
       String text = expected.append('"').toString();
       assertEquals(json.toJson(bytes), text);

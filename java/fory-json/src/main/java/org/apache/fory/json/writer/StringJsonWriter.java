@@ -1576,14 +1576,13 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
       grow((int) additional);
     }
     byte[] target = buffer;
+    int[] words = HexDigits.QUADS;
     if (coder == LATIN1) {
       target[pos++] = '"';
       int index = 0;
-      for (; index + 1 < value.length; index += 2) {
-        LittleEndian.putInt32(
-            target,
-            pos,
-            HEX_PAIRS[value[index] & 0xff] | (HEX_PAIRS[value[index + 1] & 0xff] << 16));
+      for (; index <= value.length - 2; index += 2) {
+        int bits = (value[index] & 0xff) | ((value[index + 1] & 0xff) << 8);
+        LittleEndian.putInt32(target, pos, words[bits]);
         pos += 4;
       }
       if (index < value.length) {
@@ -1594,8 +1593,17 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
       target[pos++] = '"';
     } else {
       pos = putUtf16Byte(target, pos, (byte) '"');
-      for (byte element : value) {
-        int pair = HEX_PAIRS[element & 0xff];
+      int index = 0;
+      for (; index <= value.length - 2; index += 2) {
+        int bits = (value[index] & 0xff) | ((value[index + 1] & 0xff) << 8);
+        long chars = words[bits] & 0xffffffffL;
+        chars = (chars | (chars << 16)) & 0x0000ffff0000ffffL;
+        chars = (chars | (chars << 8)) & 0x00ff00ff00ff00ffL;
+        LittleEndian.putInt64(target, pos, LITTLE_ENDIAN ? chars : chars << 8);
+        pos += 8;
+      }
+      if (index < value.length) {
+        int pair = HEX_PAIRS[value[index] & 0xff];
         int chars = (pair & 0xff) | ((pair & 0xff00) << 8);
         LittleEndian.putInt32(target, pos, LITTLE_ENDIAN ? chars : chars << 8);
         pos += 4;

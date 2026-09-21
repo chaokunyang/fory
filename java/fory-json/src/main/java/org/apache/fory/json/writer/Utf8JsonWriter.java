@@ -1936,10 +1936,11 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     }
     byte[] target = buffer;
     target[pos++] = '"';
+    int[] words = HexDigits.QUADS;
     int index = 0;
-    for (; index + 1 < value.length; index += 2) {
-      LittleEndian.putInt32(
-          target, pos, HEX_PAIRS[value[index] & 0xff] | (HEX_PAIRS[value[index + 1] & 0xff] << 16));
+    for (; index <= value.length - 2; index += 2) {
+      int bits = (value[index] & 0xff) | ((value[index + 1] & 0xff) << 8);
+      LittleEndian.putInt32(target, pos, words[bits]);
       pos += 4;
     }
     if (index < value.length) {

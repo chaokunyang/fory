@@ -105,6 +105,7 @@ public final class JsonFieldInfo {
   private static final byte[] FALSE_BYTES = "false".getBytes(StandardCharsets.ISO_8859_1);
 
   private final String name;
+  private final boolean escapeNonAscii;
   private final Field writeField;
   private final Method writeGetter;
   private final Field readField;
@@ -407,8 +408,10 @@ public final class JsonFieldInfo {
       JsonCodec codecAnnotation,
       Class<? extends JsonValueCodec<?>> valueCodecClass,
       JsonFormat formatAnnotation,
-      boolean rawValue) {
+      boolean rawValue,
+      boolean escapeNonAscii) {
     this.name = name;
+    this.escapeNonAscii = escapeNonAscii;
     // Inclusion, required-value, and read-index metadata become immutable with ObjectCodec.
     // Packing the flags above the read index avoids enlarging every field-metadata object.
     readIndexAndWriteNull = inclusion == Include.ALWAYS ? WRITE_NULL_MASK : 0;
@@ -475,8 +478,8 @@ public final class JsonFieldInfo {
     writeArrayComponentType =
         writeKind == JsonFieldKind.ARRAY ? writeRawType.getComponentType() : null;
     writeElementRawType = writeElementType == null ? null : knownRawType(writeElementType);
-    String stringPrefix = JsonStringEscaper.escapedNamePrefix(name, true);
-    String utf8Prefix = JsonStringEscaper.escapedNamePrefix(name, false);
+    String stringPrefix = JsonStringEscaper.escapedNamePrefix(name, escapeNonAscii ? 0x7f : 0xff);
+    String utf8Prefix = JsonStringEscaper.escapedNamePrefix(name, escapeNonAscii ? 0x7f : 0xffff);
     stringNamePrefix = stringPrefix.getBytes(StandardCharsets.ISO_8859_1);
     stringCommaNamePrefix = ("," + stringPrefix).getBytes(StandardCharsets.ISO_8859_1);
     stringUtf16NamePrefix = toUtf16Bytes(stringNamePrefix);
@@ -565,7 +568,8 @@ public final class JsonFieldInfo {
             codecAnnotation,
             valueCodecClass,
             formatAnnotation,
-            writesRawString());
+            writesRawString(),
+            escapeNonAscii);
     copy.setReadIndex(readIndex());
     copy.defaultMethod = defaultMethod;
     copy.defaultDependencies = defaultDependencies;
@@ -2419,22 +2423,22 @@ public final class JsonFieldInfo {
     return rawType == Object.class ? null : rawType;
   }
 
-  private static byte[][] enumValues(Class<?> enumType) {
+  private byte[][] enumValues(Class<?> enumType) {
     Object[] constants = enumType.getEnumConstants();
     byte[][] values = new byte[constants.length][];
     for (Object constant : constants) {
       Enum<?> enumValue = (Enum<?>) constant;
-      values[enumValue.ordinal()] = JsonStringEscaper.utf8Value(enumValue.name());
+      values[enumValue.ordinal()] = JsonStringEscaper.utf8Value(enumValue.name(), escapeNonAscii);
     }
     return values;
   }
 
-  private static byte[][] stringEnumValues(Class<?> enumType) {
+  private byte[][] stringEnumValues(Class<?> enumType) {
     Object[] constants = enumType.getEnumConstants();
     byte[][] values = new byte[constants.length][];
     for (Object constant : constants) {
       Enum<?> enumValue = (Enum<?>) constant;
-      values[enumValue.ordinal()] = JsonStringEscaper.stringValue(enumValue.name());
+      values[enumValue.ordinal()] = JsonStringEscaper.stringValue(enumValue.name(), escapeNonAscii);
     }
     return values;
   }

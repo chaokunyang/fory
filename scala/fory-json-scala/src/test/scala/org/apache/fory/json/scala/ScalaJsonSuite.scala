@@ -529,6 +529,26 @@ class ScalaJsonSuite extends AnyFunSuite {
     } finally resolver.unlockJIT()
   }
 
+  test("non ASCII escaping") {
+    val value = Map("é" -> List(Some("汉😀")))
+    val valueType = ScalaTypeRef[Map[String, List[Option[String]]]]
+    val expected = "{\"\\u00e9\":[\"\\u6c49\\ud83d\\ude00\"]}"
+    for (codegen <- Seq(false, true)) {
+      val json = ForyJsonScala.builder().escapeNonAscii(true)
+        .withCodegen(codegen).withAsyncCompilation(false).build()
+      assert(json.toJson(value, valueType) == expected)
+      assert(new String(json.toJsonBytes(value, valueType), UTF_8) == expected)
+      assert(json.fromJson(expected, valueType) == value)
+      assert(json.fromJson(json.toPrettyJsonBytes(value), valueType) == value)
+      val fields = BinaryFields("汉😀", Array[Byte](1), Nil, Map.empty, None)
+      val text = json.toJson(fields)
+      assert(text.contains("\"label\":\"\\u6c49\\ud83d\\ude00\""))
+      assert(new String(json.toJsonBytes(fields), UTF_8) == text)
+      assert(json.fromJson(text, classOf[BinaryFields]).label == fields.label)
+      assertWriterGeneration(json, classOf[BinaryFields], codegen)
+    }
+  }
+
   test("byte array formats") {
     val bytes = Array[Byte](1, -2, 3)
     val formats = Seq(

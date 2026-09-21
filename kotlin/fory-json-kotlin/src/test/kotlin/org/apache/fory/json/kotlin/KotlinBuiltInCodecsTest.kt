@@ -140,6 +140,30 @@ class KotlinBuiltInCodecsTest {
   }
 
   @Test
+  fun nonAsciiEscaping() {
+    val value = mapOf("é" to listOf("汉😀"))
+    val type = jsonTypeRef<Map<String, List<String>>>()
+    val expected = "{\"\\u00e9\":[\"\\u6c49\\ud83d\\ude00\"]}"
+    for (codegen in listOf(false, true)) {
+      val json =
+        ForyJsonKotlin.builder()
+          .escapeNonAscii(true)
+          .withCodegen(codegen)
+          .withAsyncCompilation(false)
+          .build()
+      assertEquals(expected, json.toJson(value, type))
+      assertEquals(expected, json.toJsonBytes(value, type).decodeToString())
+      assertEquals(value, json.fromJson(expected, type))
+      assertEquals(value, json.fromJson(json.toPrettyJsonBytes(value), type))
+      val fields = BinaryFields("汉😀", byteArrayOf(1), emptyList(), ubyteArrayOf())
+      val text = json.toJson(fields)
+      assertTrue(text.contains("\"label\":\"\\u6c49\\ud83d\\ude00\""))
+      assertEquals(text, json.toJsonBytes(fields).decodeToString())
+      assertEquals(fields.label, json.fromJson(text, BinaryFields::class.java).label)
+    }
+  }
+
+  @Test
   fun products() {
     val fory = ForyJsonKotlin.builder().writeNullFields(true).withAsyncCompilation(false).build()
     val pairType = jsonTypeRef<Pair<Int?, String>>()

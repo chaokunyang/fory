@@ -203,7 +203,8 @@ public final class Latin1JsonReader extends JsonReader {
         cursor += 4;
         hash = JsonFieldNameHash.update(hash, low);
         decodedLength++;
-      } else if (latin1 && ch != 0 && decodedLength < Long.BYTES) {
+      } else if (latin1 && ch <= 0xff && ch != 0 && decodedLength < Long.BYTES) {
+        // Latin1 source bytes can contain escapes for non-Latin1 decoded characters.
         value = JsonFieldNameHash.value(value, decodedLength++, ch);
       } else {
         if (latin1) {

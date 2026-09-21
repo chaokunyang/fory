@@ -57,7 +57,7 @@ import org.apache.fory.json.resolver.JsonTypeResolver;
  * reparsing.
  */
 public abstract class JsonWriter {
-  // Initialized only for Base16 writes, and shared by both output representations.
+  // Initialized for hexadecimal output, and shared by both output representations.
   protected static final class HexDigits {
     static final int[] QUADS = new int[65536];
 
@@ -73,10 +73,29 @@ public abstract class JsonWriter {
     }
   }
 
+  // Fixed UTF-16 alphabet, initialized only for bulk Unicode escaping. The 512 KiB table is
+  // shared across writers and instances; it never retains application strings or grows with input.
+  protected static final class UnicodeEscapes {
+    static final long[] TOKENS = new long[65536];
+
+    static {
+      String digits = "0123456789abcdef";
+      for (int i = 0; i < TOKENS.length; i++) {
+        TOKENS[i] =
+            0x755cL
+                | ((long) digits.charAt(i >>> 12) << 16)
+                | ((long) digits.charAt((i >>> 8) & 15) << 24)
+                | ((long) digits.charAt((i >>> 4) & 15) << 32)
+                | ((long) digits.charAt(i & 15) << 40);
+      }
+    }
+  }
+
   private static final long MIN_ISO_INSTANT_SECOND = -31_557_014_167_219_200L;
   private static final long MAX_ISO_INSTANT_SECOND = 31_556_889_864_403_199L;
   private final JsonTypeResolver typeResolver;
   private final int maxDepth;
+  protected final boolean escapeNonAscii;
   protected boolean prettyPrint;
   // Indentation is emitted with the opening delimiter, including for custom codecs that omit
   // writeComma(0). Only the newest container can still be empty; closing it clears this marker.
@@ -87,6 +106,7 @@ public abstract class JsonWriter {
   JsonWriter(JsonConfig config, JsonTypeResolver typeResolver) {
     this.typeResolver = Objects.requireNonNull(typeResolver, "typeResolver");
     maxDepth = config.maxDepth();
+    escapeNonAscii = config.escapeNonAscii();
   }
 
   /**

@@ -1367,6 +1367,7 @@ public class JsonAsyncCompilationTest {
         new JsonConfig(
             Include.NON_NULL,
             false,
+            false,
             JsonByteArray.Format.BASE64,
             true,
             true,

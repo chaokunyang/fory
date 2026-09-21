@@ -32,11 +32,21 @@ import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import org.apache.fory.json.annotation.JsonAnyGetter;
+import org.apache.fory.json.annotation.JsonMixin;
+import org.apache.fory.json.annotation.JsonProperty;
+import org.apache.fory.json.annotation.JsonPropertyOrder;
+import org.apache.fory.json.annotation.JsonRawValue;
+import org.apache.fory.json.annotation.JsonUnwrapped;
 import org.apache.fory.json.codec.AbstractJsonValueCodec;
 import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.data.CharValue;
@@ -63,6 +73,200 @@ import org.apache.fory.serializer.StringSerializer;
 import org.testng.annotations.Test;
 
 public class JsonStringTest extends ForyJsonTestModels {
+  @Test
+  public void escapeNonAsciiConfig() {
+    ForyJsonBuilder builder = newJsonBuilder();
+    assertFalse(builder.build().config().escapeNonAscii());
+    ForyJson escaped = builder.escapeNonAscii(true).build();
+    ForyJson plain = builder.escapeNonAscii(false).build();
+    assertTrue(escaped.config().escapeNonAscii());
+    assertFalse(plain.config().escapeNonAscii());
+    for (int i = 0; i < 3; i++) {
+      assertEquals(escaped.toJson("é汉😀"), "\"\\u00e9\\u6c49\\ud83d\\ude00\"");
+      assertEquals(plain.toJson("é汉😀"), "\"é汉😀\"");
+    }
+  }
+
+  @Test
+  public void escapeNonAsciiStrings() {
+    ForyJson json = newJsonBuilder().escapeNonAscii(true).build();
+    StringBuilder input = new StringBuilder("ascii\u007f\n\"\\");
+    StringBuilder expected = new StringBuilder("\"ascii\u007f\\n\\\"\\\\");
+    String digits = "0123456789abcdef";
+    for (int ch = 0x80; ch <= 0xffff; ch++) {
+      if (ch >= 0xd800 && ch <= 0xdfff) {
+        continue;
+      }
+      input.append((char) ch);
+      expected.append("\\u");
+      for (int shift = 12; shift >= 0; shift -= 4) {
+        expected.append(digits.charAt((ch >>> shift) & 15));
+      }
+    }
+    input.append("😀");
+    expected.append("\\ud83d\\ude00\"");
+    String value = input.toString();
+    assertEquals(json.toJson(value), expected.toString());
+    assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected.toString());
+    assertEquals(json.toJson(input, CharSequence.class), expected.toString());
+    assertEquals(
+        new String(json.toJsonBytes(input, CharSequence.class), StandardCharsets.UTF_8),
+        expected.toString());
+    assertEquals(json.fromJson(expected.toString(), String.class), value);
+    assertEquals(json.fromJson(json.toJsonBytes(value), String.class), value);
+    assertEquals(json.toJson('é'), "\"\\u00e9\"");
+    assertEquals(new String(json.toJsonBytes('汉'), StandardCharsets.UTF_8), "\"\\u6c49\"");
+    assertEquals(json.toJson(""), "\"\"");
+    assertEquals(json.toJson(null), "null");
+    for (int length : new int[] {1, 7, 8, 255, 256, 257, 511, 512, 513}) {
+      String prefix = repeat('é', length);
+      for (String tail : new String[] {"😀", "\n\"\\\u0000", "ascii"}) {
+        String inputText = prefix + tail;
+        byte[] encoded = json.toJsonBytes(inputText);
+        assertEquals(json.fromJson(encoded, String.class), inputText);
+        assertEquals(new String(encoded, StandardCharsets.UTF_8), json.toJson(inputText));
+      }
+    }
+    for (String invalid : new String[] {"\ud800", "\udc00", "\ud800a"}) {
+      assertThrows(ForyJsonException.class, () -> json.toJson(invalid));
+      assertThrows(ForyJsonException.class, () -> json.toJsonBytes(invalid));
+      assertThrows(
+          ForyJsonException.class,
+          () -> json.toJson(new StringBuilder(invalid), CharSequence.class));
+      assertThrows(
+          ForyJsonException.class,
+          () -> json.toJsonBytes(new StringBuilder(invalid), CharSequence.class));
+      assertEquals(json.toJson("汉"), "\"\\u6c49\"");
+      assertEquals(new String(json.toJsonBytes("汉"), StandardCharsets.UTF_8), "\"\\u6c49\"");
+    }
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void escapeNonAsciiFields(boolean codegen) {
+    for (boolean escape : new boolean[] {false, true, false, true}) {
+      ForyJson json =
+          newJsonBuilder()
+              .withCodegen(codegen)
+              .escapeNonAscii(escape)
+              .registerMixin(EscapedNames.class)
+              .build();
+      EscapedFields value = new EscapedFields();
+      String text = json.toJson(value);
+      String utf8 = new String(json.toJsonBytes(value), StandardCharsets.UTF_8);
+      if (escape) {
+        assertEquals(
+            text,
+            "{\"caf\\u00e9\":\"\\u6c49\\ud83d\\ude00\",\"kind\":\"\\u4f60\\u597d\","
+                + "\"kinds\":[\"\\u4f60\\u597d\"],\"map\":{\"\\u00e9\":\"\\u6c49\"}}");
+        assertEquals(utf8, text);
+      } else {
+        assertTrue(text.contains("\"café\""));
+        assertTrue(utf8.contains("汉😀"));
+      }
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      json.writeJsonTo(value, EscapedFields.class, output);
+      assertEquals(output.toByteArray(), json.toJsonBytes(value));
+      output.reset();
+      json.writeJsonTo(value, new TypeRef<EscapedFields>() {}, output);
+      assertEquals(output.toByteArray(), json.toJsonBytes(value));
+      output.reset();
+      json.writeJsonTo(value, output);
+      assertEquals(output.toByteArray(), json.toJsonBytes(value));
+      assertEquals(json.toJson(value, EscapedFields.class), text);
+      assertEquals(json.toJson(value, new TypeRef<EscapedFields>() {}), text);
+      assertEquals(json.toJsonBytes(value, new TypeRef<EscapedFields>() {}), output.toByteArray());
+      for (String written :
+          new String[] {
+            text,
+            utf8,
+            json.toPrettyJson(value),
+            new String(json.toPrettyJsonBytes(value), StandardCharsets.UTF_8)
+          }) {
+        EscapedFields decoded = json.fromJson(written, EscapedFields.class);
+        assertEquals(decoded.value, value.value);
+        assertEquals(decoded.kind, value.kind);
+        assertEquals(decoded.kinds, value.kinds);
+        assertEquals(decoded.map, value.map);
+        if (escape) {
+          assertTrue(written.chars().allMatch(ch -> ch <= 0x7f), written);
+        }
+      }
+      String unwrapped = json.toJson(new EscapedUnwrapped());
+      assertTrue(unwrapped.contains(escape ? "\"\\u00e9caf\\u00e9\"" : "\"écafé\""), unwrapped);
+      String any = new String(json.toJsonBytes(new EscapedAny()), StandardCharsets.UTF_8);
+      assertEquals(any, escape ? "{\"\\u00e9\":\"\\u6c49\"}" : "{\"é\":\"汉\"}");
+    }
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void escapeNonAsciiRaw(boolean codegen) {
+    ForyJson json = newJsonBuilder().withCodegen(codegen).escapeNonAscii(true).build();
+    EscapedRaw value = new EscapedRaw();
+    for (int i = 0; i < 3; i++) {
+      String expected = "{\"raw\":\"汉\",\"value\":\"\\u00e9\\u6c49\\ud83d\\ude00\"}";
+      assertEquals(json.toJson(value), expected);
+      assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected);
+      assertTrue(json.toPrettyJson(value).contains("\"raw\" : \"汉\""));
+    }
+    // Raw Unicode can widen String storage; subsequent structured output must still escape.
+    JsonConfig config = json.config();
+    StringJsonWriter stringWriter =
+        new StringJsonWriter(config, newStringWriter().typeResolver(), new byte[1]);
+    Utf8JsonWriter utf8Writer =
+        new Utf8JsonWriter(config, newUtf8Writer().typeResolver(), new byte[1]);
+    for (JsonWriter writer : new JsonWriter[] {stringWriter, utf8Writer}) {
+      if (writer == stringWriter) {
+        stringWriter.writeRawValue("\"汉\",");
+      } else {
+        utf8Writer.writeRawValue("\"汉\",");
+      }
+      writer.writeString("é😀");
+      writer.writeComma(1);
+      writer.writeChar('汉');
+      writer.writeComma(1);
+      writer.writeString(new StringBuilder("汉😀"));
+    }
+    String expected = "\"汉\",\"\\u00e9\\ud83d\\ude00\",\"\\u6c49\",\"\\u6c49\\ud83d\\ude00\"";
+    assertEquals(stringWriter.toJson(), expected);
+    assertEquals(new String(utf8Writer.toJsonBytes(), StandardCharsets.UTF_8), expected);
+    stringWriter.append('é');
+    utf8Writer.append('é');
+    assertTrue(stringWriter.toJson().endsWith("\\u00e9"));
+    assertTrue(new String(utf8Writer.toJsonBytes(), StandardCharsets.UTF_8).endsWith("\\u00e9"));
+  }
+
+  @JsonPropertyOrder({"value", "kind", "kinds", "map"})
+  public static final class EscapedFields {
+    public String value = "汉😀";
+    public UnicodeKind kind = UnicodeKind.你好;
+    public List<UnicodeKind> kinds = Collections.singletonList(UnicodeKind.你好);
+    public Map<String, String> map = Collections.singletonMap("é", "汉");
+  }
+
+  @JsonMixin(target = EscapedFields.class)
+  public abstract static class EscapedNames {
+    @JsonProperty("café")
+    public String value;
+  }
+
+  public static final class EscapedUnwrapped {
+    @JsonUnwrapped(prefix = "é")
+    public EscapedFields child = new EscapedFields();
+  }
+
+  public static final class EscapedAny {
+    @JsonAnyGetter
+    public Map<String, String> values() {
+      return Collections.singletonMap("é", "汉");
+    }
+  }
+
+  @JsonPropertyOrder({"raw", "value"})
+  public static final class EscapedRaw {
+    @JsonRawValue public String raw = "\"汉\"";
+    public String value = "é汉😀";
+  }
+
   @Test
   public void packedTokenWrites() {
     for (int length = 1; length <= 16; length++) {

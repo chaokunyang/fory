@@ -33,28 +33,28 @@ import org.apache.fory.json.ForyJsonException;
 public final class JsonStringEscaper {
   private JsonStringEscaper() {}
 
-  public static String escapedNamePrefix(String name, boolean escapeNonLatin1) {
+  public static String escapedNamePrefix(String name, int maxUnescaped) {
     StringBuilder builder = new StringBuilder(name.length() + 3);
-    appendQuoted(builder, name, escapeNonLatin1);
+    appendQuoted(builder, name, maxUnescaped);
     builder.append(':');
     return builder.toString();
   }
 
-  public static byte[] stringValue(String value) {
-    return escapedString(value, true).getBytes(StandardCharsets.ISO_8859_1);
+  public static byte[] stringValue(String value, boolean escapeNonAscii) {
+    return escapedString(value, escapeNonAscii ? 0x7f : 0xff).getBytes(StandardCharsets.ISO_8859_1);
   }
 
-  public static byte[] utf8Value(String value) {
-    return escapedString(value, false).getBytes(StandardCharsets.UTF_8);
+  public static byte[] utf8Value(String value, boolean escapeNonAscii) {
+    return escapedString(value, escapeNonAscii ? 0x7f : 0xffff).getBytes(StandardCharsets.UTF_8);
   }
 
-  private static String escapedString(String value, boolean escapeNonLatin1) {
+  private static String escapedString(String value, int maxUnescaped) {
     StringBuilder builder = new StringBuilder(value.length() + 2);
-    appendQuoted(builder, value, escapeNonLatin1);
+    appendQuoted(builder, value, maxUnescaped);
     return builder.toString();
   }
 
-  private static void appendQuoted(StringBuilder builder, String value, boolean escapeNonLatin1) {
+  private static void appendQuoted(StringBuilder builder, String value, int maxUnescaped) {
     builder.append('"');
     int length = value.length();
     for (int i = 0; i < length; i++) {
@@ -90,7 +90,7 @@ public final class JsonStringEscaper {
             if (!Character.isLowSurrogate(low)) {
               throw new ForyJsonException("Unpaired high surrogate in string");
             }
-            if (escapeNonLatin1) {
+            if (ch > maxUnescaped) {
               appendUnicodeEscape(builder, ch);
               appendUnicodeEscape(builder, low);
             } else {
@@ -99,7 +99,7 @@ public final class JsonStringEscaper {
             }
           } else if (Character.isLowSurrogate(ch)) {
             throw new ForyJsonException("Unpaired low surrogate in string");
-          } else if (ch < 0x20 || escapeNonLatin1 && ch > 0xff) {
+          } else if (ch < 0x20 || ch > maxUnescaped) {
             appendUnicodeEscape(builder, ch);
           } else {
             builder.append(ch);

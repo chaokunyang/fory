@@ -447,6 +447,16 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
    */
   @Override
   public void writeString(String value) {
+    if (escapeNonAscii) {
+      if (STRING_BYTES_BACKED
+          && !StringSerializer.isLatin1Coder(StringSerializer.getStringCoder(value))) {
+        writeEscapedUtf16(StringSerializer.getStringBytes(value));
+      } else {
+        writeByteRaw((byte) '"');
+        writeStringSlow(value, 0, value.length());
+      }
+      return;
+    }
     if (STRING_BYTES_BACKED) {
       byte[] stringBytes = StringSerializer.getStringBytes(value);
       int length = stringBytes.length;
@@ -543,6 +553,11 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   public void writeString(CharSequence value) {
     if (value instanceof String) {
       writeString((String) value);
+      return;
+    }
+    if (escapeNonAscii) {
+      writeByteRaw((byte) '"');
+      writeStringSlow(value, 0, value.length());
       return;
     }
     writeStringChars(value);
@@ -2352,6 +2367,80 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     return ch >= 0x800 && (ch < Character.MIN_SURROGATE || ch > Character.MAX_SURROGATE);
   }
 
+  private void writeEscapedUtf16(byte[] value) {
+    writeByteRaw((byte) '"');
+    int length = value.length;
+    int i = 0;
+    while (i < length) {
+      int end = i + Math.min(length - i, 512);
+      // Bound the reservation. A pair crossing the chunk end needs six extra bytes, and
+      // the last packed store needs two more bytes beyond its logical end.
+      int additional = (end - i) * 3 + 8;
+      if (buffer.length - position < additional) {
+        grow(additional);
+      }
+      byte[] bytes = buffer;
+      int pos = position;
+      long[] escapes = UnicodeEscapes.TOKENS;
+      // Four independent characters expose parallel loads/stores and share cursor updates.
+      while (i <= end - 8) {
+        char c0 = StringSerializer.getBytesChar(value, i);
+        char c1 = StringSerializer.getBytesChar(value, i + 2);
+        char c2 = StringSerializer.getBytesChar(value, i + 4);
+        char c3 = StringSerializer.getBytesChar(value, i + 6);
+        if (c0 <= 0x7f
+            || c1 <= 0x7f
+            || c2 <= 0x7f
+            || c3 <= 0x7f
+            || (c0 & 0xf800) == 0xd800
+            || (c1 & 0xf800) == 0xd800
+            || (c2 & 0xf800) == 0xd800
+            || (c3 & 0xf800) == 0xd800) {
+          break;
+        }
+        long e0 = escapes[c0];
+        long e1 = escapes[c1];
+        long e2 = escapes[c2];
+        long e3 = escapes[c3];
+        // Four six-byte escapes fill three consecutive words without overlapping stores.
+        LittleEndian.putInt64(bytes, pos, e0 | (e1 << 48));
+        LittleEndian.putInt64(bytes, pos + 8, (e1 >>> 16) | (e2 << 32));
+        LittleEndian.putInt64(bytes, pos + 16, (e2 >>> 32) | (e3 << 16));
+        pos += 24;
+        i += 8;
+      }
+      while (i < end) {
+        char ch = StringSerializer.getBytesChar(value, i);
+        i += 2;
+        if (ch > 0x7f) {
+          if (Character.isSurrogate(ch)) {
+            if (!Character.isHighSurrogate(ch) || i == length) {
+              throw new ForyJsonException("Unpaired surrogate in string");
+            }
+            char low = StringSerializer.getBytesChar(value, i);
+            i += 2;
+            if (!Character.isLowSurrogate(low)) {
+              throw new ForyJsonException("Unpaired high surrogate in string");
+            }
+            LittleEndian.putInt64(bytes, pos, escapes[ch]);
+            pos += 6;
+            ch = low;
+          }
+          LittleEndian.putInt64(bytes, pos, escapes[ch]);
+          pos += 6;
+        } else if (ch >= 0x20 && ch != '"' && ch != '\\') {
+          bytes[pos++] = (byte) ch;
+        } else {
+          position = pos;
+          writeEscapedChar(ch);
+          pos = position;
+        }
+      }
+      position = pos;
+    }
+    writeByteRaw((byte) '"');
+  }
+
   private void writeEscapedChar(char ch) {
     switch (ch) {
       case '"':
@@ -2376,7 +2465,7 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
         writeAscii("\\t");
         return;
       default:
-        if (ch < 0x20) {
+        if (ch < 0x20 || (escapeNonAscii && ch > 0x7f)) {
           writeUnicodeEscape(ch);
         } else if (ch < 0x80) {
           writeByteRaw((byte) ch);
@@ -2414,7 +2503,12 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
         if (!Character.isLowSurrogate(low)) {
           throw new ForyJsonException("Unpaired high surrogate in string");
         }
-        writeCodePoint(Character.toCodePoint(ch, low));
+        if (escapeNonAscii) {
+          writeUnicodeEscape(ch);
+          writeUnicodeEscape(low);
+        } else {
+          writeCodePoint(Character.toCodePoint(ch, low));
+        }
       } else if (Character.isLowSurrogate(ch)) {
         throw new ForyJsonException("Unpaired low surrogate in string");
       } else {
@@ -2435,7 +2529,12 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
         if (!Character.isLowSurrogate(low)) {
           throw new ForyJsonException("Unpaired high surrogate in string");
         }
-        writeCodePoint(Character.toCodePoint(ch, low));
+        if (escapeNonAscii) {
+          writeUnicodeEscape(ch);
+          writeUnicodeEscape(low);
+        } else {
+          writeCodePoint(Character.toCodePoint(ch, low));
+        }
       } else if (Character.isLowSurrogate(ch)) {
         throw new ForyJsonException("Unpaired low surrogate in string");
       } else {
@@ -2485,16 +2584,13 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
 
   private void writeUnicodeEscape(char ch) {
     int pos = position;
-    if (pos + 6 > buffer.length) {
-      grow(6);
+    if (pos + 8 > buffer.length) {
+      grow(8);
     }
-    byte[] bytes = buffer;
-    bytes[pos] = '\\';
-    bytes[pos + 1] = 'u';
-    bytes[pos + 2] = '0';
-    bytes[pos + 3] = '0';
-    bytes[pos + 4] = (byte) hex((ch >>> 4) & 0xF);
-    bytes[pos + 5] = (byte) hex(ch & 0xF);
+    // Base16's table encodes the low byte first; Unicode escapes need the high byte first.
+    long digits = Integer.rotateLeft(HexDigits.QUADS[ch], 16) & 0xffffffffL;
+    // Reserve the full store, including two bytes beyond the logical six-character escape.
+    LittleEndian.putInt64(buffer, pos, 0x755cL | (digits << 16));
     position = pos + 6;
   }
 

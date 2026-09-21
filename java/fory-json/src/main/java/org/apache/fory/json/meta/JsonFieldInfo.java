@@ -49,6 +49,7 @@ import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.JsonStringEscaper;
+import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.memory.NativeByteOrder;
@@ -1172,6 +1173,9 @@ public final class JsonFieldInfo {
   }
 
   public boolean writeString(StringJsonWriter writer, Object object, int index) {
+    if (writer.prettyPrint()) {
+      return writePrettyString(writer, object, index);
+    }
     switch (writeKindId) {
       case KIND_BOOLEAN_AS_STRING:
         if (!writeRawType.isPrimitive()) {
@@ -1271,6 +1275,9 @@ public final class JsonFieldInfo {
   }
 
   public boolean writeUtf8(Utf8JsonWriter writer, Object object, int index) {
+    if (writer.prettyPrint()) {
+      return writePrettyUtf8(writer, object, index);
+    }
     switch (writeKindId) {
       case KIND_BOOLEAN_AS_STRING:
         if (!writeRawType.isPrimitive()) {
@@ -1364,6 +1371,82 @@ public final class JsonFieldInfo {
       default:
         return writeUtf8Object(writer, object, index);
     }
+  }
+
+  private boolean writePrettyString(StringJsonWriter writer, Object object, int index) {
+    if (writePrettyPrimitive(writer, object, index)) {
+      return true;
+    }
+    if (writeKindId == KIND_UNBOXED) {
+      return writeStringUnboxed(writer, object, index);
+    }
+    if (writeKindId == KIND_RAW_STRING) {
+      return writeStringRaw(writer, object, index);
+    }
+    return writeStringObject(writer, object, index);
+  }
+
+  private boolean writePrettyUtf8(Utf8JsonWriter writer, Object object, int index) {
+    if (writePrettyPrimitive(writer, object, index)) {
+      return true;
+    }
+    if (writeKindId == KIND_UNBOXED) {
+      return writeUtf8Unboxed(writer, object, index);
+    }
+    if (writeKindId == KIND_RAW_STRING) {
+      return writeUtf8Raw(writer, object, index);
+    }
+    return writeUtf8Object(writer, object, index);
+  }
+
+  private boolean writePrettyPrimitive(JsonWriter writer, Object object, int index) {
+    if (writeKindId != KIND_NULL
+        && (!writeRawType.isPrimitive()
+            || writeKindId > KIND_CHAR
+                && writeKindId != KIND_LONG_AS_STRING
+                && writeKindId != KIND_BOOLEAN_AS_STRING)) {
+      return false;
+    }
+    writer.writeComma(index);
+    writer.writeFieldName(this);
+    switch (writeKindId) {
+      case KIND_BOOLEAN:
+        writer.writeBoolean(writeAccessor.getBoolean(object));
+        break;
+      case KIND_BOOLEAN_AS_STRING:
+        writer.writeBooleanAsString(writeAccessor.getBoolean(object));
+        break;
+      case KIND_BYTE:
+        writer.writeInt(writeAccessor.getByte(object));
+        break;
+      case KIND_SHORT:
+        writer.writeInt(writeAccessor.getShort(object));
+        break;
+      case KIND_INT:
+        writer.writeInt(writeAccessor.getInt(object));
+        break;
+      case KIND_LONG:
+        writer.writeLong(writeAccessor.getLong(object));
+        break;
+      case KIND_LONG_AS_STRING:
+        writer.writeLongAsString(writeAccessor.getLong(object));
+        break;
+      case KIND_FLOAT:
+        writer.writeFloat(writeAccessor.getFloat(object));
+        break;
+      case KIND_DOUBLE:
+        writer.writeDouble(writeAccessor.getDouble(object));
+        break;
+      case KIND_CHAR:
+        writer.writeChar(writeAccessor.getChar(object));
+        break;
+      case KIND_NULL:
+        writer.writeNull();
+        break;
+      default:
+        throw new AssertionError(writeKindId);
+    }
+    return true;
   }
 
   private boolean writeStringObject(StringJsonWriter writer, Object object, int index) {

@@ -102,9 +102,11 @@ final class GeneratedCodecKeyBuilder {
         rawType,
         typeInfo.typeRef(),
         elementType,
-        kind == JsonTypeResolver.CapabilityKind.UTF8_WRITER
-            ? Role.UTF8_COLLECTION_WRITER
-            : Role.UTF8_COLLECTION_READER,
+        kind == JsonTypeResolver.CapabilityKind.STRING_WRITER
+            ? Role.STRING_COLLECTION_WRITER
+            : kind == JsonTypeResolver.CapabilityKind.UTF8_WRITER
+                ? Role.UTF8_COLLECTION_WRITER
+                : Role.UTF8_COLLECTION_READER,
         owner instanceof CollectionCodec.StringCollectionCodec);
   }
 

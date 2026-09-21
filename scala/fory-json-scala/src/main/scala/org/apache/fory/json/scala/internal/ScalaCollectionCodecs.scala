@@ -101,8 +101,9 @@ private[scala] final class ScalaListCodec(
       return
     }
     val codec = elementInfo.utf8Writer()
-    val booleanElements = (codec eq ScalarCodecs.NaturalCodec.INSTANCE) ||
-      (codec eq ScalarCodecs.BooleanCodec.PRIMITIVE) || (codec eq ScalarCodecs.BooleanCodec.BOXED)
+    val booleanElements = !writer.prettyPrint() &&
+      ((codec eq ScalarCodecs.NaturalCodec.INSTANCE) ||
+        (codec eq ScalarCodecs.BooleanCodec.PRIMITIVE) || (codec eq ScalarCodecs.BooleanCodec.BOXED))
     writer.writeArrayStart()
     var current = value
     if (current ne Nil) {
@@ -330,7 +331,7 @@ private[scala] final class ScalaIterableCodec(
     val codec = elementInfo.utf8Writer()
     // Sets have at most two Boolean values and keep their ordinary element loop.
     if (
-      sequence &&
+      sequence && !writer.prettyPrint() &&
       ((codec eq ScalarCodecs.NaturalCodec.INSTANCE) ||
         (codec eq ScalarCodecs.BooleanCodec.PRIMITIVE) || (codec eq ScalarCodecs.BooleanCodec.BOXED))
     ) {

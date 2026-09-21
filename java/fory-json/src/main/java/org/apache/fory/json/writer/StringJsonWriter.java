@@ -749,15 +749,28 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
   @Override
   public void writeFieldName(String name) {
     writeString(name);
-    writeByteRaw((byte) ':');
+    if (prettyPrint) {
+      writeAscii(" : ");
+    } else {
+      writeByteRaw((byte) ':');
+    }
   }
 
   @Override
   public void writeFieldName(JsonFieldInfo field) {
     writeRaw(field.stringNamePrefix());
+    if (prettyPrint) {
+      position -= 1 << coder;
+      writeAscii(" : ");
+    }
   }
 
   public void writeFieldName(JsonFieldInfo field, int index) {
+    if (prettyPrint) {
+      writeComma(index);
+      writeFieldName(field);
+      return;
+    }
     writeRaw(index == 0 ? field.stringNamePrefix() : field.stringCommaNamePrefix());
   }
 
@@ -792,7 +805,11 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
     writeByteRaw((byte) '"');
     writeInt(value);
     writeByteRaw((byte) '"');
-    writeByteRaw((byte) ':');
+    if (prettyPrint) {
+      writeAscii(" : ");
+    } else {
+      writeByteRaw((byte) ':');
+    }
   }
 
   @Override
@@ -800,7 +817,11 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
     writeByteRaw((byte) '"');
     writeLong(value);
     writeByteRaw((byte) '"');
-    writeByteRaw((byte) ':');
+    if (prettyPrint) {
+      writeAscii(" : ");
+    } else {
+      writeByteRaw((byte) ':');
+    }
   }
 
   @Override
@@ -808,7 +829,11 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
     writeByteRaw((byte) '"');
     writeUnsignedLong(value);
     writeByteRaw((byte) '"');
-    writeByteRaw((byte) ':');
+    if (prettyPrint) {
+      writeAscii(" : ");
+    } else {
+      writeByteRaw((byte) ':');
+    }
   }
 
   public void writeBooleanField(
@@ -1422,9 +1447,7 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
   }
 
   public void writeStringElement(int index, String value) {
-    if (index != 0) {
-      writeByteRaw((byte) ',');
-    }
+    writeComma(index);
     if (value == null) {
       writeNull();
       return;
@@ -1667,10 +1690,16 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
   public void writeObjectStart() {
     enterDepth();
     writeByteRaw((byte) '{');
+    if (prettyPrint) {
+      writeContainerStartIndent();
+    }
   }
 
   @Override
   public void writeObjectEnd() {
+    if (prettyPrint) {
+      writeContainerEndIndent();
+    }
     writeByteRaw((byte) '}');
     exitDepth();
   }
@@ -1679,10 +1708,16 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
   public void writeArrayStart() {
     enterDepth();
     writeByteRaw((byte) '[');
+    if (prettyPrint) {
+      writeContainerStartIndent();
+    }
   }
 
   @Override
   public void writeArrayEnd() {
+    if (prettyPrint) {
+      writeContainerEndIndent();
+    }
     writeByteRaw((byte) ']');
     exitDepth();
   }
@@ -1691,6 +1726,43 @@ public final class StringJsonWriter extends JsonWriter implements Appendable {
   public void writeComma(int index) {
     if (index != 0) {
       writeByteRaw((byte) ',');
+      if (prettyPrint) {
+        writeIndent(getDepth());
+      }
+    }
+  }
+
+  // Keep indentation bookkeeping out of the compact structural methods' inline budget.
+  private void writeContainerStartIndent() {
+    writeIndent(getDepth());
+    emptyContainerPosition = position >> coder;
+  }
+
+  private void writeContainerEndIndent() {
+    if ((position >> coder) == emptyContainerPosition) {
+      position -= (1 + getDepth() * 2) << coder;
+      writeByteRaw((byte) ' ');
+    } else {
+      writeIndent(getDepth() - 1);
+    }
+    emptyContainerPosition = -1;
+  }
+
+  private void writeIndent(int depth) {
+    int count = 1 + depth * 2;
+    int bytes = count << coder;
+    if (bytes > buffer.length - position) {
+      grow(bytes);
+    }
+    if (coder == LATIN1) {
+      buffer[position++] = '\n';
+      Arrays.fill(buffer, position, position + count - 1, (byte) ' ');
+      position += count - 1;
+    } else {
+      position = putUtf16Char(buffer, position, '\n');
+      for (int i = 1; i < count; i++) {
+        position = putUtf16Char(buffer, position, ' ');
+      }
     }
   }
 

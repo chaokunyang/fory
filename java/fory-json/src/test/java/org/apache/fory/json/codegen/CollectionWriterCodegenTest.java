@@ -25,19 +25,27 @@ import static org.testng.Assert.assertTrue;
 
 import java.util.ArrayList;
 import org.apache.fory.json.codec.ArrayListCodecSupport;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
-public class Utf8CollectionWriterCodegenTest {
-  @Test
-  public void directArrayListElements() {
-    Utf8CollectionWriterCodegen codegen = new Utf8CollectionWriterCodegen();
-    String source = codegen.genCode("example", "Strings", true);
-    String objectSource = codegen.genCode("example", "Objects", false);
+public class CollectionWriterCodegenTest {
+  @DataProvider
+  public Object[][] representations() {
+    return new Object[][] {{false}, {true}};
+  }
+
+  @Test(dataProvider = "representations")
+  public void directArrayListElements(boolean utf8) {
+    CollectionWriterCodegen codegen = new CollectionWriterCodegen();
+    String source = codegen.genCode("example", "Strings", true, utf8);
+    String objectSource = codegen.genCode("example", "Objects", false, utf8);
+    String writeMethod = utf8 ? "writeUtf8" : "writeString";
     if (ArrayListCodecSupport.isAvailable()) {
       assertTrue(source.contains("ArrayListCodecSupport.elements(list)"));
       assertTrue(source.contains("String element = (String) elements[index]"));
       assertFalse(source.contains("list.get(index)"));
-      assertTrue(objectSource.contains("elementWriter.writeUtf8(writer, elements[index])"));
+      assertTrue(
+          objectSource.contains("elementWriter." + writeMethod + "(writer, elements[index])"));
       assertFalse(objectSource.contains("list.get(index)"));
 
       ArrayList<String> values = new ArrayList<>();
@@ -46,7 +54,8 @@ public class Utf8CollectionWriterCodegenTest {
     } else {
       assertTrue(source.contains("String element = (String) list.get(index)"));
       assertFalse(source.contains("ArrayListCodecSupport.elements(list)"));
-      assertTrue(objectSource.contains("elementWriter.writeUtf8(writer, list.get(index))"));
+      assertTrue(
+          objectSource.contains("elementWriter." + writeMethod + "(writer, list.get(index))"));
     }
   }
 }

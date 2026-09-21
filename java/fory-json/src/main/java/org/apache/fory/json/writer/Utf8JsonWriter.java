@@ -1210,15 +1210,28 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   @Override
   public void writeFieldName(String name) {
     writeString(name);
-    writeByteRaw((byte) ':');
+    if (prettyPrint) {
+      writeAscii(" : ");
+    } else {
+      writeByteRaw((byte) ':');
+    }
   }
 
   @Override
   public void writeFieldName(JsonFieldInfo field) {
     writeRaw(field.utf8NamePrefix());
+    if (prettyPrint) {
+      position--;
+      writeAscii(" : ");
+    }
   }
 
   public void writeFieldName(JsonFieldInfo field, int index) {
+    if (prettyPrint) {
+      writeComma(index);
+      writeFieldName(field);
+      return;
+    }
     writeRaw(index == 0 ? field.utf8NamePrefix() : field.utf8CommaNamePrefix());
   }
 
@@ -1234,6 +1247,12 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
 
   @Override
   public void writeIntFieldName(int value) {
+    if (prettyPrint) {
+      writeByteRaw((byte) '"');
+      writeInt(value);
+      writeAscii("\" : ");
+      return;
+    }
     // One reservation covers the sign, ten digits, both quotes, and the colon.
     if (position + 14 > buffer.length) {
       grow(14);
@@ -1250,7 +1269,11 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     writeByteRaw((byte) '"');
     writeLong(value);
     writeByteRaw((byte) '"');
-    writeByteRaw((byte) ':');
+    if (prettyPrint) {
+      writeAscii(" : ");
+    } else {
+      writeByteRaw((byte) ':');
+    }
   }
 
   @Override
@@ -1258,7 +1281,11 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     writeByteRaw((byte) '"');
     writeUnsignedLong(value);
     writeByteRaw((byte) '"');
-    writeByteRaw((byte) ':');
+    if (prettyPrint) {
+      writeAscii(" : ");
+    } else {
+      writeByteRaw((byte) ':');
+    }
   }
 
   public void writeBooleanField(
@@ -1566,6 +1593,10 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
    * assumptions.
    */
   public void writeLongArray(long[] values) {
+    if (prettyPrint) {
+      writePrettyLongArray(values, false);
+      return;
+    }
     enterDepth();
     if (position + 2 > buffer.length) {
       grow(2);
@@ -1671,6 +1702,10 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
    * callers do not absorb the complete array loop after a small element helper is inlined.
    */
   public void writeLongArrayAsString(long[] values) {
+    if (prettyPrint) {
+      writePrettyLongArray(values, true);
+      return;
+    }
     enterDepth();
     if (position + 2 > buffer.length) {
       grow(2);
@@ -1781,6 +1816,15 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   }
 
   private void writeStringElementWithComma(int comma, String value) {
+    if (prettyPrint) {
+      writeComma(comma);
+      if (value == null) {
+        writeNull();
+      } else {
+        writeString(value);
+      }
+      return;
+    }
     if (value == null) {
       writeNullStringElement(comma);
       return;
@@ -1979,10 +2023,16 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   public void writeObjectStart() {
     enterDepth();
     writeByteRaw((byte) '{');
+    if (prettyPrint) {
+      writeContainerStartIndent();
+    }
   }
 
   @Override
   public void writeObjectEnd() {
+    if (prettyPrint) {
+      writeContainerEndIndent();
+    }
     writeByteRaw((byte) '}');
     exitDepth();
   }
@@ -1991,10 +2041,16 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
   public void writeArrayStart() {
     enterDepth();
     writeByteRaw((byte) '[');
+    if (prettyPrint) {
+      writeContainerStartIndent();
+    }
   }
 
   @Override
   public void writeArrayEnd() {
+    if (prettyPrint) {
+      writeContainerEndIndent();
+    }
     writeByteRaw((byte) ']');
     exitDepth();
   }
@@ -2008,7 +2064,56 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
       }
       buffer[pos] = (byte) ',';
       position = pos + 1;
+      if (prettyPrint) {
+        writeIndent(getDepth());
+      }
     }
+  }
+
+  // Keep indentation bookkeeping out of the compact structural methods' inline budget.
+  private void writeContainerStartIndent() {
+    writeIndent(getDepth());
+    emptyContainerPosition = position;
+  }
+
+  private void writeContainerEndIndent() {
+    if (position == emptyContainerPosition) {
+      position -= 1 + getDepth() * 2;
+      writeByteRaw((byte) ' ');
+    } else {
+      writeIndent(getDepth() - 1);
+    }
+    emptyContainerPosition = -1;
+  }
+
+  private void writeIndent(int depth) {
+    int count = 1 + depth * 2;
+    int pos = position;
+    // Reserve the final padded word too; bytes beyond the logical indentation are overwritten by
+    // the next token. Short indentations then need only one or two stores, without a copy stub.
+    int additional = (count + Long.BYTES - 1) & -Long.BYTES;
+    if (additional > buffer.length - pos) {
+      grow(additional);
+    }
+    byte[] bytes = buffer;
+    LittleEndian.putInt64(bytes, pos, 0x202020202020200aL);
+    for (int offset = Long.BYTES; offset < count; offset += Long.BYTES) {
+      LittleEndian.putInt64(bytes, pos + offset, 0x2020202020202020L);
+    }
+    position = pos + count;
+  }
+
+  private void writePrettyLongArray(long[] values, boolean quoted) {
+    writeArrayStart();
+    for (int i = 0; i < values.length; i++) {
+      writeComma(i);
+      if (quoted) {
+        writeLongAsString(values[i]);
+      } else {
+        writeLong(values[i]);
+      }
+    }
+    writeArrayEnd();
   }
 
   private boolean writeLongLatin1StringNoEnsure(byte[] value, int length) {

@@ -730,10 +730,17 @@ public class JsonAsyncCompilationTest {
     Object initialFriendWriter = friendInfo.utf8Writer();
     Object initialChildrenWriter = writtenChildrenInfo.utf8Writer();
     Object initialFriendsWriter = writtenFriendsInfo.utf8Writer();
+    JsonTypeInfo[] stringGraph = {
+      rootInfo, childInfo, friendInfo, writtenChildrenInfo, writtenFriendsInfo
+    };
+    Object[] initialStringWriters = new Object[stringGraph.length];
+    for (int i = 0; i < stringGraph.length; i++) {
+      initialStringWriters[i] = stringGraph[i].stringWriter();
+    }
     assertEquals(new String(controlled.json.toJsonBytes(initial), StandardCharsets.UTF_8), input);
 
     int pendingTasks = controlled.executor.pendingTasks();
-    assertEquals(pendingTasks, 19);
+    assertEquals(pendingTasks, 21);
     for (int i = 0; i < pendingTasks; i++) {
       controlled.executor.runNext();
       boolean initialReaderGraph =
@@ -763,8 +770,20 @@ public class JsonAsyncCompilationTest {
               && writtenChildrenInfo.utf8Writer() != initialChildrenWriter
               && writtenFriendsInfo.utf8Writer() != initialFriendsWriter;
       assertTrue(initialWriterGraph || generatedWriterGraph);
+      int installedStringWriters = 0;
+      for (int j = 0; j < stringGraph.length; j++) {
+        if (stringGraph[j].stringWriter() != initialStringWriters[j]) {
+          installedStringWriters++;
+        }
+      }
+      assertTrue(installedStringWriters == 0 || installedStringWriters == stringGraph.length);
     }
 
+    for (int i = 0; i < stringGraph.length; i++) {
+      assertNotSame(stringGraph[i].stringWriter(), initialStringWriters[i]);
+    }
+    assertFinalField(writtenChildrenInfo.stringWriter(), "elementWriter", childInfo.stringWriter());
+    assertFinalField(writtenFriendsInfo.stringWriter(), "elementWriter", friendInfo.stringWriter());
     assertNotSame(rootInfo.utf8Reader(), rootOwner);
     assertNotSame(childInfo.utf8Reader(), childOwner);
     assertNotSame(friendInfo.utf8Reader(), friendOwner);
@@ -804,11 +823,13 @@ public class JsonAsyncCompilationTest {
     assertEquals(generated.children.get(8).id, 9);
     assertEquals(generated.friends.get(0).id, 10);
     assertEquals(new String(controlled.json.toJsonBytes(generated), StandardCharsets.UTF_8), input);
+    assertEquals(controlled.json.toJson(generated), input);
 
     AsyncCollections fallback = new AsyncCollections();
     fallback.children = new LinkedList<>(generated.children);
     fallback.friends = new LinkedList<>(generated.friends);
     assertEquals(new String(controlled.json.toJsonBytes(fallback), StandardCharsets.UTF_8), input);
+    assertEquals(controlled.json.toJson(fallback), input);
 
     AsyncCollections empty =
         controlled.json.fromJson(

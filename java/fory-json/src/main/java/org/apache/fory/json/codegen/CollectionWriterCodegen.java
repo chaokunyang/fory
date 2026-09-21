@@ -22,45 +22,50 @@ package org.apache.fory.json.codegen;
 import java.util.ArrayList;
 import org.apache.fory.codegen.CodegenContext;
 import org.apache.fory.json.codec.ArrayListCodecSupport;
+import org.apache.fory.json.codec.StringWriterCodec;
 import org.apache.fory.json.codec.Utf8WriterCodec;
+import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 
-/** Generates one exact declared UTF-8 collection capability. */
-final class Utf8CollectionWriterCodegen {
-  String genCode(String generatedPackage, String className, boolean stringElements) {
+/** Generates one exact declared collection writer capability. */
+final class CollectionWriterCodegen {
+  String genCode(String generatedPackage, String className, boolean stringElements, boolean utf8) {
+    Class<?> codecType = utf8 ? Utf8WriterCodec.class : StringWriterCodec.class;
+    Class<?> writerType = utf8 ? Utf8JsonWriter.class : StringJsonWriter.class;
+    String writeMethod = utf8 ? "writeUtf8" : "writeString";
     CodegenContext ctx = new CodegenContext();
     ctx.setPackage(generatedPackage);
     ctx.setClassName(className);
     ctx.setClassModifiers("final");
-    ctx.addImports(
-        ArrayList.class, ArrayListCodecSupport.class, Utf8JsonWriter.class, Utf8WriterCodec.class);
-    ctx.implementsInterfaces(ctx.type(Utf8WriterCodec.class));
-    ctx.addField(true, ctx.type(Utf8WriterCodec.class), "fallback", null);
+    ctx.addImports(ArrayList.class, ArrayListCodecSupport.class, writerType, codecType);
+    ctx.implementsInterfaces(ctx.type(codecType));
+    ctx.addField(true, ctx.type(codecType), "fallback", null);
     if (stringElements) {
-      ctx.addConstructor("this.fallback = fallback;", Utf8WriterCodec.class, "fallback");
+      ctx.addConstructor("this.fallback = fallback;", codecType, "fallback");
     } else {
-      ctx.addField(true, ctx.type(Utf8WriterCodec.class), "elementWriter", null);
+      ctx.addField(true, ctx.type(codecType), "elementWriter", null);
       ctx.addConstructor(
           "this.fallback = fallback;\nthis.elementWriter = elementWriter;",
-          Utf8WriterCodec.class,
+          codecType,
           "fallback",
-          Utf8WriterCodec.class,
+          codecType,
           "elementWriter");
     }
     ctx.addMethod(
         "@Override public final",
-        "writeUtf8",
-        writeBody(stringElements, ArrayListCodecSupport.isAvailable()),
+        writeMethod,
+        writeBody(stringElements, ArrayListCodecSupport.isAvailable(), writeMethod),
         void.class,
-        Utf8JsonWriter.class,
+        writerType,
         "writer",
         Object.class,
         "value");
     return ctx.genCode();
   }
 
-  private static String writeBody(boolean stringElements, boolean directElements) {
-    // The collection owns iteration and calls the final element codec's ordinary writeUtf8 entry.
+  private static String writeBody(
+      boolean stringElements, boolean directElements, String writeMethod) {
+    // The collection owns iteration and calls the final element codec's ordinary writer entry.
     // That entry owns null handling and any generated object-group boundaries; do not copy the
     // element object's schema work into this loop.
     //
@@ -81,7 +86,11 @@ final class Utf8CollectionWriterCodegen {
                 + "  } else {\n"
                 + "    writer.writeString(element);\n"
                 + "  }"
-            : "writer.writeComma(index);\n" + "  elementWriter.writeUtf8(writer, " + element + ");";
+            : "writer.writeComma(index);\n  elementWriter."
+                + writeMethod
+                + "(writer, "
+                + element
+                + ");";
     String elements =
         directElements
             ? "int size = list.size();\n"
@@ -96,7 +105,9 @@ final class Utf8CollectionWriterCodegen {
         + "  return;\n"
         + "}\n"
         + "if (value.getClass() != ArrayList.class) {\n"
-        + "  fallback.writeUtf8(writer, value);\n"
+        + "  fallback."
+        + writeMethod
+        + "(writer, value);\n"
         + "  return;\n"
         + "}\n"
         + "ArrayList list = (ArrayList) value;\n"

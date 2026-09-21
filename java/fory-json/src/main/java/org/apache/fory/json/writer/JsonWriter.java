@@ -61,6 +61,11 @@ public abstract class JsonWriter {
   private static final long MAX_ISO_INSTANT_SECOND = 31_556_889_864_403_199L;
   private final JsonTypeResolver typeResolver;
   private final int maxDepth;
+  protected boolean prettyPrint;
+  // Indentation is emitted with the opening delimiter, including for custom codecs that omit
+  // writeComma(0). Only the newest container can still be empty; closing it clears this marker.
+  // Positions count characters so String writer widening does not invalidate the marker.
+  protected int emptyContainerPosition = -1;
   private int depth;
 
   JsonWriter(JsonConfig config, JsonTypeResolver typeResolver) {
@@ -77,6 +82,20 @@ public abstract class JsonWriter {
 
   public void reset() {
     depth = 0;
+    emptyContainerPosition = -1;
+    prettyPrint = false;
+  }
+
+  /** Returns whether structural writes include indentation. */
+  @Internal
+  public final boolean prettyPrint() {
+    return prettyPrint;
+  }
+
+  /** Selects the format for the next root write; reset clears it even after a failed operation. */
+  @Internal
+  public final void setPrettyPrint(boolean prettyPrint) {
+    this.prettyPrint = prettyPrint;
   }
 
   @Internal

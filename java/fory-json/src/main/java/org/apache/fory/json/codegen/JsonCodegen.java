@@ -171,20 +171,24 @@ public final class JsonCodegen {
   }
 
   @Internal
-  public Class<?> compileUtf8CollectionWriter(GeneratedCodecKey key) {
+  public Class<?> compileCollectionWriter(GeneratedCodecKey key) {
     Class<?> elementType = key.collectionElementClass();
     String generatedPackage = CodeGenerator.getPackage(elementType);
     return compile(
         key,
         elementType,
         compiler ->
-            compiler.buildUtf8CollectionWriter(generatedPackage, key.stringCollectionElements()));
+            compiler.buildCollectionWriter(
+                generatedPackage,
+                key.stringCollectionElements(),
+                key.role() == GeneratedCodecKey.Role.UTF8_COLLECTION_WRITER));
   }
 
-  private Class<?> buildUtf8CollectionWriter(String generatedPackage, boolean stringElements) {
+  private Class<?> buildCollectionWriter(
+      String generatedPackage, boolean stringElements, boolean utf8) {
     String className = className();
     String code =
-        new Utf8CollectionWriterCodegen().genCode(generatedPackage, className, stringElements);
+        new CollectionWriterCodegen().genCode(generatedPackage, className, stringElements, utf8);
     return compileCodecClass(generatedPackage, className, code);
   }
 
@@ -1220,7 +1224,7 @@ public final class JsonCodegen {
   public static boolean usesUtf8WriteCodec(JsonFieldInfo field, JsonTypeResolver resolver) {
     return usesWriteCodec(field)
         || field.writeKind() == JsonFieldKind.COLLECTION
-            && resolver.exactUtf8WriterCollection(field.writeTypeInfo()) != null;
+            && resolver.exactWriterCollection(field.writeTypeInfo()) != null;
   }
 
   static boolean writesStringCollectionDirectly(JsonFieldInfo field) {
@@ -1274,6 +1278,9 @@ public final class JsonCodegen {
     if (typeInfo.usesAnnotationCodec()) {
       return StringWriterCodec.class;
     }
+    if (resolver.exactWriterCollection(typeInfo) != null) {
+      return StringWriterCodec.class;
+    }
     if (resolver.canonicalObjectCodec(typeInfo) != null) {
       return StringWriterCodec.class;
     }
@@ -1288,7 +1295,7 @@ public final class JsonCodegen {
     if (typeInfo.usesAnnotationCodec()) {
       return Utf8WriterCodec.class;
     }
-    if (resolver.exactUtf8WriterCollection(typeInfo) != null) {
+    if (resolver.exactWriterCollection(typeInfo) != null) {
       return Utf8WriterCodec.class;
     }
     if (resolver.canonicalObjectCodec(typeInfo) != null) {

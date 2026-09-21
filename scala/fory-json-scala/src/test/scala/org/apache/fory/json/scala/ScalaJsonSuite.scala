@@ -1968,6 +1968,35 @@ class ScalaJsonSuite extends AnyFunSuite {
     }
   }
 
+  test("pretty object and collection output") {
+    val value = Box(List("ascii", "中文", "[]{}\\\""))
+    val declared = ScalaTypeRef[Box[List[String]]]
+    val expected = "{\n  \"value\" : [\n    \"ascii\",\n    \"中文\",\n    \"[]{}\\\\\\\"\"\n  ]\n}"
+    for (codegen <- Seq(false, true)) {
+      val json = ForyJsonScala
+        .builder()
+        .withCodegen(codegen)
+        .withAsyncCompilation(false)
+        .build()
+      assert(json.toPrettyJson(value) == expected)
+      assert(new String(json.toPrettyJsonBytes(value), UTF_8) == expected)
+      assert(json.fromJson(expected, declared) == value)
+      assert(json.fromJson(expected.getBytes(UTF_8), declared) == value)
+      val booleans = "[\n  true,\n  false,\n  true\n]"
+      for (values <- Seq(
+          List(true, false, true),
+          Vector(true, false, true),
+          scala.collection.immutable.ArraySeq(true, false, true))) {
+        assert(json.toPrettyJson(values) == booleans)
+        assert(new String(json.toPrettyJsonBytes(values), UTF_8) == booleans)
+        assert(json.toJson(values) == "[true,false,true]")
+      }
+      assert(
+        json.toPrettyJson((List.empty[Int], List(1, 2))) ==
+          "[\n  [ ],\n  [\n    1,\n    2\n  ]\n]")
+    }
+  }
+
   test("primitive generic case classes") {
     val cases: Seq[(Any, TypeRef[_], TypeRef[_])] = Seq(
       (true, ScalaTypeRef[Box[Boolean]], ScalaTypeRef[NamedBox[Boolean]]),

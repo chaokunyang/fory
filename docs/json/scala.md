@@ -161,6 +161,20 @@ val rangeType = ScalaTypeRef[scala.collection.immutable.NumericRange[Int]]
 val range = json.fromJson("[1,3,5,7]", rangeType)
 ```
 
+Use `ScalaTypeRef[Unit]` for a `Unit` root value:
+
+```scala
+val unitType = ScalaTypeRef[Unit]
+json.toJson((), unitType)       // "null"
+json.fromJson("null", unitType) // ()
+```
+
+`Unit` also works in case-class fields and nested types such as `List[Unit]`, `Array[Unit]`,
+and `Option[Unit]`. Each `Unit` value is encoded as JSON `null`. Under the value-or-null
+representation of `Option`, `Some(())` writes `null` and reads back as `None`.
+Do not pass `classOf[Unit]` to the Java `Class` overload: it denotes JVM `void`, which is
+rejected when writing a root value.
+
 `Some[Int]` is a valid declared type when supplied with its complete type argument. A non-null JSON
 value decodes to `Some(value)`; JSON `null` is rejected for `Some[Int]` but decodes to `None` for
 `Option[Int]`.

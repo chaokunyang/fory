@@ -11,6 +11,11 @@ Load this file when changing `scala/`.
   Explicit constructor defaults take precedence. Mutable defaults must be fresh for each object.
   Explicit JSON null keeps its existing decoding semantics. Preserve these rules in interpreted
   and generated readers.
+- Scala JSON data occurrences of Unit use BoxedUnit, including ScalaTypeRef roots, nested
+  arguments, array components, and case-class properties. Normalize this at Scala type metadata
+  construction in both compiler versions and reuse ScalaUnitCodec's JSON null representation.
+  Do not special-case Option or change Java VoidCodec to accept Scala values. The Java Class
+  writer overload continues to reject void; Scala callers use ScalaTypeRef[Unit].
 - Scala supports the JVM and GraalVM Native Image, not Android. Do not add Android-specific Scala
   sources, tests, resources, R8 metadata, compiler plugins, macros, dependencies, or compatibility
   design.

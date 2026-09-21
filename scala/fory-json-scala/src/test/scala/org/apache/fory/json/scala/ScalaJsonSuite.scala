@@ -150,6 +150,8 @@ case class LongStringValues(
 
 case class UnitValue(value: Unit)
 
+case class UnitFields(value: Unit, option: Option[Unit], values: List[Unit], array: Array[Unit])
+
 case class ExplicitNullable(
     @JsonProperty(include = JsonProperty.Include.ALWAYS) value: String
 )
@@ -1868,14 +1870,72 @@ class ScalaJsonSuite extends AnyFunSuite {
     }
   }
 
-  test("Unit and singletons") {
+  test("Unit type tokens") {
+    type Completion = Unit
+    val unitType = ScalaTypeRef[Completion]
+    assert(unitType.getRawType == classOf[scala.runtime.BoxedUnit])
     for (json <- runtimes) {
-      val unitType = classOf[scala.runtime.BoxedUnit]
-      assert(json.toJson(scala.runtime.BoxedUnit.UNIT, unitType) == "null")
-      assert(json.fromJson("null", unitType) != null)
+      assert(json.toJson((), unitType) == "null")
+      assert(new String(json.toJsonBytes((), unitType), UTF_8) == "null")
+      json.fromJson("null", unitType)
+      val boxedType = unitType.asInstanceOf[TypeRef[AnyRef]]
+      assert(json.fromJson("null", boxedType) eq scala.runtime.BoxedUnit.UNIT)
+      assert(json.fromJson("null".getBytes(UTF_8), boxedType) eq scala.runtime.BoxedUnit.UNIT)
       assertThrows[ForyJsonException](json.fromJson("1", unitType))
-      assertThrows[ForyJsonException](json.fromJson("""{"value":1}""", classOf[UnitValue]))
+      assertThrows[IllegalArgumentException](json.toJson((), classOf[Unit]))
+    }
+  }
 
+  test("Unit in parameterized types") {
+    val optionType = ScalaTypeRef[Option[Unit]]
+    val listType = ScalaTypeRef[List[Unit]]
+    val arrayType = ScalaTypeRef[Array[Unit]]
+    val boxType = ScalaTypeRef[Box[Unit]]
+    val nestedType = ScalaTypeRef[List[Option[Unit]]]
+    for (json <- runtimes) {
+      assert(json.toJson(Some(()): Option[Unit], optionType) == "null")
+      assert(json.fromJson("null", optionType) == None)
+      assertThrows[ForyJsonException](json.fromJson("1", optionType))
+      val values = roundTrip(json, List((), ()), listType)
+      assert(values.asInstanceOf[List[AnyRef]].forall(_ eq scala.runtime.BoxedUnit.UNIT))
+      assert(json.toJson(values, listType) == "[null,null]")
+      assert(json.toJson(Array((), ()), arrayType) == "[null,null]")
+      assert(new String(json.toJsonBytes(Array((), ()), arrayType), UTF_8) == "[null,null]")
+      for (array <- Seq(
+          json.fromJson("[null,null]", arrayType),
+          json.fromJson("[null,null]".getBytes(UTF_8), arrayType)
+        )) {
+        assert(array.length == 2)
+        assert(array.asInstanceOf[Array[AnyRef]].forall(_ eq scala.runtime.BoxedUnit.UNIT))
+      }
+      val box = roundTrip(json, Box(()), boxType)
+      assert(box.asInstanceOf[Box[AnyRef]].value eq scala.runtime.BoxedUnit.UNIT)
+      assert(roundTrip(json, List(Some(()), None), nestedType) == List(None, None))
+    }
+  }
+
+  test("Unit case-class fields") {
+    for (json <- runtimes) {
+      val value = UnitFields((), Some(()), List(()), Array(()))
+      val text = """{"option":null,"values":[null],"array":[null],"value":null}"""
+      assert(json.toJson(value) == text)
+      assert(new String(json.toJsonBytes(value), UTF_8) == text)
+      for (decoded <- Seq(
+          json.fromJson(text, classOf[UnitFields]),
+          json.fromJson(text.getBytes(UTF_8), classOf[UnitFields])
+        )) {
+        assert(decoded.productElement(0) == (()))
+        assert(decoded.option == None)
+        assert(decoded.values.asInstanceOf[List[AnyRef]].head eq scala.runtime.BoxedUnit.UNIT)
+        assert(decoded.array.asInstanceOf[Array[AnyRef]].head eq scala.runtime.BoxedUnit.UNIT)
+      }
+      assert(json.fromJson("{}", classOf[UnitValue]) == UnitValue(()))
+      assertThrows[ForyJsonException](json.fromJson("""{"value":1}""", classOf[UnitValue]))
+    }
+  }
+
+  test("singletons") {
+    for (json <- runtimes) {
       assert(json.toJson(Marker) == "{}")
       assert(json.fromJson("{}", Marker.getClass) eq Marker)
       assert(json.fromJson("{}".getBytes(UTF_8), Marker.getClass) eq Marker)

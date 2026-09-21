@@ -1237,6 +1237,31 @@ private[scala] object ScalaCollectionCodecs {
   val MutableAnyRefMapKind = 27
   val MutableLongMapKind = 28
 
+  def emptyValue(kind: Int, tag: ClassTag[Any]): AnyRef = kind match {
+    case ListKind => Nil
+    case VectorKind => Vector.empty
+    case ImmutableQueueKind => scala.collection.immutable.Queue.empty
+    case ImmutableArraySeqKind => scala.collection.immutable.ArraySeq.empty[Any](tag)
+    case MutableArrayBufferKind => scala.collection.mutable.ArrayBuffer.empty
+    case MutableListBufferKind => scala.collection.mutable.ListBuffer.empty
+    case MutableArraySeqKind => scala.collection.mutable.ArraySeq.make[Any](tag.newArray(0))
+    case MutableArrayDequeKind => scala.collection.mutable.ArrayDeque.empty
+    case MutableQueueKind => scala.collection.mutable.Queue.empty
+    case ImmutableHashSetKind => scala.collection.immutable.HashSet.empty
+    case ImmutableListSetKind => scala.collection.immutable.ListSet.empty
+    case MutableHashSetKind => scala.collection.mutable.HashSet.empty
+    case MutableLinkedHashSetKind => scala.collection.mutable.LinkedHashSet.empty
+    case ImmutableHashMapKind => scala.collection.immutable.HashMap.empty
+    case ImmutableVectorMapKind => scala.collection.immutable.VectorMap.empty
+    case ImmutableListMapKind => scala.collection.immutable.ListMap.empty
+    case ImmutableIntMapKind => scala.collection.immutable.IntMap.empty
+    case ImmutableLongMapKind => scala.collection.immutable.LongMap.empty
+    case MutableHashMapKind => scala.collection.mutable.HashMap.empty
+    case MutableLinkedHashMapKind => scala.collection.mutable.LinkedHashMap.empty
+    case MutableAnyRefMapKind => scala.collection.mutable.AnyRefMap.empty[AnyRef, Any]
+    case MutableLongMapKind => scala.collection.mutable.LongMap.empty
+  }
+
   def writeBooleanPair(writer: Utf8JsonWriter, first: Boolean, second: Boolean): Unit = {
     val firstBytes = if (first) 0x65_7572_742cL else 0x6573_6c61_662cL
     val secondBytes = if (second) 0x65_7572_742cL else 0x6573_6c61_662cL

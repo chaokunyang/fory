@@ -36,6 +36,20 @@ class ForyJsonKotlinTest {
 
   data class Required(val id: Long, val name: String)
 
+  data class MissingValues(
+    val age: Int,
+    val enabled: Boolean,
+    val optionalAge: Int?,
+    val optionalName: String?,
+    val name: String = "guest",
+    val byte: Byte,
+    val short: Short,
+    val long: Long,
+    val float: Float,
+    val double: Double,
+    val char: Char,
+  )
+
   data class EvaluatedDefault(
     val seed: Int,
     val values: MutableList<Int> = mutableListOf(nextDefault++),
@@ -104,6 +118,40 @@ class ForyJsonKotlinTest {
     assertFailsWith<ForyJsonException> { fory.fromJson("{\"id\":9}", jsonTypeRef<Required>()) }
     assertFailsWith<ForyJsonException> {
       fory.fromJson("{\"id\":9,\"name\":null}", jsonTypeRef<Required>())
+    }
+  }
+
+  @Test
+  fun missingTypeDefaults() {
+    for (codegen in listOf(false, true)) {
+      val json = ForyJsonKotlin.builder().withCodegen(codegen).withAsyncCompilation(false).build()
+      val expected = MissingValues(0, false, null, null, "guest", 0, 0, 0L, 0F, 0.0, '\u0000')
+      val type = jsonTypeRef<MissingValues>()
+      for (text in listOf("{}", """{"unknown":"中"}""")) {
+        assertEquals(expected, json.fromJson(text, type))
+        assertEquals(expected, json.fromJson(text.toByteArray(Charsets.UTF_8), type))
+      }
+      assertEquals(
+        expected.copy(
+          age = 8,
+          enabled = true,
+          optionalAge = 4,
+          optionalName = "ready",
+          name = "member"
+        ),
+        json.fromJson(
+          """{"age":8,"enabled":true,"optionalAge":4,"optionalName":"ready","name":"member"}""",
+          type
+        ),
+      )
+      assertEquals(ReferencedDefault(0, 1), json.fromJson("{}", jsonTypeRef<ReferencedDefault>()))
+      assertEquals(Box<Int?>(null), json.fromJson("{}", jsonTypeRef<Box<Int?>>()))
+      assertEquals(Box(0), json.fromJson("{}", jsonTypeRef<Box<Int>>()))
+      assertEquals(0 to null, json.fromJson("{}", jsonTypeRef<Pair<Int, String?>>()))
+      assertFailsWith<ForyJsonException> { json.fromJson("{}", jsonTypeRef<Required>()) }
+      assertFailsWith<ForyJsonException> { json.fromJson("""{"age":null}""", type) }
+      assertFailsWith<ForyJsonException> { json.fromJson("""{"name":null}""", type) }
+      assertEquals(expected, json.fromJson("{}", type))
     }
   }
 

@@ -20,11 +20,12 @@
 package org.apache.fory.json.scala.internal
 
 import java.lang.reflect.{Constructor, Field, Method, Modifier}
+import java.util.function.Supplier
 
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.codec.{JsonObjectModel, JsonValueCodec, ObjectCodec}
 import org.apache.fory.json.resolver.JsonTypeResolver
-import org.apache.fory.reflect.TypeRef
+import org.apache.fory.reflect.{ReflectionUtils, TypeRef}
 
 private[scala] object ScalaObjectModels {
   private val optionDefault = classOf[Option[_]].getMethod("empty")
@@ -119,12 +120,15 @@ private[scala] object ScalaObjectModels {
     val defaultsReceiver =
       if (companion.staticForwarders || defaults.forall(_ == null)) null
       else companionInstance(typeRef, companion)
-    // Missing Option parameters use None unless an explicit constructor default takes precedence.
-    // Bind the companion receiver before adding static Option.empty defaults.
+    // Missing properties use type defaults; explicit constructor defaults always take precedence.
+    // Factories run only for missing arguments and never share mutable empty values between objects.
+    val defaultFactories = new Array[Supplier[_]](defaults.length)
     index = 0
     while (index < defaults.length) {
       if (defaults(index) == null && logicalParameterTypes(index).getRawType == classOf[Option[_]]) {
         defaults(index) = optionDefault
+      } else if (defaults(index) == null) {
+        defaultFactories(index) = typeDefault(logicalParameterTypes(index), parameterTypes(index))
       }
       index += 1
     }
@@ -137,6 +141,7 @@ private[scala] object ScalaObjectModels {
         accessors,
         defaults,
         defaultsReceiver,
+        defaultFactories,
         Array.fill(names.length)(-1),
         Array.fill(names.length)(true),
         logicalParameterTypes,
@@ -146,6 +151,81 @@ private[scala] object ScalaObjectModels {
         propertyTypes
       )
     )
+  }
+
+  private def typeDefault(typeRef: TypeRef[_], carrier: Class[_]): Supplier[_] = {
+    val rawType = typeRef.getRawType
+    val collection = ScalaTypeCodecFactory.collectionDefault(typeRef)
+    if (collection != null) return collection
+    if (rawType.isArray) return () => java.lang.reflect.Array.newInstance(rawType.getComponentType, 0)
+    if (rawType == classOf[BigInt]) return () => BigInt(0)
+    if (rawType == classOf[BigDecimal]) return () => BigDecimal(0)
+    if (rawType == classOf[java.math.BigInteger]) return () => java.math.BigInteger.ZERO
+    if (rawType == classOf[java.math.BigDecimal]) return () => java.math.BigDecimal.ZERO
+    if (rawType == classOf[scala.runtime.BoxedUnit]) return () => scala.runtime.BoxedUnit.UNIT
+    if (rawType == classOf[java.util.EnumSet[_]]) {
+      val element = ScalaTypeSupport.rawType(ScalaTypeSupport.arguments(typeRef, 1, "EnumSet")(0))
+      return () => java.util.EnumSet.noneOf[Nothing](element.asInstanceOf[Class[Nothing]])
+    }
+    if (rawType == classOf[java.util.EnumMap[_, _]]) {
+      val key = ScalaTypeSupport.rawType(ScalaTypeSupport.arguments(typeRef, 2, "EnumMap")(0))
+      return () => new java.util.EnumMap[Nothing, Any](key.asInstanceOf[Class[Nothing]])
+    }
+    if (classOf[java.util.Map[_, _]].isAssignableFrom(rawType)) {
+      if (rawType.isAssignableFrom(classOf[java.util.LinkedHashMap[_, _]]))
+        return () => new java.util.LinkedHashMap[AnyRef, AnyRef]()
+      if (rawType.isAssignableFrom(classOf[java.util.TreeMap[_, _]]))
+        return () => new java.util.TreeMap[AnyRef, AnyRef]()
+      if (rawType.isAssignableFrom(classOf[java.util.concurrent.ConcurrentHashMap[_, _]]))
+        return () => new java.util.concurrent.ConcurrentHashMap[AnyRef, AnyRef]()
+      if (rawType.isAssignableFrom(classOf[java.util.concurrent.ConcurrentSkipListMap[_, _]]))
+        return () => new java.util.concurrent.ConcurrentSkipListMap[AnyRef, AnyRef]()
+    }
+    if (classOf[java.util.Collection[_]].isAssignableFrom(rawType)) {
+      if (rawType.isAssignableFrom(classOf[java.util.ArrayList[_]]))
+        return () => new java.util.ArrayList[AnyRef]()
+      if (rawType.isAssignableFrom(classOf[java.util.LinkedHashSet[_]]))
+        return () => new java.util.LinkedHashSet[AnyRef]()
+      if (rawType.isAssignableFrom(classOf[java.util.TreeSet[_]]))
+        return () => new java.util.TreeSet[AnyRef]()
+      if (rawType.isAssignableFrom(classOf[java.util.LinkedList[_]]))
+        return () => new java.util.LinkedList[AnyRef]()
+      if (rawType.isAssignableFrom(classOf[java.util.ArrayDeque[_]]))
+        return () => new java.util.ArrayDeque[AnyRef]()
+      if (rawType.isAssignableFrom(classOf[java.util.concurrent.LinkedBlockingDeque[_]]))
+        return () => new java.util.concurrent.LinkedBlockingDeque[AnyRef]()
+      if (rawType.isAssignableFrom(classOf[java.util.concurrent.LinkedBlockingQueue[_]]))
+        return () => new java.util.concurrent.LinkedBlockingQueue[AnyRef]()
+    }
+    if (
+      classOf[java.util.Collection[_]].isAssignableFrom(rawType) ||
+      classOf[java.util.Map[_, _]].isAssignableFrom(rawType)
+    ) {
+      // Only types with the ordinary collection constructor can use this construction rule.
+      // Custom collection codecs must remain usable even when their type has no such constructor.
+      if (rawType.getConstructors.exists(_.getParameterCount == 0)) {
+        val constructor = ReflectionUtils.getCtrHandle(rawType)
+        return () => constructor.invoke().asInstanceOf[AnyRef]
+      }
+    }
+    val primitive = if (carrier.isPrimitive) carrier else rawType
+    if (primitive == java.lang.Boolean.TYPE || primitive == classOf[java.lang.Boolean])
+      () => java.lang.Boolean.FALSE
+    else if (primitive == java.lang.Byte.TYPE || primitive == classOf[java.lang.Byte])
+      () => java.lang.Byte.valueOf(0.toByte)
+    else if (primitive == java.lang.Short.TYPE || primitive == classOf[java.lang.Short])
+      () => java.lang.Short.valueOf(0.toShort)
+    else if (primitive == java.lang.Integer.TYPE || primitive == classOf[java.lang.Integer])
+      () => java.lang.Integer.valueOf(0)
+    else if (primitive == java.lang.Long.TYPE || primitive == classOf[java.lang.Long])
+      () => java.lang.Long.valueOf(0L)
+    else if (primitive == java.lang.Float.TYPE || primitive == classOf[java.lang.Float])
+      () => java.lang.Float.valueOf(0F)
+    else if (primitive == java.lang.Double.TYPE || primitive == classOf[java.lang.Double])
+      () => java.lang.Double.valueOf(0D)
+    else if (primitive == java.lang.Character.TYPE || primitive == classOf[java.lang.Character])
+      () => java.lang.Character.valueOf(0.toChar)
+    else () => null
   }
 
   def singletonCodec(

@@ -36,6 +36,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.PropertyNamingStrategy;
@@ -1664,6 +1665,7 @@ final class ObjectCodecBuilder {
     Executable creator = objectModel.creator();
     String[] names = objectModel.parameterNames();
     Method[] defaultMethods = objectModel.defaultMethods();
+    Supplier<?>[] defaultFactories = objectModel.defaultFactories();
     int[] defaultMaskBits = objectModel.defaultMaskBits();
     TypeRef<?>[] logicalParameterTypes = objectModel.parameterTypes();
     Type[] parameterTypes = creator.getGenericParameterTypes();
@@ -1715,7 +1717,9 @@ final class ObjectCodecBuilder {
       bindCreatorType(ownerType, creator, i, parameterTypes[i], builder);
       builder.mergeCreatorParameter(type, parameters[i]);
       if (!builder.creatorReadAllowed()) {
-        if (defaultMethods[i] == null && defaultMaskBits[i] < 0) {
+        if (defaultMethods[i] == null
+            && defaultMaskBits[i] < 0
+            && (defaultFactories == null || defaultFactories[i] == null)) {
           throw new ForyJsonException(
               "Ignored constructor property " + names[i] + " requires a language default");
         }
@@ -1746,6 +1750,7 @@ final class ObjectCodecBuilder {
         generatedCodec,
         defaultMethods,
         objectModel.defaultsReceiver(),
+        defaultFactories,
         names,
         objectModel.defaultConstructor(),
         defaultMaskBits,

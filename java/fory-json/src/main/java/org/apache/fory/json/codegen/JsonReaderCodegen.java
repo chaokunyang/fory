@@ -1494,11 +1494,13 @@ abstract class JsonReaderCodegen {
       if (method == null) {
         int maskBit = creator.defaultMaskBit(i);
         if (maskBit < 0) {
-          body.append("throw ")
-              .append(creatorExpression)
-              .append(".missingArgument(")
+          body.append("arguments[")
               .append(i)
-              .append(");\n");
+              .append("] = ")
+              .append(creatorExpression)
+              .append(".defaultValue(")
+              .append(i)
+              .append(", arguments);\n");
         } else {
           body.append("arguments[")
               .append(i)
@@ -1625,7 +1627,11 @@ abstract class JsonReaderCodegen {
     if (type == char.class) {
       return Expression.Literal.ofChar((char) 0);
     }
-    return new Expression.Literal(type == float.class ? 0F : 0D, TypeRef.of(type));
+    // A numeric conditional would promote 0F to Double before boxing the literal.
+    if (type == float.class) {
+      return new Expression.Literal(0F, TypeRef.of(type));
+    }
+    return new Expression.Literal(0D, TypeRef.of(type));
   }
 
   private Expression readCreatorValue(

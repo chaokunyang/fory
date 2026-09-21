@@ -258,9 +258,10 @@ class KotlinNullabilityRuntimeTest {
         json.fromJson(explicitNull, type),
       )
 
-      assertFailsWith<ForyJsonException> {
-        json.fromJson("""{"required":"value","count":1,"nullableCount":null}""", type)
-      }
+      assertEquals(
+        ConstructorNulls("value", null, 1, null),
+        json.fromJson("""{"required":"value","count":1,"nullableCount":null}""", type),
+      )
       assertFailsWith<ForyJsonException> {
         json.fromJson(
           """{"required":null,"nullable":null,"count":1,"nullableCount":null}""",
@@ -416,8 +417,8 @@ class KotlinNullabilityRuntimeTest {
       val text = json.toJson(value, type)
       assertEquals("""{"id":1}""", text)
       assertEquals(text, json.toJsonBytes(value, type).decodeToString())
-      assertFailsWith<ForyJsonException> { json.fromJson(text, type) }
-      assertFailsWith<ForyJsonException> { json.fromJson(text.toByteArray(), type) }
+      assertEquals(value, json.fromJson(text, type))
+      assertEquals(value, json.fromJson(text.toByteArray(), type))
 
       val deferredType = jsonTypeRef<DeferredNullableModel>()
       val deferred = DeferredNullableModel(2).also { it.value = null }

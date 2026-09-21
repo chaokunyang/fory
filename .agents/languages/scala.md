@@ -6,9 +6,10 @@ Load this file when changing `scala/`.
 
 - Run Scala commands from within `scala/`.
 - Scala serializers build on the Java implementation. If Java changed and the updated Java artifacts are not installed yet, run `cd ../java && mvn -T16 install -DskipTests` first.
-- Scala JSON case-class constructor parameters declared as `Option[A]` default to `None` when
-  omitted, including without a Scala default expression. Explicit constructor defaults take
-  precedence; explicit JSON `null` still decodes as `None`. Preserve this behavior in interpreted
+- Missing Scala JSON case-class constructor parameters use their type defaults: zero for numbers,
+  false for booleans, empty collections and arrays, None for Option, and null for other references.
+  Explicit constructor defaults take precedence. Mutable defaults must be fresh for each object.
+  Explicit JSON null keeps its existing decoding semantics. Preserve these rules in interpreted
   and generated readers.
 - Scala supports the JVM and GraalVM Native Image, not Android. Do not add Android-specific Scala
   sources, tests, resources, R8 metadata, compiler plugins, macros, dependencies, or compatibility

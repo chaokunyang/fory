@@ -4,6 +4,9 @@ Load this file when changing `kotlin/` or compiler code that generates Kotlin so
 
 ## Rules
 
+- Missing JSON constructor parameters use explicit Kotlin defaults first; otherwise non-null
+  numeric and Boolean parameters use zero and false, and nullable parameters use null. Other
+  non-null reference parameters remain required. Explicit null never requests a default.
 - Fory JSON Kotlin property inclusion follows the configured global or property-level rule,
   independently of constructor defaults and deferred initializers. Do not override or reject
   `NON_NULL` or `NON_EMPTY` to guarantee round trips. Missing-property defaults and nullability

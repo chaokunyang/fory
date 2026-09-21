@@ -52,15 +52,24 @@ can erase Scala value-type arguments to `Object`.
 Case classes are decoded by calling their full primary constructor. Fory invokes Scala's generated
 constructor-default methods for missing defaulted parameters; it does not parse default expressions
 or mutate constructor `val` fields. Defaults in later parameter lists receive the preceding
-constructor arguments exactly as Scala defines them. A missing `Option[A]` parameter defaults to
-`None` when no explicit constructor default is defined. Other missing parameters without defaults
-are errors. Mutable body properties are applied after construction.
+constructor arguments exactly as Scala defines them. When a constructor parameter has no explicit
+default, an omitted property uses its type's default:
+
+- Numeric values use zero, and Boolean values use `false`.
+- Collections, maps, and arrays use empty values. Mutable defaults are fresh for each object.
+- `Option[A]` uses `None`.
+- Other reference values, including strings and nested objects, use `null`.
+
+Mutable body properties retain their initializers when omitted and are applied after construction
+when present.
 
 ```scala
 case class Options(value: Option[Int], selected: Option[Int] = Some(7))
+case class Profile(age: Int, enabled: Boolean, tags: List[String], name: String)
 
 json.fromJson("{}", classOf[Options]) // Options(None, Some(7))
 json.fromJson("""{"selected":null}""", classOf[Options]) // Options(None, None)
+json.fromJson("{}", classOf[Profile]) // Profile(0, false, List(), null)
 ```
 
 Explicit constructor defaults take precedence for omitted properties. An explicit JSON `null`
@@ -89,11 +98,10 @@ parameters. `JsonCodec` child slots bind direct collection elements, `Option` co
 or values. All other Fory JSON annotations retain the behavior described in
 [Annotations](annotations.md).
 
-If a required non-defaulted reference parameter uses an inclusion rule that would omit `null`,
-serialization rejects a null value. This guarantees that JSON written by Fory remains readable by
-the same case-class schema. A global `defaultPropertyInclusion(NON_EMPTY)` retains empty values of
-required constructor parameters. An explicit `@JsonProperty(include = NON_EMPTY)` is rejected for
-a required parameter whose type can be empty; add a constructor default to allow omission.
+Property inclusion controls which values are written. Omitted properties use constructor or type
+defaults when read, so omitting an empty string can restore `null`. Use `ALWAYS` when those values
+must remain distinct. An explicit JSON `null` keeps the declared type's normal null behavior; it
+does not request a constructor default.
 
 ## Supported Scala types
 

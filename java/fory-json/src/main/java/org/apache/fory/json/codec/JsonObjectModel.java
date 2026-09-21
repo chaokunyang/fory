@@ -30,6 +30,7 @@ import java.lang.reflect.WildcardType;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.reflect.TypeRef;
 
@@ -43,6 +44,7 @@ public final class JsonObjectModel {
   private final Method[] accessors;
   private final Method[] defaultMethods;
   private final Object defaultsReceiver;
+  private final Supplier<?>[] defaultFactories;
   private final int[] defaultMaskBits;
   private final boolean[] parameterNullable;
   private final TypeRef<?>[] parameterTypes;
@@ -76,6 +78,7 @@ public final class JsonObjectModel {
         accessors,
         defaultMethods,
         null,
+        null,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -92,7 +95,8 @@ public final class JsonObjectModel {
    * companion, so a case class declared inside an {@code object} binds its defaults on that
    * singleton. A language module may also select a zero-argument static factory on the parameter's
    * value type for an implicit default. Static defaults do not use {@code defaultsReceiver}; pass
-   * {@code null} when no instance default needs it.
+   * {@code null} when no instance default needs it. Type-default factories are evaluated only for
+   * missing parameters without a constructor default; mutable values must be newly allocated.
    */
   public JsonObjectModel(
       Constructor<?> constructor,
@@ -101,6 +105,7 @@ public final class JsonObjectModel {
       Method[] accessors,
       Method[] defaultMethods,
       Object defaultsReceiver,
+      Supplier<?>[] defaultFactories,
       int[] defaultMaskBits,
       boolean[] parameterNullable,
       TypeRef<?>[] parameterTypes,
@@ -116,6 +121,7 @@ public final class JsonObjectModel {
         accessors,
         defaultMethods,
         defaultsReceiver,
+        defaultFactories,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -150,6 +156,7 @@ public final class JsonObjectModel {
         accessors,
         defaultMethods,
         null,
+        null,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -177,7 +184,8 @@ public final class JsonObjectModel {
       Method[] propertySetters,
       TypeRef<?>[] propertyTypes,
       boolean[] propertyReconstructible,
-      boolean[] propertyRequired) {
+      boolean[] propertyRequired,
+      Supplier<?>[] defaultFactories) {
     this(
         creator,
         invocationCreator,
@@ -186,6 +194,7 @@ public final class JsonObjectModel {
         accessors,
         defaultMethods,
         null,
+        defaultFactories,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -205,6 +214,7 @@ public final class JsonObjectModel {
       Method[] accessors,
       Method[] defaultMethods,
       Object defaultsReceiver,
+      Supplier<?>[] defaultFactories,
       int[] defaultMaskBits,
       boolean[] parameterNullable,
       TypeRef<?>[] parameterTypes,
@@ -221,6 +231,7 @@ public final class JsonObjectModel {
     this.accessors = accessors.clone();
     this.defaultMethods = defaultMethods.clone();
     this.defaultsReceiver = defaultsReceiver;
+    this.defaultFactories = defaultFactories == null ? null : defaultFactories.clone();
     this.defaultMaskBits = defaultMaskBits.clone();
     this.parameterNullable = parameterNullable.clone();
     this.parameterTypes = parameterTypes.clone();
@@ -249,6 +260,7 @@ public final class JsonObjectModel {
     accessors = new Method[0];
     defaultMethods = new Method[0];
     defaultsReceiver = null;
+    defaultFactories = null;
     defaultMaskBits = new int[0];
     parameterNullable = new boolean[0];
     parameterTypes = new TypeRef<?>[0];
@@ -332,6 +344,7 @@ public final class JsonObjectModel {
     if (parameterNames.length != count
         || accessors.length != count
         || defaultMethods.length != count
+        || defaultFactories != null && defaultFactories.length != count
         || defaultMaskBits.length != count
         || parameterNullable.length != count
         || parameterTypes.length != count) {
@@ -485,6 +498,13 @@ public final class JsonObjectModel {
   /** Returns the receiver of instance constructor-default methods, or null when they are static. */
   public Object defaultsReceiver() {
     return defaultsReceiver;
+  }
+
+  /**
+   * Returns type-default factories selected by the language module, or null if none are supplied.
+   */
+  public Supplier<?>[] defaultFactories() {
+    return defaultFactories == null ? null : defaultFactories.clone();
   }
 
   public int[] defaultMaskBits() {

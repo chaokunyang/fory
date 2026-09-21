@@ -55,7 +55,6 @@ import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldKind;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
-import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.reflect.TypeRef;
 
 /**
@@ -1100,7 +1099,7 @@ abstract class JsonWriterCodegen {
         }
         expressions.add(
             new Expression.If(
-                presentValue(first, 0, value),
+                presentValue(first, 0, value, writer),
                 present,
                 new Expression.Invoke(writer, "writeObjectStart")));
         firstProperty = 1;
@@ -1193,7 +1192,7 @@ abstract class JsonWriterCodegen {
         expressions.add(written);
         expressions.add(
             new Expression.If(
-                presentValue(first, 0, value),
+                presentValue(first, 0, value, writer),
                 new Expression.ListExpression(
                     fusedStart, new Expression.Assign(written, Expression.Literal.ofInt(1))),
                 new Expression.Invoke(writer, "writeObjectStart")));
@@ -1475,7 +1474,7 @@ abstract class JsonWriterCodegen {
               : new Expression.ListExpression(
                   writeFieldName(property, id, commaKnown, index, writer),
                   writeValue(property, id, value, true, index, writer));
-      Expression present = new Expression.If(nonEmptyValue(property, id, value), write);
+      Expression present = new Expression.If(nonEmptyValue(property, id, value, writer), write);
       if (property.writeNull()) {
         return new Expression.ListExpression(
             value,
@@ -1493,7 +1492,7 @@ abstract class JsonWriterCodegen {
                 present));
       }
       return new Expression.ListExpression(
-          value, new Expression.If(presentValue(property, id, value), write));
+          value, new Expression.If(presentValue(property, id, value, writer), write));
     }
 
     if (property.writeNull()) {
@@ -1658,12 +1657,16 @@ abstract class JsonWriterCodegen {
     return new Expression.Cast(expected, TypeRef.of(property.writeRawType())).inline();
   }
 
-  private static Expression presentValue(JsonFieldInfo property, int id, Expression value) {
+  private static Expression presentValue(
+      JsonFieldInfo property, int id, Expression value, Expression writer) {
     Expression present = ne(value, new Expression.Null(value.type(), false));
-    return property.omitEmpty() ? and(present, nonEmptyValue(property, id, value)) : present;
+    return property.omitEmpty()
+        ? and(present, nonEmptyValue(property, id, value, writer))
+        : present;
   }
 
-  private static Expression nonEmptyValue(JsonFieldInfo property, int id, Expression value) {
+  private static Expression nonEmptyValue(
+      JsonFieldInfo property, int id, Expression value, Expression writer) {
     Class<?> type = property.writeRawType();
     if (CharSequence.class.isAssignableFrom(type)) {
       return ne(
@@ -1684,6 +1687,7 @@ abstract class JsonWriterCodegen {
         || type == OptionalDouble.class) {
       return new Expression.Invoke(value, "isPresent", TypeRef.of(boolean.class)).inline();
     }
+    // Reuse the caller's expression so method splitting can capture and rename the writer.
     return not(
         new Expression.StaticInvoke(
                 JsonFieldInfo.class,
@@ -1695,7 +1699,7 @@ abstract class JsonWriterCodegen {
                         "writeTypeInfo",
                         TypeRef.of(JsonTypeInfo.class))
                     .inline(),
-                new Reference("writer", TypeRef.of(JsonWriter.class)))
+                writer)
             .inline());
   }
 

@@ -21,15 +21,11 @@ package org.apache.fory.json.meta;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
-import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.BiConsumer;
@@ -70,11 +66,8 @@ import org.apache.fory.util.function.ToShortFunction;
  */
 public abstract class JsonFieldAccessor {
   private static final ClassLoader OWN_LOADER = JsonFieldAccessor.class.getClassLoader();
-  private static final ReferenceQueue<ClassLoader> LOADER_QUEUE = new ReferenceQueue<>();
-  // Boolean values cannot retain loaders. Weak identity keys keep distinct loaders separate even
-  // when a custom ClassLoader overrides equals/hashCode.
-  private static final Map<LoaderReference, Boolean> LAMBDA_VISIBILITY =
-      Collections.synchronizedMap(new HashMap<>());
+  private static final ConcurrentMap<Integer, LoaderVisibility> LAMBDA_VISIBILITY =
+      new ConcurrentHashMap<>();
   private static final boolean USE_JDK25_NATIVE_ACCESS =
       GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION >= 25;
   private static final boolean USE_METHOD_LAMBDAS =
@@ -246,14 +239,11 @@ public abstract class JsonFieldAccessor {
     if (loader == null) {
       return false;
     }
-    LoaderReference stale;
-    while ((stale = (LoaderReference) LOADER_QUEUE.poll()) != null) {
-      LAMBDA_VISIBILITY.remove(stale);
-    }
-    LoaderReference key = new LoaderReference(loader);
-    Boolean cached = LAMBDA_VISIBILITY.get(key);
-    if (cached != null) {
-      return cached;
+    int key = System.identityHashCode(loader);
+    LoaderVisibility cached = LAMBDA_VISIBILITY.get(key);
+    // Identity hashes can collide; the weak referent verifies identity without retaining loaders.
+    if (cached != null && cached.get() == loader) {
+      return cached.visible;
     }
     // Do not hold the cache lock while invoking a user ClassLoader. Concurrent misses may repeat
     // the lookup; a cached miss remains a safe MethodHandle fallback if visibility later changes.
@@ -265,32 +255,20 @@ public abstract class JsonFieldAccessor {
     } catch (ClassNotFoundException e) {
       visible = false;
     }
-    LAMBDA_VISIBILITY.put(key, visible);
+    LAMBDA_VISIBILITY.put(key, new LoaderVisibility(loader, visible));
+    // Accessors are already retained by their codecs, so a full cache can start a new round.
+    if (LAMBDA_VISIBILITY.size() > 1024) {
+      LAMBDA_VISIBILITY.clear();
+    }
     return visible;
   }
 
-  private static final class LoaderReference extends WeakReference<ClassLoader> {
-    private final int hash;
+  private static final class LoaderVisibility extends WeakReference<ClassLoader> {
+    private final boolean visible;
 
-    private LoaderReference(ClassLoader loader) {
-      super(loader, LOADER_QUEUE);
-      hash = System.identityHashCode(loader);
-    }
-
-    @Override
-    public int hashCode() {
-      return hash;
-    }
-
-    @Override
-    public boolean equals(Object other) {
-      if (this == other) {
-        return true;
-      }
-      ClassLoader loader = get();
-      return loader != null
-          && other instanceof LoaderReference
-          && loader == ((LoaderReference) other).get();
+    private LoaderVisibility(ClassLoader loader, boolean visible) {
+      super(loader);
+      this.visible = visible;
     }
   }
 

@@ -22,10 +22,14 @@ package org.apache.fory.json;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertThrows;
+import static org.testng.Assert.assertTrue;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.text.DecimalFormat;
+import java.util.Map;
 import org.apache.fory.json.annotation.JsonProperty;
 import org.apache.fory.json.data.BeanProperties;
 import org.apache.fory.json.data.BeanProperties.BooleanBean;
@@ -110,6 +114,59 @@ public class JsonPropertyTest extends ForyJsonTestModels {
         assertEquals(loader.visibilityChecks, 1);
       }
     }
+  }
+
+  @Test
+  public void methodLoaderHashCollision() throws Exception {
+    Map<Integer, Object> cache = loaderVisibilityCache();
+    cache.clear();
+    try (PropertyClassLoader visible = new PropertyClassLoader(true);
+        PropertyClassLoader isolated = new PropertyClassLoader(false)) {
+      Class<?> visibleType = visible.loadClass(GetterBean.class.getName());
+      JsonFieldAccessor.forGetter(visibleType.getMethod("getId"));
+      // Seed a colliding result deterministically instead of depending on VM hash allocation.
+      cache.put(System.identityHashCode(isolated), cache.get(System.identityHashCode(visible)));
+      Class<?> isolatedType = isolated.loadClass(GetterBean.class.getName());
+      JsonFieldAccessor getter = JsonFieldAccessor.forGetter(isolatedType.getMethod("getId"));
+      assertEquals(getter.getInt(isolatedType.getConstructor().newInstance()), 17);
+      assertEquals(isolated.visibilityChecks, 1);
+    } finally {
+      cache.clear();
+    }
+  }
+
+  @Test
+  public void methodLoaderCacheReset() throws Exception {
+    Map<Integer, Object> cache = loaderVisibilityCache();
+    cache.clear();
+    try (PropertyClassLoader loader = new PropertyClassLoader(false)) {
+      Class<?> type = loader.loadClass(GetterBean.class.getName());
+      Method method = type.getMethod("getId");
+      JsonFieldAccessor.forGetter(method);
+      int key = System.identityHashCode(loader);
+      Object result = cache.get(key);
+      cache.clear();
+      for (int i = 1; i < 1024; i++) {
+        cache.put(key + i, result);
+      }
+      JsonFieldAccessor.forGetter(method);
+      assertEquals(cache.size(), 1024);
+      cache.remove(key);
+      cache.put(key + 1024, result);
+      JsonFieldAccessor getter = JsonFieldAccessor.forGetter(method);
+      assertTrue(cache.isEmpty());
+      assertEquals(getter.getInt(type.getConstructor().newInstance()), 17);
+      assertEquals(loader.visibilityChecks, 3);
+    } finally {
+      cache.clear();
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<Integer, Object> loaderVisibilityCache() throws Exception {
+    Field field = JsonFieldAccessor.class.getDeclaredField("LAMBDA_VISIBILITY");
+    field.setAccessible(true);
+    return (Map<Integer, Object>) field.get(null);
   }
 
   private static final class PropertyClassLoader extends URLClassLoader {

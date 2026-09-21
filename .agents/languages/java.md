@@ -118,10 +118,12 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   values may contain only generated-class keys, binary names, and completed generated classes, not
   codec instances, resolvers, configured classloaders, or `CodeGenerator`. Its GraalVM branch may
   be strong only during hosted analysis and must be reset after the frozen Native registry is
-  published. `JsonFieldAccessor` may also cache method-lambda visibility by weak classloader
-  identity with Boolean-only values. Keep same-loader and bootstrap shortcuts ahead of that cache,
-  and do not hold its lock while calling a classloader. Do not extend these exceptions to other
-  caches or retained values.
+  published. `JsonFieldAccessor` may also cache method-lambda visibility in a `ConcurrentHashMap`
+  keyed by `System.identityHashCode(loader)`, clearing it when its size exceeds 1024. Values hold
+  only a weak loader reference and the visibility boolean; verify referent identity on hits because
+  identity hashes can collide. Keep same-loader and bootstrap shortcuts ahead of the cache, and
+  classloader calls outside map callbacks. Do not add a reference queue or per-entry eviction for
+  this construction-time cache. Do not extend these exceptions to other caches or retained values.
 - Concrete serializers may opt into sharing only after auditing retained fields. Treat serializers retaining `TypeResolver`, `RefResolver`, mutable scratch buffers, runtime state, or classloader-sensitive state as non-shareable unless that state is externalized.
 - Resolver and serializer hot paths should keep the fast-path/null-slow-path shape obvious. Hoist repeated buffer or cache-state access into locals for multi-step operations and keep rebuild/restoration logic cold.
 - Java compatible metadata hash caches and depth hints retain the source `TypeInfo`, before

@@ -72,6 +72,10 @@ case class CurriedDefault(a: Int)(
     @JsonProperty(include = JsonProperty.Include.NON_DEFAULT) val b: Int = a + 1
 )
 
+case class KeywordDefault(switch: Int)(
+    @JsonProperty(include = JsonProperty.Include.NON_DEFAULT) val high: Int = switch + 1
+)
+
 @JsonInclude(JsonProperty.Include.NON_DEFAULT)
 case class InclusionDefaults(
     @JsonProperty(include = JsonProperty.Include.ALWAYS) required: Int,
@@ -826,6 +830,19 @@ class ScalaJsonSuite extends AnyFunSuite {
       assert(json.toJson(CurriedDefault(5)()) == "{\"a\":5}")
       assert(json.toJson(CurriedDefault(5)(2)) == "{\"a\":5,\"b\":2}")
       assert(json.fromJson("{\"a\":5}", classOf[CurriedDefault]).b == 6)
+      for (high <- Seq(6, 2)) {
+        val value = KeywordDefault(5)(high)
+        val text = if (high == 6) "{\"switch\":5}" else "{\"switch\":5,\"high\":2}"
+        val pretty = if (high == 6) "{\n  \"switch\" : 5\n}"
+          else "{\n  \"switch\" : 5,\n  \"high\" : 2\n}"
+        assert(json.toJson(value) == text)
+        assert(new String(json.toJsonBytes(value), UTF_8) == text)
+        assert(json.toPrettyJson(value) == pretty)
+        assert(new String(json.toPrettyJsonBytes(value), UTF_8) == pretty)
+        assert(json.fromJson(text, classOf[KeywordDefault]).high == high)
+        assert(json.fromJson(pretty.getBytes(UTF_8), classOf[KeywordDefault]).high == high)
+      }
+      assertWriterGeneration(json, classOf[KeywordDefault], codegen)
       assert(json.toJson(NestedModels.Span(5)()) == "{\"from\":5}")
       assert(new String(json.toJsonBytes(NestedModels.Span(5)(2)), UTF_8) == "{\"from\":5,\"to\":2}")
       assert(json.toJson(ArrayDefaults()) == "{}")

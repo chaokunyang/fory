@@ -352,6 +352,12 @@ public final class JsonCodegen {
     if (getter != null && !DirectMethodCodegen.sourceNameable(getter)) {
       addInvocation(invocations, DirectMethodCodegen.getterInvocation(getter));
     }
+    // Default dependencies need the same JVM-name bridges as ordinary property getters.
+    for (Method dependency : field.defaultDependencies()) {
+      if (!DirectMethodCodegen.sourceNameable(dependency)) {
+        addInvocation(invocations, DirectMethodCodegen.getterInvocation(dependency));
+      }
+    }
     if (field.writeDirectUnboxedValueCodec() != null) {
       addInvocation(
           invocations,

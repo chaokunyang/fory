@@ -1566,7 +1566,7 @@ abstract class JsonWriterCodegen {
     Expression value =
         new Expression.Variable(
             "v" + id, cast(inline(builder.fieldValue(property, object)), TypeRef.of(type)));
-    Expression expected = defaultExpression(property, id, object);
+    Expression expected = defaultExpression(builder, property, id, object);
     Expression same =
         type.isPrimitive() && type != float.class && type != double.class
             ? eq(value, expected)
@@ -1618,7 +1618,8 @@ abstract class JsonWriterCodegen {
     return result;
   }
 
-  private Expression defaultExpression(JsonFieldInfo property, int id, Expression object) {
+  private Expression defaultExpression(
+      JsonGeneratedCodecBuilder builder, JsonFieldInfo property, int id, Expression object) {
     Method method = property.defaultMethod();
     if (method == null) {
       return fieldRef("default" + id, property.writeRawType());
@@ -1629,10 +1630,11 @@ abstract class JsonWriterCodegen {
       Method getter = dependencies[i];
       inputs[i] =
           new Expression.Cast(
-                  new Expression.Invoke(
-                      new Expression.Cast(object, TypeRef.of(getter.getDeclaringClass())),
-                      getter.getName(),
-                      TypeRef.of(getter.getReturnType())),
+                  builder.getterValue(
+                      getter,
+                      "dependency",
+                      TypeRef.of(getter.getReturnType()),
+                      new Expression.Cast(object, TypeRef.of(getter.getDeclaringClass()))),
                   TypeRef.of(method.getParameterTypes()[i]))
               .inline();
     }

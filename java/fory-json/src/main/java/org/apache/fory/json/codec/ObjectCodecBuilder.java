@@ -428,6 +428,17 @@ final class ObjectCodecBuilder {
               : orderWriteFields(type, propertyOrder, writeBuilders, writes);
     }
     JsonFieldInfo[] readArray = reads.toArray(new JsonFieldInfo[0]);
+    ObjectInstantiator<?> instantiator =
+        creatorInfo == null
+            ? GraalvmSupport.isGraalRuntime()
+                ? ObjectInstantiators.getObjectInstantiator(type)
+                : ObjectInstantiators.createObjectInstantiator(type)
+            : null;
+    if (!referenceDefaults.isEmpty()) {
+      // Reference construction uses constructor defaults only. Required deferred properties
+      // validate JSON input; they need not be initialized on the comparison object.
+      initializeDefaults(type, creatorInfo, instantiator, referenceDefaults);
+    }
     if (objectModel != null && !deferredFields.isEmpty()) {
       creatorInfo =
           creatorInfo.withDeferredFields(
@@ -458,15 +469,6 @@ final class ObjectCodecBuilder {
                 generatedCodec,
                 annotations)
             : null;
-    ObjectInstantiator<?> instantiator =
-        creatorInfo == null
-            ? GraalvmSupport.isGraalRuntime()
-                ? ObjectInstantiators.getObjectInstantiator(type)
-                : ObjectInstantiators.createObjectInstantiator(type)
-            : null;
-    if (!referenceDefaults.isEmpty()) {
-      initializeDefaults(type, creatorInfo, instantiator, referenceDefaults);
-    }
     String[] skipped = hasAny ? skippedNames.toArray(new String[0]) : null;
     JsonUnwrappedInfo unwrappedInfo =
         hasUnwrapped

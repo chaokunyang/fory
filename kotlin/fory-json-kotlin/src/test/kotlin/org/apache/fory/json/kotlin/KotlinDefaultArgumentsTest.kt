@@ -23,6 +23,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotSame
+import org.apache.fory.json.ForyJson
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.annotation.JsonCreator
 import org.apache.fory.json.annotation.JsonInclude
@@ -33,6 +34,21 @@ import org.apache.fory.json.resolver.JsonTypeResolver
 import org.apache.fory.reflect.ReflectionUtils
 
 class KotlinDefaultArgumentsTest {
+  private fun assertWriterGeneration(json: ForyJson, model: Class<*>, enabled: Boolean) {
+    val slots = ReflectionUtils.getObjectFieldValue(json, "slots") as Array<*>
+    val state = ReflectionUtils.getObjectFieldValue(slots[0], "state")
+    val resolver = ReflectionUtils.getObjectFieldValue(state, "typeResolver") as JsonTypeResolver
+    resolver.lockJIT()
+    try {
+      val info = resolver.getRuntimeTypeInfo(model)
+      val owner = resolver.canonicalObjectCodec(info)
+      assertEquals(enabled, info.stringWriter() !== owner)
+      assertEquals(enabled, info.utf8Writer() !== owner)
+    } finally {
+      resolver.unlockJIT()
+    }
+  }
+
   @JsonInclude(Include.NON_DEFAULT)
   data class Limits(
     val low: Int = 1,
@@ -58,6 +74,11 @@ class KotlinDefaultArgumentsTest {
     val required: Int,
     @JsonProperty(include = Include.NON_DEFAULT) val value: Int = 1
   )
+
+  @JsonInclude(Include.NON_DEFAULT)
+  class DeferredDefault(val count: Int = 3) {
+    @JsonProperty(include = Include.ALWAYS) lateinit var required: String
+  }
 
   data class PlainDefault(val value: Int = 1) {
     init {
@@ -107,18 +128,7 @@ class KotlinDefaultArgumentsTest {
       assertEquals("{\n  \"label\" : null\n}", json.toPrettyJson(value))
       assertEquals(json.toPrettyJson(value), json.toPrettyJsonBytes(value).decodeToString())
       assertEquals(constructions + 1, ReferenceDefault.constructions)
-      val slots = ReflectionUtils.getObjectFieldValue(json, "slots") as Array<*>
-      val state = ReflectionUtils.getObjectFieldValue(slots[0], "state")
-      val resolver = ReflectionUtils.getObjectFieldValue(state, "typeResolver") as JsonTypeResolver
-      resolver.lockJIT()
-      try {
-        val info = resolver.getRuntimeTypeInfo(ReferenceDefault::class.java)
-        val owner = resolver.canonicalObjectCodec(info)
-        assertEquals(codegen, info.stringWriter() !== owner)
-        assertEquals(codegen, info.utf8Writer() !== owner)
-      } finally {
-        resolver.unlockJIT()
-      }
+      assertWriterGeneration(json, ReferenceDefault::class.java, codegen)
       val first = json.fromJson("{}", ReferenceDefault::class.java)
       // Declared reading and dynamic writing own distinct language-model metadata.
       val afterRead = ReferenceDefault.constructions
@@ -157,6 +167,38 @@ class KotlinDefaultArgumentsTest {
       assertEquals("{}", mixed.toJson(plain))
       assertEquals("{}", mixed.toJsonBytes(plain).decodeToString())
       assertEquals(calls + 1, PlainDefault.constructions)
+    }
+  }
+
+  @Test
+  fun deferredDefaultInclusion() {
+    for (codegen in listOf(false, true)) {
+      val json = ForyJsonKotlin.builder().withCodegen(codegen).withAsyncCompilation(false).build()
+      for (count in listOf(3, 4)) {
+        val value = DeferredDefault(count).apply { required = "ready" }
+        val expected =
+          if (count == 3) "{\"required\":\"ready\"}" else "{\"count\":4,\"required\":\"ready\"}"
+        val pretty =
+          if (count == 3) "{\n  \"required\" : \"ready\"\n}"
+          else "{\n  \"count\" : 4,\n  \"required\" : \"ready\"\n}"
+        assertEquals(expected, json.toJson(value))
+        assertEquals(expected, json.toJsonBytes(value).decodeToString())
+        assertEquals(pretty, json.toPrettyJson(value))
+        assertEquals(pretty, json.toPrettyJsonBytes(value).decodeToString())
+        for (decoded in
+          listOf(
+            json.fromJson(expected, DeferredDefault::class.java),
+            json.fromJson(pretty.encodeToByteArray(), DeferredDefault::class.java)
+          )) {
+          assertEquals(count, decoded.count)
+          assertEquals("ready", decoded.required)
+        }
+      }
+      assertWriterGeneration(json, DeferredDefault::class.java, codegen)
+      assertFailsWith<ForyJsonException> { json.fromJson("{}", DeferredDefault::class.java) }
+      assertFailsWith<ForyJsonException> {
+        json.fromJson("{}".encodeToByteArray(), DeferredDefault::class.java)
+      }
     }
   }
 

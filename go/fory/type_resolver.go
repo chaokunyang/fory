@@ -2352,5 +2352,7 @@ func (m *MetaContext) Reset() {
 	m.firstTypePtr = 0
 	// Logical reset prevents stale lookup; later roots overwrite the reusable slots.
 	// Retention follows the largest root table, not all previously received schemas.
-	m.readTypeInfos = m.readTypeInfos[:0]
+	if m.readTypeInfos != nil {
+		m.readTypeInfos = m.readTypeInfos[:0]
+	}
 }

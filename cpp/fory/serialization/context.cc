@@ -733,6 +733,7 @@ ReadContext::read_type_meta_owner(const TypeInfo *expected_type_info) {
     // alive for metadata references without publishing it to any persistent
     // cache.
     uncached_type_infos_.push_back(std::move(cached));
+    meta_cleanup_needed_ = true;
   }
 
   reading_type_infos_.push_back(
@@ -786,7 +787,7 @@ ReadContext::read_any_type_info_owner(const TypeInfo *expected_type_info) {
       // Read type meta inline using streaming protocol
       return read_type_meta_owner(expected_type_info);
     }
-    meta_string_table_active_ = true;
+    meta_cleanup_needed_ = true;
     FORY_TRY(namespace_str,
              meta_string_table_.read_string(*buffer_, k_namespace_decoder));
     FORY_TRY(type_name,
@@ -835,7 +836,11 @@ bool ReadContext::set_unbacked_container_items_exceeded(size_t items,
   return false;
 }
 
-void ReadContext::clear_uncached_type_infos() { uncached_type_infos_.clear(); }
+void ReadContext::reset_meta() {
+  uncached_type_infos_.clear();
+  meta_string_table_.reset();
+  meta_cleanup_needed_ = false;
+}
 
 void ReadContext::reset() {
   // Clear error state first
@@ -844,17 +849,14 @@ void ReadContext::reset() {
   // reference tracking is disabled, so every root must clear this state.
   ref_reader_.reset();
   reading_type_infos_.clear();
-  // Keep schema destruction off the common reset path while the cache has room.
-  if (FORY_PREDICT_FALSE(!uncached_type_infos_.empty())) {
-    clear_uncached_type_infos();
-  }
   current_dyn_depth_ = 0;
   remaining_unbacked_container_items_ = 0;
   // Root deserialization overwrites the remaining graph budget before any
   // serializer can reserve, so reset avoids an extra hot cleanup store here.
-  if (meta_string_table_active_) {
-    meta_string_table_.reset();
-    meta_string_table_active_ = false;
+  // Overflow schemas share the existing dynamic-metadata cleanup branch, so
+  // ordinary cached roots do not gain another reset check or backing-slot walk.
+  if (meta_cleanup_needed_) {
+    reset_meta();
   }
 }
 

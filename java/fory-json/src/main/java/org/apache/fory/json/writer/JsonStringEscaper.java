@@ -26,9 +26,10 @@ import org.apache.fory.json.ForyJsonException;
  * Cold metadata-time JSON string escaping for precomputed field, enum, and scalar tokens.
  *
  * <p>String-writer tokens escape every non-Latin1 code unit so the result can be stored as Latin1
- * bytes and widened directly when needed. UTF-8 tokens preserve valid Unicode and are encoded after
- * escaping JSON controls. Runtime arbitrary strings are handled by the concrete writers instead;
- * this helper deliberately allocates metadata that is retained and reused.
+ * bytes and widened directly when needed. UTF-8 tokens normally preserve valid Unicode. Enabling
+ * non-ASCII escaping restricts both representations to ASCII. Runtime arbitrary strings are handled
+ * by the concrete writers instead; this helper deliberately allocates metadata that is retained and
+ * reused.
  */
 public final class JsonStringEscaper {
   private JsonStringEscaper() {}

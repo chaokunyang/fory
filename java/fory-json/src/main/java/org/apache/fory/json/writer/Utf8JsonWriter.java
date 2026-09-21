@@ -2861,10 +2861,6 @@ public final class Utf8JsonWriter extends JsonWriter implements Appendable {
     buffer = Arrays.copyOf(buffer, newCapacity);
   }
 
-  private static char hex(int value) {
-    return (char) (value < 10 ? '0' + value : 'a' + value - 10);
-  }
-
   private static boolean isJsonAscii(char ch) {
     return ch > 0x1F && ch < 0x80 && ch != '"' && ch != '\\';
   }

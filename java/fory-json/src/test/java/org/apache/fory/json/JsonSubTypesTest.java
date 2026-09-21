@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.json.annotation.JsonIgnore;
+import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonPropertyOrder;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonSubTypes.Inclusion;
@@ -58,6 +59,44 @@ public class JsonSubTypesTest extends ForyJsonTestModels {
   public JsonSubTypesTest(boolean codegen) {
     super(codegen);
   }
+
+  @Test
+  public void escapedSubtypeNames() {
+    Class<?>[] mixins = {EscapedProperty.class, EscapedObject.class, EscapedArray.class};
+    String[] expected = {
+      "{\"\\u00e9\":\"\\u6c49\\ud83d\\ude00\",\"radius\":2}",
+      "{\"\\u6c49\\ud83d\\ude00\":{\"radius\":2}}",
+      "[\"\\u6c49\\ud83d\\ude00\",{\"radius\":2}]"
+    };
+    for (int i = 0; i < mixins.length; i++) {
+      ForyJson json = newJsonBuilder().escapeNonAscii(true).registerMixin(mixins[i]).build();
+      Circle circle = new Circle(2);
+      assertEquals(json.toJson(circle, Shape.class), expected[i]);
+      assertEquals(
+          new String(json.toJsonBytes(circle, Shape.class), StandardCharsets.UTF_8), expected[i]);
+      assertEquals(((Circle) json.fromJson(expected[i], Shape.class)).radius, 2);
+      assertEquals(
+          ((Circle) json.fromJson(expected[i].getBytes(StandardCharsets.UTF_8), Shape.class))
+              .radius,
+          2);
+    }
+  }
+
+  @JsonMixin(target = Shape.class)
+  @JsonSubTypes(property = "é", value = @JsonSubTypes.Type(value = Circle.class, name = "汉😀"))
+  public abstract static class EscapedProperty {}
+
+  @JsonMixin(target = Shape.class)
+  @JsonSubTypes(
+      inclusion = Inclusion.WRAPPER_OBJECT,
+      value = @JsonSubTypes.Type(value = Circle.class, name = "汉😀"))
+  public abstract static class EscapedObject {}
+
+  @JsonMixin(target = Shape.class)
+  @JsonSubTypes(
+      inclusion = Inclusion.WRAPPER_ARRAY,
+      value = @JsonSubTypes.Type(value = Circle.class, name = "汉😀"))
+  public abstract static class EscapedArray {}
 
   @Test
   public void inlineTypedRoot() {

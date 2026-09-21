@@ -40,6 +40,7 @@ public final class JsonConfig {
 
   private final Include defaultPropertyInclusion;
   private final boolean writeLongAsString;
+  private final boolean escapeNonAscii;
   private final JsonByteArray.Format byteArrayFormat;
   private final boolean codegenEnabled;
   private final boolean asyncCompilationEnabled;
@@ -61,6 +62,7 @@ public final class JsonConfig {
   JsonConfig(
       Include defaultPropertyInclusion,
       boolean writeLongAsString,
+      boolean escapeNonAscii,
       JsonByteArray.Format byteArrayFormat,
       boolean codegenEnabled,
       boolean asyncCompilationEnabled,
@@ -79,6 +81,7 @@ public final class JsonConfig {
       JsonTypeChecker typeChecker) {
     this.defaultPropertyInclusion = defaultPropertyInclusion;
     this.writeLongAsString = writeLongAsString;
+    this.escapeNonAscii = escapeNonAscii;
     this.byteArrayFormat = Objects.requireNonNull(byteArrayFormat, "byteArrayFormat");
     this.codegenEnabled = codegenEnabled;
     this.asyncCompilationEnabled = asyncCompilationEnabled;
@@ -111,6 +114,14 @@ public final class JsonConfig {
    */
   public boolean writeLongAsString() {
     return writeLongAsString;
+  }
+
+  /**
+   * Returns whether Fory-generated string contents escape characters above U+007F using lowercase
+   * hexadecimal digits and surrogate pairs. Caller-supplied raw JSON is unaffected.
+   */
+  public boolean escapeNonAscii() {
+    return escapeNonAscii;
   }
 
   /** Returns the default byte-array representation for both reading and writing. */

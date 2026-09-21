@@ -233,7 +233,8 @@ final class ObjectCodecBuilder {
                   ownerType,
                   propertyNamingStrategy,
                   defaultPropertyInclusion,
-                  generatedCodec);
+                  generatedCodec,
+                  sharedRegistry.escapeNonAscii());
           anyConstructionIndex = creatorInfo.argumentCount() + deferredFields.size();
           deferredFields.add(field);
           deferredRequired.add(builder.requiredDeferred);
@@ -302,7 +303,8 @@ final class ObjectCodecBuilder {
                 ownerType,
                 propertyNamingStrategy,
                 defaultPropertyInclusion,
-                generatedCodec);
+                generatedCodec,
+                sharedRegistry.escapeNonAscii());
         configureInclusion(
             property,
             builder,
@@ -343,7 +345,12 @@ final class ObjectCodecBuilder {
       }
       JsonFieldInfo field =
           builder.build(
-              record, ownerType, propertyNamingStrategy, defaultPropertyInclusion, generatedCodec);
+              record,
+              ownerType,
+              propertyNamingStrategy,
+              defaultPropertyInclusion,
+              generatedCodec,
+              sharedRegistry.escapeNonAscii());
       configureInclusion(
           field,
           builder,
@@ -3255,7 +3262,8 @@ final class ObjectCodecBuilder {
         TypeRef<?> ownerType,
         PropertyNamingStrategy propertyNamingStrategy,
         Include defaultInclusion,
-        GeneratedJsonCodec<?> generatedCodec) {
+        GeneratedJsonCodec<?> generatedCodec,
+        boolean escapeNonAscii) {
       validateTypes(ownerType);
       if (explicitInclude != JsonProperty.Include.DEFAULT && !hasWriteSource()) {
         throw new ForyJsonException(
@@ -3305,7 +3313,8 @@ final class ObjectCodecBuilder {
           codecAnnotation,
           valueCodecClass,
           formatAnnotation,
-          rawValue);
+          rawValue,
+          escapeNonAscii);
     }
 
     private void validateUnwrapped(Class<?> type, JsonCreatorInfo creatorInfo) {

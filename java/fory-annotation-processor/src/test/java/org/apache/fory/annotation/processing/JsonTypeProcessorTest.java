@@ -1016,6 +1016,42 @@ public class JsonTypeProcessorTest {
   }
 
   @Test
+  public void escapedStringMixinPipeline() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.TextTarget",
+            "package test;\n"
+                + "import org.apache.fory.json.annotation.*;\n"
+                + "public final class TextTarget { public String value; }\n"
+                + "@JsonMixin(target = TextTarget.class) abstract class TextMixin {\n"
+                + "  @JsonProperty(\"café\") String value;\n"
+                + "}\n");
+    assertTrue(result.success, result.diagnostics());
+    ClassLoader loader = result.classLoader();
+    Class<?> target = loader.loadClass("test.TextTarget");
+    Class<?> mixin = loader.loadClass("test.TextMixin");
+    GeneratedJsonCodec<?> generated =
+        generatedCodec(loader, "test.TextMixin_ForyJsonMixin_test_x2e_TextTarget_ForyJsonCodec");
+    Object value = target.getConstructor().newInstance();
+    fieldAccessor(generated.fieldAccessors(), "value").putObject(value, "汉😀");
+    for (boolean codegen : new boolean[] {false, true}) {
+      ForyJson json =
+          ForyJson.builder()
+              .withCodegen(codegen)
+              .withAsyncCompilation(false)
+              .withClassLoader(loader)
+              .registerMixin(mixin)
+              .escapeNonAscii(true)
+              .build();
+      String text = "{\"caf\\u00e9\":\"\\u6c49\\ud83d\\ude00\"}";
+      assertEquals(json.toJson(value), text);
+      assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), text);
+      Object decoded = json.fromJson(json.toPrettyJsonBytes(value), target);
+      assertEquals(fieldAccessor(generated.fieldAccessors(), "value").getObject(decoded), "汉😀");
+    }
+  }
+
+  @Test
   public void encodedRecordPipeline() throws Exception {
     assumeJava16Source();
     CompilationResult result =

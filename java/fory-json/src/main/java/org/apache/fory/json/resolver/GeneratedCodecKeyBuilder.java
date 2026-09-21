@@ -76,6 +76,7 @@ final class GeneratedCodecKeyBuilder {
     if (!JsonTypeResolver.readerKind(kind)) {
       keyParts.add(registry.defaultPropertyInclusion());
       keyParts.add(registry.writeLongAsString());
+      keyParts.add(registry.escapeNonAscii());
     }
     // Both readers and writers store concrete byte-array codecs selected by this default.
     keyParts.add(registry.byteArrayFormat());

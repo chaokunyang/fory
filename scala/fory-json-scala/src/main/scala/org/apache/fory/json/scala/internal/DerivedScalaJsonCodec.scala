@@ -142,7 +142,8 @@ class DerivedScalaJsonCodec[T](
       }
       return new ClosedSubtypeCodec(
         rootType,
-        new JsonSubTypesInfo(Inclusion.WRAPPER_OBJECT, "", classes.clone(), names.clone()),
+        new JsonSubTypesInfo(Inclusion.WRAPPER_OBJECT, "", classes.clone(), names.clone(),
+          resolver.sharedRegistry().escapeNonAscii()),
         typeRef,
         this,
         singletons.clone()

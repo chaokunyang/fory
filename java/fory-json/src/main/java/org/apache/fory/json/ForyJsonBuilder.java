@@ -53,6 +53,7 @@ import org.apache.fory.platform.GraalvmSupport;
 public final class ForyJsonBuilder {
   private Include defaultPropertyInclusion = Include.NON_NULL;
   private boolean writeLongAsString;
+  private boolean escapeNonAscii;
   private JsonByteArray.Format byteArrayFormat = JsonByteArray.Format.BASE64;
   private boolean codegenEnabled = true;
   private boolean asyncCompilationEnabled = true;
@@ -127,6 +128,21 @@ public final class ForyJsonBuilder {
    */
   public ForyJsonBuilder writeLongAsString(boolean writeLongAsString) {
     this.writeLongAsString = writeLongAsString;
+    return this;
+  }
+
+  /**
+   * Escapes characters above U+007F in JSON string values and names. Disabled by default.
+   *
+   * <p>Escapes use lowercase hexadecimal digits, with supplementary characters represented by two
+   * UTF-16 surrogate escapes. This applies to String, UTF-8, stream, and pretty output. Raw JSON
+   * supplied by the caller is preserved unchanged. Reading is unaffected.
+   *
+   * <p>The setting is fixed when {@link #build()} is called. Reuse two instances when both output
+   * policies are needed.
+   */
+  public ForyJsonBuilder escapeNonAscii(boolean escapeNonAscii) {
+    this.escapeNonAscii = escapeNonAscii;
     return this;
   }
 
@@ -364,6 +380,7 @@ public final class ForyJsonBuilder {
     return new JsonConfig(
         defaultPropertyInclusion,
         writeLongAsString,
+        escapeNonAscii,
         byteArrayFormat,
         effectiveCodegen,
         effectiveAsyncCompilation,

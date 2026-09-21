@@ -105,6 +105,7 @@ public final class ForyJsonExample {
     testCodecs();
     testValueAnnotations();
     testByteArrayFormats();
+    testNonAsciiEscaping();
     testSubtypes();
     testSubtypeMixin();
     testContainerRoots();
@@ -595,6 +596,22 @@ public final class ForyJsonExample {
             json.fromJson("{\"value\":\"AQID\"}", Base64Bytes.class).value, new byte[] {1, 2, 3}));
   }
 
+  private static void testNonAsciiEscaping() {
+    ForyJson json = ForyJson.builder().escapeNonAscii(true).withAsyncCompilation(false).build();
+    CodegenProbeModel model = new CodegenProbeModel();
+    model.probe = new CodegenProbeValue("é汉😀");
+    CodegenProbeCodec.expect(CodegenProbeModel.class, true, true);
+    String text = json.toJson(model);
+    Preconditions.checkArgument(text.contains("\"probe\":\"\\u00e9\\u6c49\\ud83d\\ude00\""));
+    Preconditions.checkArgument(
+        new String(json.toJsonBytes(model), StandardCharsets.UTF_8).equals(text));
+    Preconditions.checkArgument(
+        json.fromJson(json.toPrettyJsonBytes(model), CodegenProbeModel.class)
+            .probe
+            .value
+            .equals(model.probe.value));
+  }
+
   private static void testByteArrayFormats() {
     byte[] bytes = {1, -2, 3};
     JsonByteArray.Format[] formats = JsonByteArray.Format.values();
@@ -934,6 +951,10 @@ public final class ForyJsonExample {
 
     default ForyJson byteArrayConfiguration() {
       return ForyJson.builder().byteArrayFormat(JsonByteArray.Format.ARRAY).build();
+    }
+
+    default ForyJson escapingConfiguration() {
+      return ForyJson.builder().escapeNonAscii(true).build();
     }
   }
 

@@ -190,6 +190,7 @@ public final class JsonSharedRegistry {
   private final PropertyNamingStrategy propertyNamingStrategy;
   private final Include defaultPropertyInclusion;
   private final boolean writeLongAsString;
+  private final boolean escapeNonAscii;
   private final JsonByteArray.Format byteArrayFormat;
   private final ClassLoader classLoader;
   private final JsonMixinAnnotations mixinAnnotations;
@@ -248,6 +249,7 @@ public final class JsonSharedRegistry {
     propertyNamingStrategy = config.propertyNamingStrategy();
     defaultPropertyInclusion = config.defaultPropertyInclusion();
     writeLongAsString = config.writeLongAsString();
+    escapeNonAscii = config.escapeNonAscii();
     byteArrayFormat = config.byteArrayFormat();
     classLoader = config.classLoader();
     mixinAnnotations = new JsonMixinAnnotations(config);
@@ -1230,6 +1232,12 @@ public final class JsonSharedRegistry {
     return writeLongAsString;
   }
 
+  /** Returns the fixed escaping policy used to prepare writer tokens. */
+  @Internal
+  public boolean escapeNonAscii() {
+    return escapeNonAscii;
+  }
+
   /** Returns the default representation used when selecting ordinary byte-array codecs. */
   @Internal
   public JsonByteArray.Format byteArrayFormat() {
@@ -1770,7 +1778,7 @@ public final class JsonSharedRegistry {
       }
       classes[i] = subtype;
     }
-    return new JsonSubTypesInfo(inclusion, property, classes, names);
+    return new JsonSubTypesInfo(inclusion, property, classes, names, escapeNonAscii);
   }
 
   private JsonSubTypesInfo buildInferredSubTypesInfo(
@@ -1833,7 +1841,8 @@ public final class JsonSharedRegistry {
       classes = java.util.Arrays.copyOf(classes, accepted);
       names = java.util.Arrays.copyOf(names, accepted);
     }
-    return new JsonSubTypesInfo(annotation.inclusion(), annotation.property(), classes, names);
+    return new JsonSubTypesInfo(
+        annotation.inclusion(), annotation.property(), classes, names, escapeNonAscii);
   }
 
   private static void validateSubtype(Class<?> baseType, Class<?> subtype) {

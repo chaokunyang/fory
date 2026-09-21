@@ -46,6 +46,7 @@ final class JsonTestSupport {
       new JsonConfig(
           Include.NON_NULL,
           false,
+          false,
           JsonByteArray.Format.BASE64,
           false,
           false,

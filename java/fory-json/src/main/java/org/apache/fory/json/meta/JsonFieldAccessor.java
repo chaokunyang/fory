@@ -64,6 +64,7 @@ import org.apache.fory.util.function.ToShortFunction;
  * consume the original field or method metadata and emit direct expressions.
  */
 public abstract class JsonFieldAccessor {
+  private static final ClassLoader OWN_LOADER = JsonFieldAccessor.class.getClassLoader();
   private static final boolean USE_JDK25_NATIVE_ACCESS =
       GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION >= 25;
   private static final boolean USE_METHOD_LAMBDAS =
@@ -226,9 +227,15 @@ public abstract class JsonFieldAccessor {
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return true;
     }
-    // Lambda classes are defined in the declaring loader. Bootstrap and isolated model loaders
-    // cannot implement Fory's primitive function interfaces, so retain MethodHandle access there.
+    // Lambda classes must see Fory's primitive function interfaces from the declaring loader.
     ClassLoader loader = method.getDeclaringClass().getClassLoader();
+    // Check identity first because Fory itself may be loaded by the bootstrap loader.
+    if (loader == OWN_LOADER) {
+      return true;
+    }
+    if (loader == null) {
+      return false;
+    }
     try {
       return Class.forName(JsonFieldAccessor.class.getName(), false, loader)
           == JsonFieldAccessor.class;

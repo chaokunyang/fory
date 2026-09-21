@@ -21,6 +21,7 @@ package org.apache.fory.json.meta;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Member;
@@ -64,6 +65,9 @@ import org.apache.fory.util.function.ToShortFunction;
  * consume the original field or method metadata and emit direct expressions.
  */
 public abstract class JsonFieldAccessor {
+  private static final ClassLoader OWN_LOADER = JsonFieldAccessor.class.getClassLoader();
+  private static final ConcurrentMap<Integer, LoaderVisibility> LAMBDA_VISIBILITY =
+      new ConcurrentHashMap<>();
   private static final boolean USE_JDK25_NATIVE_ACCESS =
       GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION >= 25;
   private static final boolean USE_METHOD_LAMBDAS =
@@ -226,14 +230,45 @@ public abstract class JsonFieldAccessor {
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return true;
     }
-    // Lambda classes are defined in the declaring loader. Bootstrap and isolated model loaders
-    // cannot implement Fory's primitive function interfaces, so retain MethodHandle access there.
+    // Lambda classes must see Fory's primitive function interfaces from the declaring loader.
     ClassLoader loader = method.getDeclaringClass().getClassLoader();
-    try {
-      return Class.forName(JsonFieldAccessor.class.getName(), false, loader)
-          == JsonFieldAccessor.class;
-    } catch (ClassNotFoundException e) {
+    // Check identity first because Fory itself may be loaded by the bootstrap loader.
+    if (loader == OWN_LOADER) {
+      return true;
+    }
+    if (loader == null) {
       return false;
+    }
+    int key = System.identityHashCode(loader);
+    LoaderVisibility cached = LAMBDA_VISIBILITY.get(key);
+    // Identity hashes can collide; the weak referent verifies identity without retaining loaders.
+    if (cached != null && cached.get() == loader) {
+      return cached.visible;
+    }
+    // Do not hold the cache lock while invoking a user ClassLoader. Concurrent misses may repeat
+    // the lookup; a cached miss remains a safe MethodHandle fallback if visibility later changes.
+    boolean visible;
+    try {
+      visible =
+          Class.forName(JsonFieldAccessor.class.getName(), false, loader)
+              == JsonFieldAccessor.class;
+    } catch (ClassNotFoundException e) {
+      visible = false;
+    }
+    LAMBDA_VISIBILITY.put(key, new LoaderVisibility(loader, visible));
+    // Accessors are already retained by their codecs, so a full cache can start a new round.
+    if (LAMBDA_VISIBILITY.size() > 1024) {
+      LAMBDA_VISIBILITY.clear();
+    }
+    return visible;
+  }
+
+  private static final class LoaderVisibility extends WeakReference<ClassLoader> {
+    private final boolean visible;
+
+    private LoaderVisibility(ClassLoader loader, boolean visible) {
+      super(loader);
+      this.visible = visible;
     }
   }
 

@@ -2353,12 +2353,10 @@ func (m *MetaContext) Reset() {
 	m.hasFirstType = false
 	m.typeMapActive = false
 	m.firstTypePtr = 0
-	if m.readTypeInfos != nil {
-		// Cached owners may stay in reusable slots; overflow owners must end with the root.
-		if m.hasUncachedTypeInfo {
-			clear(m.readTypeInfos)
-			m.hasUncachedTypeInfo = false
-		}
-		m.readTypeInfos = m.readTypeInfos[:0]
+	// Cached owners may stay in reusable slots; overflow owners must end with the root.
+	if m.hasUncachedTypeInfo {
+		clear(m.readTypeInfos)
+		m.hasUncachedTypeInfo = false
 	}
+	m.readTypeInfos = m.readTypeInfos[:0]
 }

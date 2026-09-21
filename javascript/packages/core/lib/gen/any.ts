@@ -147,7 +147,27 @@ class AnySerializerGenerator extends BaseSerializerGenerator {
   }
 
   read(assignStmt: (v: string) => string, refState: string): string {
-    return assignStmt(`${this.detectedSerializer}.read(${refState});`);
+    const serializer = this.scope.uniqueName("serializer");
+    return `
+      const ${serializer} = ${this.detectedSerializer};
+      ${this.detectedSerializer} = null;
+      ${assignStmt(`${serializer}.read(${refState})`)};
+    `;
+  }
+
+  readWithDepth(assignStmt: (v: string) => string, refState: string): string {
+    const serializer = this.scope.uniqueName("serializer");
+    const result = this.scope.uniqueName("result");
+    // The shared dispatch slot must release overflow readers before either the
+    // depth check or the child read can fail, and before recursive dispatch.
+    return `
+      const ${serializer} = ${this.detectedSerializer};
+      ${this.detectedSerializer} = null;
+      ${this.builder.getReadContextName()}.incReadDepth();
+      const ${result} = ${serializer}.read(${refState});
+      ${this.builder.getReadContextName()}.decReadDepth();
+      ${assignStmt(result)};
+    `;
   }
 
   getFixedSize(): number {

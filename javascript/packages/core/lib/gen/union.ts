@@ -29,7 +29,6 @@ import { TypeMeta } from "../meta/TypeMeta";
 class UnionSerializerGenerator extends BaseSerializerGenerator {
   typeInfo: TypeInfo;
   typeMeta: TypeMeta | undefined;
-  detectedSerializer: string;
   writerSerializer: string;
   caseTypesVar: string;
   caseGenerators = new Map<string, SerializerGenerator>();
@@ -41,7 +40,6 @@ class UnionSerializerGenerator extends BaseSerializerGenerator {
       typeInfo.typeId === TypeId.NAMED_UNION && builder.resolver.isCompatible()
         ? TypeMeta.fromTypeInfo(typeInfo, builder.resolver)
         : undefined;
-    this.detectedSerializer = this.scope.declareVar("detectedSerializer", "null");
     this.writerSerializer = this.scope.declareVar("writerSerializer", "null");
 
     // Build case-to-type mapping from typeInfo.options.cases
@@ -160,10 +158,12 @@ class UnionSerializerGenerator extends BaseSerializerGenerator {
   }
 
   private readDynamicCaseValue(unionValue: string, refFlag: string) {
+    // A dynamic case reader may own uncached metadata and must stay call-local.
+    const serializer = this.scope.uniqueName("serializer");
     return `
-      ${this.detectedSerializer} = ${this.builder.getExternal(AnyHelper.name)}.detectSerializer(${this.builder.getReadContextName()});
+      const ${serializer} = ${this.builder.getExternal(AnyHelper.name)}.detectSerializer(${this.builder.getReadContextName()});
       ${this.builder.getReadContextName()}.incReadDepth();
-      ${unionValue} = ${this.detectedSerializer}.read(${refFlag} === ${RefFlags.RefValueFlag});
+      ${unionValue} = ${serializer}.read(${refFlag} === ${RefFlags.RefValueFlag});
       ${this.builder.getReadContextName()}.decReadDepth();
     `;
   }

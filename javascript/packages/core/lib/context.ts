@@ -601,8 +601,9 @@ export class ReadContext {
     this._depth = 0;
     this.remainingUnbackedContainerItems = 0;
     if (this.hasUncachedTypeMeta) {
-      // WeakMap keys remain live while the root metadata table retains them.
+      // Unknown values also retain their TypeMeta through the root reference table.
       this.typeMeta.length = 0;
+      this.refReader.reset();
       this.hasUncachedTypeMeta = false;
     }
   }

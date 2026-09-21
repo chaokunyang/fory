@@ -38,6 +38,87 @@ const { Type } = require("../dist/lib/typeInfo");
 
 const MAX_REMOTE_TYPE_KEYS = 8192;
 
+runTest("overflow unknown readers release root owners", async () => {
+  const Fory = require("../dist").default;
+  // Keep the resolver alive while proving that only its uncached metadata can be collected.
+  require("node:v8").setFlagsFromString("--expose-gc");
+  const gc = require("node:vm").runInNewContext("gc");
+  async function assertReleased(weak) {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await new Promise((resolve) => setImmediate(resolve));
+      gc();
+      if (weak.deref() === undefined) {
+        return;
+      }
+    }
+    assert.fail("uncached TypeMeta remains reachable from the idle reader");
+  }
+
+  for (const ref of [false, true]) {
+    for (const union of [false, true]) {
+      const reader = new Fory({ compatible: true, ref, maxSchemaVersionsPerType: 1 });
+      const registered = union ? reader.register(Type.union(7801, {})) : undefined;
+      const decode = (bytes) =>
+        registered ? registered.deserialize(bytes) : reader.deserialize(bytes);
+      const encode = (extra, value) => {
+        const writer = new Fory({ compatible: true, ref });
+        class Remote {
+          constructor() {
+            this.value = value;
+            this[extra] = "extra";
+          }
+        }
+        Type.struct(7800, {
+          value: Type.int32().setId(1),
+          [extra]: Type.string().setId(extra === "extraA" ? 2 : 3),
+        })(Remote);
+        const child = writer.register(Remote);
+        return union
+          ? writer.register(Type.union(7801, {})).serialize({ case: 0, value: new Remote() })
+          : child.serialize(new Remote());
+      };
+      const first = encode("extraA", 17);
+      const overflow = encode("extraB", 29);
+      decode(first);
+      const context = reader.readContext;
+      let observed;
+      const readTypeMetaSerializer = context.readTypeMetaSerializer;
+      context.readTypeMetaSerializer = function (wireTypeId) {
+        const serializer = readTypeMetaSerializer.call(this, wireTypeId);
+        const meta = this.typeMeta[this.typeMeta.length - 1];
+        if (this.typeMetaCache.get(meta.getHash()) !== meta) {
+          observed = new WeakRef(meta);
+        }
+        return serializer;
+      };
+      for (const failure of [undefined, "truncated", "depth"]) {
+        observed = undefined;
+        if (failure === "truncated") {
+          assert.throws(() => decode(overflow.subarray(0, overflow.length - 1)));
+        } else if (failure === "depth") {
+          const maxDepth = context._maxDepth;
+          context._maxDepth = union ? 1 : 0;
+          assert.throws(() => decode(overflow));
+          context._maxDepth = maxDepth;
+        } else {
+          const value = (() => {
+            const result = decode(overflow);
+            return (union ? result.value : result).$tag1;
+          })();
+          assert.equal(value, 29);
+        }
+        assert.ok(observed);
+        assert.equal(context.typeMeta.length, 0);
+        assert.equal(context.refReader.readObjects.length, 0);
+        assert.equal(context.typeMetaCache.size, 1);
+        await assertReleased(observed);
+      }
+      const reused = decode(first);
+      assert.equal((union ? reused.value : reused).$tag1, 17);
+    }
+  }
+});
+
 function context(typeResolver = {}, config = {}) {
   const fullConfig = {
     compatible: true,

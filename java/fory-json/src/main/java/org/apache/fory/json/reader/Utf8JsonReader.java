@@ -933,13 +933,13 @@ public final class Utf8JsonReader extends JsonReader {
     offset++;
     int safeEnd = Math.min(offset + 8, inputLimit);
     while (offset < safeEnd) {
-      ch = bytes[offset];
-      if (ch < '0' || ch > '9') {
+      int digit = bytes[offset] - '0';
+      if (Integer.compareUnsigned(digit, 9) > 0) {
         // A non-digit already ends the magnitude; only exhausting the digit bound needs the tail.
         position = offset;
         return negative ? -result : result;
       }
-      result = result * 10 + (ch - '0');
+      result = result * 10 + digit;
       offset++;
     }
     if (offset < inputLimit) {
@@ -4802,7 +4802,7 @@ public final class Utf8JsonReader extends JsonReader {
   private void rejectFractionOrExponentFast() {
     if (position < inputLimit) {
       int ch = input[position];
-      if (ch == '.' || ch == 'e' || ch == 'E') {
+      if (ch == '.' || (ch | 0x20) == 'e') {
         throw error("Expected integer");
       }
     }

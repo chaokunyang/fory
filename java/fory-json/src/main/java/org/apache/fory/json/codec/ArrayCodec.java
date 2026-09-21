@@ -1246,6 +1246,8 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
   }
 
   public abstract static class ByteArrayCodec extends ArrayCodec<byte[]> {
+    // Built-in byte elements parse directly from input, including quoted scalars. They cannot
+    // borrow the string decode buffer, so arrays may use it until the detached result is copied.
     private static final ByteArrayCodec SIGNED = new SignedByteArrayCodec();
     private static final ByteArrayCodec UNSIGNED = new UnsignedByteArrayCodec();
 
@@ -1304,15 +1306,14 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         finishPrimitiveArray(reader, 0, Byte.BYTES);
         return new byte[0];
       }
-      byte[] values = new byte[8];
+      byte[] values = reader.getStringDecodeBuffer();
       int size = 0;
       do {
-        rejectNull(reader);
         if ((size & ARRAY_BATCH_MASK) == ARRAY_BATCH_MASK) {
           reader.reserveGraphMemory(ARRAY_BATCH_SIZE * Byte.BYTES);
         }
         if (size == values.length) {
-          values = Arrays.copyOf(values, values.length << 1);
+          values = Arrays.copyOf(values, Math.max(8, values.length << 1));
         }
         values[size++] = readElement(reader);
       } while (reader.consumeNextToken(','));
@@ -1332,15 +1333,14 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         finishPrimitiveArray(reader, 0, Byte.BYTES);
         return new byte[0];
       }
-      byte[] values = new byte[8];
+      byte[] values = reader.getStringDecodeBuffer();
       int size = 0;
       do {
-        rejectNull(reader);
         if ((size & ARRAY_BATCH_MASK) == ARRAY_BATCH_MASK) {
           reader.reserveGraphMemory(ARRAY_BATCH_SIZE * Byte.BYTES);
         }
         if (size == values.length) {
-          values = Arrays.copyOf(values, values.length << 1);
+          values = Arrays.copyOf(values, Math.max(8, values.length << 1));
         }
         values[size++] = readElement(reader);
       } while (reader.consumeNextToken(','));
@@ -1360,15 +1360,14 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         finishPrimitiveArray(reader, 0, Byte.BYTES);
         return new byte[0];
       }
-      byte[] values = new byte[8];
+      byte[] values = reader.getStringDecodeBuffer();
       int size = 0;
       do {
-        rejectNull(reader);
         if ((size & ARRAY_BATCH_MASK) == ARRAY_BATCH_MASK) {
           reader.reserveGraphMemory(ARRAY_BATCH_SIZE * Byte.BYTES);
         }
         if (size == values.length) {
-          values = Arrays.copyOf(values, values.length << 1);
+          values = Arrays.copyOf(values, Math.max(8, values.length << 1));
         }
         values[size++] = readElement(reader);
       } while (reader.consumeNextToken(','));
@@ -3748,30 +3747,6 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
     writer.writeNull();
   }
 
-  private static void rejectNull(JsonReader reader) {
-    if (reader.tryReadNull()) {
-      throw new ForyJsonException("Cannot read null into primitive array element");
-    }
-  }
-
-  private static void rejectNull(Latin1JsonReader reader) {
-    if (reader.tryReadNullToken()) {
-      throw new ForyJsonException("Cannot read null into primitive array element");
-    }
-  }
-
-  private static void rejectNull(Utf16JsonReader reader) {
-    if (reader.tryReadNullToken()) {
-      throw new ForyJsonException("Cannot read null into primitive array element");
-    }
-  }
-
-  private static void rejectNull(Utf8JsonReader reader) {
-    if (reader.tryReadNullToken()) {
-      throw new ForyJsonException("Cannot read null into primitive array element");
-    }
-  }
-
   private static short readShort(int value) {
     if (value < Short.MIN_VALUE || value > Short.MAX_VALUE) {
       throw new ForyJsonException("Short overflow");
@@ -3780,7 +3755,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
   }
 
   private static byte readByte(int value) {
-    if (value < Byte.MIN_VALUE || value > Byte.MAX_VALUE) {
+    if (value != (byte) value) {
       throw new ForyJsonException("Byte overflow");
     }
     return (byte) value;

@@ -269,6 +269,53 @@ public class JsonByteArrayAnnotationTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void arrayContents() {
+    ForyJson json = newJsonBuilder().byteArrayFormat(JsonByteArray.Format.ARRAY).build();
+    for (int size : new int[] {0, 7, 8, 9, 1023, 1024, 1025, 4097}) {
+      byte[] expected = new byte[size];
+      StringBuilder array = new StringBuilder("[");
+      for (int i = 0; i < size; i++) {
+        expected[i] = (byte) i;
+        if (i != 0) {
+          array.append(",\n");
+        }
+        array.append('"').append(expected[i]).append('"');
+      }
+      String text = array.append(']').toString();
+      byte[] first = json.fromJson(text, byte[].class);
+      byte[] second = json.fromJson(text.getBytes(StandardCharsets.UTF_8), byte[].class);
+      String nested = "{\"ignored\":\"汉\\u6c49\",\"bytes\":" + text + "}";
+      assertEquals(json.fromJson(nested, ArrayField.class).bytes, expected);
+      json.fromJson("[-1,-2,-3]", byte[].class);
+      assertEquals(first, expected);
+      assertEquals(second, expected);
+    }
+    String text =
+        "{\"label\":\"汉\\u6c49\",\"bytes\":[1,2],\"list\":[[3],[4,5]],"
+            + "\"map\":{\"a\":[6],\"b\":[7,8]},\"nested\":[[9],[10,11]]}";
+    for (BinaryValues value :
+        new BinaryValues[] {
+          json.fromJson(text, BinaryValues.class),
+          json.fromJson(text.getBytes(StandardCharsets.UTF_8), BinaryValues.class)
+        }) {
+      assertEquals(value.label, "汉汉");
+      assertEquals(value.bytes, new byte[] {1, 2});
+      assertEquals(value.list.get(0), new byte[] {3});
+      assertEquals(value.list.get(1), new byte[] {4, 5});
+      assertEquals(value.map.get("a"), new byte[] {6});
+      assertEquals(value.map.get("b"), new byte[] {7, 8});
+      assertEquals(value.nested, new byte[][] {{9}, {10, 11}});
+    }
+    for (String input : new String[] {"[0,null]", "[0,128]", "[-129]", "[a,0]"}) {
+      assertThrows(ForyJsonException.class, () -> json.fromJson(input, byte[].class));
+      assertThrows(
+          ForyJsonException.class,
+          () -> json.fromJson(input.getBytes(StandardCharsets.UTF_8), byte[].class));
+      assertEquals(json.fromJson("[1,2]", byte[].class), new byte[] {1, 2});
+    }
+  }
+
+  @Test
   public void conflictingFormats() {
     assertThrows(ForyJsonException.class, () -> newJson().toJson(new ConflictingFormat()));
   }

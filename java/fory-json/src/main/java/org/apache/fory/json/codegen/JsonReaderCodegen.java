@@ -2382,7 +2382,8 @@ abstract class JsonReaderCodegen {
         new Expression.Variable(
             "routeIndex",
             new Expression.Invoke(
-                    fieldRef("unwrapped", JsonUnwrappedInfo.class),
+                    // A user type named Unwrapped produces a local named unwrapped.
+                    fieldRef("this.unwrapped", JsonUnwrappedInfo.class),
                     "match",
                     TypeRef.of(int.class),
                     true,

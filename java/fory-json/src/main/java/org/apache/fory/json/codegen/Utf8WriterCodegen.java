@@ -24,6 +24,7 @@ import static org.apache.fory.codegen.ExpressionUtils.eq;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.UUID;
 import org.apache.fory.codegen.CodegenContext;
 import org.apache.fory.codegen.Expression;
@@ -102,7 +103,7 @@ final class Utf8WriterCodegen extends JsonWriterCodegen {
   @Override
   boolean writesStringCollectionDirectly(JsonFieldInfo property) {
     return JsonCodegen.writesStringCollectionDirectly(property)
-        && resolver.exactUtf8WriterCollection(property.writeTypeInfo()) == null;
+        && resolver.exactWriterCollection(property.writeTypeInfo()) == null;
   }
 
   @Override
@@ -205,7 +206,7 @@ final class Utf8WriterCodegen extends JsonWriterCodegen {
   @Override
   Expression tryWriteObjectStartString(
       JsonFieldInfo property, Expression value, Expression writer) {
-    if (!canPackObjectStartString(property)) {
+    if (pretty || !canPackObjectStartString(property)) {
       return null;
     }
     return new Expression.ListExpression(
@@ -229,6 +230,16 @@ final class Utf8WriterCodegen extends JsonWriterCodegen {
       boolean commaKnown,
       Expression index,
       Expression writer) {
+    if (pretty) {
+      return new Expression.ListExpression(
+          writeFieldName(property, id, commaKnown, index, writer),
+          new Expression.Invoke(
+              writer,
+              longValue
+                  ? property.writesLongAsString() ? "writeLongAsString" : "writeLong"
+                  : "writeInt",
+              value));
+    }
     String method =
         longValue
             ? property.writesLongAsString() ? "writeLongAsStringField" : "writeLongField"
@@ -278,6 +289,30 @@ final class Utf8WriterCodegen extends JsonWriterCodegen {
   @Override
   Expression writeFieldName(
       JsonFieldInfo property, int id, boolean commaKnown, Expression index, Expression writer) {
+    if (pretty) {
+      byte[] name = property.utf8NamePrefix();
+      if (name.length + 2 <= Long.BYTES * 2) {
+        byte[] prefix = Arrays.copyOf(name, name.length + 2);
+        prefix[name.length - 1] = ' ';
+        prefix[name.length] = ':';
+        prefix[name.length + 1] = ' ';
+        Expression.ListExpression expressions =
+            new Expression.ListExpression(
+                new Expression.Invoke(
+                    writer, "writeComma", commaKnown ? Expression.Literal.ofInt(1) : index),
+                new Expression.Invoke(
+                    writer,
+                    "writeRawValue",
+                    Expression.Literal.ofLong(packedPrefixWord(prefix, 0)),
+                    Expression.Literal.ofLong(packedPrefixWord(prefix, Long.BYTES)),
+                    Expression.Literal.ofInt(prefix.length)));
+        if (!commaKnown) {
+          expressions.add(increment(index));
+        }
+        return expressions;
+      }
+      return prettyFieldName(id, commaKnown, index, writer);
+    }
     if (commaKnown && canPackPrefix(property, true)) {
       if (inlineSchemaWrites) {
         return directPackedPrefix(property, id);
@@ -309,7 +344,7 @@ final class Utf8WriterCodegen extends JsonWriterCodegen {
   @Override
   Expression writeNullField(
       JsonFieldInfo property, int id, boolean commaKnown, Expression index, Expression writer) {
-    if (commaKnown && canPackPrefix(property, true)) {
+    if (!pretty && commaKnown && canPackPrefix(property, true)) {
       return new Expression.Invoke(writer, "writeNullField", packedPrefixArgs(property, true));
     }
     return new Expression.ListExpression(
@@ -319,7 +354,7 @@ final class Utf8WriterCodegen extends JsonWriterCodegen {
 
   @Override
   Expression writeObjectEnd(Expression writer) {
-    if (!inlineSchemaWrites) {
+    if (pretty || !inlineSchemaWrites) {
       return super.writeObjectEnd(writer);
     }
     return new Expression.Block(

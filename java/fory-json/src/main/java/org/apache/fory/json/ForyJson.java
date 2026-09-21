@@ -168,7 +168,10 @@ public final class ForyJson {
    * writeString} method instead of invoking a {@code ForyJson} root API.
    */
   public String toJson(Object value) {
-    PooledState entry = acquire();
+    return toJson(value, acquire());
+  }
+
+  private String toJson(Object value, PooledState entry) {
     JsonState state = entry.state;
     StringJsonWriter writer = state.stringWriter();
     try {
@@ -228,6 +231,20 @@ public final class ForyJson {
   }
 
   /**
+   * Serializes one JSON document with two-space object and array indentation and LF line breaks.
+   * Colons have a space on each side; empty containers are {@code { }} and {@code [ ]}. No trailing
+   * line break is added. The format belongs to this call, not the instance.
+   *
+   * <p>Like {@link #toJson(Object)}, this operation is not reentrant on the same instance.
+   */
+  public String toPrettyJson(Object value) {
+    PooledState entry = acquire();
+    // Root cleanup restores compact output, so only pretty calls need to select a format.
+    entry.state.stringWriter.setPrettyPrint(true);
+    return toJson(value, entry);
+  }
+
+  /**
    * Serializes {@code value} as one complete JSON document in a detached UTF-8 byte array.
    *
    * <p>This root API is not reentrant on the same instance. A custom codec invoked by this
@@ -235,7 +252,10 @@ public final class ForyJson {
    * writeUtf8} method instead of invoking a {@code ForyJson} root API.
    */
   public byte[] toJsonBytes(Object value) {
-    PooledState entry = acquire();
+    return toJsonBytes(value, acquire());
+  }
+
+  private byte[] toJsonBytes(Object value, PooledState entry) {
     JsonState state = entry.state;
     Utf8JsonWriter writer = state.utf8Writer();
     try {
@@ -285,6 +305,17 @@ public final class ForyJson {
     requireDeclaredType(declaredType);
     validateDeclaredType(declaredType.getType());
     return toJsonBytesDeclared(value, declaredType);
+  }
+
+  /**
+   * Serializes a detached UTF-8 document using the format described by {@link
+   * #toPrettyJson(Object)}. Like {@link #toJsonBytes(Object)}, this operation is not reentrant on
+   * the same instance.
+   */
+  public byte[] toPrettyJsonBytes(Object value) {
+    PooledState entry = acquire();
+    entry.state.utf8Writer.setPrettyPrint(true);
+    return toJsonBytes(value, entry);
   }
 
   /**

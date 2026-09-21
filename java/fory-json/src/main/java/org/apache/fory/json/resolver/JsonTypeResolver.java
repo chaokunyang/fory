@@ -284,18 +284,18 @@ public final class JsonTypeResolver {
     return owner;
   }
 
-  /** Returns an exact declared UTF-8 collection writer owner, or {@code null}. */
+  /** Returns an exact declared collection writer owner, or {@code null}. */
   @Internal
-  public CollectionCodec<?> exactUtf8WriterCollection(JsonTypeInfo typeInfo) {
+  public CollectionCodec<?> exactWriterCollection(JsonTypeInfo typeInfo) {
     jitContext.lock();
     try {
-      return exactUtf8WriterCollectionOwner(typeInfo);
+      return exactWriterCollectionOwner(typeInfo);
     } finally {
       jitContext.unlock();
     }
   }
 
-  private CollectionCodec<?> exactUtf8WriterCollectionOwner(JsonTypeInfo typeInfo) {
+  private CollectionCodec<?> exactWriterCollectionOwner(JsonTypeInfo typeInfo) {
     CollectionCodec<?> owner = exactDeclaredCollectionOwner(typeInfo);
     // A generated collection writer owns only the ArrayList common loop. Keep declarations that
     // cannot legally contain an ArrayList on their existing codec instead of compiling a class
@@ -2052,8 +2052,8 @@ public final class JsonTypeResolver {
       throw new IllegalStateException("Inline subtype readers reuse child generated classes");
     }
     if (node.collectionOwner != null) {
-      if (kind == CapabilityKind.UTF8_WRITER) {
-        return sharedRegistry.utf8CollectionWriterClass(node.generatedKey);
+      if (kind == CapabilityKind.STRING_WRITER || kind == CapabilityKind.UTF8_WRITER) {
+        return sharedRegistry.collectionWriterClass(node.generatedKey);
       }
       if (kind == CapabilityKind.UTF8_READER) {
         return sharedRegistry.utf8CollectionReaderClass(node.generatedKey);
@@ -2086,15 +2086,21 @@ public final class JsonTypeResolver {
     }
     if (node.collectionOwner != null) {
       JsonTypeInfo element = declaredCollectionElement(node.typeInfo);
+      if (kind == CapabilityKind.STRING_WRITER) {
+        StringWriterCodec<Object> elementWriter = resolvedCapability(element, capabilities, kind);
+        StringWriterCodec<?> fallback = node.collectionOwner;
+        return GeneratedCodecInstantiator.instantiateCollectionWriter(
+            generatedClass, StringWriterCodec.class, fallback, elementWriter);
+      }
       if (kind == CapabilityKind.UTF8_WRITER) {
         Utf8WriterCodec<Object> elementWriter = resolvedCapability(element, capabilities, kind);
         Utf8WriterCodec<Object> fallback = eraseUtf8Writer(node.collectionOwner);
         if (node.collectionOwner instanceof CollectionCodec.StringCollectionCodec) {
-          return GeneratedCodecInstantiator.instantiateUtf8CollectionWriter(
-              generatedClass, fallback);
+          return GeneratedCodecInstantiator.instantiateCollectionWriter(
+              generatedClass, Utf8WriterCodec.class, fallback);
         }
-        return GeneratedCodecInstantiator.instantiateUtf8CollectionWriter(
-            generatedClass, fallback, elementWriter);
+        return GeneratedCodecInstantiator.instantiateCollectionWriter(
+            generatedClass, Utf8WriterCodec.class, fallback, elementWriter);
       }
       if (kind == CapabilityKind.UTF8_READER) {
         Utf8ReaderCodec<Object> elementReader = resolvedCapability(element, capabilities, kind);
@@ -2352,12 +2358,18 @@ public final class JsonTypeResolver {
       if (objectOwner != null) {
         return addObject(objectOwner, typeInfo, slotEdge);
       }
-      if (kind == CapabilityKind.UTF8_WRITER || kind == CapabilityKind.UTF8_READER) {
+      if (kind == CapabilityKind.STRING_WRITER
+          || kind == CapabilityKind.UTF8_WRITER
+          || kind == CapabilityKind.UTF8_READER) {
         CollectionCodec<?> collectionOwner =
-            kind == CapabilityKind.UTF8_WRITER
-                ? exactUtf8WriterCollectionOwner(typeInfo)
+            kind != CapabilityKind.UTF8_READER
+                ? exactWriterCollectionOwner(typeInfo)
                 : exactUtf8CollectionOwner(typeInfo);
-        if (collectionOwner != null) {
+        // String scalar collections already have direct generated field writes. Only object
+        // collections need a final generated element capability instead of per-call slot lookup.
+        if (collectionOwner != null
+            && (kind != CapabilityKind.STRING_WRITER
+                || collectionOwner instanceof CollectionCodec.ObjectCollectionCodec)) {
           return addCollection(collectionOwner, typeInfo);
         }
       }

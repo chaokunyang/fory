@@ -19,13 +19,52 @@
 
 package org.apache.fory.benchmark;
 
+import com.fasterxml.jackson.core.util.DefaultIndenter;
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.apache.fory.benchmark.JsonSerializationSuite.JsonState;
 import org.apache.fory.benchmark.data.MediaContent;
+import org.apache.fory.json.ForyJson;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
 public class JsonSerializationSuiteTest {
+  @Test
+  public void prettyMatchesJackson() throws IOException {
+    JsonState state = new JsonState();
+    state.setup();
+    Map<String, Object> nested = new LinkedHashMap<>();
+    nested.put("emptyObject", Collections.emptyMap());
+    nested.put("emptyArray", Collections.emptyList());
+    nested.put(
+        "values", Arrays.asList(Collections.singletonMap("中", "😀\\\"{}[],:"), new int[] {1, 2}));
+    ObjectMapper mapper = new ObjectMapper();
+    for (boolean codegen : new boolean[] {false, true}) {
+      ForyJson json = ForyJson.builder().withCodegen(codegen).withAsyncCompilation(false).build();
+      for (Object value :
+          new Object[] {state.mediaContent, nested, new Object[] {nested, nested}}) {
+        String compact = state.foryJson.toJson(value);
+        DefaultIndenter indenter = new DefaultIndenter("  ", "\n");
+        String expected =
+            mapper
+                .writer(
+                    new DefaultPrettyPrinter()
+                        .withObjectIndenter(indenter)
+                        .withArrayIndenter(indenter))
+                .writeValueAsString(mapper.readTree(compact));
+        Assert.assertEquals(json.toPrettyJson(value), expected);
+        Assert.assertEquals(
+            json.toPrettyJsonBytes(value), expected.getBytes(StandardCharsets.UTF_8));
+      }
+    }
+  }
+
   @Test
   public void testJackson() throws IOException {
     JsonSerializationSuite suite = new JsonSerializationSuite();

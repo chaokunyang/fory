@@ -363,8 +363,8 @@ public final class JsonSharedRegistry {
     return generatedClassFuture(key, () -> codegen.compileUtf8Reader(key, owner, resolver));
   }
 
-  CompletableFuture<Class<?>> utf8CollectionWriterClass(GeneratedCodecKey key) {
-    return generatedClassFuture(key, () -> codegen.compileUtf8CollectionWriter(key));
+  CompletableFuture<Class<?>> collectionWriterClass(GeneratedCodecKey key) {
+    return generatedClassFuture(key, () -> codegen.compileCollectionWriter(key));
   }
 
   CompletableFuture<Class<?>> utf8CollectionReaderClass(GeneratedCodecKey key) {

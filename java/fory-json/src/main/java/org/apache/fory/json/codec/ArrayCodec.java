@@ -951,6 +951,14 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       }
       boolean[] array = value;
       writer.writeArrayStart();
+      if (writer.prettyPrint()) {
+        for (int i = 0; i < array.length; i++) {
+          writer.writeComma(i);
+          writer.writeBoolean(array[i]);
+        }
+        writer.writeArrayEnd();
+        return;
+      }
       if (array.length != 0) {
         writer.writeBoolean(array[0]);
         for (int i = 1; i < array.length; i++) {
@@ -1447,6 +1455,14 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       }
       char[] array = value;
       writer.writeArrayStart();
+      if (writer.prettyPrint()) {
+        for (int i = 0; i < array.length; i++) {
+          writer.writeComma(i);
+          writer.writeChar(array[i]);
+        }
+        writer.writeArrayEnd();
+        return;
+      }
       if (array.length != 0) {
         writer.writeChar(array[0]);
         for (int i = 1; i < array.length; i++) {
@@ -2323,6 +2339,10 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       }
       Object[] array = (Object[]) value;
       StringEnumCodec<Object> codec = enumCodec;
+      if (writer.prettyPrint()) {
+        super.writeUtf8(writer, value);
+        return;
+      }
       long[] tokens = codec.utf8Tokens;
       writer.writeArrayStart();
       byte[] bytes = writer.getBuffer();

@@ -104,6 +104,7 @@ final class JsonGeneratedCodecBuilder extends CodecBuilder {
 
   Expression fieldValue(JsonFieldInfo property, Expression object) {
     Method getter = property.writeGetter();
+    Expression value;
     if (getter != null) {
       // Scala 3 can emit a BoxedUnit descriptor with a void generic return signature.
       TypeRef<?> returnType =
@@ -125,12 +126,20 @@ final class JsonGeneratedCodecBuilder extends CodecBuilder {
       }
       // Scala Unit getters can return void. Match reflective access, which adapts their absent
       // result to null for the logical Unit codec, rather than generating a cast from void.
-      return getter.getReturnType() == void.class
-          ? new Expression.ListExpression(
-              invocation, new Expression.Null(TypeRef.of(property.writeRawType()), false))
-          : invocation;
+      value =
+          getter.getReturnType() == void.class
+              ? new Expression.ListExpression(
+                  invocation, new Expression.Null(TypeRef.of(property.writeRawType()), false))
+              : invocation;
+    } else {
+      value = getFieldValue(object, writeDescriptor(property));
     }
-    return getFieldValue(object, writeDescriptor(property));
+    // A resolved primitive type argument still has an erased Object accessor or field.
+    // Adapt it here so both fused object-start writes and ordinary fields receive primitives.
+    Class<?> writeType = property.writeRawType();
+    return writeType.isPrimitive() && writeType != void.class && !value.type().isPrimitive()
+        ? new Expression.Cast(value, TypeRef.of(writeType))
+        : value;
   }
 
   Expression anyValue(Field field, Expression object) {

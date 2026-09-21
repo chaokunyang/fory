@@ -42,16 +42,13 @@ private[scala] object ScalaObjectModels {
     // pick a constructor.
     try {
       val companion = companionOwner(typeClass, committed = false)
-      if (companion != null) findPrimaryConstructor(typeClass, companion) != null
+      if (companion != null && findPrimaryConstructor(typeClass, companion) != null) true
       else {
-        // A case class that cannot reach its companion, such as one declared inside a class or a
-        // method, is still a case class. Claim it so the codec reports the exact reason instead of
-        // leaving it to a generic object model that silently drops every property. A generated
+        // A case class with an unreachable companion or unsupported constructor still belongs
+        // here. Otherwise the generic object model can silently drop every property. A generated
         // `copy` returning the declaring class together with a declared `productPrefix`, which
         // `Product` otherwise supplies by default, is the compiler marker of a case class.
-        // Standard-library types keep their own mapping. A reachable companion whose constructor
-        // this module does not support, such as a varargs or non-public primary constructor, keeps
-        // its previous handling.
+        // Standard-library types keep their own mapping.
         !name.startsWith("scala.") && declaresCopy(typeClass) && declaresProductPrefix(typeClass)
       }
     } catch { case _: LinkageError => false }
@@ -303,7 +300,8 @@ private[scala] object ScalaObjectModels {
   }
 
   private def declaresCopy(typeClass: Class[_]): Boolean = {
-    typeClass.getMethods.exists(method =>
+    // Scala 3 keeps copy private when the primary constructor is private.
+    typeClass.getDeclaredMethods.exists(method =>
       method.getName == "copy" && !Modifier.isStatic(method.getModifiers) &&
         !method.isBridge && !method.isSynthetic && method.getReturnType == typeClass
     )

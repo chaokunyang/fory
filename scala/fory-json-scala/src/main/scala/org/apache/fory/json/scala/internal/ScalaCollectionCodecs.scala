@@ -540,11 +540,7 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int, runtimeType
       runtimeType
     )
     val keyType = if (specializedKey == null) arguments(0) else specializedKey
-    val keyRawType = ScalaTypeSupport.rawType(keyType)
-    val enumerationKeyCodec = ScalaEnumerationTypes.mapKeyCodec(keyType)
-    keyCodec =
-      if (enumerationKeyCodec == null) resolver.getMapKeyCodec(keyRawType)
-      else enumerationKeyCodec
+    keyCodec = defaultKeyCodec(keyType, resolver)
     val valueType = arguments(if (specializedKey == null) 1 else 0)
     valueInfo = resolver.getTypeInfo(valueType, ScalaTypeSupport.rawType(valueType))
   }
@@ -566,17 +562,24 @@ private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int, runtimeType
     keyCodec =
       if (childCodecs.keyCodec() != classOf[JsonCodec.NoMapKeyCodec])
         resolver.getMapKeyCodec(keyRawType, childCodecs.keyCodec())
-      else {
-        val enumerationKeyCodec = ScalaEnumerationTypes.mapKeyCodec(keyType)
-        if (enumerationKeyCodec == null) resolver.getMapKeyCodec(keyRawType)
-        else enumerationKeyCodec
-      }
+      else defaultKeyCodec(keyType, resolver)
     val valueType = arguments(if (specializedKey == null) 1 else 0)
     val valueRawType = ScalaTypeSupport.rawType(valueType)
     valueInfo =
       if (childCodecs.valueCodec() == classOf[JsonCodec.NoJsonValueCodec])
         resolver.getTypeInfo(valueType, valueRawType)
       else resolver.getTypeInfo(valueType, valueRawType, childCodecs.valueCodec())
+  }
+
+  private def defaultKeyCodec(keyType: java.lang.reflect.Type, resolver: JsonTypeResolver): MapKeyCodec = {
+    val enumerationCodec = ScalaEnumerationTypes.mapKeyCodec(keyType)
+    if (enumerationCodec != null) return enumerationCodec
+    val rawType = ScalaTypeSupport.rawType(keyType)
+    val enumRoot = ScalaEnumCodec.enumRoot(rawType)
+    if (enumRoot != null && enumRoot == rawType) {
+      resolver.checkMapKeySecure(rawType)
+      ScalaEnumCodec.create(enumRoot, TypeRef.of(keyType))
+    } else resolver.getMapKeyCodec(rawType)
   }
 
   override def writeString(writer: StringJsonWriter, value: scala.collection.Map[Any, Any]): Unit = {
@@ -1303,12 +1306,22 @@ private[scala] object ScalaCollectionCodecs {
     add(Vector(1))
     add(Vector.tabulate(33)(identity))
     add(scala.collection.immutable.Queue.empty)
+    add(scala.collection.immutable.Queue(1))
     add(scala.collection.immutable.ArraySeq.empty[Any])
     add(scala.collection.immutable.ArraySeq.empty[Int])
     add(scala.collection.mutable.ArrayBuffer.empty)
     add(scala.collection.mutable.ListBuffer.empty)
     add(scala.collection.mutable.ArraySeq.empty[Any])
-    add(scala.collection.mutable.ArraySeq.empty[Int])
+    // ArraySeq.empty ignores its ClassTag and always uses ofRef. Register each primitive
+    // backing class explicitly without admitting application subclasses of mutable.ArraySeq.
+    add(scala.collection.mutable.ArraySeq.make(Array.emptyBooleanArray))
+    add(scala.collection.mutable.ArraySeq.make(Array.emptyByteArray))
+    add(scala.collection.mutable.ArraySeq.make(Array.emptyShortArray))
+    add(scala.collection.mutable.ArraySeq.make(Array.emptyCharArray))
+    add(scala.collection.mutable.ArraySeq.make(Array.emptyIntArray))
+    add(scala.collection.mutable.ArraySeq.make(Array.emptyLongArray))
+    add(scala.collection.mutable.ArraySeq.make(Array.emptyFloatArray))
+    add(scala.collection.mutable.ArraySeq.make(Array.emptyDoubleArray))
     add(scala.collection.mutable.ArrayDeque.empty)
     add(scala.collection.mutable.Queue.empty)
     add(scala.collection.immutable.Set.empty)

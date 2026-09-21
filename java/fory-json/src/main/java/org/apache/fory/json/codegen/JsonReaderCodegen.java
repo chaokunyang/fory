@@ -260,7 +260,7 @@ abstract class JsonReaderCodegen {
     this.any = any;
     ownerType = type;
     storesSelfReader =
-        JsonCodegen.storesSelfReader(type, properties, creatorInfo != null, any, resolver);
+        JsonCodegen.storesSelfReader(owner, properties, creatorInfo != null, any, resolver);
     if (creatorInfo != null) {
       return genAnyCreatorReaderCode(builder, type, creatorInfo);
     }
@@ -4165,8 +4165,8 @@ abstract class JsonReaderCodegen {
   }
 
   private boolean storesAnyReader(Class<?> type) {
-    return resolver.canonicalObjectCodec(any.valueTypeInfo()) == null
-        || any.valueTypeInfo().rawType() != type;
+    return any.valueTypeInfo().rawType() != type
+        || resolver.canonicalObjectCodec(any.valueTypeInfo()) != objectOwner;
   }
 
   private Expression anyReaderRef() {
@@ -4577,7 +4577,9 @@ abstract class JsonReaderCodegen {
 
   final boolean storesReadObjectCodec(Class<?> type, JsonFieldInfo property) {
     Class<?> nestedType = readNestedType(property);
-    return nestedType != null && nestedType != type;
+    return nestedType != null
+        && (nestedType != type
+            || resolver.canonicalObjectCodec(property.readTypeInfo()) != objectOwner);
   }
 
   private Expression readField(
@@ -4851,6 +4853,7 @@ abstract class JsonReaderCodegen {
   final Expression readObjectValue(Class<?> type, JsonFieldInfo property, int id) {
     Expression codec =
         property.readRawType() == type
+                && resolver.canonicalObjectCodec(property.readTypeInfo()) == objectOwner
             ? nestedSelfReaderRef()
             : usesReaderSlot(property.readTypeInfo())
                 ? readerFromSlot(fieldRef("o" + id, JsonTypeInfo.class))

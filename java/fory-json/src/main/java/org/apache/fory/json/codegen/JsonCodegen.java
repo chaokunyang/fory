@@ -1345,14 +1345,15 @@ public final class JsonCodegen {
     if (any == null || any.readField() == null && any.readSetter() == null) {
       return false;
     }
-    if (storesSelfReader(
-        owner.type(), owner.readFields(), owner.creatorInfo() != null, any, resolver)) {
+    if (storesSelfReader(owner, owner.readFields(), owner.creatorInfo() != null, any, resolver)) {
       return true;
     }
     JsonUnwrappedInfo unwrapped = owner.unwrappedInfo();
     if (unwrapped != null) {
       for (JsonUnwrappedInfo.ReadRoute route : unwrapped.readRoutes()) {
-        if (route.field() != null && readNestedType(route.field(), resolver) == owner.type()) {
+        if (route.field() != null
+            && readNestedType(route.field(), resolver) != null
+            && resolver.canonicalObjectCodec(route.field().readTypeInfo()) == owner) {
           return true;
         }
       }
@@ -1361,19 +1362,20 @@ public final class JsonCodegen {
   }
 
   static boolean storesSelfReader(
-      Class<?> type,
+      ObjectCodec<?> owner,
       JsonFieldInfo[] properties,
       boolean creator,
       AnyInfo any,
       JsonTypeResolver resolver) {
-    if (any.valueRawType() == type && resolver.canonicalObjectCodec(any.valueTypeInfo()) != null) {
+    if (resolver.canonicalObjectCodec(any.valueTypeInfo()) == owner) {
       return true;
     }
     if (creator) {
       return false;
     }
     for (JsonFieldInfo property : properties) {
-      if (readNestedType(property, resolver) == type) {
+      if (readNestedType(property, resolver) != null
+          && resolver.canonicalObjectCodec(property.readTypeInfo()) == owner) {
         return true;
       }
     }

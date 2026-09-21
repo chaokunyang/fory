@@ -445,7 +445,7 @@ private[scala] final class ScalaTupleCodec(arity: Int, tupleType: Class[_], runt
   }
 
   private def requireArity(value: Product): Unit = {
-    if (value.getClass != tupleType || value.productArity != arity) throw invalidArity()
+    if (!tupleType.isInstance(value) || value.productArity != arity) throw invalidArity()
   }
 
   private def invalidArity(): ForyJsonException =
@@ -456,6 +456,9 @@ private[scala] object ScalaTupleCodec {
   def arity(rawType: Class[_]): Int = {
     val name = rawType.getName
     if (!name.startsWith("scala.Tuple")) return -1
+    // Tuple1 and Tuple2 use specialized subclasses for primitive combinations. Their
+    // superclass owns the tuple schema; the specialization only changes the JVM carrier.
+    if (name.endsWith("$sp") && rawType.getSuperclass != null) return arity(rawType.getSuperclass)
     val suffix = name.substring("scala.Tuple".length)
     if (suffix.isEmpty || !suffix.forall(_.isDigit)) return -1
     val value = suffix.toInt

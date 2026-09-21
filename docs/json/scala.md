@@ -78,7 +78,8 @@ decodes as `None` for `Option[A]`, even when its constructor default is `Some(..
 A case class may be declared at the top level, or inside an `object` at any nesting depth, as long
 as every enclosing scope is itself an `object`. A case class enclosed by a `class`, a trait, or a
 method is rejected for both reading and writing, because Fory cannot reach the enclosing instance
-or the companion it needs to rebuild the value.
+or the companion it needs to rebuild the value. Construction requires a public JVM constructor
+with a matching public companion `apply`; unsupported private constructor shapes are rejected.
 
 Fory JSON annotations can be placed directly on Scala constructor properties:
 
@@ -160,6 +161,19 @@ import org.apache.fory.json.scala.ScalaTypeRef
 val rangeType = ScalaTypeRef[scala.collection.immutable.NumericRange[Int]]
 val range = json.fromJson("[1,3,5,7]", rangeType)
 ```
+
+Generic case classes preserve their type arguments, including finite nesting of the same class:
+
+```scala
+case class Box[A](value: A)
+
+val boxType = ScalaTypeRef[Box[Box[Int]]]
+val box = json.fromJson("""{"value":{"value":1}}""", boxType)
+json.toJson(box, boxType) // {"value":{"value":1}}
+```
+
+Recursive declarations that continually expand their type arguments, such as `Node[A]` containing
+`Node[List[A]]`, need a custom codec.
 
 Use `ScalaTypeRef[Unit]` for a `Unit` root value:
 
@@ -290,7 +304,8 @@ non-finite number, and supported direct-wrapper behavior.
 
 ## Scala 3 closed enums and sealed hierarchies
 
-A parameterless Scala 3 enum uses its case name as a JSON string. Add `derives ScalaJsonCodec` to an
+A parameterless Scala 3 enum uses its case name as a JSON string, including as the key of a typed
+Scala map such as `Map[Color, String]`. Add `derives ScalaJsonCodec` to an
 enum with parameterized cases to define one closed wrapper-object representation for every case:
 
 ```scala

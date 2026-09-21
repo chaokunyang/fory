@@ -79,6 +79,19 @@ enum Color {
   case Red, Blue
 }
 
+object Palette {
+  enum Shade {
+    case Light, Dark
+  }
+}
+
+case class EnumFields(name: String, color: Color, shade: Palette.Shade, colors: Map[Color, String])
+
+case class EnumMapValues(
+    @org.apache.fory.json.annotation.JsonCodec(valueCodec = classOf[TaggedStringCodec])
+    colors: Map[Color, String]
+)
+
 enum DisplayColor {
   case Red, Blue
 
@@ -268,11 +281,35 @@ class ScalaJsonDerivationSuite extends AnyFunSuite {
   }
 
   test("parameterless enum uses its declared root") {
-    val json = ForyJsonScala.builder().withCodegen(false).build()
-    assert(json.toJson(Color.Blue) == "\"Blue\"")
-    assert(json.fromJson("\"Blue\"", classOf[Color]) == Color.Blue)
-    assert(json.toJson(DisplayColor.Red) == "\"Red\"")
-    assert(json.fromJson("\"Blue\"", classOf[DisplayColor]) == DisplayColor.Blue)
+    for (json <- Seq(
+        ForyJsonScala.builder().withCodegen(false).build(),
+        ForyJsonScala.builder().withAsyncCompilation(false).build()
+      )) {
+      assert(json.toJson(Color.Blue) == "\"Blue\"")
+      assert(json.fromJson("\"Blue\"", classOf[Color]) == Color.Blue)
+      assert(json.toJson(DisplayColor.Red) == "\"Red\"")
+      assert(json.fromJson("\"Blue\"", classOf[DisplayColor]) == DisplayColor.Blue)
+      assertThrows[ForyJsonException](json.fromJson("\"Green\"", classOf[Color]))
+      assert(json.fromJson("\"Dark\"", classOf[Palette.Shade]) == Palette.Shade.Dark)
+      val value = EnumFields("中", Color.Red, Palette.Shade.Dark, Map(Color.Blue -> "蓝"))
+      assert(json.fromJson(json.toJson(value), classOf[EnumFields]) == value)
+      assert(json.fromJson(json.toJsonBytes(value), classOf[EnumFields]) == value)
+      val mapType = ScalaTypeRef[Map[DisplayColor, String]]
+      val map = Map(DisplayColor.Red -> "red")
+      assert(json.toJson(map, mapType) == """{"Red":"red"}""")
+      assert(json.fromJson("""{"Red":"red"}""", mapType) == map)
+      val tagged = EnumMapValues(Map(Color.Blue -> "blue"))
+      val taggedText = """{"colors":{"Blue":"tag:blue"}}"""
+      assert(json.toJson(tagged) == taggedText)
+      assert(json.fromJson(taggedText, classOf[EnumMapValues]) == tagged)
+      assert(json.fromJson(json.toJsonBytes(tagged), classOf[EnumMapValues]) == tagged)
+      assertThrows[ForyJsonException](json.fromJson(
+        """{"colors":{"Green":"unknown"}}""", classOf[EnumFields]))
+    }
+    val denied = ForyJsonScala.builder()
+      .withTypeChecker((name, _) => name != classOf[Color].getName).build()
+    assertThrows[org.apache.fory.exception.InsecureException](
+      denied.fromJson("{}", ScalaTypeRef[Map[Color, String]]))
   }
 
   test("derived sealed hierarchy uses inferred subtype names") {

@@ -16,6 +16,9 @@ Load this file when changing `scala/`.
   construction in both compiler versions and reuse ScalaUnitCodec's JSON null representation.
   Do not special-case Option or change Java VoidCodec to accept Scala values. The Java Class
   writer overload continues to reject void; Scala callers use ScalaTypeRef[Unit].
+- Recognize case classes independently of constructor support, including Scala 3 private copy
+  methods. Unsupported constructors must fail in the Scala model instead of falling through to
+  the ordinary object codec and silently dropping properties.
 - Scala supports the JVM and GraalVM Native Image, not Android. Do not add Android-specific Scala
   sources, tests, resources, R8 metadata, compiler plugins, macros, dependencies, or compatibility
   design.

@@ -226,7 +226,7 @@ public final class JsonTypeResolver {
   }
 
   /**
-   * Returns the stable metadata owner for a canonical raw-class object binding, or {@code null}.
+   * Returns the stable metadata owner for a complete declared-type object binding, or {@code null}.
    *
    * <p>This lookup never constructs metadata or requests compilation. Source generation may call it
    * outside a root operation; the short resolver-local lock protects the ordinary owner maps
@@ -1829,7 +1829,7 @@ public final class JsonTypeResolver {
   }
 
   private boolean storesAnyCodec(ObjectCodec<?> owner, AnyInfo any) {
-    return canonicalObjectCodec(any.valueTypeInfo()) == null || any.valueRawType() != owner.type();
+    return canonicalObjectCodec(any.valueTypeInfo()) != owner;
   }
 
   enum CapabilityKind {
@@ -1846,9 +1846,7 @@ public final class JsonTypeResolver {
         utf8Writer
             ? JsonCodegen.usesUtf8WriteCodec(field, this)
             : JsonCodegen.usesWriteCodec(field);
-    return usesCodec
-        && (field.writeRawType() != owner.type()
-            || canonicalObjectOwner(field.writeTypeInfo()) == null);
+    return usesCodec && canonicalObjectOwner(field.writeTypeInfo()) != owner;
   }
 
   private boolean storesReadCapability(ObjectCodec<?> owner, JsonFieldInfo field) {
@@ -1856,7 +1854,7 @@ public final class JsonTypeResolver {
       return true;
     }
     Class<?> nestedType = JsonCodegen.readNestedType(field, this);
-    return nestedType != null && nestedType != owner.type();
+    return nestedType != null && canonicalObjectOwner(field.readTypeInfo()) != owner;
   }
 
   private ArrayList<JsonTypeInfo> capabilityChildren(ObjectCodec<?> owner, CapabilityKind kind) {
@@ -2727,10 +2725,26 @@ public final class JsonTypeResolver {
       activeGenericBindings.put(rawType, type);
       return true;
     }
-    if (!active.getTypeArguments().equals(type.getTypeArguments())) {
+    // A nested instantiation already contained in the active declaration contracts a finite
+    // type tree: Box<Box<Integer>> can bind Box<Integer>. Keep the outer binding as the owner
+    // so every admitted instantiation stays within that finite tree; an expanding declaration
+    // such as Node<T> -> Node<List<T>> still cannot introduce a new instantiation recursively.
+    if (!active.getTypeArguments().equals(type.getTypeArguments()) && !containsType(active, type)) {
       throw expandingGenericType(rawType, active, type);
     }
     return false;
+  }
+
+  private static boolean containsType(TypeRef<?> enclosing, TypeRef<?> nested) {
+    if (enclosing.getType().equals(nested.getType())) {
+      return true;
+    }
+    for (TypeRef<?> argument : enclosing.getTypeArguments()) {
+      if (containsType(argument, nested)) {
+        return true;
+      }
+    }
+    return enclosing.isArray() && containsType(enclosing.getComponentType(), nested);
   }
 
   private void exitObjectBinding(TypeRef<?> type, boolean owner) {

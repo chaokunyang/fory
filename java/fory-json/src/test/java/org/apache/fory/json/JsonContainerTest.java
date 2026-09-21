@@ -69,6 +69,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.concurrent.atomic.AtomicReferenceArray;
+import org.apache.fory.json.annotation.JsonAnyProperty;
 import org.apache.fory.json.codec.ArrayCodec;
 import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.codec.MapCodec;
@@ -375,14 +376,82 @@ public class JsonContainerTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void nestedGenericPojo() {
+    for (boolean codegen : new boolean[] {false, true}) {
+      ForyJson json = newJson(codegen);
+      TypeRef<GenericBox<GenericBox<Integer>>> type =
+          new TypeRef<GenericBox<GenericBox<Integer>>>() {};
+      GenericBox<GenericBox<Integer>> outer = new GenericBox<>();
+      outer.value = new GenericBox<>();
+      outer.value.value = 1;
+      outer.value.values = Arrays.asList(2, 3);
+      outer.values = Collections.singletonList(outer.value);
+      String encoded = json.toJson(outer, type);
+      assertEquals(new String(json.toJsonBytes(outer, type), StandardCharsets.UTF_8), encoded);
+      for (GenericBox<GenericBox<Integer>> decoded :
+          Arrays.asList(
+              json.fromJson(encoded, type),
+              json.fromJson(encoded.getBytes(StandardCharsets.UTF_8), type))) {
+        assertEquals(decoded.value.value, Integer.valueOf(1));
+        assertEquals(decoded.value.values, Arrays.asList(2, 3));
+        assertEquals(decoded.values.get(0).value, Integer.valueOf(1));
+      }
+      TypeRef<GenericBox<List<GenericBox<Integer>>>> listType =
+          new TypeRef<GenericBox<List<GenericBox<Integer>>>>() {};
+      GenericBox<List<GenericBox<Integer>>> list =
+          json.fromJson("{\"value\":[{\"value\":4}]}", listType);
+      assertEquals(list.value.get(0).value, Integer.valueOf(4));
+      assertEquals(
+          json.fromJson(json.toJsonBytes(list, listType), listType).value.get(0).value,
+          Integer.valueOf(4));
+      TypeRef<GenericBox<GenericBox<Integer>[]>> arrayType =
+          new TypeRef<GenericBox<GenericBox<Integer>[]>>() {};
+      GenericBox<GenericBox<Integer>[]> array =
+          json.fromJson("{\"value\":[{\"value\":5}]}", arrayType);
+      assertEquals(array.value[0].value, Integer.valueOf(5));
+      assertEquals(
+          json.fromJson(json.toJsonBytes(array, arrayType), arrayType).value[0].value,
+          Integer.valueOf(5));
+    }
+  }
+
+  @Test
+  public void nestedGenericAnyProperties() {
+    ForyJson json = newJson();
+    TypeRef<GenericProperties<GenericProperties<Integer>>> type =
+        new TypeRef<GenericProperties<GenericProperties<Integer>>>() {};
+    String text = "{\"nested\":{\"answer\":42}}";
+    GenericProperties<GenericProperties<Integer>> value = json.fromJson(text, type);
+    assertEquals(value.properties.get("nested").properties.get("answer"), Integer.valueOf(42));
+    assertEquals(json.toJson(value, type), text);
+    assertEquals(new String(json.toJsonBytes(value, type), StandardCharsets.UTF_8), text);
+    assertEquals(
+        json.fromJson(text.getBytes(StandardCharsets.UTF_8), type)
+            .properties
+            .get("nested")
+            .properties
+            .get("answer"),
+        Integer.valueOf(42));
+  }
+
+  @Test
   public void rejectExpandingGeneric() {
-    ForyJson json = newJson(true);
-    assertThrows(
-        ForyJsonException.class,
-        () -> json.fromJson("{\"next\":null}", new TypeRef<Expanding<String>>() {}));
-    GenericBox<String> value =
-        json.fromJson("{\"value\":\"ready\",\"values\":[]}", new TypeRef<GenericBox<String>>() {});
-    assertEquals(value.value, "ready");
+    for (boolean codegen : new boolean[] {false, true}) {
+      ForyJson json = newJson(codegen);
+      for (int attempt = 0; attempt < 2; attempt++) {
+        assertThrows(
+            ForyJsonException.class,
+            () -> json.fromJson("{\"next\":null}", new TypeRef<Expanding<String>>() {}));
+        assertThrows(
+            ForyJsonException.class,
+            () -> json.fromJson("{}", new TypeRef<Expanding<Expanding<String>>>() {}));
+        GenericBox<GenericBox<String>> value =
+            json.fromJson(
+                "{\"value\":{\"value\":\"ready\"}}",
+                new TypeRef<GenericBox<GenericBox<String>>>() {});
+        assertEquals(value.value.value, "ready");
+      }
+    }
   }
 
   @Test
@@ -1181,6 +1250,10 @@ public class JsonContainerTest extends ForyJsonTestModels {
 
   public static final class Expanding<T> {
     public Expanding<List<T>> next;
+  }
+
+  public static final class GenericProperties<T> {
+    @JsonAnyProperty public Map<String, T> properties;
   }
 
   public static final class NoteList extends ArrayList<Note> {}

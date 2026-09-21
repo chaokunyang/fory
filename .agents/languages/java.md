@@ -18,6 +18,11 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   tests solely because of that formatting pass. Verify formatting with `spotless:check` and inspect
   the diff/status instead.
 - Fory Java requires JDK `17+`.
+- JSON generated self calls must compare canonical ObjectCodec identity, not just the raw class.
+  Different instantiations such as Box<Box<Integer>> and Box<Integer> have different field codecs.
+  Apply the same rule to reader/writer dependency selection, any-properties, and unwrapped paths.
+  Generated class keys must distinguish self references from stored child capabilities because
+  they produce different constructor shapes, including for non-generic subtype occurrences.
 - Place regressions in the existing test class that owns the behavior and use semantic fixture and
   test names. Do not create standalone test classes named after issue numbers.
 - Run Java `spotless` with JDK `21+`. If the current runtime is lower than 21, export `JAVA_HOME` to a JDK 21 installation before running `mvn spotless:check` or `mvn spotless:apply`.

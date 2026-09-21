@@ -847,8 +847,7 @@ abstract class JsonWriterCodegen {
   }
 
   private boolean storesAnyWriter(AnyInfo any) {
-    return resolver.canonicalObjectCodec(any.valueTypeInfo()) == null
-        || any.valueRawType() != ownerType;
+    return resolver.canonicalObjectCodec(any.valueTypeInfo()) != objectOwner;
   }
 
   static final class PrefixFields {
@@ -1650,10 +1649,10 @@ abstract class JsonWriterCodegen {
 
   private Expression writeCodec(
       JsonFieldInfo property, int id, Expression value, Expression writer) {
-    boolean object = resolver.canonicalObjectCodec(property.writeTypeInfo()) != null;
-    Class<?> valueType = property.writeTypeInfo().rawType();
+    // Equal raw classes can have different generic bindings. Only the canonical object owner
+    // identifies a self edge; Box<Box<Integer>> must retain the child Box<Integer> writer.
     Expression codec =
-        object && valueType == ownerType
+        resolver.canonicalObjectCodec(property.writeTypeInfo()) == objectOwner
             ? new Reference("this", TypeRef.of(completeWriterType()))
             : usesWriterSlot(property)
                 ? writerFromSlot(fieldRef("w" + id, JsonTypeInfo.class))
@@ -1668,8 +1667,7 @@ abstract class JsonWriterCodegen {
 
   private boolean storesWriteCodec(JsonFieldInfo property) {
     return usesWriteCodec(property)
-        && (resolver.canonicalObjectCodec(property.writeTypeInfo()) == null
-            || property.writeTypeInfo().rawType() != ownerType);
+        && resolver.canonicalObjectCodec(property.writeTypeInfo()) != objectOwner;
   }
 
   private boolean usesWriterSlot(JsonFieldInfo property) {

@@ -49,6 +49,7 @@ final class GeneratedCodecKeyBuilder {
     EXACT_CODEC,
     FACTORY,
     MIXIN,
+    SELF_REFERENCE,
     CYCLE_SLOT
   }
 
@@ -168,6 +169,12 @@ final class GeneratedCodecKeyBuilder {
   }
 
   private void addRegistration(JsonTypeInfo typeInfo) {
+    // Self calls and stored child capabilities have different generated constructor shapes.
+    // Subtype occurrences can have distinct owners even when their raw classes are identical.
+    if (resolver.canonicalObjectCodec(typeInfo) == owner) {
+      keyParts.add(Part.SELF_REFERENCE);
+      keyParts.add(occurrence);
+    }
     JsonSharedRegistry registry = resolver.sharedRegistry();
     String factoryKey = typeInfo.factoryKey();
     if (factoryKey != null) {

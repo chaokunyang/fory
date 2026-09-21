@@ -34,4 +34,7 @@ public class MetaReadContext {
    * shared meta-share session.
    */
   public final ObjectArray<TypeInfo> readTypeInfos = new ObjectArray<>();
+
+  /** Whether the current metadata table contains owners outside the checked resolver cache. */
+  public boolean hasUncachedTypeInfo;
 }

@@ -677,6 +677,7 @@ public class ClassResolverTest extends ForyTestBase {
       long overflowHash = TypeDef.headerHash(secondDef.getId());
       for (int i = 0; i < 3; i++) {
         assertEquals(reader.deserialize(secondBytes, SchemaValue.class).value, 29);
+        assertNull(reader.getReadContext().getMetaReadContext().readTypeInfos.objects[0]);
         assertEquals(shared.remoteTypeDefByHeaderHash.size(), 1);
         assertNull(reader.getTypeResolver().extRegistry.typeInfoByHeaderHash.get(overflowHash));
         assertEquals(shared.typeDefDescriptorsCache.size(), descriptors);
@@ -684,6 +685,7 @@ public class ClassResolverTest extends ForyTestBase {
       }
       byte[] truncated = Arrays.copyOf(secondBytes, secondBytes.length - 1);
       Assert.assertThrows(() -> reader.deserialize(truncated, SchemaValue.class));
+      assertNull(reader.getReadContext().getMetaReadContext().readTypeInfos.objects[0]);
       assertEquals(reader.deserialize(secondBytes, SchemaValue.class).value, 29);
       assertEquals(reader.deserialize(firstBytes, SchemaValue.class).value, 17);
     }

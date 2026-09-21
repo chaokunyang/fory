@@ -300,7 +300,14 @@ public final class ReadContext {
       contextObjects.clear();
     }
     if (scopedMetaShareEnabled) {
-      metaReadContext.readTypeInfos.clear();
+      MetaReadContext metaContext = metaReadContext;
+      if (metaContext.hasUncachedTypeInfo) {
+        // Only overflow owners need physical release; cached owners remain reusable.
+        metaContext.readTypeInfos.clear();
+        metaContext.hasUncachedTypeInfo = false;
+      } else {
+        metaContext.readTypeInfos.size = 0;
+      }
     } else {
       metaReadContext = null;
     }

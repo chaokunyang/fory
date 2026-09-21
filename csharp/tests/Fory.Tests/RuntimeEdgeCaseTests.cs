@@ -16,6 +16,7 @@
 // under the License.
 
 using System.Numerics;
+using System.Reflection;
 using Apache.Fory;
 using ForyRuntime = Apache.Fory.Fory;
 
@@ -55,6 +56,33 @@ public sealed class DecimalEnvelope
 {
     public ForyDecimal Exact { get; set; }
     public List<ForyDecimal> History { get; set; } = [];
+}
+
+[ForyStruct]
+public sealed class SchemaValue
+{
+    public int Value { get; set; }
+}
+
+[ForyStruct]
+public sealed class SchemaValueA
+{
+    public int Value { get; set; }
+    public int ExtraA { get; set; }
+}
+
+[ForyStruct]
+public sealed class SchemaValueB
+{
+    public int Value { get; set; }
+    public int ExtraB { get; set; }
+}
+
+[ForyStruct]
+public sealed class SchemaValues
+{
+    public object? First { get; set; }
+    public object? Second { get; set; }
 }
 
 public sealed class CustomPayloadSerializer : Serializer<CustomPayload>
@@ -799,6 +827,65 @@ public sealed class RuntimeEdgeCaseTests
             InvalidDataException exception =
                 Assert.Throws<InvalidDataException>(() => fory.Deserialize<int>(invalidPayload));
             Assert.Contains("unsupported root header bitmap", exception.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void SchemaOverflowRootCleanup()
+    {
+        ForyRuntime reader = ForyRuntime.Builder().Compatible(true).MaxSchemaVersionsPerType(1).Build();
+        ForyRuntime firstWriter = ForyRuntime.Builder().Compatible(true).Build();
+        ForyRuntime secondWriter = ForyRuntime.Builder().Compatible(true).Build();
+        reader.Register<SchemaValues>(910);
+        firstWriter.Register<SchemaValues>(910);
+        secondWriter.Register<SchemaValues>(910);
+        reader.Register<SchemaValue>(911);
+        firstWriter.Register<SchemaValueA>(911);
+        secondWriter.Register<SchemaValueB>(911);
+        byte[] first = firstWriter.Serialize(new SchemaValues
+        {
+            First = new SchemaValueA { Value = 17 },
+            Second = new SchemaValueA { Value = 19 },
+        });
+        byte[] overflow = secondWriter.Serialize(new SchemaValues
+        {
+            First = new SchemaValueB { Value = 29 },
+            Second = new SchemaValueB { Value = 31 },
+        });
+        ReadContext context = (ReadContext)typeof(ForyRuntime)
+            .GetField("_readContext", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(reader)!;
+        Assert.Equal(17, Assert.IsType<SchemaValue>(reader.Deserialize<SchemaValues>(first).First).Value);
+        for (int i = 0; i < 2; i++)
+        {
+            SchemaValues decoded = reader.Deserialize<SchemaValues>(overflow);
+            Assert.Equal(29, Assert.IsType<SchemaValue>(decoded.First).Value);
+            Assert.Equal(31, Assert.IsType<SchemaValue>(decoded.Second).Value);
+            AssertSchemaRefsReleased(context);
+            Assert.ThrowsAny<Exception>(() => reader.Deserialize<SchemaValues>(overflow[..^1]));
+            AssertSchemaRefsReleased(context);
+        }
+        Assert.Equal(17, Assert.IsType<SchemaValue>(reader.Deserialize<SchemaValues>(first).First).Value);
+        UInt64Map<CheckedTypeMeta> cache = (UInt64Map<CheckedTypeMeta>)typeof(ReadContext)
+            .GetField("_typeMetasByHash", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(context)!;
+        Assert.Equal(1, cache.Count);
+    }
+
+    private static void AssertSchemaRefsReleased(ReadContext context)
+    {
+        Assert.Null(context.GetTypeMetaRef(0));
+        Assert.Null(context.GetTypeMetaRef(1));
+        foreach (object? map in new object?[] { context._typeMetaByType, context._readTypeInfoByType })
+        {
+            if (map is null)
+            {
+                continue;
+            }
+            Array entries = (Array)map.GetType()
+                .GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(map)!;
+            foreach (object entry in entries)
+            {
+                Assert.Null(entry.GetType().GetField("Value")!.GetValue(entry));
+            }
         }
     }
 

@@ -56,6 +56,7 @@ import org.apache.fory.collection.ObjectMap;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
+import org.apache.fory.context.ReadContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.memory.MemoryBuffer;
@@ -1294,6 +1295,96 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     }
   }
 
+  public static class LayerOverflowValue implements Serializable {
+    public int value;
+    public transient LayerOverflowValue child;
+
+    private void writeObject(ObjectOutputStream stream) throws IOException {
+      stream.writeObject(child);
+      stream.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream stream) throws IOException, ClassNotFoundException {
+      child = (LayerOverflowValue) stream.readObject();
+      stream.defaultReadObject();
+    }
+  }
+
+  @Test
+  public void testLayerOverflowCleanup() throws Exception {
+    Fory reader =
+        Fory.builder()
+            .withXlang(false)
+            .withCompatible(true)
+            .withScopedMetaShare(true)
+            .withCodegen(false)
+            .withMaxSchemaVersionsPerType(1)
+            .build();
+    reader.register(LayerOverflowValue.class, 4000);
+    ObjectStreamSerializer serializer =
+        new ObjectStreamSerializer(reader.getTypeResolver(), LayerOverflowValue.class);
+    reader.registerSerializer(LayerOverflowValue.class, serializer);
+    byte[] first = layerOverflowBytes("extraA", 17);
+    byte[] overflow = layerOverflowBytes("extraB", 29);
+    assertEquals(((LayerOverflowValue) reader.deserialize(first)).value, 17);
+    Object[] slots = TestUtils.getFieldValue(serializer, "slotsInfos");
+    Object input = TestUtils.getFieldValue(slots[0], "objectInputStream");
+    LongMap<TypeInfo> cache = TestUtils.getFieldValue(serializer, "typeInfoByHeaderHash");
+    for (int i = 0; i < 2; i++) {
+      LayerOverflowValue decoded = (LayerOverflowValue) reader.deserialize(overflow);
+      assertEquals(decoded.value, 29);
+      assertEquals(decoded.child.value, 30);
+      Assert.assertNull(TestUtils.getFieldValue(input, "readSerializer"));
+      assertEquals(cache.size, 1);
+      byte[] truncated = java.util.Arrays.copyOf(overflow, overflow.length - 1);
+      Assert.assertThrows(() -> reader.deserialize(truncated));
+      Assert.assertNull(TestUtils.getFieldValue(input, "readSerializer"));
+      assertEquals(cache.size, 1);
+    }
+    assertEquals(((LayerOverflowValue) reader.deserialize(first)).value, 17);
+  }
+
+  private static byte[] layerOverflowBytes(String extra, int value) throws Exception {
+    String packageName = LayerOverflowValue.class.getPackage().getName();
+    String className = "ObjectStreamSerializerTest$LayerOverflowValue";
+    // Use javac so private instance serialization hooks remain available to lookup.
+    Class<?> type =
+        ClassUtils.loadClass(
+            packageName,
+            className,
+            "package "
+                + packageName
+                + "; public class "
+                + className
+                + " implements java.io.Serializable { public int value; public int "
+                + extra
+                + "; public transient "
+                + className
+                + " child;"
+                + " private void writeObject(java.io.ObjectOutputStream s) throws java.io.IOException {"
+                + " s.writeObject(child); s.defaultWriteObject(); }"
+                + " private void readObject(java.io.ObjectInputStream s) throws java.io.IOException, ClassNotFoundException {"
+                + " child = ("
+                + className
+                + ") s.readObject(); s.defaultReadObject(); } }");
+    Fory writer =
+        Fory.builder()
+            .withXlang(false)
+            .withCompatible(true)
+            .withScopedMetaShare(true)
+            .withCodegen(false)
+            .withClassLoader(type.getClassLoader())
+            .build();
+    writer.register(type, 4000);
+    writer.registerSerializer(type, new ObjectStreamSerializer(writer.getTypeResolver(), type));
+    Object root = type.getConstructor().newInstance();
+    Object child = type.getConstructor().newInstance();
+    type.getField("value").setInt(root, value);
+    type.getField("value").setInt(child, value + 1);
+    type.getField("child").set(root, child);
+    return writer.serialize(root);
+  }
+
   public static class LayerEvolutionReceiverOnly extends LayerEvolutionBase {
     public transient boolean noDataCalled;
 
@@ -1598,21 +1689,27 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
 
     reader.setMetaReadContext(new MetaReadContext());
     assertEquals(reader.deserialize(firstBytes), new SingleLayerClass("first", 1));
-    assertSame(TestUtils.getFieldValue(slot, "currentReadSerializer"), localSerializer);
 
+    boolean[] replacementUsed = {false};
     CompatibleLayerSerializerBase replacement =
-        new CompatibleLayerSerializer<>(
+        new CompatibleLayerSerializer<SingleLayerClass>(
             reader.getTypeResolver(),
             SingleLayerClass.class,
             localSerializer.getLayerTypeDef(),
-            LayerMarkerClassGenerator.getOrCreate(SingleLayerClass.class, 0));
+            LayerMarkerClassGenerator.getOrCreate(SingleLayerClass.class, 0)) {
+          @Override
+          public SingleLayerClass readAndSetFields(ReadContext context, SingleLayerClass value) {
+            replacementUsed[0] = true;
+            return super.readAndSetFields(context, value);
+          }
+        };
     Field slotsSerializer = slot.getClass().getDeclaredField("slotsSerializer");
     slotsSerializer.setAccessible(true);
     slotsSerializer.set(slot, replacement);
 
     reader.setMetaReadContext(new MetaReadContext());
     assertEquals(reader.deserialize(secondBytes), new SingleLayerClass("second", 2));
-    assertSame(TestUtils.getFieldValue(slot, "currentReadSerializer"), replacement);
+    Assert.assertTrue(replacementUsed[0]);
     LongMap<TypeInfo> cache = TestUtils.getFieldValue(serializer, "typeInfoByHeaderHash");
     assertEquals(cache.size, 0);
   }

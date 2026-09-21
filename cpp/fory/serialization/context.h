@@ -697,6 +697,7 @@ private:
                                          std::string &type_key);
   void record_remote_type_meta(const std::string &type_key);
   FORY_NOINLINE bool set_graph_memory_exceeded(size_t bytes, size_t remaining);
+  FORY_NOINLINE void clear_uncached_type_infos();
   FORY_NOINLINE bool set_unbacked_container_items_exceeded(size_t items,
                                                            size_t remaining);
 

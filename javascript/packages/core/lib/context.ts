@@ -564,6 +564,7 @@ export class ReadContext {
   // Derived serializers follow the checked metadata owner's lifetime, including
   // root-only metadata decoded after the persistent schema cache is full.
   private compatibleReadSerializers = new WeakMap<TypeMeta, CompatibleReadSerializerCacheEntry>();
+  private hasUncachedTypeMeta = false;
 
   private _depth = 0;
   private _maxDepth: number;
@@ -599,6 +600,11 @@ export class ReadContext {
     // Root reads call this in finally; nested readers retain depth when a child throws.
     this._depth = 0;
     this.remainingUnbackedContainerItems = 0;
+    if (this.hasUncachedTypeMeta) {
+      // WeakMap keys remain live while the root metadata table retains them.
+      this.typeMeta.length = 0;
+      this.hasUncachedTypeMeta = false;
+    }
   }
 
   reserveGraphMemory(bytes: number) {
@@ -1179,6 +1185,8 @@ export class ReadContext {
       const versionsForType = versionsByType.get(typeKey) ?? 0;
       versionsByType.set(typeKey, versionsForType + 1);
       this.totalAcceptedSchemaVersions++;
+    } else {
+      this.hasUncachedTypeMeta = true;
     }
     return checkedSerializer;
   }

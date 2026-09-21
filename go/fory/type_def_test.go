@@ -922,6 +922,39 @@ func TestRemoteSchemaOverflowIsUncached(t *testing.T) {
 	require.Equal(t, int64(1), fory.typeResolver.totalAcceptedSchemaVersions)
 }
 
+func TestSchemaOverflowRootCleanup(t *testing.T) {
+	type Local struct{ ID int32 }
+	type Pair struct{ First, Second any }
+	reader := NewFory(WithCompatible(true), WithMaxSchemaVersionsPerType(1))
+	require.NoError(t, reader.RegisterStructByName(Local{}, "test.SchemaValue"))
+	require.NoError(t, reader.RegisterStructByName(Pair{}, "test.SchemaPair"))
+	encode := func(value, first, second any) []byte {
+		writer := NewFory(WithCompatible(true))
+		require.NoError(t, writer.RegisterStructByName(value, "test.SchemaValue"))
+		require.NoError(t, writer.RegisterStructByName(Pair{}, "test.SchemaPair"))
+		data, err := writer.Serialize(&Pair{first, second})
+		require.NoError(t, err)
+		return data
+	}
+	first := encode(SimpleStruct{}, &SimpleStruct{ID: 17, Name: "first"}, &SimpleStruct{ID: 19, Name: "second"})
+	overflow := encode(SliceStruct{}, &SliceStruct{ID: 29, Items: []string{"a"}}, &SliceStruct{ID: 31, Items: []string{"b"}})
+	var result Pair
+	require.NoError(t, reader.Deserialize(first, &result))
+	for i := 0; i < 2; i++ {
+		require.NoError(t, reader.Deserialize(overflow, &result))
+		require.Equal(t, &Local{29}, result.First)
+		require.Equal(t, &Local{31}, result.Second)
+		for _, info := range reader.metaContext.readTypeInfos[:cap(reader.metaContext.readTypeInfos)] {
+			require.Nil(t, info)
+		}
+		require.Error(t, reader.Deserialize(overflow[:len(overflow)-1], &result))
+		require.Empty(t, reader.metaContext.readTypeInfos)
+		require.Len(t, reader.typeResolver.defIdToTypeDef, 1)
+	}
+	require.NoError(t, reader.Deserialize(first, &result))
+	require.Equal(t, &Local{17}, result.First)
+}
+
 func TestRemoteSchemaLimitKeepsUnknownTypesSeparate(t *testing.T) {
 	fory := NewFory(WithXlang(false), WithCompatible(true), WithMaxSchemaVersionsPerType(1))
 	first := remoteSchemaLimitTypeDef(t, SimpleStruct{}, "example.UnknownA")

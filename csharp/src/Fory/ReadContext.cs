@@ -55,6 +55,7 @@ public sealed class ReadContext
     private readonly Dictionary<object, int> _remoteSchemaVersionsByType = [];
     private readonly Config _config;
     private long _totalAcceptedSchemaVersions;
+    internal bool _hasUncachedTypeMeta;
     internal long _remainingGraphMemoryBytes;
     internal long _remainingUnbackedContainerItems;
 
@@ -274,6 +275,10 @@ public sealed class ReadContext
         {
             _typeMetasByHash.Set(headerHash, checkedTypeMeta);
             RecordRemoteTypeMetaVersion(typeKey);
+        }
+        else
+        {
+            _hasUncachedTypeMeta = true;
         }
         return checkedTypeMeta;
     }
@@ -550,8 +555,18 @@ public sealed class ReadContext
         RefReader.Reset();
         _typeMetaType = null;
         _typeMeta = null;
-        _typeMetaByType?.ClearKeys();
-        _readTypeInfoByType.ClearKeys();
+        if (_hasUncachedTypeMeta)
+        {
+            // Clearing keys alone leaves schema owners in reusable backing slots.
+            _typeMetaByType?.Clear();
+            _readTypeInfoByType.Clear();
+            _hasUncachedTypeMeta = false;
+        }
+        else
+        {
+            _typeMetaByType?.ClearKeys();
+            _readTypeInfoByType.ClearKeys();
+        }
         _cachedTypeMetaType = null;
         _cachedTypeMeta = null;
         ResetReadDepth();

@@ -575,6 +575,37 @@ def test_remote_schema_limit_keeps_unknown_types_separate(xlang):
     _read_remote_typedef(reader, second_type_id, second_typedef)
 
 
+@pytest.mark.parametrize("xlang", [False, True])
+def test_schema_overflow_root_reuse(xlang):
+    local = make_dataclass("SchemaValue", [("value", int)])
+    first_type = make_dataclass("SchemaA", [("value", int), ("extra_a", int)])
+    second_type = make_dataclass("SchemaB", [("value", int), ("extra_b", int)])
+    pair_type = make_dataclass("SchemaPair", [("first", Any), ("second", Any)])
+    reader = Fory(xlang=xlang, compatible=True, max_schema_versions_per_type=1)
+    reader.register(local, name="test.SchemaValue")
+    reader.register(pair_type, name="test.SchemaPair")
+
+    def encode(cls, value):
+        writer = Fory(xlang=xlang, compatible=True)
+        writer.register(cls, name="test.SchemaValue")
+        writer.register(pair_type, name="test.SchemaPair")
+        return writer.serialize(pair_type(cls(value, 1), cls(value + 2, 2)))
+
+    first = encode(first_type, 17)
+    overflow = encode(second_type, 29)
+    assert reader.deserialize(first).first.value == 17
+    for _ in range(2):
+        result = reader.deserialize(overflow)
+        assert (result.first.value, result.second.value) == (29, 31)
+        assert not reader.read_context.meta_share_context.read_type_infos
+        assert len(reader.type_resolver._meta_shared_type_info) == 1
+        with pytest.raises(Exception):
+            reader.deserialize(overflow[:-1])
+        assert not reader.read_context.meta_share_context.read_type_infos
+        assert len(reader.type_resolver._meta_shared_type_info) == 1
+    assert reader.deserialize(first).first.value == 17
+
+
 def test_remote_type_key_cap():
     from pyfory.registry import (
         _MAX_REMOTE_TYPE_DEF_KEYS,

@@ -23,6 +23,49 @@ private enum TypeInfoScopeTestError: Error {
     case expected
 }
 
+@ForyStruct
+private struct SchemaCleanupValue {
+    var value: Int32 = 0
+}
+
+@Test
+func readContextReleasesOverflowSchemas() throws {
+    let config = Config(compatible: true, maxSchemaVersionsPerType: 1)
+    let resolver = TypeResolver(config: config)
+    try resolver.register(SchemaCleanupValue.self, id: 901)
+    try resolver.finishRegistration()
+    let local = try resolver.requireTypeInfo(for: SchemaCleanupValue.self)
+    func metadata(_ name: String) throws -> TypeMeta {
+        try TypeMeta(
+            typeID: TypeId.structType.rawValue, userTypeID: 901,
+            namespace: .empty(specialChar1: ".", specialChar2: "_"),
+            typeName: .empty(specialChar1: "$", specialChar2: "_"), registerByName: false,
+            fields: [
+                TypeMeta.FieldInfo(
+                    fieldID: -1, fieldName: name,
+                    fieldType: TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false))
+            ])
+    }
+    let first = try metadata("first")
+    let firstHash = typeMetaHashFromHeader(try ByteBuffer(bytes: first.encode()).readUInt64())
+    _ = try resolver.cacheTypeInfo(first, forHeaderHash: firstHash, localTypeInfo: local, config: config)
+    for typed in [false, true] {
+        let buffer = ByteBuffer()
+        buffer.writeVarUInt32(TypeId.compatibleStruct.rawValue)
+        buffer.writeVarUInt32(0)
+        buffer.writeBytes(try metadata("second").encode())
+        let context = ReadContext(buffer: buffer, typeResolver: resolver, config: config)
+        weak var overflow: TypeInfo?
+        do {
+            let info = try typed ? context.readTypeInfo(for: SchemaCleanupValue.self) : context.readTypeInfo()
+            overflow = info
+        }
+        #expect(overflow != nil)
+        context.reset()
+        #expect(overflow == nil)
+    }
+}
+
 @Test
 func readContextResetReleasesMetaStrings() throws {
     let config = Config()

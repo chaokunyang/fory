@@ -268,6 +268,12 @@ public sealed class Fory
             Serializer<T> serializer = _typeResolver.GetSerializer<T>();
             RefMode refMode = Config.TrackRef ? RefMode.Tracking : RefMode.NullOnly;
             T value = serializer.Read(readContext, refMode, true);
+            if (readContext._hasUncachedTypeMeta)
+            {
+                // Overflow owners must be released now, even if there is no later root.
+                readContext.Reset();
+                return value;
+            }
             readContext.RefReader.Reset();
             readContext._typeMetaType = null;
             readContext._typeMeta = null;

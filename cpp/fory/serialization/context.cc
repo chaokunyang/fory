@@ -835,6 +835,8 @@ bool ReadContext::set_unbacked_container_items_exceeded(size_t items,
   return false;
 }
 
+void ReadContext::clear_uncached_type_infos() { uncached_type_infos_.clear(); }
+
 void ReadContext::reset() {
   // Clear error state first
   error_ = Error();
@@ -842,7 +844,10 @@ void ReadContext::reset() {
   // reference tracking is disabled, so every root must clear this state.
   ref_reader_.reset();
   reading_type_infos_.clear();
-  uncached_type_infos_.clear();
+  // Keep schema destruction off the common reset path while the cache has room.
+  if (FORY_PREDICT_FALSE(!uncached_type_infos_.empty())) {
+    clear_uncached_type_infos();
+  }
   current_dyn_depth_ = 0;
   remaining_unbacked_container_items_ = 0;
   // Root deserialization overwrites the remaining graph budget before any

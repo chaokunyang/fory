@@ -132,8 +132,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
      * Read the layer TypeDef from buffer (if meta share enabled) and return the appropriate
      * serializer. When meta share is enabled, reads the TypeDef from buffer, caches the serializer
      * by TypeDef header hash, and returns it. When meta share is disabled, returns the default
-     * slots serializer. Also stores the returned serializer for later retrieval via {@link
-     * #getCurrentReadSerializer()}.
+     * slots serializer. The caller owns the returned serializer for this layer read.
      *
      * @param typeResolver the type resolver
      * @param readContext the context to read TypeDef from
@@ -142,14 +141,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
      */
     CompatibleLayerSerializerBase getReadSerializer(
         TypeResolver typeResolver, ReadContext readContext, String className);
-
-    /**
-     * Get the current read serializer (last returned by {@link #getReadSerializer}). This is used
-     * by defaultReadObject() to get the serializer without reading from buffer again.
-     *
-     * @return the current read serializer
-     */
-    CompatibleLayerSerializerBase getCurrentReadSerializer();
 
     ForyStructOutputStream getObjectOutputStream();
 
@@ -315,20 +306,20 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
         // Read data for the matched layer - getReadSerializer reads TypeDef from buffer
         // This must be called exactly once per layer to read the TypeDef
-        matchedSlot.getReadSerializer(typeResolver, readContext, senderClassName);
+        CompatibleLayerSerializerBase readSerializer =
+            matchedSlot.getReadSerializer(typeResolver, readContext, senderClassName);
 
         StreamTypeInfo streamTypeInfo = matchedSlot.getStreamTypeInfo();
         Method readObjectMethod = streamTypeInfo.readObjectMethod;
 
         if (readObjectMethod == null) {
           if (streamTypeInfo.defaultReadObjectHandle != null) {
-            readObjectStreamSlot(matchedSlot, readContext, obj, callbacks, true);
+            readObjectStreamSlot(matchedSlot, readSerializer, readContext, obj, callbacks, true);
           } else {
-            // For standard field serialization - use getCurrentReadSerializer()
-            matchedSlot.getCurrentReadSerializer().readAndSetFields(readContext, obj);
+            readSerializer.readAndSetFields(readContext, obj);
           }
         } else {
-          readObjectStreamSlot(matchedSlot, readContext, obj, callbacks, false);
+          readObjectStreamSlot(matchedSlot, readSerializer, readContext, obj, callbacks, false);
         }
       }
 
@@ -397,6 +388,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
   private void readObjectStreamSlot(
       SlotInfo matchedSlot,
+      CompatibleLayerSerializerBase readSerializer,
       ReadContext readContext,
       Object obj,
       TreeMap<Integer, ObjectInputValidation> callbacks,
@@ -410,6 +402,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     MemoryBuffer oldBuffer = objectInputStream.buffer;
     Object oldObject = objectInputStream.targetObject;
     ReadContext oldReadContext = objectInputStream.readContext;
+    CompatibleLayerSerializerBase oldReadSerializer = objectInputStream.readSerializer;
     Object[] oldFieldValuesOverride = objectInputStream.fieldValuesOverride;
     ForyStructInputStream.GetFieldImpl oldGetField = objectInputStream.getField;
     ForyStructInputStream.GetFieldImpl getField =
@@ -423,6 +416,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       objectInputStream.buffer = readContext.getBuffer();
       objectInputStream.targetObject = obj;
       objectInputStream.readContext = readContext;
+      objectInputStream.readSerializer = readSerializer;
       objectInputStream.fieldValuesOverride = null;
       objectInputStream.getField = getField;
       objectInputStream.callbacks = callbacks;
@@ -438,6 +432,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       objectInputStream.buffer = oldBuffer;
       objectInputStream.targetObject = oldObject;
       objectInputStream.readContext = oldReadContext;
+      // Restore an enclosing read, or release an uncached schema at the outermost return.
+      objectInputStream.readSerializer = oldReadSerializer;
       objectInputStream.fieldValuesOverride = oldFieldValuesOverride;
       objectInputStream.getField = oldGetField;
       matchedSlot.getFieldPool().add(getField);
@@ -889,8 +885,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final ForyStructOutputStream objectOutputStream;
     private final ForyStructInputStream objectInputStream;
     private final ObjectArray getFieldPool;
-    // Current read serializer (set by getReadSerializer, used by getCurrentReadSerializer)
-    private CompatibleLayerSerializerBase currentReadSerializer;
 
     public SlotsInfo(TypeResolver typeResolver, Class<?> type) {
       this.cls = type;
@@ -1071,14 +1065,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
           }
         }
       }
-      // Store for getCurrentReadSerializer()
-      this.currentReadSerializer = result;
       return result;
-    }
-
-    @Override
-    public CompatibleLayerSerializerBase getCurrentReadSerializer() {
-      return currentReadSerializer;
     }
 
     private TypeInfo readLayerTypeInfo(
@@ -1439,6 +1426,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final SlotInfo slotsInfo;
     private final TypeResolver typeResolver;
     private ReadContext readContext;
+    private CompatibleLayerSerializerBase readSerializer;
     private MemoryBuffer buffer;
     private Object targetObject;
     private GetFieldImpl getField;
@@ -1598,7 +1586,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       Object[] vals = fieldValuesOverride;
       if (vals == null) {
         // Read field values using MetaShare serialization
-        vals = slotsInfo.getCurrentReadSerializer().readFieldValues(readContext);
+        vals = readSerializer.readFieldValues(readContext);
       }
       System.arraycopy(vals, 0, getField.vals, 0, vals.length);
       fieldsRead = true;
@@ -1646,7 +1634,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       MethodHandle defaultReadObjectHandle = slotsInfo.getStreamTypeInfo().defaultReadObjectHandle;
       if (defaultReadObjectHandle == null) {
         // Read fields using MetaShare serialization after the slot serializer read layer metadata.
-        slotsInfo.getCurrentReadSerializer().readAndSetFields(readContext, targetObject);
+        readSerializer.readAndSetFields(readContext, targetObject);
         return;
       }
       try {

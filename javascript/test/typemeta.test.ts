@@ -140,6 +140,56 @@ function replaceFirstBytesWithDifferentLength(
 }
 
 describe("typemeta", () => {
+  test.each([false, true])(
+    "releases overflow metadata after roots (registered=%s)",
+    (registered) => {
+      const childId = 7040;
+      const rootId = 7041;
+      const create = (extra?: string) => {
+        const fory = new Fory({ compatible: true, maxSchemaVersionsPerType: 1 });
+        const fields: Record<string, TypeInfo> = { value: Type.int32().setId(1) };
+        if (extra !== undefined) {
+          fields[extra] = Type.int32().setId(extra === "extraA" ? 2 : 3);
+        }
+        fory.register(Type.struct(childId, fields));
+        const root = fory.register(
+          Type.struct(rootId, {
+            first: Type.struct(childId).setId(1),
+            second: Type.struct(childId).setId(2),
+          }),
+        );
+        return { fory, root };
+      };
+      const firstWriter = create("extraA");
+      const secondWriter = create("extraB");
+      const reader = create();
+      const decode = registered
+        ? reader.root.deserialize
+        : (bytes: Uint8Array) => reader.fory.deserialize(bytes);
+      const context = (reader.fory as any).readContext;
+      const first = firstWriter.root.serialize({
+        first: { value: 17, extraA: 1 },
+        second: { value: 19, extraA: 2 },
+      });
+      const overflow = secondWriter.root.serialize({
+        first: { value: 29, extraB: 3 },
+        second: { value: 31, extraB: 4 },
+      });
+      expect(decode(first)).toEqual({ first: { value: 17 }, second: { value: 19 } });
+      const cached = context.cachedTypeMeta;
+      for (let i = 0; i < 2; i++) {
+        expect(decode(overflow)).toEqual({ first: { value: 29 }, second: { value: 31 } });
+        expect(context.typeMeta).toHaveLength(0);
+        expect(context.typeMetaCache.size).toBe(1);
+        expect(context.cachedTypeMeta).toBe(cached);
+        expect(() => decode(overflow.subarray(0, overflow.length - 1))).toThrow();
+        expect(context.typeMeta).toHaveLength(0);
+        expect(context.typeMetaCache.size).toBe(1);
+      }
+      expect(decode(first)).toEqual({ first: { value: 17 }, second: { value: 19 } });
+    },
+  );
+
   test("splits dotted names", () => {
     const structInfo = Type.struct({ typeName: "com.example.User" }, {});
     expect(structInfo.namespace).toBe("com.example");

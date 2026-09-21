@@ -1591,7 +1591,8 @@ public class ObjectCodec<T> implements CompositeJsonCodec<T> {
         i++;
       } else {
         Object child = entry.group().declaration().writeAccessor().getObject(current);
-        if (child == null) {
+        if (child == null
+            || entry.group().declaration().writeProperty().isDefault(current, child)) {
           i = ends[i];
         } else {
           owners[depth + 1] = child;
@@ -1624,7 +1625,8 @@ public class ObjectCodec<T> implements CompositeJsonCodec<T> {
         i++;
       } else {
         Object child = entry.group().declaration().writeAccessor().getObject(current);
-        if (child == null) {
+        if (child == null
+            || entry.group().declaration().writeProperty().isDefault(current, child)) {
           i = ends[i];
         } else {
           owners[depth + 1] = child;

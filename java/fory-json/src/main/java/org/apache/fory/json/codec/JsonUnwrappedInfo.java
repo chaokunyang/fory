@@ -117,6 +117,18 @@ public final class JsonUnwrappedInfo {
     return groups;
   }
 
+  /** Returns whether a generated writer needs parent-property metadata for group omission. */
+  public boolean hasDefaultGroups() {
+    requireResolved();
+    for (Group group : groups) {
+      JsonFieldInfo property = group.declaration().writeProperty();
+      if (property != null && property.omitDefault()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   public ObjectCodec<?>[] groupCodecs() {
     requireResolved();
     return groupCodecs;
@@ -323,6 +335,7 @@ public final class JsonUnwrappedInfo {
 
   /** One merged logical-property declaration produced by {@code ObjectCodecBuilder}. */
   public static final class Declaration {
+    private final JsonFieldInfo writeProperty;
     private final String javaName;
     private final String prefix;
     private final String suffix;
@@ -345,7 +358,9 @@ public final class JsonUnwrappedInfo {
         JsonFieldAccessor readAccessor,
         boolean writeEnabled,
         boolean readEnabled,
-        int constructionIndex) {
+        int constructionIndex,
+        JsonFieldInfo writeProperty) {
+      this.writeProperty = writeProperty;
       this.javaName = javaName;
       this.prefix = prefix;
       this.suffix = suffix;
@@ -360,6 +375,11 @@ public final class JsonUnwrappedInfo {
 
     public String javaName() {
       return javaName;
+    }
+
+    /** Returns the parent property whose omission is decided before expanding child members. */
+    public JsonFieldInfo writeProperty() {
+      return writeProperty;
     }
 
     public String prefix() {

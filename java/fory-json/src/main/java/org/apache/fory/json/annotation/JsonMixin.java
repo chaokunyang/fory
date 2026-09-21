@@ -38,12 +38,12 @@ import java.lang.annotation.Target;
  *
  * <p>A Mixin may contribute {@link JsonAnyGetter}, {@link JsonAnyProperty}, {@link JsonAnySetter},
  * {@link JsonByteArray}, {@link JsonCodec}, {@link JsonCreator}, {@link JsonFormat}, {@link
- * JsonIgnore}, {@link JsonProperty}, {@link JsonPropertyOrder}, {@link JsonRawValue}, {@link
- * JsonSubTypes}, {@link JsonUnwrapped}, {@link JsonValidator}, and {@link JsonValue}. {@link
- * JsonType} remains a marker declared directly on a model and cannot be contributed or removed by a
- * Mixin. A contributed annotation completely replaces the target annotation of the same type at the
- * matched declaration; annotation members are not merged individually. Use {@link JsonMixinRemove}
- * for explicit removal.
+ * JsonIgnore}, {@link JsonInclude}, {@link JsonProperty}, {@link JsonPropertyOrder}, {@link
+ * JsonRawValue}, {@link JsonSubTypes}, {@link JsonUnwrapped}, {@link JsonValidator}, and {@link
+ * JsonValue}. {@link JsonType} remains a marker declared directly on a model and cannot be
+ * contributed or removed by a Mixin. A contributed annotation completely replaces the target
+ * annotation of the same type at the matched declaration; annotation members are not merged
+ * individually. Use {@link JsonMixinRemove} for explicit removal.
  *
  * <p>A contributed {@link JsonCodec} follows the same codec resolution as a codec declared on the
  * target. An exact codec registered with {@link

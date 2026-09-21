@@ -19,12 +19,16 @@
 
 package org.apache.fory.json.meta;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
@@ -53,6 +57,7 @@ import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.memory.NativeByteOrder;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.TypeRef;
 
 /**
@@ -162,6 +167,263 @@ public final class JsonFieldInfo {
   private JsonTypeInfo readOccurrenceTypeInfo;
   private UnboxedValueCodec writeUnboxedValueCodec;
   private UnboxedValueCodec readUnboxedValueCodec;
+  private Method emptyMethod;
+  private MethodHandle emptyInvoker;
+  private Method defaultMethod;
+  private Method[] defaultDependencies;
+  private Object defaultsReceiver;
+  private MethodHandle defaultInvoker;
+
+  /** Binds a declared default to the current object's constructor properties during cold setup. */
+  public void bindDefault(Method method, Object receiver, Method[] dependencies) {
+    for (Method dependency : dependencies) {
+      if (dependency == null) {
+        throw new ForyJsonException("Missing constructor-default dependency for " + name);
+      }
+    }
+    try {
+      MethodHandle target = _JDKAccess._trustedLookup(method.getDeclaringClass()).unreflect(method);
+      if (!Modifier.isStatic(method.getModifiers())) {
+        target = target.bindTo(receiver);
+      }
+      if (dependencies.length == 0) {
+        target = MethodHandles.dropArguments(target, 0, Object.class);
+      } else {
+        MethodHandle[] getters = new MethodHandle[dependencies.length];
+        for (int i = 0; i < getters.length; i++) {
+          Method getter = dependencies[i];
+          getters[i] =
+              _JDKAccess._trustedLookup(getter.getDeclaringClass())
+                  .unreflect(getter)
+                  .asType(MethodType.methodType(method.getParameterTypes()[i], Object.class));
+        }
+        target = MethodHandles.filterArguments(target, 0, getters);
+        target =
+            MethodHandles.permuteArguments(
+                target,
+                MethodType.methodType(method.getReturnType(), Object.class),
+                new int[getters.length]);
+      }
+      defaultInvoker = target.asType(MethodType.methodType(writeRawType, Object.class));
+      defaultMethod = method;
+      defaultDependencies = dependencies.clone();
+      defaultsReceiver = receiver;
+    } catch (IllegalAccessException e) {
+      throw new ForyJsonException("Cannot access declared JSON default " + method, e);
+    }
+  }
+
+  public boolean omitDefault() {
+    return defaultInvoker != null;
+  }
+
+  /** Extracts one authorized default from a model's single initialization-time reference object. */
+  public void bindDefaultValue(Object reference) {
+    Object value = defaultWriteValue(reference);
+    defaultInvoker =
+        MethodHandles.dropArguments(
+            MethodHandles.constant(Object.class, value).asType(MethodType.methodType(writeRawType)),
+            0,
+            Object.class);
+  }
+
+  public Method defaultMethod() {
+    return defaultMethod;
+  }
+
+  public Method[] defaultDependencies() {
+    return defaultDependencies == null ? new Method[0] : defaultDependencies.clone();
+  }
+
+  public Object defaultsReceiver() {
+    return defaultsReceiver;
+  }
+
+  public Object defaultValue(Object object) {
+    try {
+      return defaultInvoker.invoke(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  public boolean defaultBoolean(Object object) {
+    try {
+      return (boolean) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  public byte defaultByte(Object object) {
+    try {
+      return (byte) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  public short defaultShort(Object object) {
+    try {
+      return (short) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  public int defaultInt(Object object) {
+    try {
+      return (int) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  public long defaultLong(Object object) {
+    try {
+      return (long) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  public float defaultFloat(Object object) {
+    try {
+      return (float) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  public double defaultDouble(Object object) {
+    try {
+      return (double) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  public char defaultChar(Object object) {
+    try {
+      return (char) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  private ForyJsonException defaultFailure(Throwable cause) {
+    if (cause instanceof Error) {
+      throw (Error) cause;
+    }
+    return new ForyJsonException("JSON default failed for " + name, cause);
+  }
+
+  /** Compares defaults without conflating signed zero or hiding non-finite JSON values. */
+  public static boolean defaultEquals(float value, float defaultValue) {
+    return Float.isFinite(value)
+        && Float.floatToRawIntBits(value) == Float.floatToRawIntBits(defaultValue);
+  }
+
+  public static boolean defaultEquals(double value, double defaultValue) {
+    return Double.isFinite(value)
+        && Double.doubleToRawLongBits(value) == Double.doubleToRawLongBits(defaultValue);
+  }
+
+  public static boolean defaultEquals(Object value, Object defaultValue) {
+    if (value == null || defaultValue == null) {
+      return value == defaultValue;
+    }
+    Class<?> type = value.getClass();
+    if (type == Float.class && defaultValue.getClass() == Float.class) {
+      return defaultEquals(((Float) value).floatValue(), ((Float) defaultValue).floatValue());
+    }
+    if (type == Double.class && defaultValue.getClass() == Double.class) {
+      return defaultEquals(((Double) value).doubleValue(), ((Double) defaultValue).doubleValue());
+    }
+    if (type.isArray()) {
+      if (type != defaultValue.getClass()
+          || Array.getLength(value) != Array.getLength(defaultValue)) {
+        return false;
+      }
+      if (type == boolean[].class) {
+        return Arrays.equals((boolean[]) value, (boolean[]) defaultValue);
+      }
+      if (type == byte[].class) {
+        return Arrays.equals((byte[]) value, (byte[]) defaultValue);
+      }
+      if (type == short[].class) {
+        return Arrays.equals((short[]) value, (short[]) defaultValue);
+      }
+      if (type == char[].class) {
+        return Arrays.equals((char[]) value, (char[]) defaultValue);
+      }
+      if (type == int[].class) {
+        return Arrays.equals((int[]) value, (int[]) defaultValue);
+      }
+      if (type == long[].class) {
+        return Arrays.equals((long[]) value, (long[]) defaultValue);
+      }
+      if (type == float[].class) {
+        float[] values = (float[]) value;
+        float[] defaults = (float[]) defaultValue;
+        for (int i = 0; i < values.length; i++) {
+          if (!defaultEquals(values[i], defaults[i])) {
+            return false;
+          }
+        }
+        return true;
+      }
+      if (type == double[].class) {
+        double[] values = (double[]) value;
+        double[] defaults = (double[]) defaultValue;
+        for (int i = 0; i < values.length; i++) {
+          if (!defaultEquals(values[i], defaults[i])) {
+            return false;
+          }
+        }
+        return true;
+      }
+      Object[] values = (Object[]) value;
+      Object[] defaults = (Object[]) defaultValue;
+      for (int i = 0; i < values.length; i++) {
+        if (!defaultEquals(values[i], defaults[i])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return value.equals(defaultValue);
+  }
+
+  /** Compares an already-read unwrapped property before entering its child members. */
+  public boolean isDefault(Object object, Object value) {
+    return omitDefault() && defaultEquals(value, defaultValue(object));
+  }
+
+  /** Binds module-defined logical emptiness before this field is published. */
+  public void bindEmptyMethod(Method method, MethodHandle invoker) {
+    if (!writeUnboxedRequired) {
+      emptyMethod = method;
+      emptyInvoker = invoker;
+      readIndexAndWriteNull |= OMIT_EMPTY_MASK;
+    }
+  }
+
+  /** Returns the exact public logical emptiness operation for generated field writes. */
+  public Method emptyMethod() {
+    return emptyMethod;
+  }
+
+  /** Tests logical emptiness independently of the property's JSON representation. */
+  public boolean emptyValue(Object value, JsonWriter writer) {
+    if (value == null) {
+      return false;
+    }
+    if (emptyMethod != null) {
+      return invokeEmpty(emptyInvoker, value);
+    }
+    return isEmpty(value, writer.typeResolver());
+  }
 
   public JsonFieldInfo(
       String name,
@@ -334,6 +596,12 @@ public final class JsonFieldInfo {
             formatAnnotation,
             writesRawString());
     copy.setReadIndex(readIndex());
+    copy.emptyMethod = emptyMethod;
+    copy.emptyInvoker = emptyInvoker;
+    copy.defaultMethod = defaultMethod;
+    copy.defaultDependencies = defaultDependencies;
+    copy.defaultsReceiver = defaultsReceiver;
+    copy.defaultInvoker = defaultInvoker;
     if (writeNull()) {
       copy.includeNullWrite();
     }
@@ -364,7 +632,8 @@ public final class JsonFieldInfo {
   public boolean mayBeEmpty() {
     Class<?> type = writeTypeRef == null ? null : writeTypeRef.getRawType();
     return type != null
-        && (type.isArray()
+        && (emptyMethod != null
+            || type.isArray()
             || CharSequence.class.isAssignableFrom(type)
             || Collection.class.isAssignableFrom(type)
             || Map.class.isAssignableFrom(type)
@@ -403,6 +672,26 @@ public final class JsonFieldInfo {
       return !((OptionalDouble) value).isPresent();
     }
     return value != null && value.getClass().isArray() && Array.getLength(value) == 0;
+  }
+
+  /** Tests dynamic logical values without requiring a codec for their concrete class. */
+  @Internal
+  public static boolean isEmpty(Object value, JsonTypeResolver resolver) {
+    return value != null
+        && (isEmpty(value)
+            || invokeEmpty(resolver.sharedRegistry().emptyInvoker(value.getClass()), value));
+  }
+
+  private static boolean invokeEmpty(MethodHandle invoker, Object value) {
+    try {
+      return (boolean) invoker.invokeExact(value);
+    } catch (Throwable e) {
+      if (e instanceof Error) {
+        throw (Error) e;
+      }
+      throw new ForyJsonException(
+          "Cannot inspect logical emptiness of " + value.getClass().getName(), e);
+    }
   }
 
   /** Makes a nullable language-model property explicit so output stays reconstructible. */
@@ -1173,6 +1462,31 @@ public final class JsonFieldInfo {
   }
 
   public boolean writeString(StringJsonWriter writer, Object object, int index) {
+    if (omitDefault()) {
+      if (writeRawType.isPrimitive()
+          && !writesUnboxedValue()
+          && (writeKind != JsonFieldKind.OBJECT || writesBooleanAsString())) {
+        return writeDefaultPrimitive(writer, object, index);
+      }
+      Object value = defaultWriteValue(object);
+      if (value == null && requiresNonNullWrite()) {
+        rejectNullWrite();
+      }
+      if (defaultEquals(value, defaultValue(object))) {
+        return false;
+      }
+      writer.writeFieldName(this, index);
+      if (writesUnboxedValue()) {
+        writeUnboxedValueCodec.writeStringCarrier(writer, value);
+      } else if (value == null) {
+        writer.writeNull();
+      } else if (writesRawString()) {
+        writer.writeRawValue((String) value);
+      } else {
+        writeTypeInfo.stringWriter().writeString(writer, value);
+      }
+      return true;
+    }
     if (writer.prettyPrint()) {
       return writePrettyString(writer, object, index);
     }
@@ -1275,6 +1589,31 @@ public final class JsonFieldInfo {
   }
 
   public boolean writeUtf8(Utf8JsonWriter writer, Object object, int index) {
+    if (omitDefault()) {
+      if (writeRawType.isPrimitive()
+          && !writesUnboxedValue()
+          && (writeKind != JsonFieldKind.OBJECT || writesBooleanAsString())) {
+        return writeDefaultPrimitive(writer, object, index);
+      }
+      Object value = defaultWriteValue(object);
+      if (value == null && requiresNonNullWrite()) {
+        rejectNullWrite();
+      }
+      if (defaultEquals(value, defaultValue(object))) {
+        return false;
+      }
+      writer.writeFieldName(this, index);
+      if (writesUnboxedValue()) {
+        writeUnboxedValueCodec.writeUtf8Carrier(writer, value);
+      } else if (value == null) {
+        writer.writeNull();
+      } else if (writesRawString()) {
+        writer.writeRawValue((String) value);
+      } else {
+        writeTypeInfo.utf8Writer().writeUtf8(writer, value);
+      }
+      return true;
+    }
     if (writer.prettyPrint()) {
       return writePrettyUtf8(writer, object, index);
     }
@@ -1373,6 +1712,121 @@ public final class JsonFieldInfo {
     }
   }
 
+  private Object defaultWriteValue(Object object) {
+    if (!writeRawType.isPrimitive()) {
+      return writeAccessor.getObject(object);
+    }
+    switch (kind(writeRawType)) {
+      case BOOLEAN:
+        return writeAccessor.getBoolean(object);
+      case BYTE:
+        return writeAccessor.getByte(object);
+      case SHORT:
+        return writeAccessor.getShort(object);
+      case INT:
+        return writeAccessor.getInt(object);
+      case LONG:
+        return writeAccessor.getLong(object);
+      case FLOAT:
+        return writeAccessor.getFloat(object);
+      case DOUBLE:
+        return writeAccessor.getDouble(object);
+      case CHAR:
+        return writeAccessor.getChar(object);
+      default:
+        return null;
+    }
+  }
+
+  private boolean writeDefaultPrimitive(JsonWriter writer, Object object, int index) {
+    switch (writeKindId) {
+      case KIND_BOOLEAN:
+      case KIND_BOOLEAN_AS_STRING:
+        boolean b = writeAccessor.getBoolean(object);
+        if (b == defaultBoolean(object)) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        if (writeKindId == KIND_BOOLEAN_AS_STRING) {
+          writer.writeBooleanAsString(b);
+        } else {
+          writer.writeBoolean(b);
+        }
+        return true;
+      case KIND_BYTE:
+        byte by = writeAccessor.getByte(object);
+        if (by == defaultByte(object)) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        writer.writeInt(by);
+        return true;
+      case KIND_SHORT:
+        short s = writeAccessor.getShort(object);
+        if (s == defaultShort(object)) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        writer.writeInt(s);
+        return true;
+      case KIND_INT:
+        int i = writeAccessor.getInt(object);
+        if (i == defaultInt(object)) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        writer.writeInt(i);
+        return true;
+      case KIND_LONG:
+      case KIND_LONG_AS_STRING:
+        long l = writeAccessor.getLong(object);
+        if (l == defaultLong(object)) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        if (writeKindId == KIND_LONG_AS_STRING) {
+          writer.writeLongAsString(l);
+        } else {
+          writer.writeLong(l);
+        }
+        return true;
+      case KIND_FLOAT:
+        float f = writeAccessor.getFloat(object);
+        if (defaultEquals(f, defaultFloat(object))) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        writer.writeFloat(f);
+        return true;
+      case KIND_DOUBLE:
+        double d = writeAccessor.getDouble(object);
+        if (defaultEquals(d, defaultDouble(object))) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        writer.writeDouble(d);
+        return true;
+      case KIND_CHAR:
+        char c = writeAccessor.getChar(object);
+        if (c == defaultChar(object)) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        writer.writeChar(c);
+        return true;
+      default:
+        throw new AssertionError(writeKindId);
+    }
+  }
+
   private boolean writePrettyString(StringJsonWriter writer, Object object, int index) {
     if (writePrettyPrimitive(writer, object, index)) {
       return true;
@@ -1454,7 +1908,7 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
-    if (omitEmpty() && isEmpty(value)) {
+    if (omitEmpty() && emptyValue(value, writer)) {
       return false;
     }
     writer.writeFieldName(this, index);
@@ -1644,7 +2098,7 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
-    if (omitEmpty() && isEmpty(value)) {
+    if (omitEmpty() && emptyValue(value, writer)) {
       return false;
     }
     if (value == null) {
@@ -1702,7 +2156,7 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
-    if (omitEmpty() && isEmpty(value)) {
+    if (omitEmpty() && emptyValue(value, writer)) {
       return false;
     }
     writer.writeFieldName(this, index);
@@ -1785,7 +2239,7 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
-    if (omitEmpty() && isEmpty(value)) {
+    if (omitEmpty() && emptyValue(value, writer)) {
       return false;
     }
     writer.writeFieldName(this, index);
@@ -1855,7 +2309,7 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
-    if (omitEmpty() && isEmpty(value)) {
+    if (omitEmpty() && emptyValue(value, writer)) {
       return false;
     }
     if (value == null) {
@@ -1912,7 +2366,7 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
-    if (omitEmpty() && isEmpty(value)) {
+    if (omitEmpty() && emptyValue(value, writer)) {
       return false;
     }
     writer.writeFieldName(this, index);

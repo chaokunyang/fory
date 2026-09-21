@@ -28,7 +28,6 @@ import org.apache.fory.json.resolver.JsonTypeResolver
 import org.apache.fory.reflect.{ReflectionUtils, TypeRef}
 
 private[scala] object ScalaObjectModels {
-  private val optionDefault = classOf[Option[_]].getMethod("empty")
 
   def isCaseClass(typeClass: Class[_]): Boolean = {
     val name = typeClass.getName
@@ -123,7 +122,8 @@ private[scala] object ScalaObjectModels {
     index = 0
     while (index < defaults.length) {
       if (defaults(index) == null && logicalParameterTypes(index).getRawType == classOf[Option[_]]) {
-        defaults(index) = optionDefault
+        // Implicit reader fallbacks must not masquerade as declared defaults used by NON_DEFAULT.
+        defaultFactories(index) = () => None
       } else if (defaults(index) == null) {
         defaultFactories(index) = typeDefault(logicalParameterTypes(index), parameterTypes(index))
       }

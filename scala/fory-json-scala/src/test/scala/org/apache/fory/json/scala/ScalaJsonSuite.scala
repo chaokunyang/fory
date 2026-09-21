@@ -24,12 +24,12 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.fory.json.{ForyJson, ForyJsonException, JsonCodecFactory}
-import org.apache.fory.json.annotation.{JsonFormat, JsonIgnore, JsonMixin, JsonProperty, JsonSubTypes, JsonUnwrapped}
-import org.apache.fory.json.codec.{AbstractJsonValueCodec, MapKeyCodec}
+import org.apache.fory.json.annotation.{JsonFormat, JsonIgnore, JsonInclude, JsonMixin, JsonProperty, JsonRawValue, JsonSubTypes, JsonUnwrapped}
+import org.apache.fory.json.codec.{AbstractJsonValueCodec, MapKeyCodec, ObjectCodec}
 import org.apache.fory.json.reader.JsonReader
-import org.apache.fory.json.resolver.UnsupportedJsonTypeException
+import org.apache.fory.json.resolver.{JsonTypeResolver, UnsupportedJsonTypeException}
 import org.apache.fory.json.writer.JsonWriter
-import org.apache.fory.reflect.TypeRef
+import org.apache.fory.reflect.{ReflectionUtils, TypeRef}
 import org.apache.fory.serializer.GraphMemoryEstimates
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -68,7 +68,98 @@ case class BodyState(id: Int) {
   var count: Int = 7
 }
 
-case class CurriedDefault(a: Int)(val b: Int = a + 1)
+case class CurriedDefault(a: Int)(
+    @JsonProperty(include = JsonProperty.Include.NON_DEFAULT) val b: Int = a + 1
+)
+
+@JsonInclude(JsonProperty.Include.NON_DEFAULT)
+case class InclusionDefaults(
+    @JsonProperty(include = JsonProperty.Include.ALWAYS) required: Int,
+    @JsonProperty(include = JsonProperty.Include.ALWAYS) flag: Boolean,
+    @JsonProperty(include = JsonProperty.Include.ALWAYS) optional: Option[Int],
+    number: Int = 2,
+    currency: String = "USD",
+    selected: Option[Int] = Some(7),
+    values: List[Int] = List(1),
+    text: String = null
+)
+
+case class EmptyScalaFields(
+    option: Option[String],
+    list: List[Int],
+    vector: Vector[Int],
+    set: Set[Int],
+    map: Map[String, Int],
+    buffer: scala.collection.mutable.ArrayBuffer[Int],
+    none: None.type,
+    dynamic: Any
+)
+
+@JsonInclude(JsonProperty.Include.NON_DEFAULT)
+case class ArrayDefaults(
+    ints: Array[Int] = Array(1, 2),
+    nested: Array[Array[Int]] = Array(Array(3)),
+    fraction: Double = 0.0,
+    single: Float = 0.0f
+)
+
+@JsonInclude(JsonProperty.Include.NON_DEFAULT)
+case class RetainedDefault(@JsonProperty(include = JsonProperty.Include.ALWAYS) value: Int = 2)
+
+case class MixinDefaults(number: Int = 2, optional: Option[Int] = None, currency: String = "USD")
+
+@JsonMixin(target = classOf[MixinDefaults])
+@JsonInclude(JsonProperty.Include.NON_NULL)
+abstract class InclusionMixin {
+  @JsonProperty(include = JsonProperty.Include.NON_DEFAULT) var number: Int = 0
+  @JsonProperty(include = JsonProperty.Include.NON_EMPTY) var optional: Option[Int] = None
+}
+
+@JsonInclude(JsonProperty.Include.NON_DEFAULT)
+case class ScalarDefaults(
+    byte: Byte = 1,
+    short: Short = 2,
+    char: Char = 'x',
+    long: Long = 3L,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) flag: Boolean = true,
+    @JsonFormat(shape = JsonFormat.Shape.STRING) number: Int = 4,
+    @JsonRawValue raw: String = "[]",
+    id: UserId = UserId(5)
+)
+
+@JsonInclude(JsonProperty.Include.NON_DEFAULT)
+case class NonFiniteDefaults(
+    value: Double = Double.PositiveInfinity,
+    values: Array[Float] = Array(Float.NaN)
+)
+
+@JsonInclude(JsonProperty.Include.NON_DEFAULT)
+case class FreshDefaults(
+    values: scala.collection.mutable.ArrayBuffer[Int] = scala.collection.mutable.ArrayBuffer(1)
+)
+
+case class HiddenDependency(@JsonIgnore a: Int = 5)(
+    @JsonProperty(include = JsonProperty.Include.NON_DEFAULT) val b: Int = a + 1
+)
+
+@JsonInclude(JsonProperty.Include.NON_DEFAULT)
+case class MissingDeclaredDefault(value: Option[Int])
+
+case class UnitDefault(@JsonProperty(include = JsonProperty.Include.NON_DEFAULT) value: Unit = ())
+
+object ObservedDefault {
+  var calls = 0
+  var fail = false
+  def value: Int = {
+    calls += 1
+    if (fail) throw new IllegalStateException("default failure")
+    1
+  }
+}
+
+case class EvaluatedDefault(
+    @JsonProperty(include = JsonProperty.Include.NON_DEFAULT) value: Int = ObservedDefault.value
+)
 
 case class MissingUnwrapped(@JsonUnwrapped point: NestedModels.Point)
 
@@ -88,7 +179,9 @@ object NestedModels {
 
   case class Region(origin: Point, size: Int = 2)
 
-  case class Span(from: Int)(val to: Int = from + 1)
+  case class Span(from: Int)(
+      @JsonProperty(include = JsonProperty.Include.NON_DEFAULT) val to: Int = from + 1
+  )
 
   case class Optional(value: Option[String], fallback: Option[String] = Some("default"))
 
@@ -96,10 +189,11 @@ object NestedModels {
 
   case class OptionalDefault(value: Option[String])(val selected: String = value.getOrElse("default"))
 
-  case class UnwrappedNested(code: Int = 5) {
+  case class UnwrappedNested(@JsonProperty(include = JsonProperty.Include.NON_DEFAULT) code: Int = 5) {
     var note: String = "default-note"
   }
 
+  @JsonInclude(JsonProperty.Include.NON_DEFAULT)
   case class UnwrappedOwner(
       id: Int = 3,
       @JsonUnwrapped nested: UnwrappedNested = UnwrappedNested()
@@ -384,6 +478,19 @@ object Hue extends Enumeration {
 final class HueCodec extends ScalaEnumerationCodec(Hue)
 
 class ScalaJsonSuite extends AnyFunSuite {
+  private def assertWriterGeneration(json: ForyJson, model: Class[_], enabled: Boolean): Unit = {
+    val slots = ReflectionUtils.getObjectFieldValue(json, "slots").asInstanceOf[Array[AnyRef]]
+    val state = ReflectionUtils.getObjectFieldValue(slots(0), "state")
+    val resolver = ReflectionUtils.getObjectFieldValue(state, "typeResolver")
+      .asInstanceOf[JsonTypeResolver]
+    resolver.lockJIT()
+    try {
+      val info = resolver.getRuntimeTypeInfo(model)
+      assert(info.stringWriter().isInstanceOf[ObjectCodec[_]] == !enabled)
+      assert(info.utf8Writer().isInstanceOf[ObjectCodec[_]] == !enabled)
+    } finally resolver.unlockJIT()
+  }
+
   test("scalar string fields and Mixins") {
     for (codegen <- Seq(false, true)) {
       val json = ForyJsonScala.builder().registerMixin(classOf[ArtifactStateMixin])
@@ -614,6 +721,138 @@ class ScalaJsonSuite extends AnyFunSuite {
       assert(json.fromJson("{}", classOf[ExplicitEmptyRequired]) == ExplicitEmptyRequired(null))
       assert(json.toJson(EmptyDefault()) == "{}")
       assert(json.fromJson("{}", classOf[EmptyDefault]) == EmptyDefault())
+    }
+  }
+
+  test("Scala property omission uses logical emptiness") {
+    for (codegen <- Seq(false, true)) {
+      val json = ForyJsonScala.builder().withCodegen(codegen).withAsyncCompilation(false)
+        .defaultPropertyInclusion(JsonProperty.Include.NON_EMPTY).build()
+      val empty = EmptyScalaFields(None, Nil, Vector.empty, Set.empty, Map.empty,
+        scala.collection.mutable.ArrayBuffer.empty, None, List.empty[Int])
+      assert(json.toJson(empty) == "{}")
+      assert(new String(json.toJsonBytes(empty), UTF_8) == "{}")
+      assert(json.toPrettyJson(empty) == "{ }")
+      assert(new String(json.toPrettyJsonBytes(empty), UTF_8) == "{ }")
+      assertWriterGeneration(json, classOf[EmptyScalaFields], codegen)
+      for (option <- Seq(Some(""), Some(null), Some("漢"))) {
+        val text = json.toJson(empty.copy(option = option, dynamic = Some(Nil)))
+        assert(text.contains("\"option\":"))
+        assert(text.contains("\"dynamic\":[]"))
+        assert(new String(json.toJsonBytes(empty.copy(option = option, dynamic = Some(Nil))), UTF_8) == text)
+      }
+    }
+  }
+
+  test("Scala property omission distinguishes declared defaults") {
+    for (codegen <- Seq(false, true); async <- Seq(false, true)) {
+      val json = ForyJsonScala.builder().withCodegen(codegen).withAsyncCompilation(async)
+        .build()
+      val reader = ForyJsonScala.builder().withCodegen(codegen).withAsyncCompilation(false).build()
+      val value = InclusionDefaults(0, false, None)
+      val expected = "{\"required\":0,\"flag\":false,\"optional\":null}"
+      assert(json.toJson(value) == expected)
+      assert(new String(json.toJsonBytes(value), UTF_8) == expected)
+      assert(reader.fromJson(expected, classOf[InclusionDefaults]) == value)
+      assert(reader.fromJson(json.toPrettyJson(value), classOf[InclusionDefaults]) == value)
+      assert(reader.fromJson(json.toPrettyJsonBytes(value), classOf[InclusionDefaults]) == value)
+      val changed = value.copy(number = 0, currency = null, selected = None, values = Nil, text = "漢")
+      val text = json.toJson(changed)
+      assert(text == "{\"required\":0,\"flag\":false,\"optional\":null,\"number\":0,\"currency\":null,\"selected\":null,\"values\":[],\"text\":\"漢\"}")
+      assert(new String(json.toJsonBytes(changed), UTF_8) == text)
+      assert(reader.fromJson(text, classOf[InclusionDefaults]) == changed)
+      assert(json.toJson(RetainedDefault()) == "{\"value\":2}")
+      assert(json.toJson(NestedModels.OptionalOnly(None)) == "{\"value\":null}")
+    }
+  }
+
+  test("Scala property omission handles dependencies and arrays") {
+    for (codegen <- Seq(false, true)) {
+      val json = ForyJsonScala.builder().withCodegen(codegen).withAsyncCompilation(false)
+        .build()
+      assert(json.toJson(CurriedDefault(5)()) == "{\"a\":5}")
+      assert(json.toJson(CurriedDefault(5)(2)) == "{\"a\":5,\"b\":2}")
+      assert(json.fromJson("{\"a\":5}", classOf[CurriedDefault]).b == 6)
+      assert(json.toJson(NestedModels.Span(5)()) == "{\"from\":5}")
+      assert(new String(json.toJsonBytes(NestedModels.Span(5)(2)), UTF_8) == "{\"from\":5,\"to\":2}")
+      assert(json.toJson(ArrayDefaults()) == "{}")
+      assert(new String(json.toJsonBytes(ArrayDefaults()), UTF_8) == "{}")
+      val negative = ArrayDefaults(fraction = -0.0, single = -0.0f)
+      val text = json.toJson(negative)
+      assert(text.contains("\"fraction\":-0.0"))
+      assert(text.contains("\"single\":-0.0"))
+      assert(new String(json.toJsonBytes(negative), UTF_8) == text)
+      assert(json.toJson(ArrayDefaults(ints = Array.emptyIntArray)).contains("\"ints\":[]"))
+      val unwrapped = NestedModels.UnwrappedOwner()
+      assert(json.toJson(unwrapped) == "{}")
+      assert(new String(json.toJsonBytes(unwrapped), UTF_8) == "{}")
+      assert(json.toPrettyJson(unwrapped) == "{ }")
+      assert(new String(json.toPrettyJsonBytes(unwrapped), UTF_8) == "{ }")
+      assert(json.fromJson("{}", classOf[NestedModels.UnwrappedOwner]) == unwrapped)
+      val changed = NestedModels.UnwrappedOwner(nested = NestedModels.UnwrappedNested(8))
+      val output = "{\"code\":8,\"note\":\"default-note\"}"
+      assert(json.toJson(changed) == output)
+      assert(new String(json.toJsonBytes(changed), UTF_8) == output)
+      assertWriterGeneration(json, classOf[CurriedDefault], codegen)
+      assertWriterGeneration(json, classOf[NestedModels.UnwrappedOwner], codegen)
+    }
+  }
+
+  test("Scala default omission respects field formats and Mixins") {
+    for (codegen <- Seq(false, true)) {
+      val json = ForyJsonScala.builder().withCodegen(codegen).withAsyncCompilation(false)
+        .build()
+      assert(json.toJson(ScalarDefaults()) == "{}")
+      assert(new String(json.toJsonBytes(ScalarDefaults()), UTF_8) == "{}")
+      val changed = ScalarDefaults(0, 0, '漢', 0L, false, 0, null, UserId(0))
+      val expected = "{\"byte\":0,\"short\":0,\"char\":\"漢\",\"long\":0,\"flag\":\"false\",\"number\":\"0\",\"raw\":null,\"id\":0}"
+      assert(json.toJson(changed) == expected)
+      assert(new String(json.toJsonBytes(changed), UTF_8) == expected)
+      assertWriterGeneration(json, classOf[ScalarDefaults], codegen)
+      assert(json.fromJson(json.toPrettyJson(changed), classOf[ScalarDefaults]) == changed)
+      assert(json.fromJson(json.toPrettyJsonBytes(changed), classOf[ScalarDefaults]) == changed)
+      val mixin = ForyJsonScala.builder().withCodegen(codegen).withAsyncCompilation(false)
+        .registerMixin(classOf[InclusionMixin]).build()
+      val text = mixin.toJson(MixinDefaults())
+      assert(!text.contains("\"number\""))
+      assert(!text.contains("\"optional\""))
+      assert(text.contains("\"currency\":\"USD\""))
+      assert(new String(mixin.toJsonBytes(MixinDefaults()), UTF_8) == text)
+      intercept[ForyJsonException](json.toJson(HiddenDependency()()))
+      intercept[ForyJsonException](json.toJson(MissingDeclaredDefault(None)))
+      // A JVM void default is not a callable value source in the current constructor model.
+      intercept[ForyJsonException](json.toJson(UnitDefault()))
+      intercept[ForyJsonException](json.toJsonBytes(UnitDefault()))
+      val fresh1 = json.fromJson("{}", classOf[FreshDefaults])
+      val fresh2 = json.fromJson("{}".getBytes(UTF_8), classOf[FreshDefaults])
+      fresh1.values += 2
+      assert(fresh2.values == Seq(1))
+    }
+  }
+
+  test("Scala default omission preserves failures and root reuse") {
+    for (codegen <- Seq(false, true)) {
+      val json = ForyJsonScala.builder().withCodegen(codegen).withAsyncCompilation(false)
+        .build()
+      for (value <- Seq(NonFiniteDefaults(), NonFiniteDefaults(value = 0.0))) {
+        val text = json.toJson(value)
+        assert(text.contains("\"value\":"))
+        assert(text.contains("\"values\":[\"NaN\"]"))
+        assert(new String(json.toJsonBytes(value), UTF_8) == text)
+      }
+      ObservedDefault.calls = 0
+      val value = EvaluatedDefault(1)
+      assert(json.toJson(value) == "{}")
+      assert(ObservedDefault.calls == 1)
+      assert(new String(json.toJsonBytes(value), UTF_8) == "{}")
+      assert(ObservedDefault.calls == 2)
+      ObservedDefault.fail = true
+      try {
+        intercept[Exception](json.toPrettyJson(value))
+        intercept[Exception](json.toPrettyJsonBytes(value))
+      } finally ObservedDefault.fail = false
+      assert(json.toJson(value) == "{}")
+      assert(new String(json.toJsonBytes(value), UTF_8) == "{}")
     }
   }
 

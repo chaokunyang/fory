@@ -21,9 +21,32 @@ package org.apache.fory.integration.kotlin.json.corpus
 
 import org.apache.fory.json.kotlin.ForyJsonKotlin
 import org.testng.Assert.assertEquals
+import org.testng.Assert.assertNotSame
 import org.testng.annotations.Test
 
 public class KotlinJsonCorpusTest {
+  @Test
+  public fun defaultInclusion(): Unit {
+    for (codegen in listOf(false, true)) {
+      val json =
+        ForyJsonKotlin.builder()
+          .withCodegen(codegen)
+          .withAsyncCompilation(false)
+          .registerMixin(PlatformDefaultMixin::class.java)
+          .build()
+      assertEquals(json.toJson(PlatformDefaults()), "{\"retained\":7}")
+      assertEquals(json.toJsonBytes(PlatformDefaults()).decodeToString(), "{\"retained\":7}")
+      assertEquals(json.toPrettyJson(PlatformDefaultTarget()), "{ }")
+      assertEquals(json.toPrettyJsonBytes(PlatformDefaultTarget()).decodeToString(), "{ }")
+      assertEquals(json.toJson(PlatformDefaultTarget("漢")), "{\"text\":\"漢\"}")
+      val first = json.fromJson("{}", PlatformDefaults::class.java)
+      val second = json.fromJson("{}".encodeToByteArray(), PlatformDefaults::class.java)
+      assertNotSame(first.values, second.values)
+      first.values += 2
+      assertEquals(second.values, listOf(1))
+    }
+  }
+
   @Test
   public fun sharedRoundTrip(): Unit {
     val json =

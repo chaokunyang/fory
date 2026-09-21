@@ -1397,6 +1397,16 @@ public final class JsonCodegen {
     if (property.writeGetter() != null && !canCall(property.writeGetter())) {
       return false;
     }
+    if (property.defaultMethod() != null) {
+      if (!canCall(property.defaultMethod())) {
+        return false;
+      }
+      for (Method dependency : property.defaultDependencies()) {
+        if (!canCall(dependency)) {
+          return false;
+        }
+      }
+    }
     if (field != null && !canCompileField(field)) {
       return false;
     }

@@ -491,6 +491,10 @@ public final class JsonObjectModel {
     return accessors.clone();
   }
 
+  /**
+   * Returns declared constructor defaults, never implicit reader type fallbacks. Explicit default
+   * omission may evaluate these methods with the current object's preceding constructor values.
+   */
   public Method[] defaultMethods() {
     return defaultMethods.clone();
   }

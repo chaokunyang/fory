@@ -128,6 +128,12 @@ class KotlinNullabilityRuntimeTest {
   fun propertyInclusion() {
     for (mode in KotlinJsonTestMode.entries) {
       for (inclusion in JsonProperty.Include.values()) {
+        if (inclusion == JsonProperty.Include.NON_DEFAULT) {
+          assertFailsWith<IllegalArgumentException> {
+            newKotlinJson(mode) { defaultPropertyInclusion(inclusion) }
+          }
+          continue
+        }
         val json =
           newKotlinJson(mode) {
             if (inclusion != JsonProperty.Include.DEFAULT) defaultPropertyInclusion(inclusion)

@@ -25,6 +25,7 @@ import static java.util.Collections.emptySet;
 import static java.util.Collections.singletonList;
 import static java.util.Collections.singletonMap;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertThrows;
 
 import java.nio.charset.StandardCharsets;
@@ -37,7 +38,9 @@ import java.util.OptionalInt;
 import java.util.OptionalLong;
 import org.apache.fory.json.annotation.JsonAnyGetter;
 import org.apache.fory.json.annotation.JsonCodec;
+import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonIgnore;
+import org.apache.fory.json.annotation.JsonInclude;
 import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonProperty;
 import org.apache.fory.json.annotation.JsonProperty.Include;
@@ -101,6 +104,127 @@ public class JsonInclusionTest extends ForyJsonTestModels {
       assertJson(json, value, "{\"value\":" + encoded[i] + "}");
     }
     assertGeneratedWhenSupported(json, Dynamic.class, codegenEnabled());
+  }
+
+  @Test
+  public void defaultInclusion() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> newJsonBuilder().defaultPropertyInclusion(Include.NON_DEFAULT));
+    ForyJson json = newJson();
+    Initialized value = new Initialized();
+    int calls = Initialized.calls;
+    assertJson(json, value, "{\"retained\":1}");
+    assertJson(json, value, "{\"retained\":1}");
+    assertEquals(Initialized.calls, calls + 1);
+    value.count = 0;
+    value.label = "漢";
+    assertJson(json, value, "{\"count\":0,\"label\":\"漢\",\"retained\":1}");
+    String pretty = "{\n  \"count\" : 0,\n  \"label\" : \"漢\",\n  \"retained\" : 1\n}";
+    assertEquals(json.toPrettyJson(value), pretty);
+    assertEquals(new String(json.toPrettyJsonBytes(value), StandardCharsets.UTF_8), pretty);
+    assertEquals(Initialized.calls, calls + 1);
+    Initialized first = json.fromJson("{}", Initialized.class);
+    Initialized second = json.fromJson("{}".getBytes(StandardCharsets.UTF_8), Initialized.class);
+    assertEquals(first.count, 3);
+    assertNotSame(first.values, second.values);
+    first.values.add(2);
+    assertEquals(second.values, singletonList(1));
+    assertThrows(ForyJsonException.class, () -> json.toJson(new ExplicitDefaults(0, null)));
+    assertThrows(ForyJsonException.class, () -> json.toJson(new RequiredConstructor(1)));
+    assertGeneratedWhenSupported(json, Initialized.class, codegenEnabled());
+  }
+
+  @Test
+  public void referenceConstruction() {
+    ForyJson json = newJson();
+    FailingDefault value = new FailingDefault();
+    FailingDefault.fail = true;
+    try {
+      assertThrows(ForyJsonException.class, () -> json.toJson(value));
+      assertThrows(ForyJsonException.class, () -> json.toJsonBytes(value));
+    } finally {
+      FailingDefault.fail = false;
+    }
+    PlainDefault plain = new PlainDefault();
+    int calls = PlainDefault.calls;
+    assertJson(newJson(), plain, "{\"count\":3}");
+    assertEquals(PlainDefault.calls, calls);
+    ForyJson mixed = newJsonBuilder().registerMixin(DefaultMixin.class).build();
+    assertJson(mixed, plain, "{}");
+    assertEquals(PlainDefault.calls, calls + 1);
+    ForyJson overridden = newJsonBuilder().registerMixin(DefaultOverrideMixin.class).build();
+    assertJson(overridden, new Initialized(), "{\"count\":3,\"retained\":1}");
+  }
+
+  @JsonInclude(Include.NON_DEFAULT)
+  public static class Initialized {
+    public static int calls;
+    public int count = 3;
+    public String label;
+    public List<Integer> values = new java.util.ArrayList<>(singletonList(1));
+
+    @JsonProperty(include = Include.ALWAYS)
+    public int retained = 1;
+
+    public Initialized() {
+      calls++;
+    }
+  }
+
+  @JsonInclude(Include.NON_DEFAULT)
+  public static class ExplicitDefaults {
+    public final int count;
+    public final String label;
+
+    public ExplicitDefaults() {
+      this(3, "default");
+    }
+
+    @JsonCreator
+    public ExplicitDefaults(@JsonProperty("count") int count, @JsonProperty("label") String label) {
+      this.count = count;
+      this.label = label;
+    }
+  }
+
+  public static class RequiredConstructor {
+    @JsonProperty(include = Include.NON_DEFAULT)
+    public int count;
+
+    public RequiredConstructor(int count) {
+      this.count = count;
+    }
+  }
+
+  public static class FailingDefault {
+    public static boolean fail;
+
+    @JsonProperty(include = Include.NON_DEFAULT)
+    public int value = 1;
+
+    public FailingDefault() {
+      if (fail) throw new IllegalStateException("constructor failed");
+    }
+  }
+
+  public static class PlainDefault {
+    public static int calls;
+    public int count = 3;
+
+    public PlainDefault() {
+      calls++;
+    }
+  }
+
+  @JsonMixin(target = PlainDefault.class)
+  @JsonInclude(Include.NON_DEFAULT)
+  public abstract static class DefaultMixin {}
+
+  @JsonMixin(target = Initialized.class)
+  public abstract static class DefaultOverrideMixin {
+    @JsonProperty(include = Include.ALWAYS)
+    public int count;
   }
 
   @Test
@@ -199,6 +323,12 @@ public class JsonInclusionTest extends ForyJsonTestModels {
     assertJson(json, value, "{\"object\":\"\"}");
     value.list = singletonList("x");
     assertJson(json, value, "{\"list\":\"custom\",\"object\":\"\"}");
+    CustomDynamic dynamic = new CustomDynamic();
+    assertJson(json, dynamic, "{\"value\":\"custom\"}");
+    String pretty = "{\n  \"value\" : \"custom\"\n}";
+    assertEquals(json.toPrettyJson(dynamic), pretty);
+    assertEquals(new String(json.toPrettyJsonBytes(dynamic), StandardCharsets.UTF_8), pretty);
+    assertGeneratedWhenSupported(json, CustomDynamic.class, codegenEnabled());
   }
 
   @Test
@@ -335,6 +465,23 @@ public class JsonInclusionTest extends ForyJsonTestModels {
   }
 
   public static final class EmptyObject {}
+
+  public static final class CustomDynamic {
+    @JsonCodec(RepresentationCodec.class)
+    public Object value = new RequiredConstructor(1);
+  }
+
+  public static final class RepresentationCodec extends AbstractJsonValueCodec<Object> {
+    @Override
+    public void write(JsonWriter writer, Object value) {
+      writer.writeString("custom");
+    }
+
+    @Override
+    public Object read(JsonReader reader) {
+      return reader.readString();
+    }
+  }
 
   public static final class ListCodec extends AbstractJsonValueCodec<List<String>> {
     @Override

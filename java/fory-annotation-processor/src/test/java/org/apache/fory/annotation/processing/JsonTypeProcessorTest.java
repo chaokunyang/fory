@@ -541,6 +541,71 @@ public class JsonTypeProcessorTest {
   }
 
   @Test
+  public void defaultInclusion() throws Exception {
+    for (boolean mixin : new boolean[] {false, true}) {
+      String authorization = "@JsonInclude(JsonProperty.Include.NON_DEFAULT) ";
+      CompilationResult result =
+          compile(
+              "test.DefaultModel",
+              "package test;\nimport org.apache.fory.json.annotation.*;\n"
+                  + (mixin ? "" : "@JsonType " + authorization)
+                  + "public class DefaultModel {\n"
+                  + "  public static int calls;\n"
+                  + "  public int number = 3;\n"
+                  + "  private String text = \"default\";\n"
+                  + "  @JsonProperty(include=JsonProperty.Include.ALWAYS) public int retained = 7;\n"
+                  + "  public DefaultModel() { calls++; }\n"
+                  + "  public String getText() { return text; }\n"
+                  + "  public void setText(String value) { text = value; }\n"
+                  + "}\n"
+                  + (mixin
+                      ? "@JsonMixin(target=DefaultModel.class) "
+                          + authorization
+                          + "abstract class DefaultMixin {}\n"
+                      : ""));
+      assertTrue(result.success, result.diagnostics());
+      ClassLoader loader = result.classLoader();
+      Class<?> type = loader.loadClass("test.DefaultModel");
+      String companion =
+          mixin
+              ? "test.DefaultMixin_ForyJsonMixin_test_x2e_DefaultModel_ForyJsonCodec"
+              : "test.DefaultModel_ForyJsonCodec";
+      GeneratedJsonCodec<?> codec = generatedCodec(loader, companion);
+      Object value = type.getConstructor().newInstance();
+      assertEquals(methodAccessor(codec.fieldAccessors(), "getText").getObject(value), "default");
+      String rules =
+          result.generatedResource(
+              (mixin ? MIXIN_RULE_PREFIX : RULE_PREFIX)
+                  + (mixin ? "test.DefaultMixin.pro" : "test.DefaultModel.pro"));
+      assertTrue(rules.contains("<init>();"), rules);
+      assertTrue(rules.contains("java.lang.String getText();"), rules);
+      assertTrue(rules.contains("@interface org.apache.fory.json.annotation.JsonInclude"), rules);
+      for (boolean codegen : new boolean[] {false, true}) {
+        org.apache.fory.json.ForyJsonBuilder builder =
+            ForyJson.builder()
+                .withClassLoader(loader)
+                .withCodegen(codegen)
+                .withAsyncCompilation(false);
+        if (mixin) {
+          builder.registerMixin(loader.loadClass("test.DefaultMixin"));
+        }
+        ForyJson json = builder.build();
+        int calls = type.getField("calls").getInt(null);
+        assertEquals(json.toJson(value), "{\"retained\":7}");
+        assertEquals(
+            new String(json.toJsonBytes(value), StandardCharsets.UTF_8), "{\"retained\":7}");
+        assertEquals(json.toPrettyJson(value), "{\n  \"retained\" : 7\n}");
+        assertEquals(
+            new String(json.toPrettyJsonBytes(value), StandardCharsets.UTF_8),
+            json.toPrettyJson(value));
+        assertEquals(type.getField("calls").getInt(null), calls + 1);
+        Object decoded = json.fromJson("{}", type);
+        assertEquals(type.getMethod("getText").invoke(decoded), "default");
+      }
+    }
+  }
+
+  @Test
   public void generatedAccessors() throws Exception {
     CompilationResult result =
         compile(

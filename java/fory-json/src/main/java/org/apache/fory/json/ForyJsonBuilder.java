@@ -85,20 +85,29 @@ public final class ForyJsonBuilder {
    * Sets inclusion for properties whose {@code JsonProperty.include} is {@code DEFAULT}.
    *
    * <p>The default is {@code NON_NULL}. {@code NON_EMPTY} additionally omits empty CharSequence
-   * values, arrays, collections, maps, and absent JDK Optional values. Root values and container
-   * entries are not filtered. Inclusion examines the logical property value before a custom value
-   * codec runs. Kotlin properties follow this policy even when omission changes the value restored
-   * by a constructor default or causes a missing-property read failure. Other language models may
-   * retain properties needed for reconstruction.
+   * values, arrays, collections, maps, and absent JDK Optional values, plus None and supported
+   * strict Scala collections when the Scala module is installed. Root values and container entries
+   * are not filtered. Inclusion examines the logical property value before a custom value codec
+   * runs. Kotlin properties follow this policy even when omission changes the value restored by a
+   * constructor default or causes a missing-property read failure. Other language models may retain
+   * properties needed for reconstruction.
    *
-   * @throws IllegalArgumentException if inclusion is {@code DEFAULT}, which requires a parent
-   *     default
+   * <p>{@link Include#NON_DEFAULT} is rejected here: default omission requires explicit property
+   * authorization through {@link org.apache.fory.json.annotation.JsonProperty#include()} or class
+   * authorization through {@link org.apache.fory.json.annotation.JsonInclude}. The caller must
+   * confirm stable defaults, side-effect-safe evaluation, and equivalent missing-field recovery.
+   *
+   * @throws IllegalArgumentException if inclusion is {@code DEFAULT} or {@code NON_DEFAULT}
    * @throws NullPointerException if inclusion is null
    */
   public ForyJsonBuilder defaultPropertyInclusion(Include inclusion) {
     Objects.requireNonNull(inclusion, "inclusion");
     if (inclusion == Include.DEFAULT) {
       throw new IllegalArgumentException("Default property inclusion must be concrete");
+    }
+    if (inclusion == Include.NON_DEFAULT) {
+      throw new IllegalArgumentException(
+          "NON_DEFAULT requires explicit @JsonProperty or @JsonInclude authorization on the model");
     }
     defaultPropertyInclusion = inclusion;
     return this;

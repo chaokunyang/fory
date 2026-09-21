@@ -77,15 +77,16 @@ public @interface JsonProperty {
    * Returns the inclusion policy for this property.
    *
    * <p>The policy affects writing only. A non-default policy is invalid when the logical property
-   * has no write source, including creator-only input properties. Primitive properties are always
-   * written because their Java value cannot be null, but conflicting primitive declarations are
-   * still rejected during logical-property normalization.
+   * has no write source, including creator-only input properties. {@code DEFAULT} inherits the
+   * class's {@link JsonInclude} policy, then the runtime setting. {@code NON_DEFAULT} explicitly
+   * authorizes evaluating a supported default source; see its safety and construction contract.
+   * Other policies retain primitive zero and false.
    */
   Include include() default Include.DEFAULT;
 
   /** Property inclusion policies supported by Fory JSON. */
   enum Include {
-    /** Inherit the runtime's default property inclusion. */
+    /** Inherit the class's JsonInclude policy, or the runtime default when absent. */
     DEFAULT,
     /** Always write the property, including when its value is JSON {@code null}. */
     ALWAYS,
@@ -93,9 +94,41 @@ public @interface JsonProperty {
     NON_NULL,
     /**
      * Omit null, empty CharSequence values, arrays, collections, maps, and absent JDK Optional
-     * values. Emptiness describes the logical property value before its codec runs, not its JSON
-     * output. Container elements and present Optional contents are not inspected recursively.
+     * values. With the Scala module, also omit None and supported empty strict Scala collections.
+     * Emptiness describes the logical property value before its codec runs, not its JSON output.
+     * Container elements and present Optional or Scala Option contents are not inspected
+     * recursively. Zero and false are not empty. A missing field may restore a nonempty constructor
+     * default; this output policy does not guarantee lossless round trips for empty values.
      */
-    NON_EMPTY
+    NON_EMPTY,
+    /**
+     * Explicitly authorize omitting this property when it equals its supported default. The caller
+     * guarantees stable defaults, evaluation without externally visible side effects, and recovery
+     * of the same logical value when input omits the field. Fory does not prove expression purity.
+     * This policy is accepted only on a property or through class-level {@link JsonInclude}; the
+     * runtime-wide default rejects it. Class authorization also covers future added properties.
+     *
+     * <p>Scala declared constructor defaults are evaluated on each write through their compiler
+     * methods, with actual preceding parameters from the current object. Missing dependencies or
+     * reader-only type fallbacks are not default sources. Java no-argument models and Kotlin models
+     * whose selected constructor has defaults for every parameter use one reference object per
+     * model metadata initialization. Ordinary no-argument Kotlin models are also supported. This
+     * authorization permits the full constructor, other field initializers, and init blocks to run
+     * when building that reference. Only authorized property values are retained for comparison.
+     * Required constructor arguments are never fabricated, and creator selection is unchanged.
+     *
+     * <p>Kotlin metadata does not expose default expressions or dependencies. A reference object
+     * cannot represent defaults that vary with the current object's parameters, time, or external
+     * state. Authorize only properties for which its baseline matches missing-field recovery.
+     * Unsupported sources and failed construction cause a model-initialization error, rather than
+     * silently retaining the field or bypassing the constructor.
+     *
+     * <p>Primitive values compare directly; floating-point values preserve signed zero and never
+     * omit non-finite values. References use {@code equals}, and arrays compare contents with exact
+     * array types. Different values, including null and empty values, are written. Reading remains
+     * independent: explicit null is not missing, and reference defaults are never assigned to
+     * decoded objects. Root values and container contents are not filtered.
+     */
+    NON_DEFAULT
   }
 }

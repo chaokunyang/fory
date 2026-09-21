@@ -19,7 +19,7 @@
 
 package org.apache.fory.json.scala.internal
 
-import java.lang.reflect.Modifier
+import java.lang.reflect.{Method, Modifier}
 import java.util.function.Supplier
 
 import org.apache.fory.json.JsonCodecFactory
@@ -31,6 +31,22 @@ import org.apache.fory.serializer.GraphMemoryEstimates
 import scala.collection.immutable.NumericRange
 
 private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
+  override def emptyMethod(rawType: Class[_]): Method = {
+    if (isRejected(rawType)) return null
+    if (classOf[Option[_]].isAssignableFrom(rawType))
+      return classOf[Option[_]].getMethod("isEmpty")
+    if (
+      classOf[Range].isAssignableFrom(rawType) ||
+      classOf[NumericRange[_]].isAssignableFrom(rawType) ||
+      classOf[List[_]].isAssignableFrom(rawType) ||
+      classOf[scala.collection.immutable.BitSet].isAssignableFrom(rawType) ||
+      classOf[scala.collection.mutable.BitSet].isAssignableFrom(rawType) ||
+      classOf[scala.collection.Map[_, _]].isAssignableFrom(rawType) && mapKind(rawType, true) != null ||
+      classOf[scala.collection.Iterable[_]].isAssignableFrom(rawType) && iterableKind(rawType, true) != null
+    ) classOf[scala.collection.Iterable[_]].getMethod("isEmpty")
+    else null
+  }
+
   override def create(
       typeRef: TypeRef[_],
       resolver: JsonTypeResolver,

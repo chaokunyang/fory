@@ -19,6 +19,8 @@
 
 package org.apache.fory.json.resolver;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
 import org.apache.fory.json.codec.CodecUtils;
@@ -140,7 +142,15 @@ final class GeneratedCodecKeyBuilder {
       JsonFieldInfo[] fields =
           owner.unwrappedInfo() == null ? owner.writeFields() : owner.unwrappedInfo().writeFields();
       for (JsonFieldInfo field : fields) {
+        addWriteInclusion(field);
         addRegistration(field.writeTypeInfo());
+      }
+      if (owner.unwrappedInfo() != null) {
+        for (JsonUnwrappedInfo.Group group : owner.unwrappedInfo().groups()) {
+          if (group.declaration().writeProperty() != null) {
+            addWriteInclusion(group.declaration().writeProperty());
+          }
+        }
       }
       if (any != null && (any.writeField() != null || any.writeGetter() != null)) {
         addRegistration(any.valueTypeInfo());
@@ -195,6 +205,32 @@ final class GeneratedCodecKeyBuilder {
       keyParts.add(mixinType);
     }
     occurrence++;
+  }
+
+  private void addWriteInclusion(JsonFieldInfo field) {
+    keyParts.add(field.writeNull());
+    keyParts.add(field.omitEmpty());
+    keyParts.add(field.omitDefault());
+    addMethod(field.emptyMethod());
+    addMethod(field.defaultMethod());
+    for (Method dependency : field.defaultDependencies()) {
+      addMethod(dependency);
+    }
+  }
+
+  private void addMethod(Method method) {
+    keyParts.add(method != null);
+    if (method == null) {
+      return;
+    }
+    keyParts.add(method.getDeclaringClass());
+    keyParts.add(method.getName());
+    keyParts.add(method.getReturnType());
+    keyParts.add(Modifier.isStatic(method.getModifiers()));
+    keyParts.add(method.getParameterCount());
+    for (Class<?> type : method.getParameterTypes()) {
+      keyParts.add(type);
+    }
   }
 
   private void add(Part part, Object value) {

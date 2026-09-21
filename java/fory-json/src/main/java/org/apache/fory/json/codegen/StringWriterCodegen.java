@@ -102,7 +102,7 @@ final class StringWriterCodegen extends JsonWriterCodegen {
           markUtf16PrefixField(property, commaKnown, fields, i);
         }
       }
-      if (property.writeNull() && !property.omitEmpty()) {
+      if (property.writeNull() && !property.omitEmpty() && !property.omitDefault()) {
         commaKnown = true;
       }
     }

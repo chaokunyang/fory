@@ -267,15 +267,19 @@ public sealed class ReadContext
             return cached;
         }
 
-        object typeKey = CheckRemoteTypeMetaLimits(typeMeta);
+        object? typeKey = TypeMetaCacheKey(typeMeta);
         CheckedTypeMeta checkedTypeMeta = new(typeMeta, owner);
-        _typeMetasByHash.Set(headerHash, checkedTypeMeta);
-        RecordRemoteTypeMetaVersion(typeKey);
+        // Full caches still decode valid metadata; only the root reference table retains it.
+        if (typeKey is not null)
+        {
+            _typeMetasByHash.Set(headerHash, checkedTypeMeta);
+            RecordRemoteTypeMetaVersion(typeKey);
+        }
         return checkedTypeMeta;
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private object CheckRemoteTypeMetaLimits(TypeMeta typeMeta)
+    private object? TypeMetaCacheKey(TypeMeta typeMeta)
     {
         object typeKey;
         if (typeMeta.RegisterByName)
@@ -295,17 +299,13 @@ public sealed class ReadContext
         if (!hasTypeKey &&
             _remoteSchemaVersionsByType.Count >= MaxRemoteTypeMetaKeys)
         {
-            throw new InvalidDataException(
-                $"Remote TypeMeta logical type limit exceeded: {_remoteSchemaVersionsByType.Count} >= {MaxRemoteTypeMetaKeys}. " +
-                "The data may be malicious.");
+            return null;
         }
 
         int maxSchemaVersionsPerType = _config.MaxSchemaVersionsPerType;
         if (versionsForType >= maxSchemaVersionsPerType)
         {
-            throw new InvalidDataException(
-                $"Remote schema version limit exceeded for type {typeKey}: {versionsForType} >= {maxSchemaVersionsPerType}. " +
-                "The data may be malicious. If the data is not malicious, please increase MaxSchemaVersionsPerType.");
+            return null;
         }
 
         long acceptedTypeCount = !hasTypeKey
@@ -315,10 +315,7 @@ public sealed class ReadContext
         if (_totalAcceptedSchemaVersions >= MinRemoteTypeMetaVersions &&
             _totalAcceptedSchemaVersions / acceptedTypeCount >= maxAverageSchemaVersionsPerType)
         {
-            throw new InvalidDataException(
-                $"Remote schema version limit exceeded: {_totalAcceptedSchemaVersions} metadata versions for " +
-                $"{acceptedTypeCount} accepted remote types exceeds the average limit {maxAverageSchemaVersionsPerType}. " +
-                "The data may be malicious. If the data is not malicious, please increase MaxAverageSchemaVersionsPerType.");
+            return null;
         }
 
         return typeKey;

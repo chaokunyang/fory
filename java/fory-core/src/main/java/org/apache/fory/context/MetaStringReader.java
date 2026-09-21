@@ -258,7 +258,7 @@ public final class MetaStringReader {
   }
 
   private void updateDynamicString(EncodedMetaString encodedMetaString) {
-    int currentDynamicReadId = dynamicReadStringId++;
+    int currentDynamicReadId = dynamicReadStringId;
     EncodedMetaString[] readStringIds = dynamicReadStringIds;
     if (readStringIds.length <= currentDynamicReadId) {
       if (currentDynamicReadId >= MAX_CACHED_READ_META_STRINGS) {
@@ -267,6 +267,8 @@ public final class MetaStringReader {
       readStringIds = dynamicReadStringIds = growRead(readStringIds, currentDynamicReadId);
     }
     readStringIds[currentDynamicReadId] = encodedMetaString;
+    // A rejected insertion must leave the count within the table for root cleanup.
+    dynamicReadStringId = currentDynamicReadId + 1;
   }
 
   private static EncodedMetaString[] growRead(EncodedMetaString[] current, int id) {

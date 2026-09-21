@@ -112,8 +112,8 @@ cdef class Config:
         max_depth: Maximum allowed nesting depth during deserialization.
         max_type_fields: Maximum accepted field count in one received struct TypeDef.
         max_type_meta_bytes: Maximum accepted body size in one received TypeDef.
-        max_schema_versions_per_type: Maximum accepted remote metadata versions for one logical type.
-        max_average_schema_versions_per_type: Average remote schema versions allowed across accepted remote types.
+        max_schema_versions_per_type: Maximum cached remote metadata versions for one logical type.
+        max_average_schema_versions_per_type: Average cached remote schema versions across cached remote types.
         max_graph_memory_bytes: Approximate graph-memory gate per root deserialization.
             Mainly covers materialized collections, maps, arrays, structs, and objects. Leaf values
             are gated by unread input bytes instead, and actual process memory can be higher.
@@ -175,8 +175,8 @@ cdef class Config:
             max_depth: Maximum allowed read depth before failing deserialization.
             max_type_fields: Maximum accepted field count in one received struct TypeDef.
             max_type_meta_bytes: Maximum accepted body size in one received TypeDef.
-            max_schema_versions_per_type: Maximum accepted remote metadata versions for one logical type.
-            max_average_schema_versions_per_type: Average remote schema versions allowed across accepted remote types.
+            max_schema_versions_per_type: Maximum cached remote metadata versions for one logical type.
+            max_average_schema_versions_per_type: Average cached remote schema versions across cached remote types.
             max_graph_memory_bytes: Approximate graph-memory gate per root deserialization.
                 Mainly covers materialized collections, maps, arrays, structs, and objects. Leaf
                 values are gated by unread input bytes instead, and actual process memory can be
@@ -725,7 +725,7 @@ cdef class TypeResolver:
                 else type_def.typename
             )
             raise ValueError(f"TypeDef {name} is not registered")
-        type_key = self.resolver._check_remote_type_def_limit(type_def)
+        type_key = self.resolver._remote_type_def_cache_key(type_def)
         if typeinfo is None:
             # Compatible metadata authorizes only this fixed framework owner;
             # it never loads or manufactures the sender-named Python class.
@@ -735,8 +735,10 @@ cdef class TypeResolver:
         else:
             self.resolver._bind_local_type_def(type_def, typeinfo)
         typeinfo = self.resolver._build_type_info_from_typedef(type_def)
-        self._meta_shared_type_info[hash_key] = typeinfo
-        self.resolver._record_remote_type_def(type_key)
+        # Root metadata references retain uncached owners until reset.
+        if type_key is not None:
+            self._meta_shared_type_info[hash_key] = typeinfo
+            self.resolver._record_remote_type_def(type_key)
         return typeinfo
 
     cdef inline TypeInfo _load_bytes_to_type_info(
@@ -1093,8 +1095,8 @@ cdef class Fory:
             max_depth: Maximum allowed read depth before rejecting payloads.
             max_type_fields: Maximum accepted field count in one received struct TypeDef.
             max_type_meta_bytes: Maximum accepted body size in one received TypeDef.
-            max_schema_versions_per_type: Maximum accepted remote metadata versions for one logical type.
-            max_average_schema_versions_per_type: Average remote schema versions allowed across accepted remote types.
+            max_schema_versions_per_type: Maximum cached remote metadata versions for one logical type.
+            max_average_schema_versions_per_type: Average cached remote schema versions across cached remote types.
             max_graph_memory_bytes: Approximate graph-memory gate per root deserialization.
                 Mainly covers materialized collections, maps, arrays, structs, and objects. Leaf
                 values are gated by unread input bytes instead, and actual process memory can be

@@ -693,8 +693,8 @@ private:
                                            const TypeInfo *expected_type_info);
   static bool matches_expected_type(const TypeInfo *concrete_owner,
                                     const TypeInfo *expected_type_info);
-  FORY_NOINLINE Result<std::string, Error>
-  check_remote_type_meta_limit(const TypeMeta &type_meta);
+  FORY_NOINLINE bool can_cache_type_meta(const TypeMeta &type_meta,
+                                         std::string &type_key);
   void record_remote_type_meta(const std::string &type_key);
   FORY_NOINLINE bool set_graph_memory_exceeded(size_t bytes, size_t remaining);
   FORY_NOINLINE bool set_unbacked_container_items_exceeded(size_t items,
@@ -715,6 +715,8 @@ private:
   // Persistent cache storage for TypeInfo objects keyed by the protocol
   // 52-bit TypeMeta header hash.
   std::vector<std::unique_ptr<CachedTypeInfo>> cached_type_infos_;
+  // Overflow metadata is owned only until the root operation releases its refs.
+  std::vector<std::unique_ptr<CachedTypeInfo>> uncached_type_infos_;
   // Root-local TypeMeta entries retain both their read TypeInfo and the
   // registration-owned concrete TypeInfo authorized for that metadata.
   std::vector<ReadTypeInfo> reading_type_infos_;

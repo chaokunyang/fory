@@ -361,7 +361,7 @@ impl MetaReaderResolver {
                     self.reading_type_infos.push(local_type_info.clone());
                     return Ok(local_type_info);
                 } else {
-                    remote_schema_key = self.check_remote_type_meta_limit(&type_meta, config)?;
+                    remote_schema_key = self.type_meta_cache_key(&type_meta, config);
                     Rc::new(TypeInfo::from_remote_meta(
                         type_meta.clone(),
                         Some(local_type_info.get_harness()),
@@ -370,7 +370,7 @@ impl MetaReaderResolver {
                     ))
                 }
             } else {
-                remote_schema_key = self.check_remote_type_meta_limit(&type_meta, config)?;
+                remote_schema_key = self.type_meta_cache_key(&type_meta, config);
                 Rc::new(TypeInfo::from_remote_meta(
                     type_meta.clone(),
                     None,
@@ -392,7 +392,7 @@ impl MetaReaderResolver {
                     self.reading_type_infos.push(local_type_info.clone());
                     return Ok(local_type_info);
                 } else {
-                    remote_schema_key = self.check_remote_type_meta_limit(&type_meta, config)?;
+                    remote_schema_key = self.type_meta_cache_key(&type_meta, config);
                     Rc::new(TypeInfo::from_remote_meta(
                         type_meta.clone(),
                         Some(local_type_info.get_harness()),
@@ -401,7 +401,7 @@ impl MetaReaderResolver {
                     ))
                 }
             } else {
-                remote_schema_key = self.check_remote_type_meta_limit(&type_meta, config)?;
+                remote_schema_key = self.type_meta_cache_key(&type_meta, config);
                 Rc::new(TypeInfo::from_remote_meta(
                     type_meta.clone(),
                     None,
@@ -415,21 +415,20 @@ impl MetaReaderResolver {
         // mapping alone may retain an unregistered stub, and this decision must precede root or
         // persistent checked-cache publication and schema-version accounting.
         Self::check_expected_owner(&type_info, expected)?;
-        self.parsed_type_infos.insert(meta_hash, type_info.clone());
-        self.cached_meta_hash = meta_hash;
-        self.cached_type_info = Some(type_info.clone());
+        // Overflow schemas remain fully validated but are owned only by the current root.
+        if let Some(key) = remote_schema_key {
+            self.parsed_type_infos.insert(meta_hash, type_info.clone());
+            self.cached_meta_hash = meta_hash;
+            self.cached_type_info = Some(type_info.clone());
+            self.record_remote_type_meta(key);
+        }
         self.reading_type_infos.push(type_info.clone());
-        self.record_remote_type_meta(remote_schema_key);
         Ok(type_info)
     }
 
     #[cold]
     #[inline(never)]
-    fn check_remote_type_meta_limit(
-        &self,
-        type_meta: &TypeMeta,
-        config: &Config,
-    ) -> Result<String, Error> {
+    fn type_meta_cache_key(&self, type_meta: &TypeMeta, config: &Config) -> Option<String> {
         let namespace = type_meta.get_namespace();
         let type_name = type_meta.get_type_name();
         let key = if !namespace.original.is_empty() || !type_name.original.is_empty() {
@@ -448,15 +447,10 @@ impl MetaReaderResolver {
         if versions_for_type == 0
             && self.remote_schema_versions_by_type.len() >= MAX_REMOTE_TYPE_META_KEYS
         {
-            return Err(Error::invalid_data(
-                "remote logical TypeMeta key limit exceeded. The data may be malicious",
-            ));
+            return None;
         }
         if versions_for_type >= config.max_schema_versions_per_type() {
-            return Err(Error::invalid_data(format!(
-                "remote schema version limit exceeded for one type. The data may be malicious. If the data is not malicious, please increase max_schema_versions_per_type={}",
-                config.max_schema_versions_per_type()
-            )));
+            return None;
         }
 
         let accepted_type_count = (self.remote_schema_versions_by_type.len()
@@ -468,13 +462,10 @@ impl MetaReaderResolver {
             || (self.total_accepted_schema_versions >= MIN_REMOTE_TYPE_META_VERSIONS
                 && reached_average_limit)
         {
-            return Err(Error::invalid_data(format!(
-                "remote schema version limit exceeded globally. The data may be malicious. If the data is not malicious, please increase max_average_schema_versions_per_type={}",
-                config.max_average_schema_versions_per_type()
-            )));
+            return None;
         }
 
-        Ok(key)
+        Some(key)
     }
 
     fn record_remote_type_meta(&mut self, key: String) {
@@ -485,8 +476,7 @@ impl MetaReaderResolver {
             .unwrap_or(0);
         self.remote_schema_versions_by_type
             .insert(key, versions_for_type + 1);
-        // The cold miss check rejects u64::MAX before its caller publishes the TypeInfo and reaches
-        // this mutation.
+        // The cold miss check stops caching at u64::MAX before this mutation.
         self.total_accepted_schema_versions += 1;
     }
 
@@ -782,11 +772,7 @@ mod tests {
         let cached_hash = resolver.cached_meta_hash;
         let cached_type_info = resolver.cached_type_info.as_ref().map(Rc::as_ptr);
         let rejected = remote_struct_meta(MAX_REMOTE_TYPE_META_KEYS as u32, "a");
-        let err = read_type_def(&mut resolver, &config, rejected.get_bytes())
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("logical TypeMeta key limit"));
+        let overflow = read_type_def(&mut resolver, &config, rejected.get_bytes()).unwrap();
         assert_eq!(
             resolver.remote_schema_versions_by_type.len(),
             MAX_REMOTE_TYPE_META_KEYS
@@ -796,12 +782,16 @@ mod tests {
             MAX_REMOTE_TYPE_META_KEYS as u64
         );
         assert_eq!(resolver.parsed_type_infos.len(), parsed_count);
-        assert_eq!(resolver.reading_type_infos.len(), reading_count);
+        assert_eq!(resolver.reading_type_infos.len(), reading_count + 1);
         assert_eq!(resolver.cached_meta_hash, cached_hash);
         assert_eq!(
             resolver.cached_type_info.as_ref().map(Rc::as_ptr),
             cached_type_info
         );
+        let weak = Rc::downgrade(&overflow);
+        drop(overflow);
+        resolver.reset();
+        assert!(weak.upgrade().is_none());
     }
 
     #[test]
@@ -813,14 +803,13 @@ mod tests {
             ..Default::default()
         };
         let changed = remote_struct_meta(0, "b");
-        let err = read_type_def(
+        read_type_def(
             &mut per_type_resolver,
             &per_type_config,
             changed.get_bytes(),
         )
-        .unwrap_err()
-        .to_string();
-        assert!(err.contains("max_schema_versions_per_type"));
+        .unwrap();
+        assert!(per_type_resolver.parsed_type_infos.is_empty());
 
         let mut average_resolver = MetaReaderResolver::default();
         fill_remote_schema_keys(&mut average_resolver, MAX_REMOTE_TYPE_META_KEYS, 3);
@@ -840,10 +829,8 @@ mod tests {
         assert_eq!(average_resolver.total_accepted_schema_versions, 24_576);
 
         let rejected = remote_struct_meta(0, "c");
-        let err = read_type_def(&mut average_resolver, &average_config, rejected.get_bytes())
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("max_average_schema_versions_per_type"));
+        read_type_def(&mut average_resolver, &average_config, rejected.get_bytes()).unwrap();
+        assert_eq!(average_resolver.parsed_type_infos.len(), 1);
         assert_eq!(average_resolver.total_accepted_schema_versions, 24_576);
     }
 
@@ -859,16 +846,12 @@ mod tests {
         resolver.total_accepted_schema_versions = u64::MAX;
         let meta = remote_struct_meta(0, "b");
 
-        let err = read_type_def(&mut resolver, &config, meta.get_bytes())
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("remote schema version limit exceeded globally"));
+        read_type_def(&mut resolver, &config, meta.get_bytes()).unwrap();
         assert_eq!(resolver.total_accepted_schema_versions, u64::MAX);
         assert_eq!(resolver.remote_schema_versions_by_type.get("i0"), Some(&1));
         assert!(resolver.parsed_type_infos.is_empty());
         assert!(resolver.cached_type_info.is_none());
-        assert!(resolver.reading_type_infos.is_empty());
+        assert_eq!(resolver.reading_type_infos.len(), 1);
     }
 
     #[test]
@@ -1437,14 +1420,13 @@ mod tests {
         read_type_def(&mut resolver, &config, &type_def(9001, "a")).unwrap();
         read_type_def(&mut resolver, &config, &type_def(9002, "a")).unwrap();
 
-        let err = read_type_def(&mut resolver, &config, &type_def(9001, "b"))
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("max_schema_versions_per_type"));
+        read_type_def(&mut resolver, &config, &type_def(9001, "b")).unwrap();
+        assert_eq!(resolver.parsed_type_infos.len(), 2);
+        assert_eq!(resolver.total_accepted_schema_versions, 2);
     }
 
     #[test]
-    fn schema_limit_rejects_extra_versions_for_type() {
+    fn schema_overflow_is_uncached() {
         let meta = TypeMeta::new(
             TypeId::STRUCT as u32,
             9001,
@@ -1490,11 +1472,20 @@ mod tests {
         writer.write_var_u32(0);
         writer.write_bytes(changed.get_bytes());
         let mut reader = Reader::new(&bytes);
-        let err = resolver
+        let overflow = resolver
             .read_type_meta(&mut reader, &TypeResolver::default(), &config)
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("max_schema_versions_per_type"));
+            .unwrap();
+        assert_eq!(resolver.parsed_type_infos.len(), 1);
+        assert_eq!(resolver.total_accepted_schema_versions, 1);
+        let weak = Rc::downgrade(&overflow);
+        drop(overflow);
+        resolver.reset();
+        assert!(weak.upgrade().is_none());
+        let mut reader = Reader::new(&bytes);
+        resolver
+            .read_type_meta(&mut reader, &TypeResolver::default(), &config)
+            .unwrap();
+        assert_eq!(resolver.parsed_type_infos.len(), 1);
     }
 
     #[test]
@@ -1529,9 +1520,7 @@ mod tests {
         )
         .unwrap();
 
-        resolver
-            .check_remote_type_meta_limit(&checked, &config)
-            .unwrap();
+        resolver.type_meta_cache_key(&checked, &config).unwrap();
 
         let mut bytes = vec![];
         let mut writer = Writer::from_buffer(&mut bytes);
@@ -1575,16 +1564,10 @@ mod tests {
         )
         .unwrap();
 
-        let key = resolver
-            .check_remote_type_meta_limit(&first, &config)
-            .unwrap();
+        let key = resolver.type_meta_cache_key(&first, &config).unwrap();
         resolver.record_remote_type_meta(key);
 
-        let err = resolver
-            .check_remote_type_meta_limit(&second, &config)
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("max_schema_versions_per_type"));
+        assert!(resolver.type_meta_cache_key(&second, &config).is_none());
     }
 
     #[test]
@@ -1621,8 +1604,6 @@ mod tests {
             vec![],
         )
         .unwrap();
-        resolver
-            .check_remote_type_meta_limit(&second, &config)
-            .unwrap();
+        resolver.type_meta_cache_key(&second, &config).unwrap();
     }
 }

@@ -62,7 +62,6 @@ import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.logging.LogLevel;
 import org.apache.fory.logging.Logger;
@@ -627,8 +626,67 @@ public class ClassResolverTest extends ForyTestBase {
 
     assertSame(first, sharedRegistry.getOrCreateRemoteTypeDef(first, "remote.Type"));
     assertSame(first, sharedRegistry.getOrCreateRemoteTypeDef(first, "remote.Type"));
-    Assert.assertThrows(
-        ForyException.class, () -> sharedRegistry.getOrCreateRemoteTypeDef(second, "remote.Type"));
+    assertSame(second, sharedRegistry.getOrCreateRemoteTypeDef(second, "remote.Type"));
+    assertNull(sharedRegistry.remoteTypeDefByHeaderHash.get(TypeDef.headerHash(second.getId())));
+  }
+
+  public static class SchemaValue {
+    public int value;
+  }
+
+  public static class SchemaExtraA {
+    public int value;
+    public int extraA;
+  }
+
+  public static class SchemaExtraB {
+    public int value;
+    public int extraB;
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testSchemaOverflowDecoding(boolean codegen) {
+    for (boolean xlang : new boolean[] {false, true}) {
+      ForyBuilder builder =
+          Fory.builder()
+              .withXlang(xlang)
+              .withCompatible(true)
+              .withScopedMetaShare(true)
+              .withMaxSchemaVersionsPerType(1)
+              .withCodegen(codegen)
+              .withAsyncCompilation(false);
+      Fory firstWriter = builder.build();
+      Fory secondWriter = builder.build();
+      Fory reader = builder.build();
+      firstWriter.register(SchemaExtraA.class, 4000);
+      secondWriter.register(SchemaExtraB.class, 4000);
+      reader.register(SchemaValue.class, 4000);
+      SchemaExtraA first = new SchemaExtraA();
+      first.value = 17;
+      SchemaExtraB second = new SchemaExtraB();
+      second.value = 29;
+      byte[] firstBytes = firstWriter.serialize(first);
+      byte[] secondBytes = secondWriter.serialize(second);
+      assertEquals(reader.deserialize(firstBytes, SchemaValue.class).value, 17);
+      SharedRegistry shared = reader.getTypeResolver().getSharedRegistry();
+      assertEquals(shared.remoteTypeDefByHeaderHash.size(), 1);
+      int descriptors = shared.typeDefDescriptorsCache.size();
+      int groupers = shared.typeDefDescriptorGrouperCache.size();
+      TypeDef secondDef =
+          secondWriter.getTypeResolver().getTypeInfo(SchemaExtraB.class).getTypeDef();
+      long overflowHash = TypeDef.headerHash(secondDef.getId());
+      for (int i = 0; i < 3; i++) {
+        assertEquals(reader.deserialize(secondBytes, SchemaValue.class).value, 29);
+        assertEquals(shared.remoteTypeDefByHeaderHash.size(), 1);
+        assertNull(reader.getTypeResolver().extRegistry.typeInfoByHeaderHash.get(overflowHash));
+        assertEquals(shared.typeDefDescriptorsCache.size(), descriptors);
+        assertEquals(shared.typeDefDescriptorGrouperCache.size(), groupers);
+      }
+      byte[] truncated = Arrays.copyOf(secondBytes, secondBytes.length - 1);
+      Assert.assertThrows(() -> reader.deserialize(truncated, SchemaValue.class));
+      assertEquals(reader.deserialize(secondBytes, SchemaValue.class).value, 29);
+      assertEquals(reader.deserialize(firstBytes, SchemaValue.class).value, 17);
+    }
   }
 
   @Test
@@ -668,8 +726,8 @@ public class ClassResolverTest extends ForyTestBase {
 
     Assert.assertFalse(first.isStructSchemaKind());
     assertSame(first, sharedRegistry.getOrCreateRemoteTypeDef(first, "remote.Enum"));
-    Assert.assertThrows(
-        ForyException.class, () -> sharedRegistry.getOrCreateRemoteTypeDef(second, "remote.Enum"));
+    assertSame(second, sharedRegistry.getOrCreateRemoteTypeDef(second, "remote.Enum"));
+    assertNull(sharedRegistry.remoteTypeDefByHeaderHash.get(TypeDef.headerHash(second.getId())));
   }
 
   @Test
@@ -841,9 +899,7 @@ public class ClassResolverTest extends ForyTestBase {
             template.getFieldsInfo(),
             8194L << 12,
             template.getEncoded());
-    Assert.assertThrows(
-        ForyException.class,
-        () -> sharedRegistry.getOrCreateRemoteTypeDef(rejected, "remote.Rejected"));
+    assertSame(rejected, sharedRegistry.getOrCreateRemoteTypeDef(rejected, "remote.Rejected"));
     long rejectedHash = TypeDef.headerHash(rejected.getId());
     Assert.assertFalse(sharedRegistry.remoteTypeDefByHeaderHash.containsKey(rejectedHash));
     Assert.assertFalse(sharedRegistry.typeDefByHeaderHash.containsKey(rejectedHash));
@@ -876,7 +932,7 @@ public class ClassResolverTest extends ForyTestBase {
     TypeDef checked = TypeDef.buildTypeDef(resolver, BeanB.class);
     TypeDef accepted = TypeDef.buildTypeDef(resolver, BeanA.class);
 
-    sharedRegistry.checkRemoteTypeDefLimit(checked, "remote.Type");
+    Assert.assertTrue(sharedRegistry.canCacheRemoteTypeDef(checked, "remote.Type"));
     assertSame(accepted, sharedRegistry.getOrCreateRemoteTypeDef(accepted, "remote.Type"));
   }
 

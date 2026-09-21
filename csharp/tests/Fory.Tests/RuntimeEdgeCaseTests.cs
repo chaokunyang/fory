@@ -803,7 +803,7 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
-    public void TypeMetaSchemaLimitRejectsExtraVersions()
+    public void TypeMetaSchemaOverflowIsUncached()
     {
         Config config = ForyRuntime.Builder()
             .Compatible(false)
@@ -816,7 +816,10 @@ public sealed class RuntimeEdgeCaseTests
 
         ReadAndStoreTypeMeta(context, first);
 
-        Assert.Throws<InvalidDataException>(() => ReadAndStoreTypeMeta(context, second));
+        TypeMeta overflow = ReadAndStoreTypeMeta(context, second);
+        Assert.NotSame(overflow, ReadAndStoreTypeMeta(context, second));
+        Assert.False(context.TryGetTypeMetaByHash(EncodedTypeMetaHash(second), out _));
+        Assert.True(context.TryGetTypeMetaByHash(EncodedTypeMetaHash(first), out _));
     }
 
     [Fact]
@@ -856,16 +859,12 @@ public sealed class RuntimeEdgeCaseTests
 
         TypeMeta rejected =
             RemoteStructTypeMeta(maxLogicalKeys + 1, "value");
-        InvalidDataException exception =
-            Assert.Throws<InvalidDataException>(
-                () => ReadAndStoreTypeMeta(context, rejected));
-        Assert.Contains("logical type limit", exception.Message, StringComparison.Ordinal);
+        ReadAndStoreTypeMeta(context, rejected);
         Assert.False(context.TryGetTypeMetaByHash(EncodedTypeMetaHash(rejected), out _));
 
         TypeMeta rejectedAgain =
             RemoteStructTypeMeta(maxLogicalKeys + 1, "other");
-        Assert.Throws<InvalidDataException>(
-            () => ReadAndStoreTypeMeta(context, rejectedAgain));
+        ReadAndStoreTypeMeta(context, rejectedAgain);
         Assert.False(context.TryGetTypeMetaByHash(EncodedTypeMetaHash(rejectedAgain), out _));
 
         TypeMeta existing = RemoteStructTypeMeta(1, "other");
@@ -887,9 +886,8 @@ public sealed class RuntimeEdgeCaseTests
 
         ReadAndStoreTypeMeta(context, first);
 
-        InvalidDataException exception =
-            Assert.Throws<InvalidDataException>(() => ReadAndStoreTypeMeta(context, second));
-        Assert.Contains("MaxSchemaVersionsPerType", exception.Message, StringComparison.Ordinal);
+        ReadAndStoreTypeMeta(context, second);
+        Assert.False(context.TryGetTypeMetaByHash(EncodedTypeMetaHash(second), out _));
     }
 
     [Fact]

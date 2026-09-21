@@ -470,9 +470,8 @@ ReadContext::read_enum_type_info_owner(const TypeInfo *expected_type_info,
 static constexpr uint64_t k_min_remote_type_meta_limit = 8192;
 static constexpr uint64_t k_max_remote_type_meta_keys = 8192;
 
-Result<std::string, Error>
-ReadContext::check_remote_type_meta_limit(const TypeMeta &type_meta) {
-  std::string key;
+bool ReadContext::can_cache_type_meta(const TypeMeta &type_meta,
+                                      std::string &key) {
   if (type_meta.register_by_name) {
     key.reserve(type_meta.namespace_str.size() + type_meta.type_name.size() +
                 2);
@@ -489,18 +488,13 @@ ReadContext::check_remote_type_meta_limit(const TypeMeta &type_meta) {
           entry == nullptr &&
           static_cast<uint64_t>(remote_schema_versions_by_type_.size()) >=
               k_max_remote_type_meta_keys)) {
-    return Unexpected(Error::invalid_data(
-        "Remote TypeMeta logical type limit 8192 exceeded"));
+    return false;
   }
 
   const uint32_t versions_for_type = entry == nullptr ? 0 : entry->second;
   if (FORY_PREDICT_FALSE(versions_for_type >=
                          config_->max_schema_versions_per_type)) {
-    return Unexpected(Error::invalid_data(
-        "Remote schema version limit exceeded for one type. The data may be "
-        "malicious. If the data is not malicious, please increase "
-        "max_schema_versions_per_type=" +
-        std::to_string(config_->max_schema_versions_per_type)));
+    return false;
   }
 
   const uint64_t accepted_type_count =
@@ -511,14 +505,10 @@ ReadContext::check_remote_type_meta_limit(const TypeMeta &type_meta) {
           total_accepted_schema_versions_ >= k_min_remote_type_meta_limit &&
           total_accepted_schema_versions_ / accepted_type_count >=
               max_average)) {
-    return Unexpected(Error::invalid_data(
-        "Remote schema version limit exceeded globally. The data may be "
-        "malicious. If the data is not malicious, please increase "
-        "max_average_schema_versions_per_type=" +
-        std::to_string(config_->max_average_schema_versions_per_type)));
+    return false;
   }
 
-  return key;
+  return true;
 }
 
 void ReadContext::record_remote_type_meta(const std::string &type_key) {
@@ -700,7 +690,8 @@ ReadContext::read_type_meta_owner(const TypeInfo *expected_type_info) {
     }
   }
 
-  FORY_TRY(remote_schema_key, check_remote_type_meta_limit(*parsed_meta));
+  std::string remote_schema_key;
+  const bool cache_meta = can_cache_type_meta(*parsed_meta, remote_schema_key);
 
   // Create TypeInfo with local compatible dispatch IDs assigned.
   auto cached = std::make_unique<CachedTypeInfo>();
@@ -730,12 +721,19 @@ ReadContext::read_type_meta_owner(const TypeInfo *expected_type_info) {
     type_info->type_meta = std::move(parsed_meta);
   }
 
-  cached_type_infos_.push_back(std::move(cached));
-  const CachedTypeInfo *cached_ptr = cached_type_infos_.back().get();
+  const CachedTypeInfo *cached_ptr = cached.get();
   const TypeInfo *raw_ptr = &cached_ptr->type_info;
-  parsed_type_infos_[meta_hash] = cached_ptr;
-  cached_meta_type_info_ = cached_ptr;
-  record_remote_type_meta(remote_schema_key);
+  if (cache_meta) {
+    cached_type_infos_.push_back(std::move(cached));
+    parsed_type_infos_[meta_hash] = cached_ptr;
+    cached_meta_type_info_ = cached_ptr;
+    record_remote_type_meta(remote_schema_key);
+  } else {
+    // Quotas bound retained schemas, not decoding. Keep the fully checked owner
+    // alive for metadata references without publishing it to any persistent
+    // cache.
+    uncached_type_infos_.push_back(std::move(cached));
+  }
 
   reading_type_infos_.push_back(
       ReadTypeInfo{raw_ptr, cached_ptr->concrete_owner});
@@ -844,6 +842,7 @@ void ReadContext::reset() {
   // reference tracking is disabled, so every root must clear this state.
   ref_reader_.reset();
   reading_type_infos_.clear();
+  uncached_type_infos_.clear();
   current_dyn_depth_ = 0;
   remaining_unbacked_container_items_ = 0;
   // Root deserialization overwrites the remaining graph budget before any

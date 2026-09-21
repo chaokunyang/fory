@@ -190,15 +190,11 @@ func remoteSchemaLogicalKeyLimitPersists() throws {
         return (header, typeInfo)
     }
 
-    func expectLogicalKeyLimit(_ typeMeta: TypeMeta) {
-        do {
-            _ = try cache(typeMeta)
-            Issue.record("expected remote logical type limit")
-        } catch ForyError.invalidData(let message) {
-            #expect(message.contains("logical type limit"))
-        } catch {
-            Issue.record("expected invalid data, got \(error)")
-        }
+    func expectUncached(_ typeMeta: TypeMeta) throws {
+        let first = try cache(typeMeta)
+        let second = try cache(typeMeta)
+        #expect(first.typeInfo !== second.typeInfo)
+        #expect(resolver.getTypeInfo(forHeaderHash: typeMetaHashFromHeader(first.header)) == nil)
     }
 
     var firstTypeInfo: TypeInfo?
@@ -216,11 +212,11 @@ func remoteSchemaLogicalKeyLimitPersists() throws {
     #expect(cachedHit.typeInfo === firstTypeInfo)
 
     let rejectedTypeID = firstUserTypeID + UInt32(keyLimit)
-    expectLogicalKeyLimit(
+    try expectUncached(
         try remoteTypeMeta(userTypeID: rejectedTypeID, fieldName: "rejectedA")
     )
-    // A rejected key must not become an existing key on a later version.
-    expectLogicalKeyLimit(
+    // An uncached key must not become an existing key on a later version.
+    try expectUncached(
         try remoteTypeMeta(userTypeID: rejectedTypeID, fieldName: "rejectedB")
     )
 
@@ -240,7 +236,7 @@ func remoteSchemaLogicalKeyLimitPersists() throws {
     let existingHit = try cache(existingVersion)
     #expect(existingHit.typeInfo === existing.typeInfo)
 
-    expectLogicalKeyLimit(
+    try expectUncached(
         try remoteTypeMeta(userTypeID: rejectedTypeID + 2)
     )
 }

@@ -346,7 +346,7 @@ impl ForyBuilder {
         self
     }
 
-    /// Sets the maximum accepted remote metadata versions for one logical type.
+    /// Sets the maximum cached remote metadata versions for one logical type.
     pub fn max_schema_versions_per_type(mut self, max_versions: usize) -> Self {
         assert!(
             max_versions > 0,
@@ -360,7 +360,7 @@ impl ForyBuilder {
         self
     }
 
-    /// Sets the maximum accepted average remote metadata versions across logical types.
+    /// Sets the maximum cached average remote metadata versions across logical types.
     pub fn max_average_schema_versions_per_type(mut self, max_versions: usize) -> Self {
         assert!(
             max_versions > 0,

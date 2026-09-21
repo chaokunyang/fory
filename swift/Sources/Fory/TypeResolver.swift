@@ -1048,15 +1048,18 @@ final class TypeResolver {
         }
         let canonicalTypeMeta = try typeMeta.assigningFieldIDs(from: localTypeMeta)
         // Failed compatibility checks must not consult or mutate persistent remote accounting.
-        let remoteSchemaKey = try checkRemoteTypeMetaLimit(typeMeta, config: config)
+        let remoteSchemaKey = typeMetaCacheKey(typeMeta, config: config)
         let typeInfo = TypeInfo(dynamic: localTypeInfo, compatibleTypeMeta: canonicalTypeMeta)
-        typeInfoByHeaderHash.set(typeInfo, for: headerHash)
-        recordRemoteTypeMeta(remoteSchemaKey)
+        // Quotas bound retained metadata. Overflow owners remain in the root reference table.
+        if let remoteSchemaKey {
+            typeInfoByHeaderHash.set(typeInfo, for: headerHash)
+            recordRemoteTypeMeta(remoteSchemaKey)
+        }
         return typeInfo
     }
 
     @inline(never)
-    private func checkRemoteTypeMetaLimit(_ typeMeta: TypeMeta, config: Config) throws -> String {
+    private func typeMetaCacheKey(_ typeMeta: TypeMeta, config: Config) -> String? {
         let key: String
         if typeMeta.registerByName {
             key = "n\(typeMeta.namespace.value)\0\(typeMeta.typeName.value)"
@@ -1069,17 +1072,11 @@ final class TypeResolver {
         let acceptedTypeCount = remoteSchemaVersionsByType.count
         // Filling the key table must not disable schema evolution for accepted logical types.
         if isNewType && acceptedTypeCount >= Self.maxRemoteTypeMetaKeys {
-            throw ForyError.invalidData(
-                "remote TypeMeta logical type limit exceeded. The data may be malicious"
-            )
+            return nil
         }
         let maxSchemaVersionsPerType = config.maxSchemaVersionsPerType
         if versionsForType >= maxSchemaVersionsPerType {
-            throw ForyError.invalidData(
-                "remote schema version limit exceeded for one type. The data may be malicious. "
-                    + "If the data is not malicious, please increase "
-                    + "maxSchemaVersionsPerType=\(maxSchemaVersionsPerType)"
-            )
+            return nil
         }
         // The preceding fixed cap proves this addition cannot overflow.
         let resultingTypeCount = acceptedTypeCount + (isNewType ? 1 : 0)
@@ -1089,11 +1086,7 @@ final class TypeResolver {
                 && totalAcceptedSchemaVersions / resultingTypeCount
                     >= maxAverageSchemaVersionsPerType)
         {
-            throw ForyError.invalidData(
-                "remote schema version limit exceeded globally. The data may be malicious. "
-                    + "If the data is not malicious, please increase "
-                    + "maxAverageSchemaVersionsPerType=\(maxAverageSchemaVersionsPerType)"
-            )
+            return nil
         }
         return key
     }

@@ -536,7 +536,7 @@ def test_type_meta_body_limit_rejects_large_metadata(xlang):
 
 
 @pytest.mark.parametrize("xlang", [False, True])
-def test_remote_schema_limit_rejects_extra_versions(xlang):
+def test_remote_schema_overflow_is_uncached(xlang):
     reader = Fory(
         xlang=xlang,
         strict=False,
@@ -551,8 +551,10 @@ def test_remote_schema_limit_rejects_extra_versions(xlang):
     _read_remote_typedef(reader, first_type_id, first_typedef)
 
     second_header = Buffer(second_typedef).read_int64()
-    with pytest.raises(ValueError, match="max_schema_versions_per_type"):
-        _read_remote_typedef(reader, second_type_id, second_typedef)
+    overflow = _read_remote_typedef(reader, second_type_id, second_typedef)
+    repeated = _read_remote_typedef(reader, second_type_id, second_typedef)
+    assert overflow is not repeated
+    assert len(reader.type_resolver._meta_shared_type_info) == 1
     assert _typedef_hash_key(second_header) not in reader.type_resolver._meta_shared_type_info
 
 
@@ -588,30 +590,20 @@ def test_remote_type_key_cap():
     resolver = TypeResolver(config, shared_registry=SharedRegistry())
     for index in range(_MAX_REMOTE_TYPE_DEF_KEYS):
         type_key = ("security", f"Accepted{index}")
-        resolver._check_remote_type_def_key(type_key)
+        assert resolver._type_def_cache_key(type_key) == type_key
         resolver._record_remote_type_def(type_key)
 
     existing_key = ("security", "Accepted0")
-    resolver._check_remote_type_def_key(existing_key)
+    assert resolver._type_def_cache_key(existing_key) == existing_key
     accepted_before = dict(resolver._remote_schema_versions_by_type)
     total_before = resolver._total_accepted_schema_versions
     cache_before = dict(resolver._meta_shared_type_info)
 
-    remote = make_dataclass("RejectedRemote", [("value", int)])
-    _, encoded = _remote_typedef(
-        True,
-        "security.RejectedRemote",
-        remote,
-    )
-    buffer = Buffer(encoded)
-    header = buffer.read_int64()
-    with pytest.raises(ValueError, match="key limit"):
-        resolver._read_uncached_type_info(buffer, header)
+    assert resolver._type_def_cache_key(("security", "OverflowRemote")) is None
 
     assert resolver._remote_schema_versions_by_type == accepted_before
     assert resolver._total_accepted_schema_versions == total_before
     assert resolver._meta_shared_type_info == cache_before
-    assert _typedef_hash_key(header) not in resolver._meta_shared_type_info
 
     resolver._record_remote_type_def(existing_key)
     assert len(resolver._remote_schema_versions_by_type) == _MAX_REMOTE_TYPE_DEF_KEYS
@@ -638,12 +630,11 @@ def test_remote_average_limit_boundary():
     resolver._remote_schema_versions_by_type[boundary_key] = 2
     resolver._total_accepted_schema_versions = _MAX_REMOTE_TYPE_DEF_KEYS * 3 - 1
 
-    resolver._check_remote_type_def_key(boundary_key)
+    assert resolver._type_def_cache_key(boundary_key) == boundary_key
     resolver._remote_schema_versions_by_type[boundary_key] = 3
     resolver._total_accepted_schema_versions += 1
 
-    with pytest.raises(ValueError, match="average"):
-        resolver._check_remote_type_def_key(boundary_key)
+    assert resolver._type_def_cache_key(boundary_key) is None
 
 
 def test_remote_key_cap_cache_hit():
@@ -862,9 +853,9 @@ def test_exact_local_non_struct_typedef_bypasses_schema_limit(xlang):
     type_info = _read_remote_typedef(reader, type_id, encoded)
     assert type_info.cls is IdLimitEnum
 
-    if hasattr(reader.type_resolver, "_check_remote_type_def_limit"):
+    if hasattr(reader.type_resolver, "_remote_type_def_cache_key"):
         second = TypeDef("example", "RemoteEnum", IdLimitEnum, TypeId.NAMED_EXT, [])
-        reader.type_resolver._check_remote_type_def_limit(second)
+        assert reader.type_resolver._remote_type_def_cache_key(second) is not None
 
 
 @pytest.mark.parametrize("xlang", [False, True])
@@ -930,11 +921,10 @@ def test_non_struct_typedef_uses_schema_limit():
     first = TypeDef("example", "RemoteEnum", IdLimitEnum, TypeId.NAMED_ENUM, [])
     second = TypeDef("example", "RemoteEnum", IdLimitEnum, TypeId.NAMED_EXT, [])
 
-    type_key = resolver._check_remote_type_def_limit(first)
+    type_key = resolver._remote_type_def_cache_key(first)
     resolver._record_remote_type_def(type_key)
 
-    with pytest.raises(ValueError, match="max_schema_versions_per_type"):
-        resolver._check_remote_type_def_limit(second)
+    assert resolver._remote_type_def_cache_key(second) is None
 
 
 def _remote_typedef(xlang, remote_name, cls):

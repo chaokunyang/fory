@@ -31,7 +31,9 @@ public struct Config {
     public let maxUnbackedContainerItems: Int
     public let maxTypeFields: Int
     public let maxTypeMetaBytes: Int
+    /// Maximum cached remote schemas per logical type; overflow is decoded without caching.
     public let maxSchemaVersionsPerType: Int
+    /// Average cached remote schemas across logical types, with a global floor of 8192.
     public let maxAverageSchemaVersionsPerType: Int
 
     public init(

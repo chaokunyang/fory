@@ -685,7 +685,14 @@ belongs to the first miss. After this first validation, the miss path may
 build local metadata when no local header was available before the parse. The
 validated received 52-bit hash alone is compared with that local header hash;
 equality selects the local owner without comparing encoded bytes or fields.
-Non-local metadata is then published to the remote cache. Do not add
+Non-local metadata is published to the remote cache only while its schema-version
+and logical-type quotas have room. After a quota is exhausted, readers still
+parse and validate the complete metadata and decode the value, retaining the
+metadata only for existing operation or explicit metadata-context references.
+Overflow metadata and its derived serializers, layouts, and read hints must not
+enter persistent schema-indexed caches. Root-scoped owners are released on both
+success and failure. These retention limits do not replace metadata byte and
+field-count limits or other deserialization checks. Do not add
 separate nullable flags, sentinel headers, per-TypeInfo acceptance markers, or
 parallel state to represent this decision.
 

@@ -314,12 +314,12 @@ public class Config implements Serializable {
     return maxTypeMetaBytes;
   }
 
-  /** Returns the maximum accepted remote metadata versions for one logical type. */
+  /** Returns the maximum cached remote metadata versions for one logical type. */
   public int maxSchemaVersionsPerType() {
     return maxSchemaVersionsPerType;
   }
 
-  /** Returns the maximum average accepted remote metadata versions across logical types. */
+  /** Returns the maximum average cached remote metadata versions across logical types. */
   public int maxAverageSchemaVersionsPerType() {
     return maxAverageSchemaVersionsPerType;
   }

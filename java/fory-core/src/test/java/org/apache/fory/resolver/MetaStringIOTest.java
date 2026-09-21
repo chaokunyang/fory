@@ -40,6 +40,22 @@ import org.apache.fory.util.StringUtils;
 import org.testng.annotations.Test;
 
 public class MetaStringIOTest {
+  @Test
+  public void testReferenceOverflowReset() {
+    MetaStringReader reader = new MetaStringReader(newSharedRegistry());
+    // Empty inline strings still occupy reference IDs, independently of interning.
+    MemoryBuffer buffer = MemoryUtils.wrap(new byte[8193]);
+    for (int i = 0; i < 8192; i++) {
+      reader.readMetaString(buffer);
+    }
+    expectThrows(ForyException.class, () -> reader.readMetaString(buffer));
+    reader.reset();
+    reader.reset();
+    assertEquals(
+        reader.readMetaString(MemoryUtils.wrap(new byte[1])).decode(Encoders.GENERIC_DECODER), "");
+    reader.reset();
+  }
+
   private static SharedRegistry newSharedRegistry() {
     return new SharedRegistry();
   }

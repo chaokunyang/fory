@@ -391,7 +391,6 @@ describe("typemeta", () => {
     expect(() => reader.deserialize(malformed)).toThrow("Duplicate field id 1");
     expect(readContext.typeMeta).toHaveLength(0);
     expect(readContext.typeMetaCache.size).toBe(0);
-    expect(readContext.compatibleReadSerializers.size).toBe(0);
     expect(readContext.totalAcceptedSchemaVersions).toBe(0);
     expect(readContext.remoteSchemaVersionsByType).toBeUndefined();
     expect(reader.deserialize(valid)).toEqual(value);
@@ -642,7 +641,7 @@ describe("typemeta", () => {
       context.genSerializerByTypeMetaRuntime(remoteTypeMeta, localTypeInfo, 123),
     ).toBeDefined();
     expect(context.genSerializerByTypeMetaRuntime(remoteTypeMeta)).toBeDefined();
-    expect((context as any).compatibleReadSerializers.size).toBe(0);
+    expect((context as any).compatibleReadSerializers.has(remoteTypeMeta)).toBe(false);
 
     const localTypeMeta = TypeMeta.fromTypeInfo(localTypeInfo, (readerFory as any).typeResolver);
     context.reset(typeMetaRecord(remoteTypeMeta));
@@ -967,7 +966,7 @@ describe("typemeta", () => {
     readContext.reset(frame(TypeId.NAMED_ENUM, metadata));
     expect(() => AnyHelper.detectSerializer(readContext)).toThrow("TypeMeta wire type mismatch");
     expect((readContext as any).typeMetaCache.size).toBe(0);
-    expect((readContext as any).compatibleReadSerializers.size).toBe(0);
+    expect((readContext as any).typeMeta).toHaveLength(0);
     expect((readContext as any).totalAcceptedSchemaVersions).toBe(0);
     expect((readContext as any).remoteSchemaVersionsByType).toBeUndefined();
     expect((readContext as any).typeMeta).toHaveLength(0);
@@ -1048,7 +1047,9 @@ describe("typemeta", () => {
       return AnyHelper.detectSerializer(context);
     };
     const cachedReader = (fory: Fory) =>
-      (fory as any).readContext.compatibleReadSerializers.get(remoteTypeMeta.getHash()).serializer;
+      (fory as any).readContext.compatibleReadSerializers.get(
+        (fory as any).readContext.typeMetaCache.get(remoteTypeMeta.getHash()),
+      ).serializer;
 
     const anyFirst = createReader();
     const anyOwner = detectAny(anyFirst.fory);
@@ -1169,7 +1170,11 @@ describe("typemeta", () => {
     expect(() => reader.deserialize(wrongBytes)).toThrow("Compatible TypeMeta owner mismatch");
     expect(readContext.typeMeta).toHaveLength(1);
     expect(readContext.typeMetaCache.has(writerChildMeta.getHash())).toBe(false);
-    expect(readContext.compatibleReadSerializers.has(writerChildMeta.getHash())).toBe(false);
+    expect(
+      readContext.compatibleReadSerializers.has(
+        readContext.typeMetaCache.get(writerChildMeta.getHash()),
+      ),
+    ).toBe(false);
 
     expect(readerWriterChild.deserialize(writerChild.serialize({ value: 8 }))).toEqual({
       value: 8,
@@ -1177,7 +1182,11 @@ describe("typemeta", () => {
     expect(readContext.typeMetaCache.has(writerChildMeta.getHash())).toBe(false);
     expect(() => reader.deserialize(wrongBytes)).toThrow("Compatible TypeMeta owner mismatch");
     expect(readContext.typeMeta).toHaveLength(1);
-    expect(readContext.compatibleReadSerializers.has(writerChildMeta.getHash())).toBe(false);
+    expect(
+      readContext.compatibleReadSerializers.has(
+        readContext.typeMetaCache.get(writerChildMeta.getHash()),
+      ),
+    ).toBe(false);
 
     const localChildType = Type.struct(readerChildId, {
       value: Type.int32().setId(1),
@@ -1282,7 +1291,6 @@ describe("typemeta", () => {
     expect(generatedReaders).toBe(0);
     expect(typeResolver.getSerializerById(TypeId.COMPATIBLE_STRUCT, typeId)).toBeUndefined();
     expect(readContext.typeMetaCache.size).toBe(1);
-    expect(readContext.compatibleReadSerializers.size).toBe(0);
   });
 
   test("keeps non-compatible unknown structs registration-only", () => {
@@ -1332,7 +1340,6 @@ describe("typemeta", () => {
       "generated reader rejected",
     );
     expect(readContext.typeMetaCache.has(remoteHash)).toBe(false);
-    expect(readContext.compatibleReadSerializers.has(remoteHash)).toBe(false);
     expect(readContext.totalAcceptedSchemaVersions).toBe(0);
     expect(readContext.remoteSchemaVersionsByType).toBeUndefined();
   });

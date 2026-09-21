@@ -910,16 +910,16 @@ func TestSkipTypeDefExtendedSizeIntRange(t *testing.T) {
 	}
 }
 
-func TestRemoteSchemaLimitRejectsExtraVersions(t *testing.T) {
+func TestRemoteSchemaOverflowIsUncached(t *testing.T) {
 	fory := NewFory(WithXlang(false), WithCompatible(true), WithMaxSchemaVersionsPerType(1))
 	first := remoteSchemaLimitTypeDef(t, SimpleStruct{}, "example.Shared")
 	second := remoteSchemaLimitTypeDef(t, SliceStruct{}, "example.Shared")
 
 	require.NoError(t, readRemoteTypeDef(t, fory, first))
-	err := readRemoteTypeDef(t, fory, second)
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "MaxSchemaVersionsPerType")
+	require.NoError(t, readRemoteTypeDef(t, fory, second))
+	require.NoError(t, readRemoteTypeDef(t, fory, second))
+	require.Len(t, fory.typeResolver.defIdToTypeDef, 1)
+	require.Equal(t, int64(1), fory.typeResolver.totalAcceptedSchemaVersions)
 }
 
 func TestRemoteSchemaLimitKeepsUnknownTypesSeparate(t *testing.T) {
@@ -936,7 +936,7 @@ func TestRemoteSchemaCheckDoesNotConsumeLimit(t *testing.T) {
 	checked := remoteSchemaLimitTypeDef(t, SchemaLimitBad{}, "example.Accepted")
 	valid := remoteSchemaLimitTypeDef(t, SchemaLimitExtra{}, "example.Accepted")
 
-	typeKey, err := fory.typeResolver.checkRemoteTypeDefLimit(checked)
+	typeKey, err := fory.typeResolver.remoteTypeDefCacheKey(checked)
 	require.NoError(t, err)
 	require.NotNil(t, typeKey)
 	require.NoError(t, readRemoteTypeDef(t, fory, valid))
@@ -947,13 +947,13 @@ func TestRemoteNonStructTypeDefUsesLimit(t *testing.T) {
 	first := remoteNamedEnumTypeDef(t, namedAuditEnum(0), "example.RemoteEnum")
 	second := NewTypeDef(uint32(NAMED_EXT), 0, first.nsName, first.typeName, true, false, nil)
 
-	typeKey, err := fory.typeResolver.checkRemoteTypeDefLimit(first)
+	typeKey, err := fory.typeResolver.remoteTypeDefCacheKey(first)
 	require.NoError(t, err)
 	fory.typeResolver.recordRemoteTypeDef(typeKey)
 
-	_, err = fory.typeResolver.checkRemoteTypeDefLimit(second)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "MaxSchemaVersionsPerType")
+	typeKey, err = fory.typeResolver.remoteTypeDefCacheKey(second)
+	require.NoError(t, err)
+	require.Nil(t, typeKey)
 }
 
 func TestExactLocalNonStructTypeDefBypassesLimit(t *testing.T) {
@@ -964,7 +964,7 @@ func TestExactLocalNonStructTypeDefBypassesLimit(t *testing.T) {
 	require.NoError(t, readRemoteTypeDef(t, fory, exact))
 
 	second := NewTypeDef(uint32(NAMED_EXT), 0, exact.nsName, exact.typeName, true, false, nil)
-	_, err = fory.typeResolver.checkRemoteTypeDefLimit(second)
+	_, err = fory.typeResolver.remoteTypeDefCacheKey(second)
 	require.NoError(t, err)
 }
 

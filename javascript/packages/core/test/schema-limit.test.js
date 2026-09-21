@@ -164,7 +164,7 @@ function localSerializer(typeInfo) {
   };
 }
 
-runTest("remote schema limit rejects extra versions", () => {
+runTest("remote schema overflow is uncached", () => {
   const typeInfo = Type.struct({ namespace: "example", typeName: "Shared" }, {});
   const original = localSerializer(typeInfo);
   const readContext = context({
@@ -183,10 +183,10 @@ runTest("remote schema limit rejects extra versions", () => {
     },
   });
   readTypeMeta(readContext, remoteStruct("Shared", "first"));
-  assert.throws(
-    () => readTypeMeta(readContext, remoteStruct("Shared", "second")),
-    /maxSchemaVersionsPerType/,
-  );
+  readTypeMeta(readContext, remoteStruct("Shared", "second"));
+  readTypeMeta(readContext, remoteStruct("Shared", "second"));
+  assert.equal(readContext.typeMetaCache.size, 1);
+  assert.equal(readContext.totalAcceptedSchemaVersions, 1);
 });
 
 runTest("remote TypeMeta key cap preserves persistent owner state", () => {
@@ -217,7 +217,7 @@ runTest("remote TypeMeta key cap preserves persistent owner state", () => {
 
   const rejected = remoteNamedNonStruct("RemoteOverflow", TypeId.NAMED_ENUM);
   const cachedBeforeReject = readContext.cachedTypeMeta;
-  assert.throws(() => readTypeMeta(readContext, rejected), /Remote TypeMeta key limit exceeded/);
+  readTypeMeta(readContext, rejected);
   assert.equal(readContext.remoteSchemaVersionsByType.size, MAX_REMOTE_TYPE_KEYS);
   assert.equal(readContext.totalAcceptedSchemaVersions, MAX_REMOTE_TYPE_KEYS);
   assert.equal(readContext.typeMetaCache.size, MAX_REMOTE_TYPE_KEYS);
@@ -252,10 +252,9 @@ runTest("remote non-struct TypeMeta uses schema limit", () => {
     },
   });
   readTypeMeta(readContext, remoteNamedNonStruct("SharedEnum", TypeId.NAMED_ENUM));
-  assert.throws(
-    () => readTypeMeta(readContext, remoteNamedNonStruct("SharedEnum", TypeId.NAMED_EXT)),
-    /maxSchemaVersionsPerType/,
-  );
+  readTypeMeta(readContext, remoteNamedNonStruct("SharedEnum", TypeId.NAMED_EXT));
+  assert.equal(readContext.typeMetaCache.size, 1);
+  assert.equal(readContext.totalAcceptedSchemaVersions, 1);
 });
 
 runTest("failed non-struct TypeMeta does not consume schema limit", () => {

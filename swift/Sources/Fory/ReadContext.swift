@@ -711,7 +711,7 @@ public final class ReadContext {
         if !typeInfoScopeStack.isEmpty {
             typeInfoScopeStack.removeAll(keepingCapacity: true)
         }
-        compatibleTypeDefTypeInfos.reset()
+        compatibleTypeDefTypeInfos.resetReleasingUsedElements()
         metaStrings.resetReleasingUsedElements()
         remainingUnbackedContainerItems = 0
     }

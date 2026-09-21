@@ -563,9 +563,9 @@ public final class ForyBuilder {
   }
 
   /**
-   * Sets the maximum number of accepted remote metadata versions for one logical type.
+   * Sets the maximum number of cached remote metadata versions for one logical type.
    *
-   * <p>This limit applies only to cold remote metadata miss paths.
+   * <p>Additional valid schemas are decoded without caching when this limit is reached.
    */
   public ForyBuilder withMaxSchemaVersionsPerType(int maxSchemaVersionsPerType) {
     Preconditions.checkArgument(
@@ -578,9 +578,10 @@ public final class ForyBuilder {
   }
 
   /**
-   * Sets the maximum average number of accepted remote metadata versions across logical types.
+   * Sets the maximum average number of cached remote metadata versions across logical types.
    *
    * <p>The global limit has an internal floor so small type universes can still evolve normally.
+   * Additional valid schemas are decoded without caching when this limit is reached.
    */
   public ForyBuilder withMaxAverageSchemaVersionsPerType(int maxAverageSchemaVersionsPerType) {
     Preconditions.checkArgument(

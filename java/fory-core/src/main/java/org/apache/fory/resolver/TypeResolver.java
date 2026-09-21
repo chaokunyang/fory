@@ -960,9 +960,6 @@ public abstract class TypeResolver {
         // Only the miss checks publication. Overflow owners must not enter depth or field
         // hints, which would otherwise skip validation across roots outside the bounded cache.
         cacheTypeInfo = extRegistry.typeInfoByHeaderHash.get(headerHash) == typeInfo;
-        if (!cacheTypeInfo) {
-          metaReadContext.hasUncachedTypeInfo = true;
-        }
       }
       if (cacheTypeInfo && typeInfo != cachedTypeInfo) {
         // Hints retain the source owner, before any requested-target adaptation.

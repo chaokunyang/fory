@@ -1311,7 +1311,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   }
 
   @Test
-  public void testLayerOverflowCleanup() throws Exception {
+  public void testLayerOverflowReuse() throws Exception {
     Fory reader =
         Fory.builder()
             .withXlang(false)
@@ -1327,18 +1327,14 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     byte[] first = layerOverflowBytes("extraA", 17);
     byte[] overflow = layerOverflowBytes("extraB", 29);
     assertEquals(((LayerOverflowValue) reader.deserialize(first)).value, 17);
-    Object[] slots = TestUtils.getFieldValue(serializer, "slotsInfos");
-    Object input = TestUtils.getFieldValue(slots[0], "objectInputStream");
     LongMap<TypeInfo> cache = TestUtils.getFieldValue(serializer, "typeInfoByHeaderHash");
     for (int i = 0; i < 2; i++) {
       LayerOverflowValue decoded = (LayerOverflowValue) reader.deserialize(overflow);
       assertEquals(decoded.value, 29);
       assertEquals(decoded.child.value, 30);
-      Assert.assertNull(TestUtils.getFieldValue(input, "readSerializer"));
       assertEquals(cache.size, 1);
       byte[] truncated = java.util.Arrays.copyOf(overflow, overflow.length - 1);
       Assert.assertThrows(() -> reader.deserialize(truncated));
-      Assert.assertNull(TestUtils.getFieldValue(input, "readSerializer"));
       assertEquals(cache.size, 1);
     }
     assertEquals(((LayerOverflowValue) reader.deserialize(first)).value, 17);

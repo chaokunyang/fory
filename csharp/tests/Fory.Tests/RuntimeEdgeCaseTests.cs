@@ -831,7 +831,7 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
-    public void SchemaOverflowRootCleanup()
+    public void SchemaOverflowRootReuse()
     {
         ForyRuntime reader = ForyRuntime.Builder().Compatible(true).MaxSchemaVersionsPerType(1).Build();
         ForyRuntime firstWriter = ForyRuntime.Builder().Compatible(true).Build();
@@ -860,33 +860,14 @@ public sealed class RuntimeEdgeCaseTests
             SchemaValues decoded = reader.Deserialize<SchemaValues>(overflow);
             Assert.Equal(29, Assert.IsType<SchemaValue>(decoded.First).Value);
             Assert.Equal(31, Assert.IsType<SchemaValue>(decoded.Second).Value);
-            AssertSchemaRefsReleased(context);
+            Assert.Equal(0, context._readTypeInfoByType.Count);
             Assert.ThrowsAny<Exception>(() => reader.Deserialize<SchemaValues>(overflow[..^1]));
-            AssertSchemaRefsReleased(context);
+            Assert.Equal(0, context._readTypeInfoByType.Count);
         }
         Assert.Equal(17, Assert.IsType<SchemaValue>(reader.Deserialize<SchemaValues>(first).First).Value);
         UInt64Map<CheckedTypeMeta> cache = (UInt64Map<CheckedTypeMeta>)typeof(ReadContext)
             .GetField("_typeMetasByHash", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(context)!;
         Assert.Equal(1, cache.Count);
-    }
-
-    private static void AssertSchemaRefsReleased(ReadContext context)
-    {
-        Assert.Null(context.GetTypeMetaRef(0));
-        Assert.Null(context.GetTypeMetaRef(1));
-        foreach (object? map in new object?[] { context._typeMetaByType, context._readTypeInfoByType })
-        {
-            if (map is null)
-            {
-                continue;
-            }
-            Array entries = (Array)map.GetType()
-                .GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(map)!;
-            foreach (object entry in entries)
-            {
-                Assert.Null(entry.GetType().GetField("Value")!.GetValue(entry));
-            }
-        }
     }
 
     [Fact]

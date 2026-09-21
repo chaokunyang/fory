@@ -1192,8 +1192,10 @@ Otherwise, build and validate the required read state. If the schema-version and
 logical-type cache quotas have room, publish to the persistent metadata cache
 and then record the schema count. A full cache does not reject valid metadata:
 continue decoding without caching it or its derived serializers and layouts.
-Existing metadata references own this uncached state for their required lifetime;
-root-scoped state is released on success and failure. Failed or
+Existing metadata references own this uncached state for their required lifetime.
+Root reset must prevent stale logical lookup and cumulative growth across requests.
+Reusable backing slots may retain bounded values until overwritten; immediate
+physical clearing is not required. Failed or
 incompatible metadata must not publish to the persistent cache and must not
 consume schema-version counts. Pure id-based enum, ext, and typed-union values
 do not carry TypeDef or TypeMeta bodies and must stay on the normal type-id plus

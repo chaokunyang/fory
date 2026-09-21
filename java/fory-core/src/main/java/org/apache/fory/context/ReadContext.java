@@ -300,14 +300,9 @@ public final class ReadContext {
       contextObjects.clear();
     }
     if (scopedMetaShareEnabled) {
-      MetaReadContext metaContext = metaReadContext;
-      if (metaContext.hasUncachedTypeInfo) {
-        // Only overflow owners need physical release; cached owners remain reusable.
-        metaContext.readTypeInfos.clear();
-        metaContext.hasUncachedTypeInfo = false;
-      } else {
-        metaContext.readTypeInfos.size = 0;
-      }
+      // Logical reset prevents stale lookup; later roots overwrite the reusable slots.
+      // Retention follows the largest root table, not the number of remote schemas received.
+      metaReadContext.readTypeInfos.size = 0;
     } else {
       metaReadContext = null;
     }

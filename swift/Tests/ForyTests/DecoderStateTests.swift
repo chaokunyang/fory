@@ -24,17 +24,17 @@ private enum TypeInfoScopeTestError: Error {
 }
 
 @ForyStruct
-private struct SchemaCleanupValue {
+private struct SchemaReuseValue {
     var value: Int32 = 0
 }
 
 @Test
-func readContextReleasesOverflowSchemas() throws {
+func readContextReusesOverflowSchemas() throws {
     let config = Config(compatible: true, maxSchemaVersionsPerType: 1)
     let resolver = TypeResolver(config: config)
-    try resolver.register(SchemaCleanupValue.self, id: 901)
+    try resolver.register(SchemaReuseValue.self, id: 901)
     try resolver.finishRegistration()
-    let local = try resolver.requireTypeInfo(for: SchemaCleanupValue.self)
+    let local = try resolver.requireTypeInfo(for: SchemaReuseValue.self)
     func metadata(_ name: String) throws -> TypeMeta {
         try TypeMeta(
             typeID: TypeId.structType.rawValue, userTypeID: 901,
@@ -57,11 +57,17 @@ func readContextReleasesOverflowSchemas() throws {
         let context = ReadContext(buffer: buffer, typeResolver: resolver, config: config)
         weak var overflow: TypeInfo?
         do {
-            let info = try typed ? context.readTypeInfo(for: SchemaCleanupValue.self) : context.readTypeInfo()
+            let info = try typed ? context.readTypeInfo(for: SchemaReuseValue.self) : context.readTypeInfo()
             overflow = info
         }
         #expect(overflow != nil)
         context.reset()
+        // Reusing the slot must release its old owner without growing a schema-indexed cache.
+        buffer.clear()
+        buffer.writeVarUInt32(TypeId.compatibleStruct.rawValue)
+        buffer.writeVarUInt32(0)
+        buffer.writeBytes(try first.encode())
+        _ = try typed ? context.readTypeInfo(for: SchemaReuseValue.self) : context.readTypeInfo()
         #expect(overflow == nil)
     }
 }

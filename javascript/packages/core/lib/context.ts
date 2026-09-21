@@ -561,10 +561,9 @@ export class ReadContext {
   private typeMetaCache: Map<number, TypeMeta> = new Map();
   private totalAcceptedSchemaVersions = 0;
   private cachedTypeMeta: TypeMeta | undefined;
-  // Derived serializers follow the checked metadata owner's lifetime, including
-  // root-only metadata decoded after the persistent schema cache is full.
+  // Derived serializers follow their metadata owner's lifetime, so overflow schemas
+  // cannot accumulate in a persistent hash-indexed cache across roots.
   private compatibleReadSerializers = new WeakMap<TypeMeta, CompatibleReadSerializerCacheEntry>();
-  private hasUncachedTypeMeta = false;
 
   private _depth = 0;
   private _maxDepth: number;
@@ -590,6 +589,7 @@ export class ReadContext {
     this.reader.reset(bytes);
     this.refReader.reset();
     this.metaStringReader.reset();
+    // The next root replaces these owners; retaining the last root is bounded reuse.
     this.typeMeta = [];
     this._depth = 0;
     this.remainingGraphMemoryBytes = this.maxGraphMemoryBytes;
@@ -600,12 +600,6 @@ export class ReadContext {
     // Root reads call this in finally; nested readers retain depth when a child throws.
     this._depth = 0;
     this.remainingUnbackedContainerItems = 0;
-    if (this.hasUncachedTypeMeta) {
-      // Unknown values also retain their TypeMeta through the root reference table.
-      this.typeMeta.length = 0;
-      this.refReader.reset();
-      this.hasUncachedTypeMeta = false;
-    }
   }
 
   reserveGraphMemory(bytes: number) {
@@ -1186,8 +1180,6 @@ export class ReadContext {
       const versionsForType = versionsByType.get(typeKey) ?? 0;
       versionsByType.set(typeKey, versionsForType + 1);
       this.totalAcceptedSchemaVersions++;
-    } else {
-      this.hasUncachedTypeMeta = true;
     }
     return checkedSerializer;
   }

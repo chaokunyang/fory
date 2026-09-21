@@ -1638,8 +1638,6 @@ func (r *TypeResolver) readTypeDefInfo(
 	if typeKey != nil {
 		r.defIdToTypeDef[identity] = td
 		r.recordRemoteTypeDef(typeKey)
-	} else {
-		context.hasUncachedTypeInfo = true
 	}
 	context.readTypeInfos = append(context.readTypeInfos, typeInfo)
 	return typeInfo
@@ -2340,7 +2338,6 @@ type MetaContext struct {
 	firstTypePtr          uintptr
 	hasFirstType          bool
 	typeMapActive         bool
-	hasUncachedTypeInfo   bool
 }
 
 // IsScopedMetaShareEnabled returns whether scoped meta share is enabled
@@ -2353,10 +2350,7 @@ func (m *MetaContext) Reset() {
 	m.hasFirstType = false
 	m.typeMapActive = false
 	m.firstTypePtr = 0
-	// Cached owners may stay in reusable slots; overflow owners must end with the root.
-	if m.hasUncachedTypeInfo {
-		clear(m.readTypeInfos)
-		m.hasUncachedTypeInfo = false
-	}
+	// Logical reset prevents stale lookup; later roots overwrite the reusable slots.
+	// Retention follows the largest root table, not all previously received schemas.
 	m.readTypeInfos = m.readTypeInfos[:0]
 }

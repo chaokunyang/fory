@@ -922,7 +922,7 @@ func TestRemoteSchemaOverflowIsUncached(t *testing.T) {
 	require.Equal(t, int64(1), fory.typeResolver.totalAcceptedSchemaVersions)
 }
 
-func TestSchemaOverflowRootCleanup(t *testing.T) {
+func TestSchemaOverflowRootReuse(t *testing.T) {
 	type Local struct{ ID int32 }
 	type Pair struct{ First, Second any }
 	reader := NewFory(WithCompatible(true), WithMaxSchemaVersionsPerType(1))
@@ -944,9 +944,7 @@ func TestSchemaOverflowRootCleanup(t *testing.T) {
 		require.NoError(t, reader.Deserialize(overflow, &result))
 		require.Equal(t, &Local{29}, result.First)
 		require.Equal(t, &Local{31}, result.Second)
-		for _, info := range reader.metaContext.readTypeInfos[:cap(reader.metaContext.readTypeInfos)] {
-			require.Nil(t, info)
-		}
+		require.Empty(t, reader.metaContext.readTypeInfos)
 		require.Error(t, reader.Deserialize(overflow[:len(overflow)-1], &result))
 		require.Empty(t, reader.metaContext.readTypeInfos)
 		require.Len(t, reader.typeResolver.defIdToTypeDef, 1)

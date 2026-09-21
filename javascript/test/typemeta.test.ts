@@ -141,7 +141,7 @@ function replaceFirstBytesWithDifferentLength(
 
 describe("typemeta", () => {
   test.each([false, true])(
-    "releases overflow metadata after roots (registered=%s)",
+    "reuses overflow metadata slots across roots (registered=%s)",
     (registered) => {
       const childId = 7040;
       const rootId = 7041;
@@ -179,11 +179,11 @@ describe("typemeta", () => {
       const cached = context.cachedTypeMeta;
       for (let i = 0; i < 2; i++) {
         expect(decode(overflow)).toEqual({ first: { value: 29 }, second: { value: 31 } });
-        expect(context.typeMeta).toHaveLength(0);
+        expect(context.typeMeta).toHaveLength(2);
         expect(context.typeMetaCache.size).toBe(1);
         expect(context.cachedTypeMeta).toBe(cached);
         expect(() => decode(overflow.subarray(0, overflow.length - 1))).toThrow();
-        expect(context.typeMeta).toHaveLength(0);
+        expect(context.typeMeta).toHaveLength(2);
         expect(context.typeMetaCache.size).toBe(1);
       }
       expect(decode(first)).toEqual({ first: { value: 17 }, second: { value: 19 } });

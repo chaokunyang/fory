@@ -41,7 +41,6 @@ public final class ReadContext {
     public let maxDepth: Int
     public let refReader: RefReader
     private let compatibleTypeDefTypeInfos = ReusableArray<TypeInfo?>(defaultValue: nil, reserve: 2)
-    private var hasUncachedTypeInfo = false
     private let metaStrings = ReusableArray<MetaString?>(defaultValue: nil, reserve: 16)
     @usableFromInline
     internal var readDepth = 0
@@ -532,16 +531,12 @@ public final class ReadContext {
             maxTypeFields: config.maxTypeFields,
             maxTypeMetaBytes: config.maxTypeMetaBytes)
         let localTypeInfo = try typeResolver.requireTypeInfo(for: decoded)
-        let typeInfo = try typeResolver.cacheTypeInfo(
+        return try typeResolver.cacheTypeInfo(
             decoded,
             forHeaderHash: headerHash,
             localTypeInfo: localTypeInfo,
             config: config
         )
-        if typeInfo !== localTypeInfo && typeResolver.getTypeInfo(forHeaderHash: headerHash) == nil {
-            hasUncachedTypeInfo = true
-        }
-        return typeInfo
     }
 
     @inline(never)
@@ -559,16 +554,12 @@ public final class ReadContext {
         try validateCompatibleTypeMeta(decoded, for: localTypeInfo, wireTypeID: wireTypeID)
         // The typed path is owned by the declared local type. After identity validation, the
         // decoded metadata must describe this same TypeInfo; do not resolve another owner here.
-        let typeInfo = try typeResolver.cacheTypeInfo(
+        return try typeResolver.cacheTypeInfo(
             decoded,
             forHeaderHash: headerHash,
             localTypeInfo: localTypeInfo,
             config: config
         )
-        if typeInfo !== localTypeInfo && typeResolver.getTypeInfo(forHeaderHash: headerHash) == nil {
-            hasUncachedTypeInfo = true
-        }
-        return typeInfo
     }
 
     @inline(__always)
@@ -720,13 +711,8 @@ public final class ReadContext {
         if !typeInfoScopeStack.isEmpty {
             typeInfoScopeStack.removeAll(keepingCapacity: true)
         }
-        // Cached owners may stay in reusable slots; overflow owners must end with the root.
-        if hasUncachedTypeInfo {
-            compatibleTypeDefTypeInfos.resetReleasingUsedElements()
-            hasUncachedTypeInfo = false
-        } else {
-            compatibleTypeDefTypeInfos.reset()
-        }
+        // Logical reset prevents stale lookup and reuses slots up to the largest root table.
+        compatibleTypeDefTypeInfos.reset()
         metaStrings.resetReleasingUsedElements()
         remainingUnbackedContainerItems = 0
     }

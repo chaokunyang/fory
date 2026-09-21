@@ -88,6 +88,12 @@ object NestedModels {
 
   case class Span(from: Int)(val to: Int = from + 1)
 
+  case class Optional(value: Option[String], fallback: Option[String] = Some("default"))
+
+  case class OptionalOnly(value: Option[String])
+
+  case class OptionalDefault(value: Option[String])(val selected: String = value.getOrElse("default"))
+
   case class UnwrappedNested(code: Int = 5) {
     var note: String = "default-note"
   }
@@ -272,6 +278,13 @@ case class Optionals(
     a: Option[Int],
     b: Option[String] = None,
     c: Option[Option[Int]] = None
+)
+
+case class OptionalFields(
+    value: Option[String],
+    fallback: Option[Int] = Some(7),
+    nested: Option[Option[Int]],
+    @JsonIgnore ignored: Option[String]
 )
 
 case class ScalarFields(
@@ -1691,7 +1704,8 @@ class ScalaJsonSuite extends AnyFunSuite {
       assert(json.toJson(Optionals(Some(1))) == """{"a":1,"b":null,"c":null}""")
       assert(json.fromJson("""{"a":1}""", classOf[Optionals]) == Optionals(Some(1)))
       assert(json.fromJson("""{"a":null}""", classOf[Optionals]) == Optionals(None))
-      assertThrows[ForyJsonException](json.fromJson("{}", classOf[Optionals]))
+      assert(json.fromJson("{}", classOf[Optionals]) == Optionals(None))
+      assert(json.fromJson("{}".getBytes(UTF_8), classOf[Optionals]) == Optionals(None))
       assert(
         json.fromJson("""{"a":1,"b":"x","c":2}""", classOf[Optionals]) ==
           Optionals(Some(1), Some("x"), Some(Some(2)))
@@ -1705,6 +1719,36 @@ class ScalaJsonSuite extends AnyFunSuite {
       val stringOption = ScalaTypeRef[Option[String]]
       assert(json.toJson(Some(null): Option[String], stringOption) == "null")
       assert(json.fromJson(quoted("中").getBytes(UTF_8), stringOption) == Some("中"))
+    }
+  }
+
+  test("Option constructor defaults") {
+    for (json <- runtimes) {
+      val empty = OptionalFields(None, Some(7), None, None)
+      for (text <- Seq("{}", """{"unknown":"中"}""")) {
+        assert(json.fromJson(text, classOf[OptionalFields]) == empty)
+        assert(json.fromJson(text.getBytes(UTF_8), classOf[OptionalFields]) == empty)
+        assert(json.fromJson(text, classOf[NestedModels.Optional]) == NestedModels.Optional(None))
+        assert(
+          json.fromJson(text.getBytes(UTF_8), classOf[NestedModels.Optional]) ==
+            NestedModels.Optional(None))
+        assert(
+          json.fromJson(text, classOf[NestedModels.OptionalOnly]) == NestedModels.OptionalOnly(None))
+        assert(json.fromJson(text, classOf[NestedModels.OptionalDefault]).selected == "default")
+      }
+      val present = """{"value":"中","fallback":null,"nested":2}"""
+      val expected = OptionalFields(Some("中"), None, Some(Some(2)), None)
+      assert(json.fromJson(present, classOf[OptionalFields]) == expected)
+      assert(json.fromJson(present.getBytes(UTF_8), classOf[OptionalFields]) == expected)
+      assert(
+        json.fromJson("""{"value":"present"}""", classOf[NestedModels.OptionalDefault]).selected ==
+          "present")
+      val boxType = ScalaTypeRef[Box[Option[String]]]
+      assert(json.fromJson("{}", boxType) == Box(None))
+      assert(json.fromJson("{}".getBytes(UTF_8), boxType) == Box(None))
+      assert(json.fromJson("""{"value":1}""", classOf[Node]) == Node(1, None))
+      assertThrows[ForyJsonException](json.fromJson("{}", classOf[Node]))
+      assert(json.fromJson(json.toJson(empty), classOf[OptionalFields]) == empty)
     }
   }
 

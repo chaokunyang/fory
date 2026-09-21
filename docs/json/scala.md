@@ -52,8 +52,19 @@ can erase Scala value-type arguments to `Object`.
 Case classes are decoded by calling their full primary constructor. Fory invokes Scala's generated
 constructor-default methods for missing defaulted parameters; it does not parse default expressions
 or mutate constructor `val` fields. Defaults in later parameter lists receive the preceding
-constructor arguments exactly as Scala defines them. A missing parameter without a default is an
-error. Mutable body properties are applied after construction.
+constructor arguments exactly as Scala defines them. A missing `Option[A]` parameter defaults to
+`None` when no explicit constructor default is defined. Other missing parameters without defaults
+are errors. Mutable body properties are applied after construction.
+
+```scala
+case class Options(value: Option[Int], selected: Option[Int] = Some(7))
+
+json.fromJson("{}", classOf[Options]) // Options(None, Some(7))
+json.fromJson("""{"selected":null}""", classOf[Options]) // Options(None, None)
+```
+
+Explicit constructor defaults take precedence for omitted properties. An explicit JSON `null`
+decodes as `None` for `Option[A]`, even when its constructor default is `Some(...)`.
 
 A case class may be declared at the top level, or inside an `object` at any nesting depth, as long
 as every enclosing scope is itself an `object`. A case class enclosed by a `class`, a trait, or a

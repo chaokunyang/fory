@@ -668,16 +668,22 @@ public final class JsonCreatorInfo {
       if (method == null) {
         continue;
       }
-      // A default is either a static member of the created type or an instance member of the
-      // language singleton that owns it, such as a Scala companion of a nested case class.
+      // Language modules select defaults during schema construction. Compiler defaults belong to
+      // the creator or its companion; implicit defaults can use a value type's static factory,
+      // such as Option.empty, alongside those compiler defaults.
       boolean instanceDefault = !java.lang.reflect.Modifier.isStatic(method.getModifiers());
       Class<?> declaringClass = method.getDeclaringClass();
-      if ((instanceDefault
-              ? defaultsReceiver == null
-                  || !declaringClass.isInstance(defaultsReceiver)
-                  || !declaringClass.getName().equals(ownerType.getName() + "$")
-              : defaultsReceiver != null || declaringClass != ownerType)
-          || !method.getName().equals("$lessinit$greater$default$" + (i + 1))
+      boolean constructorDefault =
+          method.getName().equals("$lessinit$greater$default$" + (i + 1))
+              && (instanceDefault
+                  ? declaringClass.isInstance(defaultsReceiver)
+                      && declaringClass.getName().equals(ownerType.getName() + "$")
+                  : declaringClass == ownerType);
+      boolean valueFactory =
+          !instanceDefault
+              && method.getParameterCount() == 0
+              && method.getReturnType() == declaringClass;
+      if ((!constructorDefault && !valueFactory)
           || method.getParameterCount() > i
           || !java.lang.reflect.Modifier.isPublic(method.getModifiers())
           || !boxed(parameterTypes[i]).isAssignableFrom(boxed(method.getReturnType()))) {

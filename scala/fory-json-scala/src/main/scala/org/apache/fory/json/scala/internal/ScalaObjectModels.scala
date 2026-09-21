@@ -27,6 +27,8 @@ import org.apache.fory.json.resolver.JsonTypeResolver
 import org.apache.fory.reflect.TypeRef
 
 private[scala] object ScalaObjectModels {
+  private val optionDefault = classOf[Option[_]].getMethod("empty")
+
   def isCaseClass(typeClass: Class[_]): Boolean = {
     val name = typeClass.getName
     if (!classOf[Product].isAssignableFrom(typeClass) || name.startsWith("scala.Tuple")) {
@@ -117,6 +119,15 @@ private[scala] object ScalaObjectModels {
     val defaultsReceiver =
       if (companion.staticForwarders || defaults.forall(_ == null)) null
       else companionInstance(typeRef, companion)
+    // Missing Option parameters use None unless an explicit constructor default takes precedence.
+    // Bind the companion receiver before adding static Option.empty defaults.
+    index = 0
+    while (index < defaults.length) {
+      if (defaults(index) == null && logicalParameterTypes(index).getRawType == classOf[Option[_]]) {
+        defaults(index) = optionDefault
+      }
+      index += 1
+    }
     resolver.createObjectCodec(
       typeRef,
       new JsonObjectModel(

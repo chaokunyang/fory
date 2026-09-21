@@ -90,7 +90,9 @@ public final class JsonObjectModel {
    * {@code defaultsReceiver}. Scala emits {@code $lessinit$greater$default$N} on the companion
    * singleton and mirrors it as a static forwarder on the case class only for a top-level
    * companion, so a case class declared inside an {@code object} binds its defaults on that
-   * singleton. Pass {@code null} when the defaults are static members of the created type.
+   * singleton. A language module may also select a zero-argument static factory on the parameter's
+   * value type for an implicit default. Static defaults do not use {@code defaultsReceiver}; pass
+   * {@code null} when no instance default needs it.
    */
   public JsonObjectModel(
       Constructor<?> constructor,
@@ -372,7 +374,7 @@ public final class JsonObjectModel {
       }
     }
     HashSet<String> names = new HashSet<>();
-    boolean hasDefaultMethod = false;
+    boolean hasInstanceDefault = false;
     for (int i = 0; i < parameterNames.length; i++) {
       String name = parameterNames[i];
       if (name == null || name.isEmpty() || !names.add(name)) {
@@ -382,21 +384,15 @@ public final class JsonObjectModel {
       if (defaultMethods[i] != null && defaultMaskBits[i] >= 0) {
         throw new IllegalArgumentException("A constructor parameter has two default mechanisms");
       }
-      if (defaultMethods[i] != null
-          && Modifier.isStatic(defaultMethods[i].getModifiers()) == (defaultsReceiver != null)) {
-        throw new IllegalArgumentException(
-            "A JSON constructor default receiver is required exactly for instance defaults "
-                + defaultMethods[i]);
+      if (defaultMethods[i] != null && !Modifier.isStatic(defaultMethods[i].getModifiers())) {
+        if (!defaultMethods[i].getDeclaringClass().isInstance(defaultsReceiver)) {
+          throw new IllegalArgumentException(
+              "JSON constructor default receiver does not own " + defaultMethods[i]);
+        }
+        hasInstanceDefault = true;
       }
-      if (defaultsReceiver != null
-          && defaultMethods[i] != null
-          && !defaultMethods[i].getDeclaringClass().isInstance(defaultsReceiver)) {
-        throw new IllegalArgumentException(
-            "JSON constructor default receiver does not own " + defaultMethods[i]);
-      }
-      hasDefaultMethod |= defaultMethods[i] != null;
     }
-    if (defaultsReceiver != null && !hasDefaultMethod) {
+    if (defaultsReceiver != null && !hasInstanceDefault) {
       throw new IllegalArgumentException(
           "A JSON constructor default receiver requires at least one instance default");
     }

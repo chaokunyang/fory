@@ -1455,14 +1455,11 @@ public final class JsonTypeResolver {
       }
     }
     AnyInfo any = owner.anyInfo();
-    if (any == null || any.writeField() == null && any.writeGetter() == null) {
-      if (!owner.unwrappedInfo().hasDefaultGroups()) {
-        return GeneratedCodecInstantiator.instantiateStringWriter(generatedClass, fields, codecs);
-      }
-      return GeneratedCodecInstantiator.instantiateAnyStringWriter(
-          generatedClass, owner, fields, codecs);
+    boolean writesAny = any != null && (any.writeField() != null || any.writeGetter() != null);
+    if (!writesAny && !owner.unwrappedInfo().hasDefaultGroups()) {
+      return GeneratedCodecInstantiator.instantiateStringWriter(generatedClass, fields, codecs);
     }
-    if (!storesAnyCodec(owner, any)) {
+    if (!writesAny || !storesAnyCodec(owner, any)) {
       return GeneratedCodecInstantiator.instantiateAnyStringWriter(
           generatedClass, owner, fields, codecs);
     }
@@ -1488,14 +1485,11 @@ public final class JsonTypeResolver {
       }
     }
     AnyInfo any = owner.anyInfo();
-    if (any == null || any.writeField() == null && any.writeGetter() == null) {
-      if (!owner.unwrappedInfo().hasDefaultGroups()) {
-        return GeneratedCodecInstantiator.instantiateUtf8Writer(generatedClass, fields, codecs);
-      }
-      return GeneratedCodecInstantiator.instantiateAnyUtf8Writer(
-          generatedClass, owner, fields, codecs);
+    boolean writesAny = any != null && (any.writeField() != null || any.writeGetter() != null);
+    if (!writesAny && !owner.unwrappedInfo().hasDefaultGroups()) {
+      return GeneratedCodecInstantiator.instantiateUtf8Writer(generatedClass, fields, codecs);
     }
-    if (!storesAnyCodec(owner, any)) {
+    if (!writesAny || !storesAnyCodec(owner, any)) {
       return GeneratedCodecInstantiator.instantiateAnyUtf8Writer(
           generatedClass, owner, fields, codecs);
     }

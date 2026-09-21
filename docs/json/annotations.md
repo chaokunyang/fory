@@ -174,9 +174,11 @@ public final class Response {
 ```
 
 With an empty `items` list, this object writes `{}`. Explicit property inclusion overrides the
-builder default. Empty checks apply to the property's logical value before its selected codec is
-called. A custom codec that writes an ordinary object as `""` or `{}` does not make that object
-empty. An empty `byte[]` is empty with either Base64 or numeric-array representation.
+class and builder defaults. Java empty-value checks run directly, even with a custom codec.
+Other types use the selected codec's `isEmpty(writer, value)`, which defaults to `false`.
+A custom codec must override it to define empty values; writing `""` or `{}` alone does not make
+an ordinary object empty. An empty `byte[]` is empty with either Base64 or numeric-array
+representation. See [Custom codecs](custom-codecs.md#custom-empty-values).
 
 Filtering is shallow: `0`, `false`, a list containing null, a list containing an empty list, and a
 present Optional containing an empty list remain included. Root values, collection elements, Map
@@ -268,20 +270,25 @@ import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonProperty;
 import org.apache.fory.json.annotation.JsonProperty.Include;
 
-@JsonMixin(target = Options.class)
-abstract class OptionsMixin {
+final class RetryPolicy {
+  public int retries = 3;
+  public long timestamp;
+}
+
+@JsonMixin(target = RetryPolicy.class)
+abstract class RetryPolicyMixin {
   @JsonProperty(include = Include.NON_DEFAULT)
   int retries;
 }
 
 // A class-level @JsonInclude on a Mixin can also supply the target's class policy.
-var json = ForyJson.builder().registerMixin(OptionsMixin.class).build();
+var json = ForyJson.builder().registerMixin(RetryPolicyMixin.class).build();
+json.toJson(new RetryPolicy()); // {"timestamp":0}
 ```
 
-For source-generated access and retention, continue using `@JsonType` or the existing Mixin
-processor setup. Kotlin applications using R8/ProGuard must run JSON KSP; it retains the selected
-default constructor, authorized fields/getters, and annotations. Processing never executes user
-constructors to compute defaults. See [Kotlin](kotlin.md).
+For Android or Native Image, continue using the existing `@JsonType` or Mixin build setup.
+Kotlin applications using R8/ProGuard must run JSON KSP. Default evaluation takes place at runtime,
+not during annotation processing. See [Kotlin](kotlin.md).
 
 ## `JsonPropertyOrder`
 

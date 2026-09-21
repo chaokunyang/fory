@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.fory.json.{ForyJson, ForyJsonException, JsonCodecFactory}
-import org.apache.fory.json.annotation.{JsonFormat, JsonIgnore, JsonInclude, JsonMixin, JsonProperty, JsonRawValue, JsonSubTypes, JsonUnwrapped}
+import org.apache.fory.json.annotation.{JsonCodec, JsonFormat, JsonIgnore, JsonInclude, JsonMixin, JsonProperty, JsonRawValue, JsonSubTypes, JsonUnwrapped}
 import org.apache.fory.json.codec.{AbstractJsonValueCodec, MapKeyCodec, ObjectCodec}
 import org.apache.fory.json.reader.JsonReader
 import org.apache.fory.json.resolver.{JsonTypeResolver, UnsupportedJsonTypeException}
@@ -93,6 +93,27 @@ case class EmptyScalaFields(
     buffer: scala.collection.mutable.ArrayBuffer[Int],
     none: None.type,
     dynamic: Any
+)
+
+case class EmptyScalaRanges[T](
+    bits: scala.collection.immutable.BitSet,
+    mutableBits: scala.collection.mutable.BitSet,
+    range: Range,
+    numeric: NumericRange[T]
+)
+
+class OptionTextCodec extends AbstractJsonValueCodec[Option[String]] {
+  override def write(writer: JsonWriter, value: Option[String]): Unit = writer.writeString("custom")
+  override def read(reader: JsonReader): Option[String] = Option(reader.readString())
+}
+
+final class EmptyOptionTextCodec extends OptionTextCodec {
+  override def isEmpty(writer: JsonWriter, value: Option[String]): Boolean = value.isEmpty
+}
+
+case class CustomEmptyOptions(
+    @JsonCodec(classOf[OptionTextCodec]) retained: Option[String],
+    @JsonCodec(classOf[EmptyOptionTextCodec]) omitted: Option[String]
 )
 
 @JsonInclude(JsonProperty.Include.NON_DEFAULT)
@@ -735,6 +756,33 @@ class ScalaJsonSuite extends AnyFunSuite {
       assert(json.toPrettyJson(empty) == "{ }")
       assert(new String(json.toPrettyJsonBytes(empty), UTF_8) == "{ }")
       assertWriterGeneration(json, classOf[EmptyScalaFields], codegen)
+      val ranges = EmptyScalaRanges(scala.collection.immutable.BitSet.empty,
+        scala.collection.mutable.BitSet.empty, Range(1, 1), NumericRange(1L, 1L, 1L))
+      val rangesType = ScalaTypeRef[EmptyScalaRanges[Long]]
+      assert(json.toJson(ranges, rangesType) == "{}")
+      assert(new String(json.toJsonBytes(ranges, rangesType), UTF_8) == "{}")
+      val nonEmptyRanges = ranges.copy(bits = scala.collection.immutable.BitSet(1),
+        mutableBits = scala.collection.mutable.BitSet(2), range = Range(3, 4),
+        numeric = NumericRange(4L, 5L, 1L))
+      val expectedRanges = "{\"bits\":[1],\"mutableBits\":[2],\"range\":[3],\"numeric\":[4]}"
+      assert(json.toJson(nonEmptyRanges, rangesType) == expectedRanges)
+      assert(new String(json.toJsonBytes(nonEmptyRanges, rangesType), UTF_8) == expectedRanges)
+      val dynamicEmpty = Seq[Any](None, Nil, Vector.empty, Set.empty, Map.empty,
+        scala.collection.mutable.ArrayBuffer.empty, ranges.bits, ranges.mutableBits,
+        ranges.range, ranges.numeric)
+      for (value <- dynamicEmpty) {
+        assert(json.toJson(empty.copy(dynamic = value)) == "{}")
+        assert(new String(json.toJsonBytes(empty.copy(dynamic = value)), UTF_8) == "{}")
+        // Pretty entry points are runtime-typed; NumericRange keeps its dynamic codec here.
+        assert(json.toPrettyJson(empty.copy(dynamic = value)) == "{ }")
+        assert(new String(json.toPrettyJsonBytes(empty.copy(dynamic = value)), UTF_8) == "{ }")
+      }
+      val custom = CustomEmptyOptions(None, None)
+      assert(json.toJson(custom) == "{\"retained\":\"custom\"}")
+      assert(new String(json.toJsonBytes(custom), UTF_8) == "{\"retained\":\"custom\"}")
+      assert(json.toPrettyJson(custom) == "{\n  \"retained\" : \"custom\"\n}")
+      assert(new String(json.toPrettyJsonBytes(custom), UTF_8) == json.toPrettyJson(custom))
+      assertWriterGeneration(json, classOf[CustomEmptyOptions], codegen)
       for (option <- Seq(Some(""), Some(null), Some("漢"))) {
         val text = json.toJson(empty.copy(option = option, dynamic = Some(Nil)))
         assert(text.contains("\"option\":"))

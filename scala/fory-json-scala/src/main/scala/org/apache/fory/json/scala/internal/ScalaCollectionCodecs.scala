@@ -32,7 +32,7 @@ import org.apache.fory.json.codec.{
 }
 import org.apache.fory.json.reader.{JsonReader, Latin1JsonReader, Utf16JsonReader, Utf8JsonReader}
 import org.apache.fory.json.resolver.{JsonTypeInfo, JsonTypeResolver}
-import org.apache.fory.json.writer.{StringJsonWriter, Utf8JsonWriter}
+import org.apache.fory.json.writer.{JsonWriter, StringJsonWriter, Utf8JsonWriter}
 import org.apache.fory.reflect.TypeRef
 import org.apache.fory.serializer.GraphMemoryEstimates
 
@@ -46,6 +46,8 @@ private[scala] final class ScalaListCodec(
     runtimeType: Boolean
 )
     extends CompositeJsonCodec[List[Any]] {
+  override def isEmpty(writer: JsonWriter, value: List[Any]): Boolean = value.isEmpty
+
   private var elementInfo: JsonTypeInfo = _
 
   override def resolveTypes(typeRef: TypeRef[_], resolver: JsonTypeResolver): Unit = {
@@ -230,6 +232,8 @@ private[scala] final class ScalaIterableCodec(
     sequence: Boolean
 )
     extends CompositeJsonCodec[scala.collection.Iterable[Any]] {
+  override def isEmpty(writer: JsonWriter, value: scala.collection.Iterable[Any]): Boolean = value.isEmpty
+
   private val resultOwnerBytes =
     if (kind == ScalaCollectionCodecs.ListKind) 0 else ownerBytes
   private val retainedElementBytes =
@@ -529,6 +533,8 @@ private[scala] final class ScalaIterableCodec(
 
 private[scala] final class ScalaMapCodec(kind: Int, ownerBytes: Int, runtimeType: Boolean)
     extends CompositeJsonCodec[scala.collection.Map[Any, Any]] {
+  override def isEmpty(writer: JsonWriter, value: scala.collection.Map[Any, Any]): Boolean = value.isEmpty
+
   private var keyCodec: MapKeyCodec = _
   private var valueInfo: JsonTypeInfo = _
 

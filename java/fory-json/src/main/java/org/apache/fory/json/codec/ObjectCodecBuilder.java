@@ -310,7 +310,6 @@ final class ObjectCodecBuilder {
             creatorInfo,
             objectModel,
             defaultPropertyInclusion,
-            sharedRegistry,
             referenceDefaults,
             type);
         markRequiredWrite(property, builder, creatorInfo, objectModel);
@@ -352,7 +351,6 @@ final class ObjectCodecBuilder {
           creatorInfo,
           objectModel,
           defaultPropertyInclusion,
-          sharedRegistry,
           referenceDefaults,
           type);
       markRequiredWrite(field, builder, creatorInfo, objectModel);
@@ -494,17 +492,10 @@ final class ObjectCodecBuilder {
       JsonCreatorInfo creator,
       JsonObjectModel model,
       Include defaultInclusion,
-      JsonSharedRegistry registry,
       List<JsonFieldInfo> referenceDefaults,
       Class<?> type) {
     Include inclusion =
         builder.explicitInclude == Include.DEFAULT ? defaultInclusion : builder.explicitInclude;
-    if (inclusion == Include.NON_EMPTY && field.writeRawType() != null) {
-      Method method = registry.emptyMethod(field.writeRawType());
-      if (method != null) {
-        field.bindEmptyMethod(method, registry.emptyInvoker(field.writeRawType()));
-      }
-    }
     if (inclusion != Include.NON_DEFAULT || !builder.hasWriteSource()) {
       return;
     }

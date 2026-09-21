@@ -153,7 +153,8 @@ validation are not bypassed.
 Kotlin properties follow the configured [property inclusion](annotations.md#jsonproperty),
 including constructor parameters and body properties. The default `NON_NULL` omits null values;
 `NON_EMPTY` also omits empty strings, arrays, collections, and maps, and absent JDK Optional values.
-A property's `@JsonProperty(include = ...)` overrides the builder default. Use `ALWAYS` or
+A property's `@JsonProperty(include = ...)` overrides the class's `@JsonInclude` policy, which
+overrides the builder default. Use `ALWAYS` or
 `writeNullFields(true)` to retain null values.
 
 ```kotlin
@@ -199,6 +200,8 @@ on the current input, time, randomness, or external state. Exclude those propert
 ```kotlin
 import org.apache.fory.json.annotation.JsonInclude
 import org.apache.fory.json.annotation.JsonProperty
+import org.apache.fory.json.annotation.JsonProperty.Include
+import org.apache.fory.json.kotlin.ForyJsonKotlin
 
 @JsonInclude(Include.NON_DEFAULT)
 data class Limits(
@@ -222,9 +225,8 @@ maintainers must verify each new default or exclude it with `ALWAYS`.
 Reading still invokes the normal Kotlin defaults for missing fields. Explicit null is not missing.
 The reference object and its mutable collections are never shared with decoded objects. Comparison
 uses primitive values, reference equality contracts (`equals`), and array contents; see
-[Default omission](annotations.md#jsoninclude-and-default-omission). When minifying, keep the existing
-JSON KSP setup: its generated rules retain mask constructors, fields/getters, annotations and Mixin
-targets. KSP does not evaluate defaults or generate another Kotlin codec mechanism.
+[Default omission](annotations.md#jsoninclude-and-default-omission). When minifying, use the existing
+JSON KSP setup. Default evaluation takes place at runtime, not during KSP processing.
 
 An empty list is omitted by `NON_EMPTY` regardless of whether its default is null, `emptyList()`, or
 a non-empty list. Empty underlying string or collection carriers do not make non-null value-class

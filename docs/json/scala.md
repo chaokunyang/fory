@@ -109,6 +109,12 @@ mutable collections and ranges. Filtering is shallow: `Some("")`, `Some(Nil)`, `
 nonempty containers remain included. It does not traverse lazy collections to determine emptiness.
 Root values, array elements, map entries, and tuple positions are not removed.
 
+These Scala codecs implement `isEmpty(writer, value)`. If you replace one with a custom codec,
+override that method to preserve the desired omission behavior; its default returns `false`.
+For example, a custom Option codec without that override retains `None` fields under `NON_EMPTY`.
+Dynamic `Any` properties use the codec selected for the actual value, while a field-specific custom
+codec controls its own empty check. See [Custom empty values](custom-codecs.md#custom-empty-values).
+
 Explicitly authorize stable declared defaults with `NON_DEFAULT`:
 
 ```scala

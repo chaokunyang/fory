@@ -113,6 +113,8 @@ private[scala] object ScalaStringBuilderCodec
 
 private[scala] final class ScalaRangeCodec(exclusive: Boolean)
     extends AbstractJsonValueCodec[Range] {
+  override def isEmpty(writer: JsonWriter, value: Range): Boolean = value.isEmpty
+
   private val OwnerBytes = GraphMemoryEstimates.shallowObjectBytes(classOf[Range])
 
   override def write(writer: JsonWriter, value: Range): Unit = {

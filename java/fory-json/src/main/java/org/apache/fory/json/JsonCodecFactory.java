@@ -19,7 +19,6 @@
 
 package org.apache.fory.json;
 
-import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.List;
 import org.apache.fory.annotation.Internal;
@@ -47,16 +46,6 @@ public interface JsonCodecFactory {
    */
   default String factoryKey() {
     return getClass().getName();
-  }
-
-  /**
-   * Returns a public no-argument boolean method describing logical emptiness, or null. This cold
-   * query is independent of codec selection: a custom JSON representation does not change whether a
-   * language value is empty. The method must not traverse or materialize a lazy sequence.
-   */
-  @Internal
-  default Method emptyMethod(Class<?> type) {
-    return null;
   }
 
   /**

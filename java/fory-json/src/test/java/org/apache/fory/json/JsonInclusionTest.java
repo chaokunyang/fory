@@ -323,6 +323,13 @@ public class JsonInclusionTest extends ForyJsonTestModels {
     assertJson(json, value, "{\"object\":\"\"}");
     value.list = singletonList("x");
     assertJson(json, value, "{\"list\":\"custom\",\"object\":\"\"}");
+    value.object.empty = true;
+    assertJson(json, value, "{\"list\":\"custom\"}");
+    assertEquals(json.toPrettyJson(value), "{\n  \"list\" : \"custom\"\n}");
+    assertEquals(
+        new String(json.toPrettyJsonBytes(value), StandardCharsets.UTF_8),
+        json.toPrettyJson(value));
+    assertGeneratedWhenSupported(json, Custom.class, codegenEnabled());
     CustomDynamic dynamic = new CustomDynamic();
     assertJson(json, dynamic, "{\"value\":\"custom\"}");
     String pretty = "{\n  \"value\" : \"custom\"\n}";
@@ -464,7 +471,9 @@ public class JsonInclusionTest extends ForyJsonTestModels {
     public EmptyObject object = new EmptyObject();
   }
 
-  public static final class EmptyObject {}
+  public static final class EmptyObject {
+    public boolean empty;
+  }
 
   public static final class CustomDynamic {
     @JsonCodec(RepresentationCodec.class)
@@ -485,6 +494,11 @@ public class JsonInclusionTest extends ForyJsonTestModels {
 
   public static final class ListCodec extends AbstractJsonValueCodec<List<String>> {
     @Override
+    public boolean isEmpty(JsonWriter writer, List<String> value) {
+      throw new AssertionError("Collection emptiness must use the built-in fast path");
+    }
+
+    @Override
     public void write(JsonWriter writer, List<String> value) {
       writer.writeString("custom");
     }
@@ -496,6 +510,11 @@ public class JsonInclusionTest extends ForyJsonTestModels {
   }
 
   public static final class EmptyObjectCodec extends AbstractJsonValueCodec<EmptyObject> {
+    @Override
+    public boolean isEmpty(JsonWriter writer, EmptyObject value) {
+      return value.empty;
+    }
+
     @Override
     public void write(JsonWriter writer, EmptyObject value) {
       writer.writeString("");

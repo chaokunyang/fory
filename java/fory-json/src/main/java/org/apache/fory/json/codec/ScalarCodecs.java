@@ -139,6 +139,18 @@ public final class ScalarCodecs {
     }
 
     @Override
+    public boolean isEmpty(JsonWriter writer, Object value) {
+      if (value.getClass() == Object.class) {
+        return false;
+      }
+      return writer
+          .typeResolver()
+          .getRuntimeTypeInfo(value.getClass())
+          .valueCodec()
+          .isEmpty(writer, value);
+    }
+
+    @Override
     public void writeString(StringJsonWriter writer, Object value) {
       if (value == null) {
         writer.writeNull();

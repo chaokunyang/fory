@@ -211,7 +211,6 @@ final class GeneratedCodecKeyBuilder {
     keyParts.add(field.writeNull());
     keyParts.add(field.omitEmpty());
     keyParts.add(field.omitDefault());
-    addMethod(field.emptyMethod());
     addMethod(field.defaultMethod());
     for (Method dependency : field.defaultDependencies()) {
       addMethod(dependency);

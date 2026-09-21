@@ -95,10 +95,12 @@ public @interface JsonProperty {
     /**
      * Omit null, empty CharSequence values, arrays, collections, maps, and absent JDK Optional
      * values. With the Scala module, also omit None and supported empty strict Scala collections.
-     * Emptiness describes the logical property value before its codec runs, not its JSON output.
-     * Container elements and present Optional or Scala Option contents are not inspected
-     * recursively. Zero and false are not empty. A missing field may restore a nonempty constructor
-     * default; this output policy does not guarantee lossless round trips for empty values.
+     * Built-in Java types use direct empty checks; other types use the selected codec's {@code
+     * isEmpty}, which defaults to false. A custom codec must override it to omit its own empty
+     * values; producing an empty JSON representation alone does not make a value empty. Container
+     * elements and present Optional or Scala Option contents are not inspected recursively. Zero
+     * and false are not empty. A missing field may restore a nonempty constructor default; this
+     * output policy does not guarantee lossless round trips for empty values.
      */
     NON_EMPTY,
     /**

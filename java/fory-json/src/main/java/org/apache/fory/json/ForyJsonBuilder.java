@@ -82,15 +82,15 @@ public final class ForyJsonBuilder {
   }
 
   /**
-   * Sets inclusion for properties whose {@code JsonProperty.include} is {@code DEFAULT}.
+   * Sets inclusion for properties without an explicit property or class inclusion policy.
    *
    * <p>The default is {@code NON_NULL}. {@code NON_EMPTY} additionally omits empty CharSequence
    * values, arrays, collections, maps, and absent JDK Optional values, plus None and supported
    * strict Scala collections when the Scala module is installed. Root values and container entries
-   * are not filtered. Inclusion examines the logical property value before a custom value codec
-   * runs. Kotlin properties follow this policy even when omission changes the value restored by a
-   * constructor default or causes a missing-property read failure. Other language models may retain
-   * properties needed for reconstruction.
+   * are not filtered. Built-in Java empty checks bypass codecs; other values use the selected
+   * codec's {@code isEmpty}, whose default is false. Kotlin properties follow this policy even when
+   * omission changes the value restored by a constructor default or causes a missing-property read
+   * failure. Other language models may retain properties needed for reconstruction.
    *
    * <p>{@link Include#NON_DEFAULT} is rejected here: default omission requires explicit property
    * authorization through {@link org.apache.fory.json.annotation.JsonProperty#include()} or class

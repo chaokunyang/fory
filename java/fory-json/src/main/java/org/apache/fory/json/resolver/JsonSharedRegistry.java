@@ -22,8 +22,6 @@ package org.apache.fory.json.resolver;
 import java.io.File;
 import java.lang.annotation.Annotation;
 import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
@@ -133,7 +131,6 @@ import org.apache.fory.json.resolver.CodecRegistry.FactoryBinding;
 import org.apache.fory.json.resolver.JsonGeneratedClassRegistry.CompanionKey;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.DisallowedList;
@@ -162,8 +159,6 @@ import org.apache.fory.util.record.RecordUtils;
  */
 public final class JsonSharedRegistry {
   private static final int TYPE_CHECK_CACHE_LIMIT = 8192;
-  private static final MethodHandle NOT_EMPTY =
-      MethodHandles.dropArguments(MethodHandles.constant(boolean.class, false), 0, Object.class);
   private static final Comparator<DeclarationCandidate> DECLARATION_ORDER =
       new Comparator<DeclarationCandidate>() {
         @Override
@@ -178,7 +173,6 @@ public final class JsonSharedRegistry {
 
   private final CodecRegistry customCodecs;
   private final JsonCodecFactory[] codecFactories;
-  private final ConcurrentHashMap<Class<?>, MethodHandle> emptyInvokers;
   private final String[] codecFactoryIdentities;
   private final IdentityHashMap<Class<?>, ExactFactoryBinding> runtimeFactories;
   private final IdentityHashMap<Class<?>, JsonValueCodec<?>> exactCodecs;
@@ -227,7 +221,6 @@ public final class JsonSharedRegistry {
       JsonConfig config, ExecutorService compilationService, boolean hostedCodegen) {
     this.customCodecs = config.codecRegistry();
     codecFactories = config.codecFactories();
-    emptyInvokers = codecFactories.length == 0 ? null : new ConcurrentHashMap<>();
     codecFactoryIdentities = config.codecFactoryIdentities();
     runtimeFactories = new IdentityHashMap<>();
     for (Map.Entry<Class<?>, FactoryBinding> entry : customCodecs.factoryBindings().entrySet()) {
@@ -1225,53 +1218,6 @@ public final class JsonSharedRegistry {
 
   Include defaultPropertyInclusion() {
     return defaultPropertyInclusion;
-  }
-
-  /** Resolves logical language emptiness independently of the selected JSON representation. */
-  @Internal
-  public Method emptyMethod(Class<?> type) {
-    for (JsonCodecFactory factory : codecFactories) {
-      Method method = factory.emptyMethod(type);
-      if (method != null) {
-        if (method.getParameterCount() != 0
-            || method.getReturnType() != boolean.class
-            || Modifier.isStatic(method.getModifiers())
-            || !Modifier.isPublic(method.getModifiers())
-            || !method.getDeclaringClass().isAssignableFrom(type)) {
-          throw new ForyJsonException("Invalid logical emptiness method " + method);
-        }
-        return method;
-      }
-    }
-    return null;
-  }
-
-  /** Returns a bound logical emptiness test without resolving the value's JSON codec. */
-  @Internal
-  public MethodHandle emptyInvoker(Class<?> type) {
-    if (emptyInvokers == null) {
-      return NOT_EMPTY;
-    }
-    MethodHandle invoker = emptyInvokers.get(type);
-    return invoker != null
-        ? invoker
-        : emptyInvokers.computeIfAbsent(type, this::resolveEmptyInvoker);
-  }
-
-  private MethodHandle resolveEmptyInvoker(Class<?> type) {
-    // A custom field codec can handle values whose ordinary object schema is unsupported. Checking
-    // logical emptiness must not resolve that schema or run its constructors/default methods.
-    Method method = emptyMethod(type);
-    if (method == null) {
-      return NOT_EMPTY;
-    }
-    try {
-      return _JDKAccess._trustedLookup(method.getDeclaringClass())
-          .unreflect(method)
-          .asType(MethodType.methodType(boolean.class, Object.class));
-    } catch (IllegalAccessException e) {
-      throw new ForyJsonException("Cannot access logical emptiness method " + method, e);
-    }
   }
 
   boolean writeLongAsString() {

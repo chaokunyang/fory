@@ -253,19 +253,7 @@ abstract class JsonWriterCodegen {
     ctx.implementsInterfaces(JsonCodegen.generatedCodecType(ctx, completeWriterType()));
     boolean objectStartFused = canFuseObjectStart(properties);
     PrefixFields prefixFields = prefixFields(properties, objectStartFused);
-    for (int i = 0; i < properties.length; i++) {
-      JsonFieldInfo property = properties[i];
-      ctx.addField(JsonFieldInfo.class, "wp" + i);
-      if (property.omitDefault() && property.defaultMethod() == null) {
-        ctx.addField(true, ctx.type(property.writeRawType()), "default" + i, null);
-      }
-      if (storesWriteCodec(property)) {
-        addWriterCodecField(ctx, property, "w" + i);
-      }
-      if (usesPrefix(property)) {
-        addPrefixFields(ctx, property, i, prefixFields);
-      }
-    }
+    addWriterFields(ctx, properties, prefixFields);
     String bodyCode;
     if (groupEnds != null) {
       if (rootGroups) {
@@ -353,7 +341,7 @@ abstract class JsonWriterCodegen {
       addAnyWriterField(ctx, any);
       addGeneratedConstructor(
           ctx,
-          anyWriterConstructorExpression(properties, prefixFields, any, true),
+          ownerWriterConstructorExpression(properties, prefixFields, any, true),
           ObjectCodec.class,
           "owner",
           JsonFieldInfo[].class,
@@ -365,7 +353,7 @@ abstract class JsonWriterCodegen {
     } else {
       addGeneratedConstructor(
           ctx,
-          anyWriterConstructorExpression(properties, prefixFields, any, false),
+          ownerWriterConstructorExpression(properties, prefixFields, any, false),
           ObjectCodec.class,
           "owner",
           JsonFieldInfo[].class,
@@ -457,32 +445,19 @@ abstract class JsonWriterCodegen {
           "properties",
           JsonCodegen.generatedCodecArrayType(ctx, codecArrayType()),
           "codecs");
-    } else if (!writesAny) {
-      ctx.addField(ObjectCodec.class, "owner");
-      addGeneratedConstructor(
-          ctx,
-          new Expression.ListExpression(
-              new Expression.Assign(
-                  new Reference("this.owner", TypeRef.of(ObjectCodec.class)),
-                  new Reference("owner", TypeRef.of(ObjectCodec.class))),
-              writerConstructorExpression(leaves, prefixFields)),
-          ObjectCodec.class,
-          "owner",
-          JsonFieldInfo[].class,
-          "properties",
-          JsonCodegen.generatedCodecArrayType(ctx, codecArrayType()),
-          "codecs");
     } else {
-      ctx.addImports(ObjectCodec.class, Map.class);
       ctx.addField(ObjectCodec.class, "owner");
-      if (any.writeGetter() != null) {
-        addAnyGetterMethod(builder, type, any);
+      if (writesAny) {
+        ctx.addImports(ObjectCodec.class, Map.class);
+        if (any.writeGetter() != null) {
+          addAnyGetterMethod(builder, type, any);
+        }
       }
-      if (storesAnyWriter(any)) {
+      if (writesAny && storesAnyWriter(any)) {
         addAnyWriterField(ctx, any);
         addGeneratedConstructor(
             ctx,
-            anyWriterConstructorExpression(leaves, prefixFields, any, true),
+            ownerWriterConstructorExpression(leaves, prefixFields, any, true),
             ObjectCodec.class,
             "owner",
             JsonFieldInfo[].class,
@@ -494,7 +469,7 @@ abstract class JsonWriterCodegen {
       } else {
         addGeneratedConstructor(
             ctx,
-            anyWriterConstructorExpression(leaves, prefixFields, any, false),
+            ownerWriterConstructorExpression(leaves, prefixFields, any, false),
             ObjectCodec.class,
             "owner",
             JsonFieldInfo[].class,
@@ -963,7 +938,7 @@ abstract class JsonWriterCodegen {
     }
   }
 
-  private Expression anyWriterConstructorExpression(
+  private Expression ownerWriterConstructorExpression(
       JsonFieldInfo[] properties, PrefixFields prefixFields, AnyInfo any, boolean storesAnyWriter) {
     Expression.ListExpression expressions =
         new Expression.ListExpression(
@@ -1119,7 +1094,7 @@ abstract class JsonWriterCodegen {
         }
         expressions.add(
             new Expression.If(
-                presentValue(first, value),
+                presentValue(first, 0, value),
                 present,
                 new Expression.Invoke(writer, "writeObjectStart")));
         firstProperty = 1;
@@ -1212,7 +1187,7 @@ abstract class JsonWriterCodegen {
         expressions.add(written);
         expressions.add(
             new Expression.If(
-                presentValue(first, value),
+                presentValue(first, 0, value),
                 new Expression.ListExpression(
                     fusedStart, new Expression.Assign(written, Expression.Literal.ofInt(1))),
                 new Expression.Invoke(writer, "writeObjectStart")));
@@ -1494,7 +1469,7 @@ abstract class JsonWriterCodegen {
               : new Expression.ListExpression(
                   writeFieldName(property, id, commaKnown, index, writer),
                   writeValue(property, id, value, true, index, writer));
-      Expression present = new Expression.If(nonEmptyValue(property, value), write);
+      Expression present = new Expression.If(nonEmptyValue(property, id, value), write);
       if (property.writeNull()) {
         return new Expression.ListExpression(
             value,
@@ -1512,7 +1487,7 @@ abstract class JsonWriterCodegen {
                 present));
       }
       return new Expression.ListExpression(
-          value, new Expression.If(presentValue(property, value), write));
+          value, new Expression.If(presentValue(property, id, value), write));
     }
 
     if (property.writeNull()) {
@@ -1668,21 +1643,12 @@ abstract class JsonWriterCodegen {
     return new Expression.Cast(expected, TypeRef.of(property.writeRawType())).inline();
   }
 
-  private static Expression presentValue(JsonFieldInfo property, Expression value) {
+  private static Expression presentValue(JsonFieldInfo property, int id, Expression value) {
     Expression present = ne(value, new Expression.Null(value.type(), false));
-    return property.omitEmpty() ? and(present, nonEmptyValue(property, value)) : present;
+    return property.omitEmpty() ? and(present, nonEmptyValue(property, id, value)) : present;
   }
 
-  private static Expression nonEmptyValue(JsonFieldInfo property, Expression value) {
-    Method method = property.emptyMethod();
-    if (method != null) {
-      return not(
-          new Expression.Invoke(
-                  new Expression.Cast(value, TypeRef.of(method.getDeclaringClass())),
-                  method.getName(),
-                  TypeRef.of(boolean.class))
-              .inline());
-    }
+  private static Expression nonEmptyValue(JsonFieldInfo property, int id, Expression value) {
     Class<?> type = property.writeRawType();
     if (CharSequence.class.isAssignableFrom(type)) {
       return ne(
@@ -1710,10 +1676,11 @@ abstract class JsonWriterCodegen {
                 TypeRef.of(boolean.class),
                 value,
                 new Expression.Invoke(
-                        new Reference("writer", TypeRef.of(JsonWriter.class)),
-                        "typeResolver",
-                        TypeRef.of(JsonTypeResolver.class))
-                    .inline())
+                        fieldRef("wp" + id, JsonFieldInfo.class),
+                        "writeTypeInfo",
+                        TypeRef.of(JsonTypeInfo.class))
+                    .inline(),
+                new Reference("writer", TypeRef.of(JsonWriter.class)))
             .inline());
   }
 

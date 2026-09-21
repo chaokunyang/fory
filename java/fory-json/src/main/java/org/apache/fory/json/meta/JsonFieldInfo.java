@@ -167,8 +167,6 @@ public final class JsonFieldInfo {
   private JsonTypeInfo readOccurrenceTypeInfo;
   private UnboxedValueCodec writeUnboxedValueCodec;
   private UnboxedValueCodec readUnboxedValueCodec;
-  private Method emptyMethod;
-  private MethodHandle emptyInvoker;
   private Method defaultMethod;
   private Method[] defaultDependencies;
   private Object defaultsReceiver;
@@ -176,11 +174,6 @@ public final class JsonFieldInfo {
 
   /** Binds a declared default to the current object's constructor properties during cold setup. */
   public void bindDefault(Method method, Object receiver, Method[] dependencies) {
-    for (Method dependency : dependencies) {
-      if (dependency == null) {
-        throw new ForyJsonException("Missing constructor-default dependency for " + name);
-      }
-    }
     try {
       MethodHandle target = _JDKAccess._trustedLookup(method.getDeclaringClass()).unreflect(method);
       if (!Modifier.isStatic(method.getModifiers())) {
@@ -247,7 +240,7 @@ public final class JsonFieldInfo {
     }
   }
 
-  public boolean defaultBoolean(Object object) {
+  private boolean defaultBoolean(Object object) {
     try {
       return (boolean) defaultInvoker.invokeExact(object);
     } catch (Throwable e) {
@@ -255,7 +248,7 @@ public final class JsonFieldInfo {
     }
   }
 
-  public byte defaultByte(Object object) {
+  private byte defaultByte(Object object) {
     try {
       return (byte) defaultInvoker.invokeExact(object);
     } catch (Throwable e) {
@@ -263,7 +256,7 @@ public final class JsonFieldInfo {
     }
   }
 
-  public short defaultShort(Object object) {
+  private short defaultShort(Object object) {
     try {
       return (short) defaultInvoker.invokeExact(object);
     } catch (Throwable e) {
@@ -271,7 +264,7 @@ public final class JsonFieldInfo {
     }
   }
 
-  public int defaultInt(Object object) {
+  private int defaultInt(Object object) {
     try {
       return (int) defaultInvoker.invokeExact(object);
     } catch (Throwable e) {
@@ -279,7 +272,7 @@ public final class JsonFieldInfo {
     }
   }
 
-  public long defaultLong(Object object) {
+  private long defaultLong(Object object) {
     try {
       return (long) defaultInvoker.invokeExact(object);
     } catch (Throwable e) {
@@ -287,7 +280,7 @@ public final class JsonFieldInfo {
     }
   }
 
-  public float defaultFloat(Object object) {
+  private float defaultFloat(Object object) {
     try {
       return (float) defaultInvoker.invokeExact(object);
     } catch (Throwable e) {
@@ -295,7 +288,7 @@ public final class JsonFieldInfo {
     }
   }
 
-  public double defaultDouble(Object object) {
+  private double defaultDouble(Object object) {
     try {
       return (double) defaultInvoker.invokeExact(object);
     } catch (Throwable e) {
@@ -303,7 +296,7 @@ public final class JsonFieldInfo {
     }
   }
 
-  public char defaultChar(Object object) {
+  private char defaultChar(Object object) {
     try {
       return (char) defaultInvoker.invokeExact(object);
     } catch (Throwable e) {
@@ -400,31 +393,6 @@ public final class JsonFieldInfo {
     return omitDefault() && defaultEquals(value, defaultValue(object));
   }
 
-  /** Binds module-defined logical emptiness before this field is published. */
-  public void bindEmptyMethod(Method method, MethodHandle invoker) {
-    if (!writeUnboxedRequired) {
-      emptyMethod = method;
-      emptyInvoker = invoker;
-      readIndexAndWriteNull |= OMIT_EMPTY_MASK;
-    }
-  }
-
-  /** Returns the exact public logical emptiness operation for generated field writes. */
-  public Method emptyMethod() {
-    return emptyMethod;
-  }
-
-  /** Tests logical emptiness independently of the property's JSON representation. */
-  public boolean emptyValue(Object value, JsonWriter writer) {
-    if (value == null) {
-      return false;
-    }
-    if (emptyMethod != null) {
-      return invokeEmpty(emptyInvoker, value);
-    }
-    return isEmpty(value, writer.typeResolver());
-  }
-
   public JsonFieldInfo(
       String name,
       Include inclusion,
@@ -478,7 +446,10 @@ public final class JsonFieldInfo {
         readTypeRef == null ? null : readUnboxedRequired ? readFallback : readTypeRef.getRawType();
     // A lowered value-class carrier is not the logical property value. An empty String carrier
     // does not make its non-null application value class empty.
-    if (inclusion == Include.NON_EMPTY && !writeUnboxedRequired && mayBeEmpty()) {
+    if (inclusion == Include.NON_EMPTY
+        && !writeUnboxedRequired
+        && writeRawType != null
+        && !writeRawType.isPrimitive()) {
       readIndexAndWriteNull |= OMIT_EMPTY_MASK;
     }
     this.codecAnnotation = codecAnnotation;
@@ -596,8 +567,6 @@ public final class JsonFieldInfo {
             formatAnnotation,
             writesRawString());
     copy.setReadIndex(readIndex());
-    copy.emptyMethod = emptyMethod;
-    copy.emptyInvoker = emptyInvoker;
     copy.defaultMethod = defaultMethod;
     copy.defaultDependencies = defaultDependencies;
     copy.defaultsReceiver = defaultsReceiver;
@@ -632,8 +601,7 @@ public final class JsonFieldInfo {
   public boolean mayBeEmpty() {
     Class<?> type = writeTypeRef == null ? null : writeTypeRef.getRawType();
     return type != null
-        && (emptyMethod != null
-            || type.isArray()
+        && (type.isArray()
             || CharSequence.class.isAssignableFrom(type)
             || Collection.class.isAssignableFrom(type)
             || Map.class.isAssignableFrom(type)
@@ -645,11 +613,11 @@ public final class JsonFieldInfo {
   }
 
   /**
-   * Tests a dynamically typed non-null property value, without inspecting its JSON representation.
-   * Null omission is handled separately by the containing field's nullability contract.
+   * Tests built-in empty values directly, then delegates to the selected codec. Null omission is
+   * handled separately by the containing field's nullability contract.
    */
   @Internal
-  public static boolean isEmpty(Object value) {
+  public static boolean isEmpty(Object value, JsonTypeInfo typeInfo, JsonWriter writer) {
     if (value instanceof CharSequence) {
       return ((CharSequence) value).length() == 0;
     }
@@ -671,27 +639,15 @@ public final class JsonFieldInfo {
     if (value instanceof OptionalDouble) {
       return !((OptionalDouble) value).isPresent();
     }
-    return value != null && value.getClass().isArray() && Array.getLength(value) == 0;
-  }
-
-  /** Tests dynamic logical values without requiring a codec for their concrete class. */
-  @Internal
-  public static boolean isEmpty(Object value, JsonTypeResolver resolver) {
-    return value != null
-        && (isEmpty(value)
-            || invokeEmpty(resolver.sharedRegistry().emptyInvoker(value.getClass()), value));
-  }
-
-  private static boolean invokeEmpty(MethodHandle invoker, Object value) {
-    try {
-      return (boolean) invoker.invokeExact(value);
-    } catch (Throwable e) {
-      if (e instanceof Error) {
-        throw (Error) e;
-      }
-      throw new ForyJsonException(
-          "Cannot inspect logical emptiness of " + value.getClass().getName(), e);
+    if (value == null) {
+      return false;
     }
+    if (value.getClass().isArray()) {
+      return Array.getLength(value) == 0;
+    }
+    // A custom codec may handle a value whose ordinary object schema is unsupported. Use that
+    // selected codec, never resolve a replacement by runtime class just to decide field omission.
+    return typeInfo.valueCodec().isEmpty(writer, value);
   }
 
   /** Makes a nullable language-model property explicit so output stays reconstructible. */
@@ -1908,7 +1864,7 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
-    if (omitEmpty() && emptyValue(value, writer)) {
+    if (omitEmpty() && isEmpty(value, writeTypeInfo, writer)) {
       return false;
     }
     writer.writeFieldName(this, index);
@@ -2098,7 +2054,7 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
-    if (omitEmpty() && emptyValue(value, writer)) {
+    if (omitEmpty() && isEmpty(value, writeTypeInfo, writer)) {
       return false;
     }
     if (value == null) {
@@ -2156,7 +2112,7 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
-    if (omitEmpty() && emptyValue(value, writer)) {
+    if (omitEmpty() && isEmpty(value, writeTypeInfo, writer)) {
       return false;
     }
     writer.writeFieldName(this, index);
@@ -2239,7 +2195,7 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
-    if (omitEmpty() && emptyValue(value, writer)) {
+    if (omitEmpty() && isEmpty(value, writeTypeInfo, writer)) {
       return false;
     }
     writer.writeFieldName(this, index);
@@ -2309,7 +2265,7 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
-    if (omitEmpty() && emptyValue(value, writer)) {
+    if (omitEmpty() && isEmpty(value, writeTypeInfo, writer)) {
       return false;
     }
     if (value == null) {
@@ -2366,7 +2322,7 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
-    if (omitEmpty() && emptyValue(value, writer)) {
+    if (omitEmpty() && isEmpty(value, writeTypeInfo, writer)) {
       return false;
     }
     writer.writeFieldName(this, index);

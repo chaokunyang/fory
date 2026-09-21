@@ -24,7 +24,7 @@ import org.apache.fory.json.annotation.JsonCodec
 import org.apache.fory.json.codec.CompositeJsonCodec
 import org.apache.fory.json.reader.{JsonReader, Latin1JsonReader, Utf16JsonReader, Utf8JsonReader}
 import org.apache.fory.json.resolver.{JsonTypeInfo, JsonTypeResolver}
-import org.apache.fory.json.writer.{StringJsonWriter, Utf8JsonWriter}
+import org.apache.fory.json.writer.{JsonWriter, StringJsonWriter, Utf8JsonWriter}
 import org.apache.fory.reflect.TypeRef
 import org.apache.fory.serializer.GraphMemoryEstimates
 
@@ -33,6 +33,8 @@ import scala.math.Integral
 
 private[scala] final class ScalaNumericRangeCodec(exclusive: Boolean, runtimeType: Boolean)
     extends CompositeJsonCodec[NumericRange[Any]] {
+  override def isEmpty(writer: JsonWriter, value: NumericRange[Any]): Boolean = value.isEmpty
+
   private val ownerBytes = GraphMemoryEstimates.shallowObjectBytes(
     if (exclusive) classOf[NumericRange.Exclusive[_]] else classOf[NumericRange.Inclusive[_]]
   )

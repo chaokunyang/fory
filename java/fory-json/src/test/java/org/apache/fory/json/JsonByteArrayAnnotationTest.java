@@ -24,6 +24,10 @@ import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertThrows;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.apache.fory.json.annotation.JsonAnyGetter;
 import org.apache.fory.json.annotation.JsonAnyProperty;
@@ -31,11 +35,13 @@ import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonIgnore;
+import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonProperty;
 import org.apache.fory.json.annotation.JsonPropertyOrder;
 import org.apache.fory.json.annotation.JsonRawValue;
 import org.apache.fory.json.codec.Base64ByteArrayCodec;
 import org.apache.fory.platform.JdkVersion;
+import org.apache.fory.reflect.TypeRef;
 import org.testng.SkipException;
 import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
@@ -44,6 +50,177 @@ public class JsonByteArrayAnnotationTest extends ForyJsonTestModels {
   @Factory(dataProvider = "enableCodegen")
   public JsonByteArrayAnnotationTest(boolean codegen) {
     super(codegen);
+  }
+
+  @Test
+  public void globalFormats() {
+    byte[] bytes = {0, 127, -128, -1};
+    String[] encodings = {"\"AH+A/w==\"", "\"007f80ff\"", "[0,127,-128,-1]"};
+    JsonByteArray.Format[] formats = {
+      JsonByteArray.Format.BASE64, JsonByteArray.Format.BASE16, JsonByteArray.Format.ARRAY
+    };
+    ForyJsonBuilder builder = newJsonBuilder();
+    ForyJson defaultJson = builder.build();
+    for (int i = 0; i < formats.length; i++) {
+      ForyJson json = builder.byteArrayFormat(formats[i]).build();
+      String encoded = encodings[i];
+      assertEquals(json.toJson(bytes), encoded);
+      assertEquals(json.toJson(bytes, TypeRef.of(Object.class)), encoded);
+      assertEquals(new String(json.toJsonBytes(bytes), StandardCharsets.UTF_8), encoded);
+      assertEquals(json.fromJson(encoded, byte[].class), bytes);
+      assertEquals(json.fromJson(encoded.getBytes(StandardCharsets.UTF_8), byte[].class), bytes);
+      assertNull(json.fromJson("null", byte[].class));
+      assertNull(json.fromJson("null".getBytes(StandardCharsets.UTF_8), byte[].class));
+
+      BinaryValues value = new BinaryValues();
+      value.bytes = bytes;
+      value.list = Arrays.asList(bytes, null);
+      value.map = Collections.singletonMap("data", bytes);
+      value.nested = new byte[][] {bytes};
+      String expected =
+          "{\"label\":\"汉\",\"bytes\":"
+              + encoded
+              + ",\"list\":["
+              + encoded
+              + ",null],\"map\":{\"data\":"
+              + encoded
+              + "},\"nested\":["
+              + encoded
+              + "]}";
+      assertEquals(json.toJson(value), expected);
+      assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected);
+      String pretty = json.toPrettyJson(value);
+      assertEquals(new String(json.toPrettyJsonBytes(value), StandardCharsets.UTF_8), pretty);
+      for (String text : new String[] {expected, pretty}) {
+        assertBinaryValues(json.fromJson(text, BinaryValues.class), bytes);
+        assertBinaryValues(
+            json.fromJson(text.getBytes(StandardCharsets.UTF_8), BinaryValues.class), bytes);
+      }
+      TypeRef<List<byte[]>> listType = new TypeRef<List<byte[]>>() {};
+      assertEquals(json.toJson(value.list, listType), "[" + encoded + ",null]");
+      assertEquals(json.fromJson("[" + encoded + ",null]", listType).get(0), bytes);
+      TypeRef<Map<String, byte[]>> mapType = new TypeRef<Map<String, byte[]>>() {};
+      assertEquals(json.toJson(value.map, mapType), "{\"data\":" + encoded + "}");
+      assertEquals(json.fromJson("{\"data\":" + encoded + "}", mapType).get("data"), bytes);
+      assertGeneratedWhenSupported(json, BinaryValues.class, codegenEnabled());
+    }
+    assertEquals(defaultJson.toJson(bytes), encodings[0]);
+    assertThrows(NullPointerException.class, () -> builder.byteArrayFormat(null));
+  }
+
+  private static void assertBinaryValues(BinaryValues value, byte[] bytes) {
+    assertEquals(value.label, "汉");
+    assertEquals(value.bytes, bytes);
+    assertEquals(value.list.get(0), bytes);
+    assertNull(value.list.get(1));
+    assertEquals(value.map.get("data"), bytes);
+    assertEquals(value.nested[0], bytes);
+  }
+
+  @Test
+  public void base16Overrides() {
+    ForyJson json = newJsonBuilder().byteArrayFormat(JsonByteArray.Format.BASE16).build();
+    Base64Field base64 = new Base64Field();
+    base64.bytes = new byte[] {1, -2};
+    assertEquals(json.toJson(base64), "{\"bytes\":\"Af4=\"}");
+    assertEquals(json.fromJson(json.toJsonBytes(base64), Base64Field.class).bytes, base64.bytes);
+    ArrayField array = new ArrayField();
+    array.bytes = base64.bytes;
+    assertEquals(json.toJson(array), "{\"bytes\":[1,-2]}");
+    assertEquals(json.fromJson(json.toJsonBytes(array), ArrayField.class).bytes, base64.bytes);
+    DirectCodecBase64 custom = new DirectCodecBase64();
+    custom.bytes = base64.bytes;
+    assertEquals(json.toJson(custom), "{\"bytes\":\"Af4=\"}");
+
+    ForyJson mixinJson =
+        newJsonBuilder()
+            .byteArrayFormat(JsonByteArray.Format.ARRAY)
+            .registerMixin(HexMixin.class)
+            .build();
+    assertEquals(mixinJson.toJson(base64), "{\"bytes\":\"01fe\"}");
+    assertEquals(
+        mixinJson.fromJson(mixinJson.toJsonBytes(base64), Base64Field.class).bytes, base64.bytes);
+    assertGeneratedWhenSupported(mixinJson, Base64Field.class, codegenEnabled());
+
+    HexField hex = new HexField();
+    hex.bytes = base64.bytes;
+    assertEquals(newJson().toJson(hex), "{\"bytes\":\"01fe\"}");
+    hex.bytes = null;
+    assertEquals(newJson().toJson(hex), "{}");
+    assertEquals(newJsonBuilder().writeNullFields(true).build().toJson(hex), "{\"bytes\":null}");
+  }
+
+  @Test
+  public void base16Contents() {
+    ForyJson json = newJsonBuilder().byteArrayFormat(JsonByteArray.Format.BASE16).build();
+    for (int size : new int[] {0, 1, 2, 255, 256, 257, 1025}) {
+      byte[] bytes = new byte[size];
+      StringBuilder expected = new StringBuilder("\"");
+      for (int i = 0; i < size; i++) {
+        bytes[i] = (byte) i;
+        expected.append(Character.forDigit((i & 255) >>> 4, 16));
+        expected.append(Character.forDigit(i & 15, 16));
+      }
+      String text = expected.append('"').toString();
+      assertEquals(json.toJson(bytes), text);
+      assertEquals(new String(json.toJsonBytes(bytes), StandardCharsets.UTF_8), text);
+      for (String input : new String[] {text, text.toUpperCase(Locale.ROOT)}) {
+        assertEquals(json.fromJson(input, byte[].class), bytes);
+        assertEquals(json.fromJson(input.getBytes(StandardCharsets.UTF_8), byte[].class), bytes);
+      }
+      // The prefix widens String output and forces UTF16 input before the binary value.
+      String unicode = "{\"label\":\"汉\",\"bytes\":" + text + "}";
+      UnicodeHex value = new UnicodeHex();
+      value.bytes = bytes;
+      assertEquals(json.toJson(value), unicode);
+      assertEquals(json.fromJson(unicode, UnicodeHex.class).bytes, bytes);
+    }
+    String escaped = "\"0\\u0061Ff\"";
+    assertEquals(json.fromJson(escaped, byte[].class), new byte[] {10, -1});
+    assertEquals(
+        json.fromJson(escaped.getBytes(StandardCharsets.UTF_8), byte[].class), new byte[] {10, -1});
+    for (String input :
+        new String[] {
+          "\"0\"", "\"gg\"", "\"0g\"", "\"汉0\"", "\"0 00\"", "\"00", "[0]", "\"\\u0030\""
+        }) {
+      assertThrows(ForyJsonException.class, () -> json.fromJson(input, byte[].class));
+      assertThrows(
+          ForyJsonException.class,
+          () -> json.fromJson(input.getBytes(StandardCharsets.UTF_8), byte[].class));
+      assertEquals(json.fromJson("\"00\"", byte[].class), new byte[] {0});
+    }
+    ForyJson leaf =
+        newJsonBuilder()
+            .byteArrayFormat(JsonByteArray.Format.BASE16)
+            .withMaxGraphMemoryBytes(1)
+            .build();
+    assertEquals(leaf.fromJson(leaf.toJsonBytes(new byte[1024]), byte[].class), new byte[1024]);
+  }
+
+  @JsonPropertyOrder({"label", "bytes", "list", "map", "nested"})
+  public static final class BinaryValues {
+    public String label = "汉";
+    public byte[] bytes;
+    public List<byte[]> list;
+    public Map<String, byte[]> map;
+    public byte[][] nested;
+  }
+
+  public static final class HexField {
+    @JsonByteArray(JsonByteArray.Format.BASE16)
+    public byte[] bytes;
+  }
+
+  @JsonPropertyOrder({"label", "bytes"})
+  public static final class UnicodeHex {
+    public String label = "汉";
+    public byte[] bytes;
+  }
+
+  @JsonMixin(target = Base64Field.class)
+  public abstract static class HexMixin {
+    @JsonByteArray(JsonByteArray.Format.BASE16)
+    public byte[] bytes;
   }
 
   @Test

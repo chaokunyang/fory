@@ -523,6 +523,27 @@ public abstract class JsonReader {
     }
   }
 
+  /** Reads a nullable hexadecimal JSON string, accepting uppercase and lowercase digits. */
+  public final byte[] readBase16() {
+    CharSequence encoded = readQuotedText();
+    if (encoded == null) {
+      return null;
+    }
+    int encodedLength = encoded.length();
+    if ((encodedLength & 1) != 0) {
+      throw error("Invalid Base16 JSON string length");
+    }
+    if (encodedLength == 0) {
+      return EMPTY_BYTES;
+    }
+    // Quoted-text scanning proves the complete input before allocating decoded binary storage.
+    byte[] decoded = new byte[encodedLength >>> 1];
+    for (int i = 0, j = 0; i < decoded.length; i++, j += 2) {
+      decoded[i] = (byte) ((hexValue(encoded.charAt(j)) << 4) | hexValue(encoded.charAt(j + 1)));
+    }
+    return decoded;
+  }
+
   public String readCharSequence() {
     return readString();
   }

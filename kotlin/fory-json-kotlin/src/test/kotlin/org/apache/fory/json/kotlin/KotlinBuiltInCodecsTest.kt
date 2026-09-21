@@ -21,6 +21,7 @@ package org.apache.fory.json.kotlin
 
 import java.lang.reflect.Modifier
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -35,6 +36,7 @@ import kotlin.time.TimedValue
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import org.apache.fory.json.ForyJsonException
+import org.apache.fory.json.annotation.JsonByteArray
 import org.apache.fory.json.codec.DirectUnboxedValueCodec
 import org.apache.fory.json.reader.JsonReader
 import org.apache.fory.json.writer.JsonWriter
@@ -85,6 +87,57 @@ class KotlinBuiltInCodecsTest {
   )
 
   private val fory = ForyJsonKotlin.builder().withAsyncCompilation(false).build()
+
+  data class BinaryFields(
+    val label: String,
+    val bytes: ByteArray,
+    val nested: List<ByteArray>,
+    val unsigned: UByteArray
+  )
+
+  @Test
+  fun byteArrayFormats() {
+    val bytes = byteArrayOf(1, -2, 3)
+    val formats =
+      mapOf(
+        JsonByteArray.Format.BASE64 to "\"Af4D\"",
+        JsonByteArray.Format.BASE16 to "\"01fe03\"",
+        JsonByteArray.Format.ARRAY to "[1,-2,3]"
+      )
+    for (codegen in listOf(false, true)) {
+      for ((format, encoded) in formats) {
+        val json =
+          ForyJsonKotlin.builder()
+            .byteArrayFormat(format)
+            .withCodegen(codegen)
+            .withAsyncCompilation(false)
+            .build()
+        assertEquals(encoded, json.toJson(bytes, jsonTypeRef<ByteArray>()))
+        assertContentEquals(bytes, json.fromJson(encoded, jsonTypeRef<ByteArray>()))
+        assertContentEquals(
+          bytes,
+          json.fromJson(encoded.encodeToByteArray(), jsonTypeRef<ByteArray>())
+        )
+        val value = BinaryFields("汉", bytes, listOf(bytes), ubyteArrayOf(1u, 254u, 3u))
+        val text = json.toJson(value)
+        assertTrue(text.contains("\"bytes\":$encoded"), text)
+        assertTrue(text.contains("\"nested\":[$encoded]"), text)
+        assertTrue(text.contains("\"unsigned\":[1,254,3]"), text)
+        assertEquals(text, json.toJsonBytes(value).decodeToString())
+        for (input in listOf(text, json.toPrettyJson(value))) {
+          for (decoded in
+            listOf(
+              json.fromJson(input, BinaryFields::class.java),
+              json.fromJson(input.encodeToByteArray(), BinaryFields::class.java)
+            )) {
+            assertContentEquals(bytes, decoded.bytes)
+            assertContentEquals(bytes, decoded.nested.single())
+            assertContentEquals(value.unsigned, decoded.unsigned)
+          }
+        }
+      }
+    }
+  }
 
   @Test
   fun products() {

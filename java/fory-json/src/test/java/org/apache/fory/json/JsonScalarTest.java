@@ -478,6 +478,36 @@ public class JsonScalarTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void writeBase16() {
+    byte[] value = {0, 1, 15, 16, 127, -128, -1};
+    String expected = "[\"汉\",\"00010f107f80ff\",0]";
+    for (int capacity : new int[] {1, 16, 31, 64}) {
+      StringJsonWriter string = newStringWriter(new byte[capacity]);
+      string.writeArrayStart();
+      string.writeString("汉");
+      string.writeComma(1);
+      string.writeBase16(value);
+      string.writeComma(2);
+      string.writeInt(0);
+      string.writeArrayEnd();
+      assertEquals(string.toJson(), expected);
+      string.reset();
+      string.writeBase16(value);
+      assertEquals(string.toJson(), "\"00010f107f80ff\"");
+
+      Utf8JsonWriter utf8 = newUtf8Writer(new byte[capacity]);
+      utf8.writeArrayStart();
+      utf8.writeString("汉");
+      utf8.writeComma(1);
+      utf8.writeBase16(value);
+      utf8.writeComma(2);
+      utf8.writeInt(0);
+      utf8.writeArrayEnd();
+      assertEquals(new String(utf8.toJsonBytes(), StandardCharsets.UTF_8), expected);
+    }
+  }
+
+  @Test
   public void writeBase64() {
     ForyJson json = newJson();
     for (int length :

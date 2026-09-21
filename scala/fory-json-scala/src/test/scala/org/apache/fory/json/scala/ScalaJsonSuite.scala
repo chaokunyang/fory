@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.fory.json.{ForyJson, ForyJsonException, JsonCodecFactory}
-import org.apache.fory.json.annotation.{JsonCodec, JsonFormat, JsonIgnore, JsonInclude, JsonMixin, JsonProperty, JsonRawValue, JsonSubTypes, JsonUnwrapped}
+import org.apache.fory.json.annotation.{JsonByteArray, JsonCodec, JsonFormat, JsonIgnore, JsonInclude, JsonMixin, JsonProperty, JsonRawValue, JsonSubTypes, JsonUnwrapped}
 import org.apache.fory.json.codec.{AbstractJsonValueCodec, MapKeyCodec, ObjectCodec}
 import org.apache.fory.json.reader.JsonReader
 import org.apache.fory.json.resolver.{JsonTypeResolver, UnsupportedJsonTypeException}
@@ -40,6 +40,14 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 case class Node(value: Int, next: Option[Node])
 
 case class BigIntFields(value: BigInt, values: Vector[BigInt])
+
+case class BinaryFields(
+    label: String,
+    bytes: Array[Byte],
+    nested: List[Array[Byte]],
+    mapped: Map[String, Array[Byte]],
+    optional: Option[Array[Byte]]
+)
 
 case class StringScalarFields(
     @JsonFormat(shape = JsonFormat.Shape.STRING) active: Boolean,
@@ -519,6 +527,43 @@ class ScalaJsonSuite extends AnyFunSuite {
       assert(info.stringWriter().isInstanceOf[ObjectCodec[_]] == !enabled)
       assert(info.utf8Writer().isInstanceOf[ObjectCodec[_]] == !enabled)
     } finally resolver.unlockJIT()
+  }
+
+  test("byte array formats") {
+    val bytes = Array[Byte](1, -2, 3)
+    val formats = Seq(
+      JsonByteArray.Format.BASE64 -> "\"Af4D\"",
+      JsonByteArray.Format.BASE16 -> "\"01fe03\"",
+      JsonByteArray.Format.ARRAY -> "[1,-2,3]"
+    )
+    for (codegen <- Seq(false, true); (format, encoded) <- formats) {
+      val json = ForyJsonScala.builder().byteArrayFormat(format)
+        .withCodegen(codegen).withAsyncCompilation(false).build()
+      val byteType = ScalaTypeRef[Array[Byte]]
+      assert(json.toJson(bytes, byteType) == encoded)
+      assert(json.fromJson(encoded, byteType).sameElements(bytes))
+      assert(json.fromJson(encoded.getBytes(UTF_8), byteType).sameElements(bytes))
+      val value = BinaryFields("汉", bytes, List(bytes), Map("data" -> bytes), Some(bytes))
+      val text = json.toJson(value)
+      assert(text.contains("\"bytes\":" + encoded))
+      assert(text.contains("\"nested\":[" + encoded + "]"))
+      assert(text.contains("\"mapped\":{\"data\":" + encoded + "}"))
+      assert(text.contains("\"optional\":" + encoded))
+      assert(new String(json.toJsonBytes(value), UTF_8) == text)
+      for {
+        input <- Seq(text, json.toPrettyJson(value))
+        decoded <- Seq(
+          json.fromJson(input, classOf[BinaryFields]),
+          json.fromJson(input.getBytes(UTF_8), classOf[BinaryFields])
+        )
+      } {
+        assert(decoded.bytes.sameElements(bytes))
+        assert(decoded.nested.head.sameElements(bytes))
+        assert(decoded.mapped("data").sameElements(bytes))
+        assert(decoded.optional.get.sameElements(bytes))
+      }
+      assertWriterGeneration(json, classOf[BinaryFields], codegen)
+    }
   }
 
   test("scalar string fields and Mixins") {

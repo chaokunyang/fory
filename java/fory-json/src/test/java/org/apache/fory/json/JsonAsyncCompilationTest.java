@@ -57,6 +57,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.json.annotation.JsonAnyProperty;
+import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonProperty.Include;
@@ -1366,6 +1367,7 @@ public class JsonAsyncCompilationTest {
         new JsonConfig(
             Include.NON_NULL,
             false,
+            JsonByteArray.Format.BASE64,
             true,
             true,
             true,

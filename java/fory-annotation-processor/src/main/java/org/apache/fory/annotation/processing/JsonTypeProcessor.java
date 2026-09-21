@@ -575,7 +575,9 @@ final class JsonTypeProcessor {
       model.codecTypes.add(
           format.getSimpleName().contentEquals("ARRAY")
               ? JSON_PACKAGE + ".codec.ArrayCodec$SignedByteArrayCodec"
-              : BASE64_CODEC);
+              : format.getSimpleName().contentEquals("BASE16")
+                  ? JSON_PACKAGE + ".codec.Base16ByteArrayCodec"
+                  : BASE64_CODEC);
     }
   }
 

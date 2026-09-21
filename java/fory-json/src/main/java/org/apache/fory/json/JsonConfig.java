@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.annotation.JsonProperty.Include;
 import org.apache.fory.json.resolver.CodecRegistry;
 
@@ -39,6 +40,7 @@ public final class JsonConfig {
 
   private final Include defaultPropertyInclusion;
   private final boolean writeLongAsString;
+  private final JsonByteArray.Format byteArrayFormat;
   private final boolean codegenEnabled;
   private final boolean asyncCompilationEnabled;
   private final boolean propertyDiscoveryEnabled;
@@ -59,6 +61,7 @@ public final class JsonConfig {
   JsonConfig(
       Include defaultPropertyInclusion,
       boolean writeLongAsString,
+      JsonByteArray.Format byteArrayFormat,
       boolean codegenEnabled,
       boolean asyncCompilationEnabled,
       boolean propertyDiscoveryEnabled,
@@ -76,6 +79,7 @@ public final class JsonConfig {
       JsonTypeChecker typeChecker) {
     this.defaultPropertyInclusion = defaultPropertyInclusion;
     this.writeLongAsString = writeLongAsString;
+    this.byteArrayFormat = Objects.requireNonNull(byteArrayFormat, "byteArrayFormat");
     this.codegenEnabled = codegenEnabled;
     this.asyncCompilationEnabled = asyncCompilationEnabled;
     this.propertyDiscoveryEnabled = propertyDiscoveryEnabled;
@@ -107,6 +111,11 @@ public final class JsonConfig {
    */
   public boolean writeLongAsString() {
     return writeLongAsString;
+  }
+
+  /** Returns the default byte-array representation for both reading and writing. */
+  public JsonByteArray.Format byteArrayFormat() {
+    return byteArrayFormat;
   }
 
   public boolean codegenEnabled() {

@@ -125,6 +125,8 @@ public data class PlatformRoot(
   public val numbers: ByteArray = byteArrayOf(1, -2, 3),
   @get:JsonByteArray(JsonByteArray.Format.BASE64)
   public val binary: ByteArray = byteArrayOf(1, -2, 3),
+  @field:JsonByteArray(JsonByteArray.Format.BASE16)
+  public val hex: ByteArray = byteArrayOf(1, -2, 3),
   public val defaultBytes: ByteArray = byteArrayOf(1, -2, 3),
 )
 

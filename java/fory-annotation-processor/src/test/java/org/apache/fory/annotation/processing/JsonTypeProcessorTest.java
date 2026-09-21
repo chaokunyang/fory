@@ -51,6 +51,7 @@ import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import org.apache.fory.json.ForyJson;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
 import org.apache.fory.json.meta.JsonAnySetterAccessor;
 import org.apache.fory.json.meta.JsonFieldAccessor;
@@ -965,6 +966,53 @@ public class JsonTypeProcessorTest {
         "test.MutableModel",
         new Class<?>[] {int.class, String.class, Map.class},
         new Object[] {5, "mutable", extra});
+  }
+
+  @Test
+  public void byteArrayMixinPipeline() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.BinaryTarget",
+            "package test;\n"
+                + "import org.apache.fory.json.annotation.*;\n"
+                + "public final class BinaryTarget { public byte[] value; public byte[] other; }\n"
+                + "@JsonMixin(target = BinaryTarget.class) abstract class BinaryMixin {\n"
+                + "  @JsonByteArray(JsonByteArray.Format.BASE16) byte[] value;\n"
+                + "}\n");
+    assertTrue(result.success, result.diagnostics());
+    String companion = "test.BinaryMixin_ForyJsonMixin_test_x2e_BinaryTarget_ForyJsonCodec";
+    ClassLoader loader = result.classLoader();
+    GeneratedJsonCodec<?> generated = generatedCodec(loader, companion);
+    Class<?> target = loader.loadClass("test.BinaryTarget");
+    Class<?> mixin = loader.loadClass("test.BinaryMixin");
+    byte[] bytes = {1, -2};
+    Object value = target.getConstructor().newInstance();
+    target.getField("value").set(value, bytes);
+    target.getField("other").set(value, bytes);
+    assertEquals(generated.type(), target);
+    assertEquals(fieldAccessor(generated.fieldAccessors(), "value").getObject(value), bytes);
+    String rules = result.generatedResource(MIXIN_RULE_PREFIX + "test.BinaryMixin.pro");
+    assertTrue(
+        rules.contains(
+            "class org.apache.fory.json.codec.Base16ByteArrayCodec { public <init>(); }"),
+        rules);
+    for (boolean codegen : new boolean[] {false, true}) {
+      ForyJson json =
+          ForyJson.builder()
+              .withCodegen(codegen)
+              .withAsyncCompilation(false)
+              .withClassLoader(loader)
+              .registerMixin(mixin)
+              .byteArrayFormat(JsonByteArray.Format.ARRAY)
+              .build();
+      String text = json.toJson(value);
+      assertTrue(text.contains("\"value\":\"01fe\""), text);
+      assertTrue(text.contains("\"other\":[1,-2]"), text);
+      assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), text);
+      Object decoded = json.fromJson(json.toPrettyJsonBytes(value), target);
+      assertEquals(target.getField("value").get(decoded), bytes);
+      assertEquals(target.getField("other").get(decoded), bytes);
+    }
   }
 
   @Test
@@ -2015,6 +2063,7 @@ public class JsonTypeProcessorTest {
             + "  @JsonRawValue public String body;\n"
             + "  @JsonByteArray(JsonByteArray.Format.BASE64) public byte[] bytes;\n"
             + "  @JsonByteArray(JsonByteArray.Format.ARRAY) public byte[] numbers;\n"
+            + "  @JsonByteArray(JsonByteArray.Format.BASE16) public byte[] hex;\n"
             + "  private String other;\n"
             + "  @JsonRawValue public String getOther() { return other; }\n"
             + "  public void setOther(String other) { this.other = other; }\n"
@@ -2032,6 +2081,10 @@ public class JsonTypeProcessorTest {
         valueRules.contains("@interface org.apache.fory.json.annotation.JsonRawValue"), valueRules);
 
     String rawRules = result.generatedResource(RULE_PREFIX + "test.RawModel.pro");
+    assertTrue(
+        rawRules.contains(
+            "class org.apache.fory.json.codec.Base16ByteArrayCodec { public <init>(); }"),
+        rawRules);
     assertTrue(
         rawRules.contains(
             "class org.apache.fory.json.codec.ArrayCodec$SignedByteArrayCodec { public <init>(); }"),

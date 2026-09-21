@@ -24,6 +24,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonProperty.Include;
 import org.apache.fory.json.codec.JsonValueCodec;
@@ -52,6 +53,7 @@ import org.apache.fory.platform.GraalvmSupport;
 public final class ForyJsonBuilder {
   private Include defaultPropertyInclusion = Include.NON_NULL;
   private boolean writeLongAsString;
+  private JsonByteArray.Format byteArrayFormat = JsonByteArray.Format.BASE64;
   private boolean codegenEnabled = true;
   private boolean asyncCompilationEnabled = true;
   private boolean propertyDiscoveryEnabled = true;
@@ -125,6 +127,22 @@ public final class ForyJsonBuilder {
    */
   public ForyJsonBuilder writeLongAsString(boolean writeLongAsString) {
     this.writeLongAsString = writeLongAsString;
+    return this;
+  }
+
+  /**
+   * Sets the default representation for {@code byte[]} roots, properties, and container values in
+   * both reading and writing. The default is {@link JsonByteArray.Format#BASE64}.
+   *
+   * <p>{@link JsonByteArray} on a property or its Mixin overrides this setting. Custom occurrence
+   * codecs and language-module unsigned arrays retain their own representation. Base16 writes
+   * lowercase hexadecimal digits without a prefix and accepts either case when reading. Numeric
+   * arrays use signed values in {@code [-128, 127]}. Formats are not detected automatically.
+   *
+   * @throws NullPointerException if format is null
+   */
+  public ForyJsonBuilder byteArrayFormat(JsonByteArray.Format format) {
+    byteArrayFormat = Objects.requireNonNull(format, "format");
     return this;
   }
 
@@ -346,6 +364,7 @@ public final class ForyJsonBuilder {
     return new JsonConfig(
         defaultPropertyInclusion,
         writeLongAsString,
+        byteArrayFormat,
         effectiveCodegen,
         effectiveAsyncCompilation,
         propertyDiscoveryEnabled,

@@ -1151,9 +1151,11 @@ internal class KspModelBuilder(
         val format =
           annotation.arguments.first { it.name?.asString() == "value" }.value as KSClassDeclaration
         result.codecs +=
-          if (format.simpleName.asString() == "ARRAY")
-            "org.apache.fory.json.codec.ArrayCodec\$SignedByteArrayCodec"
-          else BASE64_CODEC
+          when (format.simpleName.asString()) {
+            "ARRAY" -> "org.apache.fory.json.codec.ArrayCodec\$SignedByteArrayCodec"
+            "BASE16" -> "org.apache.fory.json.codec.Base16ByteArrayCodec"
+            else -> BASE64_CODEC
+          }
       }
       JSON_SUB_TYPES -> collectSubtypeTypes(annotation, result.types)
       else ->

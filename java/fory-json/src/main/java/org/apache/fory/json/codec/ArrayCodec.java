@@ -23,6 +23,7 @@ import java.lang.reflect.Array;
 import java.util.Arrays;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Utf16JsonReader;
@@ -67,11 +68,12 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
     Class<?> componentType = arrayType.getComponentType();
     TypeRef<?> componentTypeRef = arrayTypeRef.getComponentType();
     JsonTypeInfo componentTypeInfo = resolver.getTypeInfo(componentTypeRef);
-    return create(arrayType, componentTypeInfo);
+    return create(arrayType, componentTypeInfo, resolver.sharedRegistry().byteArrayFormat());
   }
 
   @Internal
-  public static <T> JsonValueCodec<T> create(Class<T> arrayType, JsonTypeInfo componentTypeInfo) {
+  public static <T> JsonValueCodec<T> create(
+      Class<T> arrayType, JsonTypeInfo componentTypeInfo, JsonByteArray.Format byteArrayFormat) {
     if (!arrayType.isArray()) {
       throw new ForyJsonException("Unsupported JSON array type " + arrayType);
     }
@@ -91,7 +93,14 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         && componentCodec == ScalarCodecs.ShortCodec.PRIMITIVE) {
       return bind(ShortArrayCodec.INSTANCE);
     } else if (componentType == byte.class && componentCodec == ScalarCodecs.ByteCodec.PRIMITIVE) {
-      return bind(Base64ByteArrayCodec.INSTANCE);
+      switch (byteArrayFormat) {
+        case ARRAY:
+          return bind(ByteArrayCodec.SIGNED);
+        case BASE16:
+          return bind(Base16ByteArrayCodec.INSTANCE);
+        default:
+          return bind(Base64ByteArrayCodec.INSTANCE);
+      }
     } else if (componentType == char.class && componentCodec == ScalarCodecs.CharCodec.PRIMITIVE) {
       return bind(CharArrayCodec.INSTANCE);
     } else if (componentType == float.class
@@ -1237,6 +1246,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
   }
 
   public abstract static class ByteArrayCodec extends ArrayCodec<byte[]> {
+    private static final ByteArrayCodec SIGNED = new SignedByteArrayCodec();
     private static final ByteArrayCodec UNSIGNED = new UnsignedByteArrayCodec();
 
     private ByteArrayCodec() {

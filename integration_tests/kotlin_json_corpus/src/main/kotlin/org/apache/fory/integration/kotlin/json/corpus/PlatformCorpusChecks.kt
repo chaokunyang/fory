@@ -32,6 +32,7 @@ public object PlatformCorpusChecks {
     check(text.contains("\"display_label\":\"mixin\""))
     check(text.contains("\"numbers\":[1,-2,3]"))
     check(text.contains("\"binary\":\"Af4D\""))
+    check(text.contains("\"hex\":\"01fe03\""))
     check(text.contains("\"defaultBytes\":\"Af4D\""))
     verifyRoot(json.fromJson(text, type))
     verifyRoot(json.fromJson(json.toJsonBytes(decoded, type), type))
@@ -48,6 +49,7 @@ public object PlatformCorpusChecks {
     check(actual.box == expected.box)
     check(actual.numbers.contentEquals(expected.numbers))
     check(actual.binary.contentEquals(expected.binary))
+    check(actual.hex.contentEquals(expected.hex))
     check(actual.defaultBytes.contentEquals(expected.defaultBytes))
   }
 }

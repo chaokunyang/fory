@@ -177,10 +177,17 @@ public class JsonByteArrayAnnotationTest extends ForyJsonTestModels {
       assertEquals(json.toJson(value), unicode);
       assertEquals(json.fromJson(unicode, UnicodeHex.class).bytes, bytes);
     }
-    String escaped = "\"0\\u0061Ff\"";
-    assertEquals(json.fromJson(escaped, byte[].class), new byte[] {10, -1});
-    assertEquals(
-        json.fromJson(escaped.getBytes(StandardCharsets.UTF_8), byte[].class), new byte[] {10, -1});
+    for (String escaped : new String[] {"\"0\\u0061Ff\"", "\"\\u0030\\u0061Ff\""}) {
+      assertEquals(json.fromJson(escaped, byte[].class), new byte[] {10, -1});
+      assertEquals(
+          json.fromJson(escaped.getBytes(StandardCharsets.UTF_8), byte[].class),
+          new byte[] {10, -1});
+      String unicode = "{\"label\":\"汉\",\"bytes\":" + escaped + "}";
+      assertEquals(json.fromJson(unicode, UnicodeHex.class).bytes, new byte[] {10, -1});
+      assertEquals(
+          json.fromJson(unicode.getBytes(StandardCharsets.UTF_8), UnicodeHex.class).bytes,
+          new byte[] {10, -1});
+    }
     for (String input :
         new String[] {
           "\"0\"", "\"gg\"", "\"0g\"", "\"汉0\"", "\"0 00\"", "\"00", "[0]", "\"\\u0030\""

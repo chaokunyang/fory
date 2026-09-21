@@ -524,11 +524,66 @@ public abstract class JsonReader {
   }
 
   /** Reads a nullable hexadecimal JSON string, accepting uppercase and lowercase digits. */
-  public final byte[] readBase16() {
-    CharSequence encoded = readQuotedText();
-    if (encoded == null) {
+  public byte[] readBase16() {
+    if (tryReadNullToken()) {
       return null;
     }
+    int start = position + 1;
+    int end = scanStringEnd(position) - 1;
+    position = end + 1;
+    int length = end - start;
+    if (length == 0) {
+      return EMPTY_BYTES;
+    }
+    if ((length & 1) != 0) {
+      return decodeBase16(decodeQuotedText(start, end));
+    }
+    byte[] decoded = new byte[length >>> 1];
+    for (int i = 0; i < decoded.length; i++) {
+      char first = charAt(start + (i << 1));
+      char second = charAt(start + (i << 1) + 1);
+      if ((first | second) > 255) {
+        throw error("Invalid hex digit");
+      }
+      int value = HEX_PAIRS[first | (second << 8)];
+      if (value < 0) {
+        return decodeBase16(decodeQuotedText(start, end));
+      }
+      decoded[i] = (byte) value;
+    }
+    return decoded;
+  }
+
+  /** Decodes a proven quoted byte range directly; escaped strings use the common decoder. */
+  protected final byte[] readBase16(byte[] bytes) {
+    if (tryReadNullToken()) {
+      return null;
+    }
+    int start = position + 1;
+    int end = scanStringEnd(position) - 1;
+    position = end + 1;
+    int length = end - start;
+    if (length == 0) {
+      return EMPTY_BYTES;
+    }
+    if ((length & 1) != 0) {
+      return decodeBase16(decodeQuotedText(start, end));
+    }
+    // The scan proves the complete source range before allocating binary storage.
+    byte[] decoded = new byte[length >>> 1];
+    short[] pairs = HEX_PAIRS;
+    for (int i = 0; i < decoded.length; i++) {
+      int offset = start + (i << 1);
+      int value = pairs[(bytes[offset] & 255) | ((bytes[offset + 1] & 255) << 8)];
+      if (value < 0) {
+        return decodeBase16(decodeQuotedText(start, end));
+      }
+      decoded[i] = (byte) value;
+    }
+    return decoded;
+  }
+
+  private byte[] decodeBase16(CharSequence encoded) {
     int encodedLength = encoded.length();
     if ((encodedLength & 1) != 0) {
       throw error("Invalid Base16 JSON string length");
@@ -536,7 +591,6 @@ public abstract class JsonReader {
     if (encodedLength == 0) {
       return EMPTY_BYTES;
     }
-    // Quoted-text scanning proves the complete input before allocating decoded binary storage.
     byte[] decoded = new byte[encodedLength >>> 1];
     for (int i = 0, j = 0; i < decoded.length; i++, j += 2) {
       decoded[i] = (byte) ((hexValue(encoded.charAt(j)) << 4) | hexValue(encoded.charAt(j + 1)));

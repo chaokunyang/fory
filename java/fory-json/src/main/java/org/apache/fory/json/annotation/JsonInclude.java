@@ -37,8 +37,14 @@ import java.lang.annotation.Target;
  * every participating property, including fields added later. The caller accepts the evaluation and
  * construction requirements documented on that policy and guarantees stable defaults with
  * equivalent missing-field recovery. Use {@code ALWAYS} on individual properties to exclude them.
- * Every effectively authorized property must have a supported default source; otherwise model
- * initialization fails. {@code NON_EMPTY} does not authorize default evaluation.
+ * Properties without a default remain included, even when null, zero, false, or empty. This
+ * includes required constructor properties and Kotlin lateinit properties. Java models without a
+ * reader no-argument construction path retain their properties. A declared default that cannot be
+ * evaluated through a supported source still causes an error; for example, a Kotlin defaulted
+ * property cannot use a reference object if the selected constructor also requires arguments.
+ * Property-level {@code NON_DEFAULT} follows the same rules. Scala properties without a supported
+ * compiler default method also remain included. {@code NON_EMPTY} does not authorize default
+ * evaluation.
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)

@@ -607,6 +607,69 @@ public class JsonTypeProcessorTest {
   }
 
   @Test
+  public void requiredInclusion() throws Exception {
+    for (boolean mixin : new boolean[] {false, true}) {
+      String inclusion = "@JsonInclude(JsonProperty.Include.NON_DEFAULT) ";
+      CompilationResult result =
+          compile(
+              "test.RequiredModel",
+              "package test;\nimport org.apache.fory.json.annotation.*;\n"
+                  + (mixin ? "" : "@JsonType " + inclusion)
+                  + "public class RequiredModel {\n"
+                  + "  public static int calls;\n"
+                  + "  public final int count;\n"
+                  + "  public final String label;\n"
+                  + "  public RequiredModel() { this(3, \"default\"); }\n"
+                  + "  @JsonCreator public RequiredModel(@JsonProperty(\"count\") int count, "
+                  + "@JsonProperty(\"label\") String label) {\n"
+                  + "    calls++; this.count = count; this.label = label;\n  }\n}\n"
+                  + (mixin
+                      ? "@JsonMixin(target=RequiredModel.class) "
+                          + inclusion
+                          + "abstract class RequiredMixin {}\n"
+                      : ""));
+      assertTrue(result.success, result.diagnostics());
+      ClassLoader loader = result.classLoader();
+      Class<?> type = loader.loadClass("test.RequiredModel");
+      GeneratedJsonCodec<?> codec =
+          generatedCodec(
+              loader,
+              mixin
+                  ? "test.RequiredMixin_ForyJsonMixin_test_x2e_RequiredModel_ForyJsonCodec"
+                  : "test.RequiredModel_ForyJsonCodec");
+      Object value = type.getConstructor(int.class, String.class).newInstance(0, null);
+      assertEquals(fieldAccessor(codec.fieldAccessors(), "count").getInt(value), 0);
+      for (boolean codegen : new boolean[] {false, true}) {
+        org.apache.fory.json.ForyJsonBuilder builder =
+            ForyJson.builder()
+                .withClassLoader(loader)
+                .withCodegen(codegen)
+                .withAsyncCompilation(false);
+        if (mixin) {
+          builder.registerMixin(loader.loadClass("test.RequiredMixin"));
+        }
+        ForyJson json = builder.build();
+        int calls = type.getField("calls").getInt(null);
+        String compact = "{\"count\":0,\"label\":null}";
+        String pretty = "{\n  \"count\" : 0,\n  \"label\" : null\n}";
+        assertEquals(json.toJson(value), compact);
+        assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), compact);
+        assertEquals(json.toPrettyJson(value), pretty);
+        assertEquals(new String(json.toPrettyJsonBytes(value), StandardCharsets.UTF_8), pretty);
+        assertEquals(type.getField("calls").getInt(null), calls);
+        for (Object decoded :
+            new Object[] {
+              json.fromJson(compact, type),
+              json.fromJson(pretty.getBytes(StandardCharsets.UTF_8), type)
+            }) {
+          assertEquals(type.getField("count").getInt(decoded), 0);
+          assertEquals(type.getField("label").get(decoded), null);
+        }
+      }
+    }
+  }
+
+  @Test
   public void generatedAccessors() throws Exception {
     CompilationResult result =
         compile(

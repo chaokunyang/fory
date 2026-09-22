@@ -122,8 +122,12 @@ public @interface JsonProperty {
      * <p>Kotlin metadata does not expose default expressions or dependencies. A reference object
      * cannot represent defaults that vary with the current object's parameters, time, or external
      * state. Authorize only properties for which its baseline matches missing-field recovery.
-     * Unsupported sources and failed construction cause a model-initialization error, rather than
-     * silently retaining the field or bypassing the constructor.
+     * Properties without defaults remain included under both property-level and class-level
+     * authorization, including required constructor parameters and Kotlin lateinit properties. Java
+     * models without a reader no-argument construction path retain their authorized properties.
+     * Scala properties without a supported compiler default method also remain included. Declared
+     * defaults requiring an unavailable reference object, or failed construction/evaluation, still
+     * cause errors.
      *
      * <p>Primitive values compare directly; floating-point values preserve signed zero and never
      * omit non-finite values. References use {@code equals}, and arrays compare contents with exact

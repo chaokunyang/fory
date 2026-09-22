@@ -134,8 +134,20 @@ public class JsonInclusionTest extends ForyJsonTestModels {
     assertNotSame(first.values, second.values);
     first.values.add(2);
     assertEquals(second.values, singletonList(1));
-    assertThrows(ForyJsonException.class, () -> json.toJson(new ExplicitDefaults(0, null)));
-    assertThrows(ForyJsonException.class, () -> json.toJson(new RequiredConstructor(1)));
+    ExplicitDefaults required = new ExplicitDefaults(0, null);
+    assertJson(json, required, "{\"count\":0,\"label\":null}");
+    String requiredPretty = "{\n  \"count\" : 0,\n  \"label\" : null\n}";
+    assertEquals(json.toPrettyJson(required), requiredPretty);
+    assertEquals(
+        new String(json.toPrettyJsonBytes(required), StandardCharsets.UTF_8), requiredPretty);
+    assertEquals(json.fromJson(requiredPretty, ExplicitDefaults.class).count, 0);
+    assertEquals(
+        json.fromJson(requiredPretty.getBytes(StandardCharsets.UTF_8), ExplicitDefaults.class)
+            .label,
+        null);
+    assertGeneratedWhenSupported(json, ExplicitDefaults.class, codegenEnabled());
+    assertJson(json, new RequiredConstructor(0), "{\"count\":0}");
+    assertGeneratedWhenSupported(json, RequiredConstructor.class, codegenEnabled());
     assertGeneratedWhenSupported(json, Initialized.class, codegenEnabled());
   }
 
@@ -216,7 +228,12 @@ public class JsonInclusionTest extends ForyJsonTestModels {
     value.value = new EmptyObject();
     assertJson(json, value, "{\"value\":\"\"}");
     assertEquals(lookups.calls, 2);
-    assertThrows(ForyJsonException.class, () -> resolver.getObjectCodec(RequiredConstructor.class));
+    FailingDefault.fail = true;
+    try {
+      assertThrows(ForyJsonException.class, () -> resolver.getObjectCodec(FailingDefault.class));
+    } finally {
+      FailingDefault.fail = false;
+    }
     assertJson(json, value, "{\"value\":\"\"}");
     assertEquals(lookups.calls, 3);
     assertGeneratedWhenSupported(json, Dynamic.class, codegenEnabled());
@@ -298,6 +315,34 @@ public class JsonInclusionTest extends ForyJsonTestModels {
       this.count = count;
     }
   }
+
+  @Test
+  public void requiredMixin() {
+    ForyJson json = newJsonBuilder().registerMixin(RequiredMixin.class).build();
+    ConstructorOnly value = new ConstructorOnly(0);
+    int calls = ConstructorOnly.calls;
+    assertJson(json, value, "{\"count\":0}");
+    assertEquals(json.toPrettyJson(value), "{\n  \"count\" : 0\n}");
+    assertEquals(
+        new String(json.toPrettyJsonBytes(value), StandardCharsets.UTF_8),
+        json.toPrettyJson(value));
+    assertEquals(ConstructorOnly.calls, calls);
+    assertGeneratedWhenSupported(json, ConstructorOnly.class, codegenEnabled());
+  }
+
+  public static class ConstructorOnly {
+    public static int calls;
+    public int count;
+
+    public ConstructorOnly(int count) {
+      calls++;
+      this.count = count;
+    }
+  }
+
+  @JsonMixin(target = ConstructorOnly.class)
+  @JsonInclude(Include.NON_DEFAULT)
+  public abstract static class RequiredMixin {}
 
   public static class FailingDefault {
     public static boolean fail;

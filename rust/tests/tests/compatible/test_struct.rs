@@ -21,6 +21,67 @@ use fory_derive::{ForyEnum, ForyStruct, ForyUnion};
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 
+#[test]
+fn schema_overflow_root_reuse() {
+    #[derive(ForyStruct, Debug, PartialEq)]
+    struct Local {
+        value: i32,
+    }
+    #[derive(ForyStruct)]
+    struct First {
+        value: i32,
+        extra_a: String,
+    }
+    #[derive(ForyStruct)]
+    struct Second {
+        value: i32,
+        extra_b: String,
+    }
+    let mut reader = Fory::builder()
+        .compatible(true)
+        .max_schema_versions_per_type(1)
+        .build();
+    let mut first_writer = Fory::builder().compatible(true).build();
+    let mut second_writer = Fory::builder().compatible(true).build();
+    reader.register::<Local>(9001).unwrap();
+    first_writer.register::<First>(9001).unwrap();
+    second_writer.register::<Second>(9001).unwrap();
+    let first = first_writer
+        .serialize(&vec![
+            First {
+                value: 17,
+                extra_a: "a".into(),
+            },
+            First {
+                value: 19,
+                extra_a: "b".into(),
+            },
+        ])
+        .unwrap();
+    let overflow = second_writer
+        .serialize(&vec![
+            Second {
+                value: 29,
+                extra_b: "c".into(),
+            },
+            Second {
+                value: 31,
+                extra_b: "d".into(),
+            },
+        ])
+        .unwrap();
+    let initial: Vec<Local> = reader.deserialize(&first).unwrap();
+    assert_eq!(initial, vec![Local { value: 17 }, Local { value: 19 }]);
+    for _ in 0..2 {
+        let result: Vec<Local> = reader.deserialize(&overflow).unwrap();
+        assert_eq!(result, vec![Local { value: 29 }, Local { value: 31 }]);
+        assert!(reader
+            .deserialize::<Vec<Local>>(&overflow[..overflow.len() - 1])
+            .is_err());
+    }
+    assert_eq!(reader.deserialize::<Vec<Local>>(&first).unwrap(), initial);
+}
+
 // RUSTFLAGS="-Awarnings" cargo expand -p tests --test test_struct
 #[test]
 fn simple() {

@@ -677,9 +677,10 @@ func schemaLimitTracksStructTypesSeparately() throws {
 
     try cache(remoteTypeMeta(userTypeID: 901, fieldName: "remoteA"))
     try cache(remoteTypeMeta(userTypeID: 902, fieldName: "remoteA"))
-    #expect(throws: (any Error).self) {
-        try cache(remoteTypeMeta(userTypeID: 901, fieldName: "remoteB"))
-    }
+    let overflow = try remoteTypeMeta(userTypeID: 901, fieldName: "remoteB")
+    try cache(overflow)
+    let header = try ByteBuffer(bytes: overflow.encode()).readUInt64()
+    #expect(resolver.getTypeInfo(forHeaderHash: typeMetaHashFromHeader(header)) == nil)
 }
 
 @Test
@@ -718,9 +719,10 @@ func nonStructTypeMetaUsesSchemaLimit() throws {
     }
 
     try cache(remoteTypeMeta(.namedExt))
-    #expect(throws: (any Error).self) {
-        try cache(remoteTypeMeta(.namedUnion))
-    }
+    let overflow = try remoteTypeMeta(.namedUnion)
+    try cache(overflow)
+    let header = try ByteBuffer(bytes: overflow.encode()).readUInt64()
+    #expect(resolver.getTypeInfo(forHeaderHash: typeMetaHashFromHeader(header)) == nil)
 }
 
 @Test

@@ -146,7 +146,7 @@ public:
     return *this;
   }
 
-  /// Set maximum accepted remote metadata versions for one logical type.
+  /// Set maximum cached remote metadata versions for one logical type.
   ForyBuilder &max_schema_versions_per_type(uint32_t max_versions) {
     FORY_CHECK(max_versions > 0)
         << "max_schema_versions_per_type must be positive";
@@ -154,7 +154,7 @@ public:
     return *this;
   }
 
-  /// Set maximum accepted average remote metadata versions across logical
+  /// Set maximum cached average remote metadata versions across logical
   /// types. The effective global minimum remains 8192 schemas.
   ForyBuilder &max_average_schema_versions_per_type(uint32_t max_versions) {
     FORY_CHECK(max_versions > 0)

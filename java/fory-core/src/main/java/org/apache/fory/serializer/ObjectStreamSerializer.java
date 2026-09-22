@@ -658,7 +658,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     // wire owner; never parse or revalidate checked metadata on this path.
     checkCachedLayerOwner(typeDef, className, cls);
     TypeInfo typeInfo = new TypeInfo(resolvedClass, typeDef);
-    typeInfoByHeaderHash.put(headerHash, typeInfo);
+    if (typeResolver.getCheckedRemoteTypeDef(headerHash) != null) {
+      typeInfoByHeaderHash.put(headerHash, typeInfo);
+    }
     return typeInfo;
   }
 

@@ -78,6 +78,7 @@ final class WriteContext {
   }
 
   @internal
+  @pragma('vm:prefer-inline')
   void reset() {
     _typeDefIds.clear();
     _refWriter.reset();

@@ -678,8 +678,8 @@ public abstract class TypeResolver {
         break;
       case Types.COMPATIBLE_STRUCT:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        typeInfo = readSharedClassTypeInfo(readContext, null, cachedTypeInfo);
-        break;
+        typeInfo = readSharedClassTypeInfo(readContext, null, cachedTypeInfo, null);
+        return typeInfo.serializer == null ? ensureSerializerForTypeInfo(typeInfo) : typeInfo;
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
@@ -687,7 +687,8 @@ public abstract class TypeResolver {
         if (!metaContextShareEnabled) {
           typeInfo = readTypeInfoFromBytes(readContext, cachedTypeInfo, typeId);
         } else {
-          typeInfo = readSharedClassTypeInfo(readContext, null, cachedTypeInfo);
+          typeInfo = readSharedClassTypeInfo(readContext, null, cachedTypeInfo, null);
+          return typeInfo.serializer == null ? ensureSerializerForTypeInfo(typeInfo) : typeInfo;
         }
         break;
       case Types.LIST:
@@ -777,7 +778,7 @@ public abstract class TypeResolver {
         break;
       case Types.COMPATIBLE_STRUCT:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        typeInfo = readSharedClassTypeInfo(readContext, null, typeInfoCache);
+        typeInfo = readSharedClassTypeInfo(readContext, null, typeInfoCache, null);
         break;
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
@@ -786,7 +787,7 @@ public abstract class TypeResolver {
         if (!metaContextShareEnabled) {
           typeInfo = readTypeInfoFromBytes(readContext, typeInfoCache, typeId);
         } else {
-          typeInfo = readSharedClassTypeInfo(readContext, null, typeInfoCache);
+          typeInfo = readSharedClassTypeInfo(readContext, null, typeInfoCache, null);
         }
         break;
       case Types.LIST:
@@ -826,8 +827,8 @@ public abstract class TypeResolver {
         break;
       case Types.COMPATIBLE_STRUCT:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        typeInfo = readSharedClassTypeInfo(readContext, null, cachedTypeInfo);
-        break;
+        typeInfo = readSharedClassTypeInfo(readContext, null, cachedTypeInfo, classInfoHolder);
+        return typeInfo.serializer == null ? ensureSerializerForTypeInfo(typeInfo) : typeInfo;
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
@@ -835,7 +836,8 @@ public abstract class TypeResolver {
         if (!metaContextShareEnabled) {
           typeInfo = readTypeInfoFromBytes(readContext, cachedTypeInfo, typeId);
         } else {
-          typeInfo = readSharedClassTypeInfo(readContext, null, cachedTypeInfo);
+          typeInfo = readSharedClassTypeInfo(readContext, null, cachedTypeInfo, classInfoHolder);
+          return typeInfo.serializer == null ? ensureSerializerForTypeInfo(typeInfo) : typeInfo;
         }
         break;
       case Types.LIST:
@@ -907,10 +909,7 @@ public abstract class TypeResolver {
 
   private TypeInfo readSharedClassMeta(
       ReadContext readContext, Class<?> targetClass, TypeInfo cachedTypeInfo) {
-    TypeInfo typeInfo = readSharedClassTypeInfo(readContext, targetClass, cachedTypeInfo);
-    // A hash identifies the wire schema, not the requested target class. Keep source hints
-    // unchanged so alternating targets reuse their own entries in transformedTypeInfo.
-    typeInfoCache[readContext.getDepth()] = typeInfo;
+    TypeInfo typeInfo = readSharedClassTypeInfo(readContext, targetClass, cachedTypeInfo, null);
     Class<?> readClass = typeInfo.getType();
     if (targetClass != readClass) {
       return getTargetTypeInfo(typeInfo, targetClass);
@@ -918,12 +917,11 @@ public abstract class TypeResolver {
     return typeInfo;
   }
 
-  private TypeInfo readSharedClassTypeInfo(ReadContext readContext, Class<?> targetClass) {
-    return readSharedClassTypeInfo(readContext, targetClass, null);
-  }
-
   private TypeInfo readSharedClassTypeInfo(
-      ReadContext readContext, Class<?> targetClass, TypeInfo cachedTypeInfo) {
+      ReadContext readContext,
+      Class<?> targetClass,
+      TypeInfo cachedTypeInfo,
+      TypeInfoHolder classInfoHolder) {
     MemoryBuffer buffer = readContext.getBuffer();
     MetaReadContext metaReadContext = readContext.getMetaReadContext();
     assert metaReadContext != null : SET_META_READ_CONTEXT_MSG;
@@ -954,10 +952,22 @@ public abstract class TypeResolver {
       if (typeInfo == null) {
         typeInfo = extRegistry.typeInfoByHeaderHash.get(headerHash);
       }
+      boolean cacheTypeInfo = true;
       if (typeInfo != null) {
         TypeDef.skipTypeDef(buffer, header);
       } else {
         typeInfo = readSharedTypeDefInfo(buffer, header, headerHash, targetClass);
+        // Only the miss checks publication. Overflow owners must not enter depth or field
+        // hints, which would otherwise skip validation across roots outside the bounded cache.
+        cacheTypeInfo = extRegistry.typeInfoByHeaderHash.get(headerHash) == typeInfo;
+      }
+      if (cacheTypeInfo && typeInfo != cachedTypeInfo) {
+        // Hints retain the source owner, before any requested-target adaptation.
+        if (classInfoHolder == null) {
+          typeInfoCache[readContext.getDepth()] = typeInfo;
+        } else {
+          classInfoHolder.typeInfo = typeInfo;
+        }
       }
       // index == readTypeInfos.size() since types are written sequentially
       metaReadContext.readTypeInfos.add(typeInfo);
@@ -1039,6 +1049,9 @@ public abstract class TypeResolver {
   private TypeInfo transformTypeInfo(
       TypeInfo typeInfo, Class<?> targetClass, long typeDefHeaderHash) {
     Class<?> readClass = typeInfo.getType();
+    boolean cacheTypeInfo =
+        typeInfo.getTypeDef() == null
+            || extRegistry.typeInfoByHeaderHash.get(typeDefHeaderHash) == typeInfo;
     TypeInfo newTypeInfo;
     // Select a local schema only once for this source/target cache entry. Target-specific
     // TypeInfo must not replace the source owner in the hash-only metadata cache.
@@ -1046,7 +1059,7 @@ public abstract class TypeResolver {
     // Keep assignable target matches cached here. Calling Class.isAssignableFrom for every
     // collection element is a hot-path regression for wildcard/object element targets.
     if (localTypeDef != null) {
-      newTypeInfo = createMetaSharedTypeInfo(localTypeDef, targetClass);
+      newTypeInfo = createMetaSharedTypeInfo(localTypeDef, targetClass, true);
     } else if (targetClass.isAssignableFrom(readClass)) {
       newTypeInfo = typeInfo;
     } else {
@@ -1060,7 +1073,11 @@ public abstract class TypeResolver {
       }
       // similar to create serializer for `UnknownStruct`
       newTypeInfo =
-          getMetaSharedTypeInfo(typeDef.replaceRootClassTo(this, targetClass), targetClass);
+          getMetaSharedTypeInfo(
+              typeDef.replaceRootClassTo(this, targetClass), targetClass, cacheTypeInfo);
+    }
+    if (!cacheTypeInfo) {
+      return newTypeInfo;
     }
     TransformedTypeInfo[] infos = extRegistry.transformedTypeInfo.get(targetClass);
     int size = infos == null ? 0 : infos.length;
@@ -1157,7 +1174,7 @@ public abstract class TypeResolver {
   }
 
   private TypeInfo cacheMetaSharedTypeInfo(TypeDef typeDef, Class<?> cls) {
-    TypeInfo typeInfo = createMetaSharedTypeInfo(typeDef, cls);
+    TypeInfo typeInfo = createMetaSharedTypeInfo(typeDef, cls, true);
     extRegistry.typeInfoByHeaderHash.put(TypeDef.headerHash(typeDef.getId()), typeInfo);
     return typeInfo;
   }
@@ -1184,20 +1201,20 @@ public abstract class TypeResolver {
     return cacheMetaSharedTypeInfo(typeDef, typeDef.getClassSpec().type);
   }
 
-  private TypeInfo createMetaSharedTypeInfo(TypeDef typeDef, Class<?> cls) {
+  private TypeInfo createMetaSharedTypeInfo(TypeDef typeDef, Class<?> cls, boolean cacheTypeInfo) {
     TypeInfo typeInfo;
     if (!typeDef.isStructSchemaKind()
         && !UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
       typeInfo =
           typeDef.getFieldsInfo().isEmpty()
               ? getTypeInfo(cls)
-              : getMetaSharedTypeInfo(typeDef, cls);
+              : getMetaSharedTypeInfo(typeDef, cls, cacheTypeInfo);
     } else if (ClassResolver.useReplaceResolveSerializer(cls)) {
       // For classes with writeReplace/readResolve, use their natural serializer
       // (ReplaceResolveSerializer) instead of CompatibleSerializer
       typeInfo = getTypeInfo(cls);
     } else {
-      typeInfo = getMetaSharedTypeInfo(typeDef, cls);
+      typeInfo = getMetaSharedTypeInfo(typeDef, cls, cacheTypeInfo);
     }
     return typeInfo;
   }
@@ -1213,13 +1230,21 @@ public abstract class TypeResolver {
       return getOrCreateLocalTypeInfo(localTypeDef, cls);
     }
     Object remoteTypeKey = remoteTypeKey(typeDef);
-    sharedRegistry.checkRemoteTypeDefLimit(typeDef, remoteTypeKey);
-    TypeInfo typeInfo = createMetaSharedTypeInfo(typeDef, cls);
+    if (!sharedRegistry.canCacheRemoteTypeDef(typeDef, remoteTypeKey)) {
+      // Overflow still validates compatibility, but must not retain metadata or generate
+      // schema-specific classes in a persistent code generator/classloader.
+      return createMetaSharedTypeInfo(typeDef, cls, false);
+    }
+    TypeInfo typeInfo = createMetaSharedTypeInfo(typeDef, cls, true);
     TypeDef cachedTypeDef = sharedRegistry.getOrCreateRemoteTypeDef(typeDef, remoteTypeKey);
     if (cachedTypeDef != typeDef) {
       return cacheMetaSharedTypeInfo(cachedTypeDef, cls);
     }
-    extRegistry.typeInfoByHeaderHash.put(TypeDef.headerHash(typeDef.getId()), typeInfo);
+    long headerHash = TypeDef.headerHash(typeDef.getId());
+    // Another resolver sharing the registry can fill the quota while this serializer is built.
+    if (sharedRegistry.remoteTypeDefByHeaderHash.containsKey(headerHash)) {
+      extRegistry.typeInfoByHeaderHash.put(headerHash, typeInfo);
+    }
     return typeInfo;
   }
 
@@ -1250,7 +1275,7 @@ public abstract class TypeResolver {
 
   // TODO(chaokunyang) if TypeDef is consistent with class in this process,
   //  use existing serializer instead.
-  private TypeInfo getMetaSharedTypeInfo(TypeDef typeDef, Class<?> clz) {
+  private TypeInfo getMetaSharedTypeInfo(TypeDef typeDef, Class<?> clz, boolean cacheTypeInfo) {
     if (clz == UnknownEmptyStruct.class) {
       clz = UnknownStruct.class;
     }
@@ -1341,7 +1366,7 @@ public abstract class TypeResolver {
             "Can't generate class at runtime in graalvm for class def {}, use {} instead",
             typeDef,
             sc);
-      } else if (sc == null && config.isCodeGenEnabled()) {
+      } else if (sc == null && config.isCodeGenEnabled() && cacheTypeInfo) {
         sc =
             jitContext.registerSerializerJITCallback(
                 () -> CompatibleSerializer.class,

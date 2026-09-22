@@ -300,6 +300,8 @@ public final class ReadContext {
       contextObjects.clear();
     }
     if (scopedMetaShareEnabled) {
+      // Logical reset prevents stale lookup; later roots overwrite the reusable slots.
+      // Retention follows the largest root table, not the number of remote schemas received.
       metaReadContext.readTypeInfos.size = 0;
     } else {
       metaReadContext = null;

@@ -1335,45 +1335,28 @@ class TypeResolver:
             return (namespace or "", typename)
         return user_type_id
 
-    def _check_remote_type_def_key(self, type_key):
+    def _type_def_cache_key(self, type_key):
         versions_for_type = self._remote_schema_versions_by_type.get(type_key, 0)
         accepted_type_count = len(self._remote_schema_versions_by_type)
         if versions_for_type == 0:
             # This owner persists across roots. Bound new logical remote types
             # before any checked metadata or quota state can be published.
             if accepted_type_count >= _MAX_REMOTE_TYPE_DEF_KEYS:
-                raise ValueError(
-                    "Remote type metadata key limit exceeded: "
-                    f"{accepted_type_count} accepted non-local types reached "
-                    f"the fixed limit {_MAX_REMOTE_TYPE_DEF_KEYS}. "
-                    "The data may be malicious."
-                )
+                return None
             accepted_type_count += 1
         max_schema_versions_per_type = self.config.max_schema_versions_per_type
         if versions_for_type >= max_schema_versions_per_type:
-            raise ValueError(
-                f"Remote schema version limit exceeded for type {type_key}: "
-                f"{versions_for_type} >= {max_schema_versions_per_type}. "
-                "The data may be malicious. If the data is not malicious, "
-                "please increase max_schema_versions_per_type."
-            )
+            return None
         max_average_schema_versions_per_type = self.config.max_average_schema_versions_per_type
         if (
             self._total_accepted_schema_versions >= MIN_REMOTE_TYPE_DEF_LIMIT
             and self._total_accepted_schema_versions // accepted_type_count >= max_average_schema_versions_per_type
         ):
-            raise ValueError(
-                "Remote schema version limit exceeded: "
-                f"{self._total_accepted_schema_versions} metadata versions for "
-                f"{accepted_type_count} accepted remote types exceeds the average "
-                f"limit {max_average_schema_versions_per_type}. The data may be malicious. "
-                "If the data is not malicious, please increase "
-                "max_average_schema_versions_per_type."
-            )
+            return None
         return type_key
 
-    def _check_remote_type_def_limit(self, type_def):
-        return self._check_remote_type_def_key(
+    def _remote_type_def_cache_key(self, type_def):
+        return self._type_def_cache_key(
             self._remote_type_def_key(
                 type_def.type_id,
                 type_def.namespace,
@@ -1448,7 +1431,7 @@ class TypeResolver:
         elif not is_struct_typedef_kind(type_def.type_id):
             name = type_def.namespace + "." + type_def.typename if type_def.namespace else type_def.typename
             raise ValueError(f"TypeDef {name} is not registered")
-        type_key = self._check_remote_type_def_limit(type_def)
+        type_key = self._remote_type_def_cache_key(type_def)
         if local_type_info is None:
             # Compatible metadata authorizes only this fixed framework owner;
             # it never loads or manufactures the sender-named Python class.
@@ -1458,6 +1441,9 @@ class TypeResolver:
         else:
             self._bind_local_type_def(type_def, local_type_info)
         type_info = self._build_type_info_from_typedef(type_def)
-        self._meta_shared_type_info[hash_key] = type_info
-        self._record_remote_type_def(type_key)
+        # Full caches must not reject a valid schema. The current read's metadata
+        # references own uncached TypeInfo and its compatible serializer.
+        if type_key is not None:
+            self._meta_shared_type_info[hash_key] = type_info
+            self._record_remote_type_def(type_key)
         return type_info

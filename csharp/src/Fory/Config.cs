@@ -124,12 +124,12 @@ public sealed class Config
     public int MaxTypeMetaBytes { get; }
 
     /// <summary>
-    /// Gets the maximum accepted remote metadata versions for one logical type.
+    /// Gets the maximum cached remote metadata versions for one logical type.
     /// </summary>
     public int MaxSchemaVersionsPerType { get; }
 
     /// <summary>
-    /// Gets the average remote metadata version limit across accepted remote types.
+    /// Gets the average cached remote metadata version limit across cached remote types.
     /// </summary>
     public int MaxAverageSchemaVersionsPerType { get; }
 }
@@ -266,7 +266,7 @@ public sealed class ForyBuilder
     }
 
     /// <summary>
-    /// Sets the maximum accepted remote metadata versions for one logical type.
+    /// Sets the maximum cached remote metadata versions for one logical type.
     /// </summary>
     public ForyBuilder MaxSchemaVersionsPerType(int value)
     {
@@ -280,7 +280,7 @@ public sealed class ForyBuilder
     }
 
     /// <summary>
-    /// Sets the average remote metadata version limit across accepted remote types.
+    /// Sets the average cached remote metadata version limit across cached remote types.
     /// </summary>
     public ForyBuilder MaxAverageSchemaVersionsPerType(int value)
     {

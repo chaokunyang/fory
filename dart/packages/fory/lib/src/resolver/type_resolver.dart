@@ -1432,7 +1432,7 @@ final class TypeResolver {
     if (TypeHeader.sameHash(localTypeDef.header, header.value)) {
       return resolved;
     }
-    final remoteSchemaKey = _checkRemoteTypeDefLimit(
+    final remoteSchemaKey = _typeDefCacheKey(
       typeId: typeId,
       userTypeId: userTypeId,
       resolved: resolved,
@@ -1465,7 +1465,11 @@ final class TypeResolver {
       evolving: resolved.evolving,
       fields: resolved.fields,
       serializer: resolved.serializer,
-      structSerializer: resolved.structSerializer,
+      // An overflow schema must not populate the registered serializer's layout cache.
+      structSerializer:
+          remoteSchemaKey == null && isStruct
+              ? StructSerializer(resolved.serializer, localTypeDef, this)
+              : resolved.structSerializer,
       userTypeId: resolved.userTypeId,
       namespace: resolved.namespace,
       typeName: resolved.typeName,
@@ -1479,13 +1483,16 @@ final class TypeResolver {
         remoteResolved,
       );
     }
-    _parsedTypeMetaCache.remember(header, remoteResolved);
-    _recordRemoteTypeDef(remoteSchemaKey);
+    // Full caches still decode valid schemas; root references own overflow metadata.
+    if (remoteSchemaKey != null) {
+      _parsedTypeMetaCache.remember(header, remoteResolved);
+      _recordRemoteTypeDef(remoteSchemaKey);
+    }
     return remoteResolved;
   }
 
   @pragma('vm:never-inline')
-  String _checkRemoteTypeDefLimit({
+  String? _typeDefCacheKey({
     required int typeId,
     required int? userTypeId,
     required TypeInfo resolved,
@@ -1496,18 +1503,11 @@ final class TypeResolver {
             : 'n${resolved.namespace ?? ''}\u0000${resolved.typeName ?? ''}';
     final versionsForType = _remoteSchemaVersionsByType[key] ?? 0;
     if (versionsForType >= config.maxSchemaVersionsPerType) {
-      throw StateError(
-        'Remote schema version limit exceeded for one type. The data may be '
-        'malicious. If the data is not malicious, please increase '
-        'maxSchemaVersionsPerType=${config.maxSchemaVersionsPerType}.',
-      );
+      return null;
     }
     if (versionsForType == 0 &&
         _remoteSchemaVersionsByType.length >= _maxRemoteTypeMetaKeys) {
-      throw StateError(
-        'Remote schema logical type limit exceeded. The data may be '
-        'malicious.',
-      );
+      return null;
     }
     final acceptedTypeCount =
         versionsForType == 0
@@ -1518,11 +1518,7 @@ final class TypeResolver {
     if (_totalAcceptedSchemaVersions >= _minRemoteTypeMetaLimit &&
         _totalAcceptedSchemaVersions ~/ acceptedTypeCount >=
             config.maxAverageSchemaVersionsPerType) {
-      throw StateError(
-        'Remote schema version limit exceeded globally. The data may be '
-        'malicious. If the data is not malicious, please increase '
-        'maxAverageSchemaVersionsPerType=${config.maxAverageSchemaVersionsPerType}.',
-      );
+      return null;
     }
     return key;
   }

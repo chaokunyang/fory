@@ -1898,7 +1898,7 @@ TEST(SerializationTest, StaticMapChecksOwner) {
   }
 }
 
-TEST(SerializationTest, RemoteSchemaLimitRejectsExtraVersions) {
+TEST(SerializationTest, RemoteSchemaOverflowIsUncached) {
   Config config;
   config.compatible = true;
   config.max_schema_versions_per_type = 1;
@@ -1908,11 +1908,22 @@ TEST(SerializationTest, RemoteSchemaLimitRejectsExtraVersions) {
       ctx, make_remote_type_meta("Unknown", "first_value"));
   ASSERT_TRUE(first.ok()) << first.error().to_string();
 
-  auto second = append_and_read_type_meta(
-      ctx, make_remote_type_meta("Unknown", "second_value"));
-  EXPECT_FALSE(second.ok());
-  ASSERT_FALSE(second.ok());
-  EXPECT_EQ(second.error().code(), ErrorCode::InvalidData);
+  auto overflow_bytes = make_remote_type_meta("Unknown", "second_value");
+  auto second = append_and_read_type_meta(ctx, overflow_bytes);
+  ASSERT_TRUE(second.ok()) << second.error().to_string();
+  Buffer reference;
+  reference.write_var_uint32(1);
+  ctx.attach(reference);
+  auto referenced = ctx.read_type_meta();
+  ASSERT_TRUE(referenced.ok());
+  EXPECT_EQ(second.value(), referenced.value());
+  ctx.detach();
+  overflow_bytes.back() ^= 1;
+  EXPECT_FALSE(append_and_read_type_meta(ctx, overflow_bytes).ok());
+  auto cached = append_and_read_type_meta(
+      ctx, make_remote_type_meta("Unknown", "first_value"));
+  ASSERT_TRUE(cached.ok());
+  EXPECT_EQ(first.value(), cached.value());
 }
 
 TEST(SerializationTest, RemoteNonStructTypeMetaUsesSchemaLimit) {
@@ -1927,9 +1938,7 @@ TEST(SerializationTest, RemoteNonStructTypeMetaUsesSchemaLimit) {
 
   auto second = append_and_read_type_meta(
       ctx, make_remote_non_struct_type_meta(TypeId::NAMED_EXT, "RemoteEnum"));
-  EXPECT_FALSE(second.ok());
-  ASSERT_FALSE(second.ok());
-  EXPECT_EQ(second.error().code(), ErrorCode::InvalidData);
+  ASSERT_TRUE(second.ok()) << second.error().to_string();
 }
 
 TEST(SerializationTest, ExactLocalNonStructTypeMetaBypassesLimit) {
@@ -2005,16 +2014,10 @@ TEST(SerializationTest, RemoteSchemaKeyLimitPersists) {
     ASSERT_TRUE(accepted.ok()) << i << ": " << accepted.error().to_string();
   }
 
-  auto rejected_bytes = make_remote_type_meta("RemoteOverflow", "value");
-  auto rejected = append_and_read_type_meta(ctx, rejected_bytes);
-  ASSERT_FALSE(rejected.ok());
-  EXPECT_EQ(rejected.error().code(), ErrorCode::InvalidData);
-  EXPECT_NE(rejected.error().message().find("logical type limit"),
-            std::string::npos);
-
-  auto rejected_again = append_and_read_type_meta(ctx, rejected_bytes);
-  ASSERT_FALSE(rejected_again.ok());
-  EXPECT_EQ(rejected_again.error().code(), ErrorCode::InvalidData);
+  auto overflow_bytes = make_remote_type_meta("RemoteOverflow", "value");
+  ASSERT_TRUE(append_and_read_type_meta(ctx, overflow_bytes).ok());
+  overflow_bytes.back() ^= 1;
+  EXPECT_FALSE(append_and_read_type_meta(ctx, overflow_bytes).ok());
 
   auto existing_version = append_and_read_type_meta(
       ctx, make_remote_type_meta("Remote0", "second_value"));

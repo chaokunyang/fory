@@ -693,10 +693,11 @@ private:
                                            const TypeInfo *expected_type_info);
   static bool matches_expected_type(const TypeInfo *concrete_owner,
                                     const TypeInfo *expected_type_info);
-  FORY_NOINLINE Result<std::string, Error>
-  check_remote_type_meta_limit(const TypeMeta &type_meta);
+  FORY_NOINLINE bool can_cache_type_meta(const TypeMeta &type_meta,
+                                         std::string &type_key);
   void record_remote_type_meta(const std::string &type_key);
   FORY_NOINLINE bool set_graph_memory_exceeded(size_t bytes, size_t remaining);
+  FORY_NOINLINE void reset_meta();
   FORY_NOINLINE bool set_unbacked_container_items_exceeded(size_t items,
                                                            size_t remaining);
 
@@ -723,12 +724,16 @@ private:
   // Fast path for the last checked non-local TypeMeta owner. Its TypeMeta hash
   // is the cache identity; local expected hits are root-local only.
   const CachedTypeInfo *cached_meta_type_info_ = nullptr;
-  bool meta_string_table_active_ = false;
+  bool meta_cleanup_needed_ = false;
 
   // Dynamic meta strings used for named type/class info.
   meta::MetaStringTable meta_string_table_;
   fory::flat_hash_map<std::string, uint32_t> remote_schema_versions_by_type_;
   uint64_t total_accepted_schema_versions_ = 0;
+  // Keep cold overflow storage after the existing hot read/cache state so
+  // normal roots retain its field layout. The root owns these schemas until
+  // reset.
+  std::vector<std::unique_ptr<CachedTypeInfo>> uncached_type_infos_;
 };
 
 } // namespace serialization

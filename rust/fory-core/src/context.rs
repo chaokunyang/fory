@@ -85,7 +85,17 @@ impl<T> ContextCache<T> {
             // Fast path: same Fory instance as last time
             return Ok(self.cached_context.as_mut().unwrap());
         }
+        self.insert_result(id, create)
+    }
 
+    // Keep allocation and map updates out of each inlined root operation.
+    #[cold]
+    #[inline(never)]
+    fn insert_result<E>(
+        &mut self,
+        id: u64,
+        create: impl FnOnce() -> Result<Box<T>, E>,
+    ) -> Result<&mut T, E> {
         // Check if we need to swap with cached
         if self.cached_context.is_some() {
             // Move current cached to others

@@ -1319,6 +1319,37 @@ func compatibleNestedArrayEvolves() throws {
 }
 
 @Test
+func schemaOverflowRootReuse() throws {
+    let reader = Fory(compatible: true, maxSchemaVersionsPerType: 1)
+    let firstWriter = Fory(compatible: true)
+    let secondWriter = Fory(compatible: true)
+    try reader.register(CompatibleProfileV1.self, id: 9910)
+    try firstWriter.register(CompatibleProfileV2.self, id: 9910)
+    try secondWriter.register(CompatibleNestedProfileV2.self, id: 9910)
+    let first = try firstWriter.serialize([
+        CompatibleProfileV2(id: 17, name: "first", nickname: "a", scores: [1]),
+        CompatibleProfileV2(id: 19, name: "second", nickname: "b", scores: [2])
+    ])
+    let overflow = try secondWriter.serialize([
+        CompatibleNestedProfileV2(id: 29, name: "third", alias: "c", scores: [3]),
+        CompatibleNestedProfileV2(id: 31, name: "fourth", alias: "d", scores: [4])
+    ])
+    let initial: [CompatibleProfileV1] = try reader.deserialize(first)
+    #expect(initial.map(\.id) == [17, 19])
+    let overflowHash = try secondWriter.typeResolver.requireTypeInfo(for: CompatibleNestedProfileV2.self).typeDefHeaderHash!
+    for _ in 0..<2 {
+        let result: [CompatibleProfileV1] = try reader.deserialize(overflow)
+        #expect(result == [CompatibleProfileV1(id: 29, name: "third"), CompatibleProfileV1(id: 31, name: "fourth")])
+        #expect(reader.typeResolver.getTypeInfo(forHeaderHash: overflowHash) == nil)
+        #expect(throws: (any Error).self) {
+            let _: [CompatibleProfileV1] = try reader.deserialize(Data(overflow.dropLast()))
+        }
+    }
+    let reused: [CompatibleProfileV1] = try reader.deserialize(first)
+    #expect(reused == initial)
+}
+
+@Test
 func compatibleReadConvertsFixedUInt32() throws {
     let writer = Fory(config: .init(trackRef: false, compatible: true))
     try writer.register(RemoteFixedUInt32V1.self, id: 9920)

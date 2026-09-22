@@ -184,11 +184,11 @@ class Fory:
 
             max_type_meta_bytes: Maximum accepted body size in one received TypeDef.
 
-            max_schema_versions_per_type: Maximum accepted remote metadata versions for one
+            max_schema_versions_per_type: Maximum cached remote metadata versions for one
                 logical type.
 
-            max_average_schema_versions_per_type: Average remote metadata versions allowed
-                across accepted remote types.
+            max_average_schema_versions_per_type: Average cached remote metadata versions allowed
+                across cached remote types.
 
             max_graph_memory_bytes: Approximate graph-memory gate per root deserialization.
                 Mainly covers materialized collections, maps, arrays, structs, and objects. Leaf

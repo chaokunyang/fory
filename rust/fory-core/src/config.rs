@@ -52,9 +52,9 @@ pub struct Config {
     pub max_type_fields: u32,
     /// Maximum accepted body size in one received TypeMeta.
     pub max_type_meta_bytes: u32,
-    /// Maximum accepted remote metadata versions for one logical type.
+    /// Maximum cached remote metadata versions for one logical type.
     pub max_schema_versions_per_type: u32,
-    /// Maximum accepted average remote metadata versions across logical types.
+    /// Maximum cached average remote metadata versions across logical types.
     pub max_average_schema_versions_per_type: u32,
 }
 
@@ -157,13 +157,13 @@ impl Config {
         self.max_type_meta_bytes as usize
     }
 
-    /// Get maximum accepted remote metadata versions for one logical type.
+    /// Get maximum cached remote metadata versions for one logical type.
     #[inline(always)]
     pub fn max_schema_versions_per_type(&self) -> usize {
         self.max_schema_versions_per_type as usize
     }
 
-    /// Get maximum accepted average remote metadata versions across logical types.
+    /// Get maximum cached average remote metadata versions across logical types.
     #[inline(always)]
     pub fn max_average_schema_versions_per_type(&self) -> usize {
         self.max_average_schema_versions_per_type as usize

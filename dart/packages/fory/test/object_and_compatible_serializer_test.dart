@@ -23,6 +23,23 @@ import 'package:test/test.dart';
 part 'object_and_compatible_serializer_test.fory.dart';
 
 @ForyStruct()
+class SchemaValue {
+  int value = 0;
+}
+
+@ForyStruct()
+class SchemaValueA {
+  int value = 0;
+  String extraA = '';
+}
+
+@ForyStruct()
+class SchemaValueB {
+  int value = 0;
+  String extraB = '';
+}
+
+@ForyStruct()
 class SharedLeaf {
   SharedLeaf();
 
@@ -172,6 +189,64 @@ void _registerV2Types(Fory fory) {
 }
 
 void main() {
+  test('schema overflow root reuse', () {
+    final reader = Fory(compatible: true, maxSchemaVersionsPerType: 1);
+    final firstWriter = Fory(compatible: true);
+    final secondWriter = Fory(compatible: true);
+    ObjectAndCompatibleSerializerTestForyModule.register(
+      reader,
+      SchemaValue,
+      name: 'test.SchemaValue',
+    );
+    ObjectAndCompatibleSerializerTestForyModule.register(
+      firstWriter,
+      SchemaValueA,
+      name: 'test.SchemaValue',
+    );
+    ObjectAndCompatibleSerializerTestForyModule.register(
+      secondWriter,
+      SchemaValueB,
+      name: 'test.SchemaValue',
+    );
+    final first = firstWriter.serialize(<Object>[
+      SchemaValueA()
+        ..value = 17
+        ..extraA = 'a',
+      SchemaValueA()
+        ..value = 19
+        ..extraA = 'b',
+    ]);
+    final overflow = secondWriter.serialize(<Object>[
+      SchemaValueB()
+        ..value = 29
+        ..extraB = 'c',
+      SchemaValueB()
+        ..value = 31
+        ..extraB = 'd',
+    ]);
+    expect(
+      reader.deserialize<List>(first).cast<SchemaValue>().map((v) => v.value),
+      [17, 19],
+    );
+    for (var i = 0; i < 2; i++) {
+      expect(
+        reader
+            .deserialize<List>(overflow)
+            .cast<SchemaValue>()
+            .map((v) => v.value),
+        [29, 31],
+      );
+      expect(
+        () =>
+            reader.deserialize<List>(overflow.sublist(0, overflow.length - 1)),
+        throwsA(anything),
+      );
+    }
+    expect(
+      reader.deserialize<List>(first).cast<SchemaValue>().map((v) => v.value),
+      [17, 19],
+    );
+  });
   group('generated struct serialization', () {
     test('direct ref fields preserve identity while plain fields do not', () {
       final fory = Fory();

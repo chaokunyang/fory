@@ -553,6 +553,36 @@ size_t single_byte_delta_index(const std::vector<uint8_t> &left,
   return index;
 }
 
+TEST(SchemaEvolutionTest, SchemaOverflowRootReuse) {
+  auto reader =
+      Fory::builder().compatible(true).max_schema_versions_per_type(1).build();
+  auto first_writer = Fory::builder().compatible(true).build();
+  auto second_writer = Fory::builder().compatible(true).build();
+  ASSERT_TRUE(reader.register_struct<PersonV1>(999).ok());
+  ASSERT_TRUE(first_writer.register_struct<PersonV2>(999).ok());
+  ASSERT_TRUE(second_writer.register_struct<PersonV3>(999).ok());
+  auto first = first_writer.serialize(
+      std::vector<PersonV2>{{"first", 17, "a"}, {"second", 19, "b"}});
+  auto overflow = second_writer.serialize(std::vector<PersonV3>{
+      {"third", 29, "c", "d", "e"}, {"fourth", 31, "f", "g", "h"}});
+  ASSERT_TRUE(first.ok());
+  ASSERT_TRUE(overflow.ok());
+  ASSERT_TRUE(reader.deserialize<std::vector<PersonV1>>(first.value()).ok());
+  for (int i = 0; i < 2; ++i) {
+    auto result = reader.deserialize<std::vector<PersonV1>>(overflow.value());
+    ASSERT_TRUE(result.ok()) << result.error().to_string();
+    ASSERT_EQ(result->size(), 2);
+    EXPECT_EQ(result->at(0), (PersonV1{"third", 29}));
+    EXPECT_EQ(result->at(1), (PersonV1{"fourth", 31}));
+    auto truncated = overflow.value();
+    truncated.pop_back();
+    EXPECT_FALSE(reader.deserialize<std::vector<PersonV1>>(truncated).ok());
+  }
+  auto result = reader.deserialize<std::vector<PersonV1>>(first.value());
+  ASSERT_TRUE(result.ok());
+  EXPECT_EQ(result->at(0), (PersonV1{"first", 17}));
+}
+
 TEST(SchemaEvolutionTest, AddingSingleField) {
   // Serialize V1, deserialize as V2 (V2 should have default value for email)
   // Create separate Fory instances for V1 and V2

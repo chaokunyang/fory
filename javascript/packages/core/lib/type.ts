@@ -308,7 +308,9 @@ export interface Config {
   maxUnbackedContainerItems: number;
   maxTypeFields: number;
   maxTypeMetaBytes: number;
+  /** Maximum cached remote schemas per logical type; overflow is decoded without caching. */
   maxSchemaVersionsPerType: number;
+  /** Average cached remote schemas across logical types, with a global floor of 8192. */
   maxAverageSchemaVersionsPerType: number;
   hooks: {
     afterCodeGenerated?: (code: string) => string;

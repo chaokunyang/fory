@@ -673,7 +673,7 @@
                       <arg value="${project.build.directory}/${project.build.finalName}.jar"/>
                       <arg value="--module-version"/>
                       <arg value="${project.version}"/>
-                      <arg value="--date=${project.build.outputTimestamp}"/>
+                      <arg line="${fory.jar.date.option}"/>
                       <arg value="-C"/>
                       <arg value="${project.build.outputDirectory}"/>
                       <arg value="org/apache/fory/Fory.class"/>

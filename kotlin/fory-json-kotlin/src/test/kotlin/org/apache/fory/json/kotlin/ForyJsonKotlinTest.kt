@@ -61,6 +61,8 @@ class ForyJsonKotlinTest {
 
   data class ReferencedDefault(val base: Int, val derived: Int = base + 1)
 
+  data class DefaultProperties(val count: Int = 7, val values: MutableList<Int> = mutableListOf())
+
   data class UnsignedValues(val count: UInt, val total: ULong, val optional: UInt?)
 
   @JvmInline value class SignedLongId(val value: Long)
@@ -93,6 +95,46 @@ class ForyJsonKotlinTest {
       account,
       fory.fromJson(fory.toJsonBytes(account, jsonTypeRef<Account>()), jsonTypeRef<Account>())
     )
+  }
+
+  @Test
+  fun requiredProperties() {
+    for (codegen in listOf(false, true)) {
+      val strict =
+        ForyJsonKotlin.builder()
+          .withCodegen(codegen)
+          .withAsyncCompilation(false)
+          .failOnMissingRequiredProperties(true)
+          .build()
+      val lenient =
+        ForyJsonKotlin.builder().withCodegen(codegen).withAsyncCompilation(false).build()
+      for (text in listOf("{}", "{\"unknown\":\"中\"}")) {
+        assertFailsWith<ForyJsonException> {
+          strict.fromJson(text, jsonTypeRef<ReferencedDefault>())
+        }
+        assertFailsWith<ForyJsonException> {
+          strict.fromJson(text.toByteArray(), jsonTypeRef<Box<String?>>())
+        }
+        assertEquals(null, lenient.fromJson(text, jsonTypeRef<Box<String?>>()).value)
+      }
+      assertEquals(null, strict.fromJson("{\"value\":null}", jsonTypeRef<Box<String?>>()).value)
+      assertFailsWith<ForyJsonException> {
+        strict.fromJson("{\"id\":9,\"name\":null}", jsonTypeRef<Required>())
+      }
+      assertEquals(
+        ReferencedDefault(5, 6),
+        strict.fromJson("{\"base\":5}", jsonTypeRef<ReferencedDefault>())
+      )
+      val first = strict.fromJson("{}", jsonTypeRef<DefaultProperties>())
+      val second = strict.fromJson("{}".toByteArray(), jsonTypeRef<DefaultProperties>())
+      assertEquals(7, first.count)
+      first.values.add(1)
+      assertTrue(second.values.isEmpty())
+      assertEquals(
+        first,
+        strict.fromJson(strict.toPrettyJsonBytes(first), jsonTypeRef<DefaultProperties>())
+      )
+    }
   }
 
   @Test

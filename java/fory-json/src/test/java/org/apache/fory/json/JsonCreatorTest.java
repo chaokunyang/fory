@@ -30,6 +30,7 @@ import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonProperty;
+import org.apache.fory.json.annotation.JsonUnwrapped;
 import org.apache.fory.json.codec.AbstractJsonValueCodec;
 import org.apache.fory.json.codec.JsonObjectModel;
 import org.apache.fory.json.codec.TransparentNullCodec;
@@ -52,6 +53,52 @@ public class JsonCreatorTest extends ForyJsonTestModels {
   @Factory(dataProvider = "enableCodegen")
   public JsonCreatorTest(boolean codegen) {
     super(codegen);
+  }
+
+  @Test
+  public void requiredProperties() {
+    ForyJson strict = newJsonBuilder().failOnMissingRequiredProperties(true).build();
+    ForyJson lenient = newJsonBuilder().failOnMissingRequiredProperties(false).build();
+    for (String text :
+        new String[] {"{}", "{\"id\":0}", "{\"name\":\"中\"}", "{\"unknown\":1,\"name\":\"ok\"}"}) {
+      assertThrows(ForyJsonException.class, () -> strict.fromJson(text, User.class));
+      assertThrows(
+          ForyJsonException.class,
+          () -> strict.fromJson(text.getBytes(StandardCharsets.UTF_8), User.class));
+      assertEquals(lenient.fromJson("{}", User.class).id, 0L);
+      assertEquals(lenient.fromJson("{}".getBytes(StandardCharsets.UTF_8), User.class).name, null);
+    }
+    for (String text :
+        new String[] {
+          "{\"id\":0,\"name\":null}",
+          "{\"name\":\"中\",\"id\":0}",
+          "{\"id\":1,\"unknown\":true,\"name\":\"ok\"}"
+        }) {
+      User value = strict.fromJson(text, User.class);
+      User bytes = strict.fromJson(text.getBytes(StandardCharsets.UTF_8), User.class);
+      assertEquals(bytes.id, value.id);
+      assertEquals(bytes.name, value.name);
+    }
+    String factoryText = "{\"user_id\":0,\"display_name\":null}";
+    assertEquals(strict.fromJson(factoryText, FactoryUser.class).id, 0L);
+    assertThrows(ForyJsonException.class, () -> strict.fromJson("{}", FactoryUser.class));
+    assertEquals(strict.fromJson("{\"id\":0}", ContainerCreator.class).values, null);
+    assertThrows(ForyJsonException.class, () -> strict.fromJson("{}", ContainerCreator.class));
+    assertEquals(strict.fromJson("{}", InitializedBean.class).value, 7);
+  }
+
+  @Test
+  public void requiredUnwrappedProperties() {
+    ForyJson json = newJsonBuilder().failOnMissingRequiredProperties(true).build();
+    for (String text : new String[] {"{}", "{\"id\":1}"}) {
+      assertThrows(ForyJsonException.class, () -> json.fromJson(text, UnwrappedCreator.class));
+      assertThrows(
+          ForyJsonException.class,
+          () -> json.fromJson(text.getBytes(StandardCharsets.UTF_8), UnwrappedCreator.class));
+    }
+    UnwrappedCreator value = json.fromJson("{\"id\":1,\"name\":\"中\"}", UnwrappedCreator.class);
+    assertEquals(value.user.name, "中");
+    assertEquals(json.fromJson(json.toPrettyJsonBytes(value), UnwrappedCreator.class).user.id, 1L);
   }
 
   @Test
@@ -88,6 +135,7 @@ public class JsonCreatorTest extends ForyJsonTestModels {
             DeferredCarrierOwner.class.getConstructor(String.class),
             new JsonCreatorFieldInfo[] {deferred},
             new Object[1],
+            null,
             null);
     creator.resolveTypes(resolver);
   }
@@ -444,6 +492,30 @@ public class JsonCreatorTest extends ForyJsonTestModels {
     public User(long id, String name) {
       this.id = id;
       this.name = name;
+    }
+  }
+
+  public static final class ContainerCreator {
+    public final int id;
+    public final java.util.List<String> values;
+
+    @JsonCreator({"id", "values"})
+    public ContainerCreator(int id, java.util.List<String> values) {
+      this.id = id;
+      this.values = values;
+    }
+  }
+
+  public static final class InitializedBean {
+    public int value = 7;
+  }
+
+  public static final class UnwrappedCreator {
+    @JsonUnwrapped public final User user;
+
+    @JsonCreator({"user"})
+    public UnwrappedCreator(User user) {
+      this.user = user;
     }
   }
 

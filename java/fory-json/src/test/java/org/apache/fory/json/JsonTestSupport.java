@@ -47,6 +47,7 @@ final class JsonTestSupport {
           Include.NON_NULL,
           false,
           false,
+          false,
           JsonByteArray.Format.BASE64,
           false,
           false,

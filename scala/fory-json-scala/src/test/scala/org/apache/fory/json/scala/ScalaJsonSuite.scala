@@ -269,6 +269,17 @@ object MethodLocalHolder {
 
 case class NullableRequired(value: String)
 
+case class RequiredProperties(
+    text: String,
+    number: Int,
+    enabled: Boolean,
+    option: Option[String],
+    values: List[Int],
+    arrays: Array[Int],
+    default: Int = 7,
+    @JsonIgnore ignored: Int
+)
+
 case class EmptyRequired(value: String, items: java.util.List[String], numbers: Array[Int])
 
 case class ExplicitEmptyRequired(
@@ -2261,6 +2272,34 @@ class ScalaJsonSuite extends AnyFunSuite {
       val point = MissingUnwrapped(NestedModels.Point(2, null))
       assert(json.fromJson(flattened, classOf[MissingUnwrapped]) == point)
       assert(json.fromJson(flattened.getBytes(UTF_8), classOf[MissingUnwrapped]) == point)
+    }
+  }
+
+  test("required constructor properties preserve defaults") {
+    for (codegen <- Seq(false, true)) {
+      val strict = ForyJsonScala.builder().withCodegen(codegen).withAsyncCompilation(false)
+        .failOnMissingRequiredProperties(true).build()
+      val lenient = ForyJsonScala.builder().withCodegen(codegen).withAsyncCompilation(false).build()
+      for (text <- Seq("{}", """{"text":"中","number":0}""", """{"text":"ok","enabled":false}""")) {
+        assertThrows[ForyJsonException](strict.fromJson(text, classOf[RequiredProperties]))
+        assertThrows[ForyJsonException](strict.fromJson(text.getBytes(UTF_8), classOf[RequiredProperties]))
+        assert(lenient.fromJson("{}", classOf[RequiredProperties]).number == 0)
+      }
+      for (text <- Seq("""{"text":null,"number":0,"enabled":false}""",
+          """{"enabled":false,"unknown":1,"text":"中","number":0}""")) {
+        val value = strict.fromJson(text, classOf[RequiredProperties])
+        assert(value.option == None && value.values.isEmpty && value.arrays.isEmpty)
+        assert(value.default == 7 && value.ignored == 0)
+        val bytes = strict.fromJson(text.getBytes(UTF_8), classOf[RequiredProperties])
+        assert(bytes.text == value.text && bytes.arrays.isEmpty && bytes.default == 7)
+      }
+      assert(strict.fromJson("{}", classOf[EmptyDefault]).value == "")
+      assert(strict.fromJson("{}", classOf[NestedModels.OptionalOnly]).value == None)
+      assert(strict.fromJson("{\"a\":5}", classOf[CurriedDefault]).b == 6)
+      assertThrows[ForyJsonException](strict.fromJson("{}", classOf[CurriedDefault]))
+      val first = strict.fromJson("{\"text\":\"x\",\"number\":0,\"enabled\":false}", classOf[RequiredProperties])
+      val second = strict.fromJson(strict.toPrettyJsonBytes(first), classOf[RequiredProperties])
+      assert(second.arrays ne first.arrays)
     }
   }
 

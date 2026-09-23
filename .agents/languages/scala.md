@@ -10,7 +10,9 @@ Load this file when changing `scala/`.
   false for booleans, empty collections and arrays, None for Option, and null for other references.
   Explicit constructor defaults take precedence. Mutable defaults must be fresh for each object.
   Explicit JSON null keeps its existing decoding semantics. Preserve these rules in interpreted
-  and generated readers.
+  and generated readers. With `failOnMissingRequiredProperties(true)`, preserve declared defaults
+  and Option/container defaults, but require ordinary constructor properties instead of applying
+  scalar zero/false/null fallbacks. Explicit null and ignored properties keep their existing rules.
 - Scala JSON data occurrences of Unit use BoxedUnit, including ScalaTypeRef roots, nested
   arguments, array components, and case-class properties. Normalize this at Scala type metadata
   construction in both compiler versions and reuse ScalaUnitCodec's JSON null representation.

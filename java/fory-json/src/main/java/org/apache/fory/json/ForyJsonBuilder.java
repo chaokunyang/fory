@@ -54,6 +54,7 @@ public final class ForyJsonBuilder {
   private Include defaultPropertyInclusion = Include.NON_NULL;
   private boolean writeLongAsString;
   private boolean escapeNonAscii;
+  private boolean failOnMissingRequiredProperties;
   private JsonByteArray.Format byteArrayFormat = JsonByteArray.Format.BASE64;
   private boolean codegenEnabled = true;
   private boolean asyncCompilationEnabled = true;
@@ -143,6 +144,23 @@ public final class ForyJsonBuilder {
    */
   public ForyJsonBuilder escapeNonAscii(boolean escapeNonAscii) {
     this.escapeNonAscii = escapeNonAscii;
+    return this;
+  }
+
+  /**
+   * Rejects missing required constructor or factory properties. Disabled by default.
+   *
+   * <p>Declared language defaults and existing optional/container defaults still apply. Ordinary
+   * properties without declared defaults must appear instead of receiving zero, false, or null.
+   * Explicit JSON null remains subject to the existing type and nullability rules. Ignored
+   * properties, ordinary no-argument beans, and post-constructor properties keep their existing
+   * behavior. This setting applies to Fory-owned object codecs, including nested objects.
+   *
+   * <p>Writing is unaffected. An inclusion policy that omits a required property can produce JSON
+   * rejected by an instance with this setting enabled.
+   */
+  public ForyJsonBuilder failOnMissingRequiredProperties(boolean enabled) {
+    failOnMissingRequiredProperties = enabled;
     return this;
   }
 
@@ -381,6 +399,7 @@ public final class ForyJsonBuilder {
         defaultPropertyInclusion,
         writeLongAsString,
         escapeNonAscii,
+        failOnMissingRequiredProperties,
         byteArrayFormat,
         effectiveCodegen,
         effectiveAsyncCompilation,

@@ -213,6 +213,29 @@ public class JsonAsyncCompilationTest {
   }
 
   @Test
+  public void requiredPropertiesSurviveReplacement() throws Exception {
+    ControlledJson controlled = controlledJson(new CodecRegistry(), 1, true);
+    ForyJson json = controlled.json;
+    JsonTypeResolver resolver = currentTypeResolver(json);
+    ObjectCodec<AsyncCreator> owner = resolver.getObjectCodec(AsyncCreator.class);
+    JsonTypeInfo info = resolver.getTypeInfo(AsyncCreator.class, AsyncCreator.class);
+    assertSame(info.utf8Reader(), owner);
+    for (int pass = 0; pass < 2; pass++) {
+      for (String text : new String[] {"{}", "{\"name\":\"中\"}"}) {
+        expectThrows(ForyJsonException.class, () -> json.fromJson(text, AsyncCreator.class));
+        expectThrows(
+            ForyJsonException.class,
+            () -> json.fromJson(text.getBytes(StandardCharsets.UTF_8), AsyncCreator.class));
+      }
+      assertEquals(json.fromJson("{\"id\":0,\"name\":null}", AsyncCreator.class).id, 0);
+      controlled.executor.runAll();
+      assertNotSame(info.latin1Reader(), owner);
+      assertNotSame(info.utf16Reader(), owner);
+      assertNotSame(info.utf8Reader(), owner);
+    }
+  }
+
+  @Test
   public void validatorsSurviveReplacement() throws Exception {
     ControlledJson controlled = controlledJson();
     ForyJson json = controlled.json;
@@ -1363,11 +1386,18 @@ public class JsonAsyncCompilationTest {
 
   private static ControlledJson controlledJson(CodecRegistry codecs, int concurrencyLevel)
       throws Exception {
+    return controlledJson(codecs, concurrencyLevel, false);
+  }
+
+  private static ControlledJson controlledJson(
+      CodecRegistry codecs, int concurrencyLevel, boolean failOnMissingRequiredProperties)
+      throws Exception {
     JsonConfig config =
         new JsonConfig(
             Include.NON_NULL,
             false,
             false,
+            failOnMissingRequiredProperties,
             JsonByteArray.Format.BASE64,
             true,
             true,

@@ -23,6 +23,7 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNotSame;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
@@ -279,6 +280,21 @@ public class JsonTypeProcessorTest {
       Object decoded = json.fromJson(text, target);
       assertEquals(target.getMethod("id").invoke(decoded), 9);
       assertEquals(target.getMethod("name").invoke(decoded), "record");
+      ForyJson strict =
+          ForyJson.builder()
+              .withCodegen(codegen)
+              .withAsyncCompilation(false)
+              .withClassLoader(loader)
+              .registerMixin(mixin)
+              .failOnMissingRequiredProperties(true)
+              .build();
+      assertThrows(ForyJsonException.class, () -> strict.fromJson("{}", target));
+      assertThrows(
+          ForyJsonException.class,
+          () -> strict.fromJson("{\"user_id\":9}".getBytes(StandardCharsets.UTF_8), target));
+      assertEquals(strict.fromJson(text, target), value);
+      assertEquals(strict.fromJson(strict.toPrettyJsonBytes(value), target), value);
+      assertEquals(target.getMethod("id").invoke(json.fromJson("{}", target)), 0);
     }
   }
 

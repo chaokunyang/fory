@@ -28,9 +28,11 @@ https://github.com/apache/fory/releases/tag/${rc_tag}
 The release commit:
 https://github.com/apache/fory/commit/${release_commit}
 
+Independent trusted-hardware reproducibility report:
+${reproducibility_report_url}
+
 The artifacts are signed with PGP key fingerprint
-${gpg_fingerprint}, corresponding to ${apache_email}. The key can be found in
-the KEYS file:
+${gpg_fingerprint}. The key can be found in the KEYS file:
 https://downloads.apache.org/fory/KEYS
 
 The vote will remain open for at least 72 hours and close at

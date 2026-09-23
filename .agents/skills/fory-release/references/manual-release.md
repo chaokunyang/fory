@@ -11,9 +11,19 @@ values once and never commit the file.
 
 ```bash
 FORY_RELEASE_MANAGER_NAME="..."
-FORY_RELEASE_APACHE_EMAIL="..."
 FORY_RELEASE_GPG_FINGERPRINT="..."
 FORY_DIST_DEV_WC="..."
+```
+
+Load the configuration and derive the manual release values:
+
+```bash
+release_config="$(git rev-parse --show-toplevel)/.local/fory-release.env"
+test -f "$release_config"
+. "$release_config"
+release_manager_name="${FORY_RELEASE_MANAGER_NAME:?missing release manager name}"
+gpg_fingerprint="${FORY_RELEASE_GPG_FINGERPRINT:?missing GPG fingerprint}"
+svn_wc="${FORY_DIST_DEV_WC:?missing ASF Subversion working-copy path}"
 ```
 
 Export `NEXUS_USERNAME` and `NEXUS_PASSWORD` from the release manager's secret
@@ -55,7 +65,6 @@ Use a clean, updated working copy of the ASF development distribution
 repository.
 
 ```bash
-svn_wc="${FORY_DIST_DEV_WC:?missing ASF Subversion working-copy path}"
 test -d "$svn_wc/.svn" || \
   svn checkout https://dist.apache.org/repos/dist/dev/fory "$svn_wc"
 svn update "$svn_wc"
@@ -76,3 +85,21 @@ files. For the vote template, set:
 ```bash
 release_candidate_url="https://dist.apache.org/repos/dist/dev/fory/${release_version}/"
 ```
+
+## Verify Staged Artifacts
+
+After closing both Nexus repositories, rebuild from the exact RC tag and compare
+the unsigned local output with every staged source and JVM artifact:
+
+```bash
+python3 ci/release.py verify_ci_artifacts \
+  -v "$release_version" \
+  --rc-tag "$rc_tag" \
+  --java-kotlin-id "$java_kotlin_staging_id" \
+  --scala-id "$scala_staging_id" \
+  --gpg-fingerprint "$gpg_fingerprint" \
+  --source-url "$release_candidate_url"
+```
+
+This verification uses only the public signing key. It does not sign or upload
+artifacts. Link the generated reproducibility report in the vote email.

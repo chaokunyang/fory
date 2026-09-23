@@ -19,19 +19,24 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import logging
 import os
+import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -140,6 +145,8 @@ NEXUS_BASE_URL = "https://repository.apache.org"
 NEXUS_TIMEOUT_SECONDS = 30
 NEXUS_CLOSE_ATTEMPTS = 30
 NEXUS_CLOSE_INTERVAL_SECONDS = 10
+FORY_KEYS_URL = "https://downloads.apache.org/fory/KEYS"
+JVM_CHECKSUM_SUFFIXES = (".md5", ".sha1", ".sha256", ".sha512")
 
 
 def prepare(v: str):
@@ -331,6 +338,537 @@ def stage_jvm(v, rc_tag, output=None):
         _write_staging_metadata(output, staging)
 
     close_jvm_staging(v, rc_tag, java_kotlin_id, scala_id)
+
+
+def build_jvm_artifacts(v, output):
+    """Build the unsigned JVM release repository without publishing it."""
+    _check_release_version(v)
+    _require_jvm_release_version(v)
+    _ensure_openjdk25()
+    output = os.path.abspath(output)
+    if os.path.exists(output):
+        raise FileExistsError(f"JVM artifact output already exists: {output}")
+    os.makedirs(output)
+    repository_url = Path(output).as_uri()
+    # Reproducibility requires clean build outputs, not an empty dependency cache.
+    _run_release_args(
+        _local_maven_command(JAVA_RELEASE_DEPLOY_CMD, repository_url),
+        "java",
+    )
+    verify_java_artifacts()
+
+    _run_release_args(
+        _local_maven_command(KOTLIN_RELEASE_DEPLOY_CMD, repository_url),
+        "kotlin",
+    )
+    verify_kotlin_artifacts()
+
+    _run_release_args(
+        [
+            "sbt",
+            f"-Dfory.maven.repo={repository_url}",
+            "clean",
+            "project fory-scala",
+            "+publish",
+            "project fory-json-scala",
+            "+publish",
+        ],
+        "scala",
+    )
+    scala_repository = os.path.join(
+        PROJECT_ROOT_DIR,
+        "scala",
+        "target",
+        "sonatype-staging",
+        v,
+        "org",
+        "apache",
+        "fory",
+    )
+    if not os.path.isdir(scala_repository):
+        raise RuntimeError(
+            f"Scala publication repository not found: {scala_repository}"
+        )
+    shutil.copytree(
+        scala_repository,
+        os.path.join(output, "org", "apache", "fory"),
+        dirs_exist_ok=True,
+    )
+    logger.info("Built unsigned JVM release repository: %s", output)
+
+
+def verify_ci_artifacts(
+    v,
+    rc_tag,
+    java_kotlin_staging_id,
+    scala_staging_id,
+    gpg_fingerprint,
+    source_url=None,
+    keys_url=FORY_KEYS_URL,
+    output=None,
+):
+    """Rebuild an RC locally and compare every signed CI artifact byte-for-byte."""
+    _validate_release_candidate(v, rc_tag)
+    staging_ids = (java_kotlin_staging_id, scala_staging_id)
+    if len(set(staging_ids)) != 2:
+        raise ValueError("Java/Kotlin and Scala staging repository IDs must differ")
+    for staging_id in staging_ids:
+        if not re.fullmatch(r"orgapachefory-\d+", staging_id):
+            raise ValueError(f"Invalid Apache Fory staging repository ID: {staging_id}")
+    expected_fingerprint = _normalize_gpg_fingerprint(gpg_fingerprint)
+    source_url = (
+        source_url or f"https://release-test.apache.org/vote/fory/{v}"
+    ).rstrip("/")
+    output = output or os.path.join(
+        PROJECT_ROOT_DIR,
+        "dist",
+        f"{rc_tag}-reproducibility-report.md",
+    )
+    output = os.path.abspath(output)
+    release_commit = subprocess.check_output(
+        ["git", "rev-parse", f"{rc_tag}^{{commit}}"],
+        cwd=PROJECT_ROOT_DIR,
+        text=True,
+    ).strip()
+    _ensure_openjdk25()
+
+    with tempfile.TemporaryDirectory(prefix="fory-ci-artifact-verification-") as root:
+        checkout = os.path.join(root, "checkout")
+        local_repository = os.path.join(root, "local-maven-repository")
+        staged = os.path.join(root, "staged")
+        gnupg_home = os.path.join(root, "gnupg")
+        os.makedirs(staged)
+        os.makedirs(gnupg_home, mode=0o700)
+        subprocess.check_call(
+            [
+                "git",
+                "clone",
+                "--quiet",
+                "--no-checkout",
+                "--no-hardlinks",
+                os.path.abspath(PROJECT_ROOT_DIR),
+                checkout,
+            ]
+        )
+        subprocess.check_call(
+            ["git", "checkout", "--quiet", "--detach", release_commit], cwd=checkout
+        )
+        subprocess.check_call(
+            ["git", "branch", "-f", f"releases-{v}", release_commit], cwd=checkout
+        )
+        subprocess.check_call(
+            ["git", "config", "user.name", "Apache Fory Release Verification"],
+            cwd=checkout,
+        )
+        subprocess.check_call(
+            ["git", "config", "user.email", "dev@fory.apache.org"], cwd=checkout
+        )
+        release_script = os.path.join(checkout, "ci", "release.py")
+        subprocess.check_call(
+            [sys.executable, release_script, "build", "-v", v, "--skip-sign"],
+            cwd=checkout,
+        )
+        subprocess.check_call(
+            [
+                sys.executable,
+                release_script,
+                "build_jvm_artifacts",
+                "-v",
+                v,
+                "--output",
+                local_repository,
+            ],
+            cwd=checkout,
+        )
+
+        keys_path = os.path.join(root, "KEYS")
+        _download_file(keys_url, keys_path)
+        gpg_env = os.environ.copy()
+        gpg_env["GNUPGHOME"] = gnupg_home
+        subprocess.check_call(
+            ["gpg", "--batch", "--import", keys_path],
+            env=gpg_env,
+            stdout=subprocess.DEVNULL,
+        )
+
+        rows = []
+        source_archive = f"apache-fory-{v}-src.tar.gz"
+        staged_source = os.path.join(staged, source_archive)
+        staged_source_signature = staged_source + ".asc"
+        staged_source_checksum = staged_source + ".sha512"
+        for suffix, path in (
+            ("", staged_source),
+            (".asc", staged_source_signature),
+            (".sha512", staged_source_checksum),
+        ):
+            _download_file(f"{source_url}/{source_archive}{suffix}", path)
+        _verify_sha512_file(staged_source, staged_source_checksum)
+        _verify_gpg_signature(
+            staged_source,
+            staged_source_signature,
+            expected_fingerprint,
+            gpg_env,
+        )
+        local_source = os.path.join(checkout, "dist", source_archive)
+        rows.append(
+            _compare_release_file("ATR", source_archive, staged_source, local_source)
+        )
+
+        staged_payloads = {}
+        for staging_id in staging_ids:
+            repository_files = _nexus_repository_files(staging_id)
+            payloads = sorted(
+                path for path in repository_files if _is_jvm_release_payload(path, v)
+            )
+            if not payloads:
+                raise RuntimeError(
+                    f"Nexus staging repository has no Fory {v} artifacts: {staging_id}"
+                )
+            for path in payloads:
+                if f"{path}.asc" not in repository_files:
+                    raise RuntimeError(
+                        f"Nexus artifact has no detached signature: {staging_id}/{path}"
+                    )
+                if path in staged_payloads:
+                    raise RuntimeError(
+                        f"Duplicate JVM artifact in staging repositories: {path}"
+                    )
+                staged_payloads[path] = staging_id
+
+        local_payloads = set(_local_jvm_release_payloads(local_repository, v))
+        staged_paths = set(staged_payloads)
+        missing_local = sorted(staged_paths.difference(local_payloads))
+        extra_local = sorted(local_payloads.difference(staged_paths))
+        if missing_local or extra_local:
+            raise RuntimeError(
+                "Local and staged JVM artifact sets differ: "
+                f"missing locally={missing_local}, extra locally={extra_local}"
+            )
+
+        for relative_path in sorted(staged_payloads):
+            staging_id = staged_payloads[relative_path]
+            base_url = f"{NEXUS_BASE_URL}/content/repositories/{staging_id}"
+            staged_file = os.path.join(staged, staging_id, relative_path)
+            staged_signature = staged_file + ".asc"
+            _download_file(f"{base_url}/{relative_path}", staged_file)
+            _download_file(f"{base_url}/{relative_path}.asc", staged_signature)
+            _verify_gpg_signature(
+                staged_file,
+                staged_signature,
+                expected_fingerprint,
+                gpg_env,
+            )
+            local_file = os.path.join(local_repository, relative_path)
+            rows.append(
+                _compare_release_file(
+                    staging_id,
+                    relative_path,
+                    staged_file,
+                    local_file,
+                )
+            )
+
+        toolchain = {
+            "java": _tool_version([_java_tool("java"), "-version"]),
+            "maven": _tool_version(["mvn", "--version"]),
+            "python": sys.version.replace("\n", " "),
+            "sbt": _tool_version(["sbt", "--numeric-version"]),
+            "system": platform.platform(),
+        }
+        _write_ci_verification_report(
+            output,
+            v,
+            rc_tag,
+            release_commit,
+            source_url,
+            java_kotlin_staging_id,
+            scala_staging_id,
+            expected_fingerprint,
+            toolchain,
+            rows,
+        )
+    logger.info("Verified %d CI artifacts byte-for-byte; report: %s", len(rows), output)
+
+
+def _local_maven_command(command, repository_url):
+    args = shlex.split(command)
+    args.insert(args.index("deploy"), "clean")
+    args.extend(
+        [
+            "-Dgpg.skip=true",
+            "-DretryFailedDeploymentCount=3",
+            f"-DaltDeploymentRepository=fory-verification::default::{repository_url}",
+        ]
+    )
+    return args
+
+
+def _run_release_args(command, path):
+    cwd = os.path.join(PROJECT_ROOT_DIR, path)
+    logger.info("Run release command in %s: %s", cwd, shlex.join(command))
+    subprocess.check_call(command, cwd=cwd)
+
+
+def _normalize_gpg_fingerprint(fingerprint):
+    fingerprint = re.sub(r"\s+", "", fingerprint).upper()
+    if not re.fullmatch(r"[0-9A-F]{40,64}", fingerprint):
+        raise ValueError(f"Invalid GPG fingerprint: {fingerprint}")
+    return fingerprint
+
+
+def _download_file(url, path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "apache-fory-release-verifier/1"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=NEXUS_TIMEOUT_SECONDS) as response:
+            if response.status != 200:
+                raise RuntimeError(f"Download returned HTTP {response.status}: {url}")
+            with open(path, "wb") as output:
+                shutil.copyfileobj(response, output)
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"Download returned HTTP {exc.code}: {url}") from None
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Download failed for {url}: {exc.reason}") from None
+
+
+def _sha512(path):
+    digest = hashlib.sha512()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _verify_sha512_file(artifact, checksum_path):
+    with open(checksum_path, "r", encoding="utf-8") as f:
+        fields = f.read().strip().split()
+    if not fields or not re.fullmatch(r"[0-9a-fA-F]{128}", fields[0]):
+        raise RuntimeError(f"Invalid SHA-512 file: {checksum_path}")
+    actual = _sha512(artifact)
+    if actual.lower() != fields[0].lower():
+        raise RuntimeError(
+            f"SHA-512 mismatch for {artifact}: expected {fields[0]}, got {actual}"
+        )
+
+
+def _verify_gpg_signature(artifact, signature, expected_fingerprint, env):
+    result = subprocess.run(
+        [
+            "gpg",
+            "--batch",
+            "--status-fd",
+            "1",
+            "--verify",
+            signature,
+            artifact,
+        ],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"PGP signature verification failed for {artifact}: {result.stderr.strip()}"
+        )
+    valid_signatures = []
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) >= 3 and fields[0] == "[GNUPG:]" and fields[1] == "VALIDSIG":
+            valid_signatures.append(fields)
+    if len(valid_signatures) != 1:
+        raise RuntimeError(
+            f"Expected one valid PGP signature for {artifact}; found {len(valid_signatures)}"
+        )
+    fields = valid_signatures[0]
+    signer = fields[2].upper()
+    primary = fields[11].upper() if len(fields) >= 12 else signer
+    if expected_fingerprint not in (signer, primary):
+        raise RuntimeError(
+            f"Unexpected PGP signer for {artifact}: signer={signer}, primary={primary}"
+        )
+
+
+def _nexus_repository_files(staging_id):
+    pending = ["org/apache/fory/"]
+    visited = set()
+    files = set()
+    while pending:
+        relative_path = pending.pop()
+        if relative_path in visited:
+            continue
+        visited.add(relative_path)
+        encoded = urllib.parse.quote(relative_path, safe="/")
+        url = (
+            f"{NEXUS_BASE_URL}/service/local/repositories/{staging_id}/content/"
+            f"{encoded}"
+        )
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "apache-fory-release-verifier/1",
+            },
+        )
+        try:
+            with urllib.request.urlopen(
+                request, timeout=NEXUS_TIMEOUT_SECONDS
+            ) as response:
+                payload = json.load(response)
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(
+                f"Nexus content listing returned HTTP {exc.code}: {url}"
+            ) from None
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                f"Nexus content listing failed for {url}: {exc.reason}"
+            ) from None
+        entries = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(entries, list):
+            raise RuntimeError(f"Nexus content listing has no data list: {url}")
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            path = str(entry.get("relativePath", "")).lstrip("/")
+            if not path.startswith("org/apache/fory/"):
+                raise RuntimeError(f"Unexpected Nexus content path: {path}")
+            if entry.get("leaf"):
+                files.add(path)
+            else:
+                pending.append(path.rstrip("/") + "/")
+    return files
+
+
+def _is_jvm_release_payload(path, v):
+    if f"/{v}/" not in f"/{path}":
+        return False
+    name = os.path.basename(path)
+    if name.startswith("maven-metadata") or name.startswith("_remote.repositories"):
+        return False
+    if name.endswith(".asc") or name.endswith(JVM_CHECKSUM_SUFFIXES):
+        return False
+    return True
+
+
+def _local_jvm_release_payloads(repository, v):
+    group_root = os.path.join(repository, "org", "apache", "fory")
+    if not os.path.isdir(group_root):
+        raise RuntimeError(f"Local JVM repository has no Fory artifacts: {repository}")
+    payloads = []
+    for directory, _, filenames in os.walk(group_root):
+        for filename in filenames:
+            path = os.path.join(directory, filename)
+            relative_path = os.path.relpath(path, repository).replace(os.sep, "/")
+            if _is_jvm_release_payload(relative_path, v):
+                payloads.append(relative_path)
+    return payloads
+
+
+def _compare_release_file(repository, relative_path, staged_file, local_file):
+    if not os.path.isfile(local_file):
+        raise FileNotFoundError(f"Missing locally rebuilt artifact: {local_file}")
+    staged_sha512 = _sha512(staged_file)
+    local_sha512 = _sha512(local_file)
+    if staged_sha512 != local_sha512 or not _files_equal(staged_file, local_file):
+        raise RuntimeError(
+            f"Reproducibility mismatch for {repository}/{relative_path}: "
+            f"staged={staged_sha512}, local={local_sha512}"
+        )
+    return {
+        "artifact": relative_path,
+        "repository": repository,
+        "sha512": staged_sha512,
+    }
+
+
+def _files_equal(first, second):
+    if os.path.getsize(first) != os.path.getsize(second):
+        return False
+    with open(first, "rb") as left, open(second, "rb") as right:
+        while True:
+            left_block = left.read(1024 * 1024)
+            right_block = right.read(1024 * 1024)
+            if left_block != right_block:
+                return False
+            if not left_block:
+                return True
+
+
+def _tool_version(command):
+    result = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def _write_ci_verification_report(
+    output,
+    v,
+    rc_tag,
+    release_commit,
+    source_url,
+    java_kotlin_staging_id,
+    scala_staging_id,
+    gpg_fingerprint,
+    toolchain,
+    rows,
+):
+    lines = [
+        f"# Apache Fory {rc_tag} reproducibility report",
+        "",
+        f"- Release version: `{v}`",
+        f"- RC tag: `{rc_tag}`",
+        f"- Commit: `{release_commit}`",
+        f"- ATR candidate: {source_url}",
+        f"- Java/Kotlin staging: `{java_kotlin_staging_id}`",
+        f"- Scala staging: `{scala_staging_id}`",
+        f"- Signing key: `{gpg_fingerprint}`",
+        "",
+        "## Local rebuild",
+        "",
+        "The artifacts were rebuilt unsigned from the exact RC commit on trusted hardware.",
+        "The staged detached signatures were verified separately with the public key.",
+        "",
+        "```text",
+        f"python3 ci/release.py build -v {v} --skip-sign",
+        f"python3 ci/release.py build_jvm_artifacts -v {v} --output <local-repository>",
+        "```",
+        "",
+        "## Toolchain",
+        "",
+        "```text",
+    ]
+    for name, value in sorted(toolchain.items()):
+        lines.append(f"{name}: {value}")
+    lines.extend(
+        [
+            "```",
+            "",
+            "## Byte-for-byte comparison",
+            "",
+            "| Repository | Artifact | SHA-512 | Result |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
+    for row in rows:
+        lines.append(
+            f"| `{row['repository']}` | `{row['artifact']}` | "
+            f"`{row['sha512']}` | Match |"
+        )
+    lines.extend(["", f"All {len(rows)} staged artifacts matched.", ""])
+    output_directory = os.path.dirname(output)
+    if output_directory:
+        os.makedirs(output_directory, exist_ok=True)
+    with open(output, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
 
 
 def _record_failed_jvm_staging(repositories_before, authorization, output):
@@ -2197,6 +2735,23 @@ def _parse_args():
     )
     publish_jvm_parser.set_defaults(func=publish_jvm)
 
+    build_jvm_parser = subparsers.add_parser(
+        "build_jvm_artifacts",
+        description="Build unsigned JVM release artifacts into a local Maven repository",
+    )
+    build_jvm_parser.add_argument(
+        "-v",
+        dest="v",
+        required=True,
+        help="final release version without a v prefix or RC suffix",
+    )
+    build_jvm_parser.add_argument(
+        "--output",
+        required=True,
+        help="new directory for the locally rebuilt Maven repository",
+    )
+    build_jvm_parser.set_defaults(func=build_jvm_artifacts)
+
     stage_jvm_parser = subparsers.add_parser(
         "stage_jvm",
         description="Publish, discover, close, and verify JVM staging repositories",
@@ -2251,6 +2806,53 @@ def _parse_args():
         help="require closed state and verify downloads without submitting a close",
     )
     close_jvm_parser.set_defaults(func=close_jvm_staging)
+
+    verify_ci_parser = subparsers.add_parser(
+        "verify_ci_artifacts",
+        description="Rebuild and compare all CI-staged source and JVM artifacts",
+    )
+    verify_ci_parser.add_argument(
+        "-v",
+        dest="v",
+        required=True,
+        help="final release version without a v prefix or RC suffix",
+    )
+    verify_ci_parser.add_argument(
+        "--rc-tag",
+        required=True,
+        help="immutable release-candidate tag to rebuild",
+    )
+    verify_ci_parser.add_argument(
+        "--java-kotlin-id",
+        dest="java_kotlin_staging_id",
+        required=True,
+        help="closed Java/Kotlin Nexus staging repository ID",
+    )
+    verify_ci_parser.add_argument(
+        "--scala-id",
+        dest="scala_staging_id",
+        required=True,
+        help="closed Scala Nexus staging repository ID",
+    )
+    verify_ci_parser.add_argument(
+        "--gpg-fingerprint",
+        required=True,
+        help="expected primary fingerprint of the CI signing key",
+    )
+    verify_ci_parser.add_argument(
+        "--source-url",
+        help="ATR candidate directory; defaults to the Fory ATR version directory",
+    )
+    verify_ci_parser.add_argument(
+        "--keys-url",
+        default=FORY_KEYS_URL,
+        help="public KEYS file used to verify staged signatures",
+    )
+    verify_ci_parser.add_argument(
+        "--output",
+        help="Markdown verification report path under the local trusted machine",
+    )
+    verify_ci_parser.set_defaults(func=verify_ci_artifacts)
 
     verify_java_parser = subparsers.add_parser(
         "verify_java_artifacts",

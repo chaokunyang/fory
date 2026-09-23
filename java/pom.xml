@@ -76,7 +76,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <!-- Use one timestamp for NOTICE years and every release archive writer. -->
     <project.build.outputTimestamp>2026-01-01T00:00:00Z</project.build.outputTimestamp>
-    <!-- JDK 11 jar lacks --date; the JDK 25+ release profile supplies it. -->
+    <!-- JDK 11 jar lacks the date option; the JDK 25+ release profile supplies it. -->
     <fory.jar.date.option></fory.jar.date.option>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <guava.version>32.1.2-jre</guava.version>

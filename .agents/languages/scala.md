@@ -26,7 +26,8 @@ Load this file when changing `scala/`.
   default methods are omission sources; reader type fallbacks must stay distinct. Evaluate dependent
   defaults with actual preceding object properties and reject missing dependencies. Do not infer
   purity from method availability or use a default reference object for parameter-dependent Scala
-  defaults. Missing-field recovery remains reader-owned.
+  defaults. Both class-level and field-level NON_DEFAULT retain properties without a supported
+  compiler default method. Missing-field recovery remains reader-owned.
 
 ## Commands
 

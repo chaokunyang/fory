@@ -531,7 +531,28 @@ final class ObjectCodecBuilder {
       // Authorization never turns reader type fallbacks into declared defaults. Only the
       // selected no-arg/all-default construction path can supply a reference value.
       if (model != null && !model.referenceDefaults()) {
-        throw unsupportedDefault(type, field, "the property has no declared constructor default");
+        return;
+      }
+      // Both field and class omission retain properties without defaults, including required
+      // constructor arguments and Kotlin lateinit properties. Keep null/zero/empty values too.
+      if (builder.requiredDeferred
+          || (creator != null && index >= 0 && creator.defaultMaskBit(index) < 0)) {
+        return;
+      }
+      if (model == null) {
+        if (creator != null) {
+          // A Java parameterized creator supplies no default baseline, even if the class also
+          // declares a no-argument constructor. Do not change the reader's creator selection.
+          if (!(creator.executable() instanceof Constructor) || creator.argumentCount() != 0) {
+            return;
+          }
+        } else {
+          try {
+            type.getDeclaredConstructor();
+          } catch (NoSuchMethodException e) {
+            return;
+          }
+        }
       }
       referenceDefaults.add(field);
     }

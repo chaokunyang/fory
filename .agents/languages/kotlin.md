@@ -12,7 +12,9 @@ Load this file when changing `kotlin/` or compiler code that generates Kotlin so
   `NON_NULL` or `NON_EMPTY` to guarantee round trips. Missing-property defaults and nullability
   remain reader-owned.
 - `NON_DEFAULT` requires explicit property or class authorization; global use is invalid. Kotlin
-  defaults use one reference object per model metadata only when the selected constructor has no
+  properties without defaults, including required parameters and lateinit properties, remain written
+  under either authorization form. A defaulted property still requires a legal reference baseline.
+  Kotlin defaults use one reference object per model metadata only when the selected constructor has no
   required parameters. Never fabricate required arguments, change creator selection, or construct
   a comparison object on each write. Authorization covers constructor and initializer execution;
   the caller owns stable defaults and consistent missing-field recovery, including dependencies.

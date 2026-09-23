@@ -77,8 +77,24 @@ class KotlinDefaultArgumentsTest {
 
   @JsonInclude(Include.NON_DEFAULT)
   class DeferredDefault(val count: Int = 3) {
-    @JsonProperty(include = Include.ALWAYS) lateinit var required: String
+    lateinit var required: String
   }
+
+  @JsonInclude(Include.NON_DEFAULT)
+  data class RequiredValues(
+    val count: Int,
+    @JsonProperty(include = Include.NON_DEFAULT) val flag: Boolean,
+    val label: String?,
+    val items: List<Int>
+  )
+
+  @JsonMixin(target = RequiredDefault::class)
+  @JsonInclude(Include.NON_DEFAULT)
+  abstract class RequiredDefaultMixin(
+    val required: Int,
+    // Match the target's default use sites: Kotlin 2.4 also annotates the backing field.
+    @JsonProperty(include = Include.ALWAYS) val value: Int
+  )
 
   data class PlainDefault(val value: Int = 1) {
     init {
@@ -145,7 +161,8 @@ class KotlinDefaultArgumentsTest {
         json.fromJson("{\"values\":null}".encodeToByteArray(), ReferenceDefault::class.java)
       }
       assertFailsWith<ForyJsonException> { json.toJson(RequiredDefault(1)) }
-      assertFailsWith<ForyJsonException> { json.toJson(SelectedCreator()) }
+      assertEquals("{\"value\":1}", json.toJson(SelectedCreator()))
+      assertEquals("{\"value\":0}", json.toJsonBytes(SelectedCreator(0)).decodeToString())
       val failing = FailingDefault()
       FailingDefault.fail = true
       try {
@@ -167,6 +184,37 @@ class KotlinDefaultArgumentsTest {
       assertEquals("{}", mixed.toJson(plain))
       assertEquals("{}", mixed.toJsonBytes(plain).decodeToString())
       assertEquals(calls + 1, PlainDefault.constructions)
+    }
+  }
+
+  @Test
+  fun requiredInclusion() {
+    for (codegen in listOf(false, true)) {
+      val json = ForyJsonKotlin.builder().withCodegen(codegen).withAsyncCompilation(false).build()
+      val value = RequiredValues(0, false, null, emptyList())
+      val expected = "{\"count\":0,\"flag\":false,\"label\":null,\"items\":[]}"
+      val pretty =
+        "{\n  \"count\" : 0,\n  \"flag\" : false,\n  \"label\" : null,\n  \"items\" : [ ]\n}"
+      assertEquals(expected, json.toJson(value))
+      assertEquals(expected, json.toJsonBytes(value).decodeToString())
+      assertEquals(pretty, json.toPrettyJson(value))
+      assertEquals(pretty, json.toPrettyJsonBytes(value).decodeToString())
+      assertEquals(value, json.fromJson(expected, RequiredValues::class.java))
+      assertEquals(value, json.fromJson(pretty.encodeToByteArray(), RequiredValues::class.java))
+      assertWriterGeneration(json, RequiredValues::class.java, codegen)
+
+      val mixed =
+        ForyJsonKotlin.builder()
+          .withCodegen(codegen)
+          .withAsyncCompilation(false)
+          .registerMixin(RequiredDefaultMixin::class.java)
+          .build()
+      assertEquals("{\"required\":0,\"value\":1}", mixed.toJson(RequiredDefault(0)))
+      assertEquals(
+        "{\"required\":0,\"value\":1}",
+        mixed.toJsonBytes(RequiredDefault(0)).decodeToString()
+      )
+      assertWriterGeneration(mixed, RequiredDefault::class.java, codegen)
     }
   }
 

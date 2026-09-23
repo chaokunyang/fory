@@ -76,6 +76,7 @@ case class BodyState(id: Int) {
   var count: Int = 7
 }
 
+@JsonInclude(JsonProperty.Include.NON_DEFAULT)
 case class CurriedDefault(a: Int)(
     @JsonProperty(include = JsonProperty.Include.NON_DEFAULT) val b: Int = a + 1
 )
@@ -86,9 +87,9 @@ case class KeywordDefault(switch: Int)(
 
 @JsonInclude(JsonProperty.Include.NON_DEFAULT)
 case class InclusionDefaults(
-    @JsonProperty(include = JsonProperty.Include.ALWAYS) required: Int,
-    @JsonProperty(include = JsonProperty.Include.ALWAYS) flag: Boolean,
-    @JsonProperty(include = JsonProperty.Include.ALWAYS) optional: Option[Int],
+    required: Int,
+    flag: Boolean,
+    optional: Option[Int],
     number: Int = 2,
     currency: String = "USD",
     selected: Option[Int] = Some(7),
@@ -177,6 +178,16 @@ case class HiddenDependency(@JsonIgnore a: Int = 5)(
 
 @JsonInclude(JsonProperty.Include.NON_DEFAULT)
 case class MissingDeclaredDefault(value: Option[Int])
+
+case class RequiredMixinValue(id: String, count: Int = 3)
+
+@JsonMixin(target = classOf[RequiredMixinValue])
+@JsonInclude(JsonProperty.Include.NON_DEFAULT)
+abstract class RequiredDefaultMixin
+
+case class ExplicitMissingDefault(
+    @JsonProperty(include = JsonProperty.Include.NON_DEFAULT) value: Option[Int]
+)
 
 @JsonInclude(JsonProperty.Include.NON_DEFAULT)
 case class BodyDefault() {
@@ -875,6 +886,9 @@ class ScalaJsonSuite extends AnyFunSuite {
       val expected = "{\"required\":0,\"flag\":false,\"optional\":null}"
       assert(json.toJson(value) == expected)
       assert(new String(json.toJsonBytes(value), UTF_8) == expected)
+      val pretty = "{\n  \"required\" : 0,\n  \"flag\" : false,\n  \"optional\" : null\n}"
+      assert(json.toPrettyJson(value) == pretty)
+      assert(new String(json.toPrettyJsonBytes(value), UTF_8) == pretty)
       assert(reader.fromJson(expected, classOf[InclusionDefaults]) == value)
       assert(reader.fromJson(json.toPrettyJson(value), classOf[InclusionDefaults]) == value)
       assert(reader.fromJson(json.toPrettyJsonBytes(value), classOf[InclusionDefaults]) == value)
@@ -885,6 +899,7 @@ class ScalaJsonSuite extends AnyFunSuite {
       assert(reader.fromJson(text, classOf[InclusionDefaults]) == changed)
       assert(json.toJson(RetainedDefault()) == "{\"value\":2}")
       assert(json.toJson(NestedModels.OptionalOnly(None)) == "{\"value\":null}")
+      if (!async) assertWriterGeneration(json, classOf[InclusionDefaults], codegen)
     }
   }
 
@@ -954,12 +969,24 @@ class ScalaJsonSuite extends AnyFunSuite {
       assert(text.contains("\"currency\":\"USD\""))
       assert(new String(mixin.toJsonBytes(MixinDefaults()), UTF_8) == text)
       intercept[ForyJsonException](json.toJson(HiddenDependency()()))
-      intercept[ForyJsonException](json.toJson(MissingDeclaredDefault(None)))
-      intercept[ForyJsonException](json.toJson(BodyDefault()))
-      intercept[ForyJsonException](json.toJsonBytes(BodyDefault()))
-      // A JVM void default is not a callable value source in the current constructor model.
-      intercept[ForyJsonException](json.toJson(UnitDefault()))
-      intercept[ForyJsonException](json.toJsonBytes(UnitDefault()))
+      assert(json.toJson(MissingDeclaredDefault(None)) == "{\"value\":null}")
+      assert(new String(json.toJsonBytes(MissingDeclaredDefault(None)), UTF_8) == "{\"value\":null}")
+      assert(json.toJson(BodyDefault()) == "{\"count\":3}")
+      assert(new String(json.toJsonBytes(BodyDefault()), UTF_8) == "{\"count\":3}")
+      assert(json.toJson(ExplicitMissingDefault(None)) == "{\"value\":null}")
+      assert(new String(json.toJsonBytes(ExplicitMissingDefault(None)), UTF_8) == "{\"value\":null}")
+      val requiredMixin = ForyJsonScala.builder().withCodegen(codegen)
+        .withAsyncCompilation(false).registerMixin(classOf[RequiredDefaultMixin]).build()
+      val required = RequiredMixinValue("漢")
+      val requiredText = "{\"id\":\"漢\"}"
+      assert(requiredMixin.toJson(required) == requiredText)
+      assert(new String(requiredMixin.toJsonBytes(required), UTF_8) == requiredText)
+      assert(requiredMixin.fromJson(requiredText, classOf[RequiredMixinValue]) == required)
+      assert(requiredMixin.fromJson(requiredMixin.toPrettyJsonBytes(required), classOf[RequiredMixinValue]) == required)
+      assertWriterGeneration(requiredMixin, classOf[RequiredMixinValue], codegen)
+      // A JVM void method supplies no comparable default value; retain the Unit property.
+      assert(json.toJson(UnitDefault()) == "{\"value\":null}")
+      assert(new String(json.toJsonBytes(UnitDefault()), UTF_8) == "{\"value\":null}")
       val fresh1 = json.fromJson("{}", classOf[FreshDefaults])
       val fresh2 = json.fromJson("{}".getBytes(UTF_8), classOf[FreshDefaults])
       fresh1.values += 2

@@ -126,8 +126,6 @@ jobs:
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
           set -euo pipefail
-          git config user.name "Apache Fory Release Automation"
-          git config user.email "dev@fory.apache.org"
           python3 ci/release.py build -v "$VERSION"
 
       - name: Upload source release to ATR

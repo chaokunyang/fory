@@ -167,53 +167,37 @@ def prepare(v: str):
 
 
 def build(v: str, skip_sign: bool = False):
-    """version format: 0.5.1"""
+    """Build source artifacts from the checked-out commit without changing Git state."""
     logger.info("Start to prepare release artifacts for version %s", v)
     _check_release_version(v)
     os.chdir(PROJECT_ROOT_DIR)
+    _check_all_committed()
+    release_commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD^{commit}"], text=True
+    ).strip()
+    license_text = subprocess.check_output(
+        ["git", "show", f"{release_commit}:LICENSE"], text=True, encoding="utf-8"
+    )
     if os.path.exists("dist"):
         shutil.rmtree("dist")
     os.mkdir("dist")
-    branch = f"releases-{v}"
-    # Check if branch exists, if not create it
-    result = subprocess.run(
-        f"git show-ref --verify --quiet refs/heads/{branch}",
-        shell=True,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode == 0:
-        # Branch exists, checkout
-        subprocess.check_call(f"git checkout {branch}", shell=True)
-    else:
-        # Branch doesn't exist, create it
-        subprocess.check_call(f"git checkout -b {branch}", shell=True)
     src_tar = f"apache-fory-{v}-src.tar.gz"
-    _check_all_committed()
-    _strip_unnecessary_license()
-    # git archive includes the commit ID and time. Keep this temporary commit
-    # identical for CI and keyless local rebuilds, and never sign the commit.
-    commit_time = subprocess.check_output(
-        ["git", "show", "-s", "--format=%cI", "HEAD"], text=True
-    ).strip()
-    commit_env = os.environ.copy()
-    for role in ("AUTHOR", "COMMITTER"):
-        commit_env[f"GIT_{role}_NAME"] = "Apache Fory Release Automation"
-        commit_env[f"GIT_{role}_EMAIL"] = "dev@fory.apache.org"
-        commit_env[f"GIT_{role}_DATE"] = commit_time
+    prefix = f"apache-fory-{v}-src/"
+    # Keep the RC commit ID and timestamp in the archive. Prune benchmark-only
+    # licenses in the archive entry, never through a commit or worktree edit.
     subprocess.check_call(
-        "git add LICENSE && git -c commit.gpgsign=false commit "
-        "-m 'remove benchmark from license'",
-        shell=True,
-        env=commit_env,
+        [
+            "git",
+            "archive",
+            "--format=tar.gz",
+            f"--output=dist/{src_tar}",
+            f"--prefix={prefix}",
+            f"--add-virtual-file={prefix}LICENSE:{_strip_unnecessary_license(license_text)}",
+            release_commit,
+            ".",
+            ":(exclude)LICENSE",
+        ]
     )
-    subprocess.check_call(
-        f"git archive --format=tar.gz "
-        f"--output=dist/{src_tar} "
-        f"--prefix=apache-fory-{v}-src/ {branch}",
-        shell=True,
-    )
-    subprocess.check_call("git reset --hard HEAD~", shell=True)
     os.chdir("dist")
     if not skip_sign:
         logger.info("Start to generate signature")
@@ -234,7 +218,7 @@ def _check_release_version(v: str):
 
 def _check_all_committed():
     proc = subprocess.run(
-        "git diff --quiet", capture_output=True, shell=True, check=False
+        ["git", "diff", "--quiet", "HEAD"], capture_output=True, check=False
     )
     result = proc.returncode
     if result != 0:
@@ -243,9 +227,8 @@ def _check_all_committed():
         )
 
 
-def _strip_unnecessary_license():
-    with open("LICENSE", "r") as f:
-        lines = f.readlines()
+def _strip_unnecessary_license(license_text):
+    lines = license_text.splitlines(keepends=True)
     new_lines = []
     line_number = 0
     while line_number < len(lines):
@@ -257,10 +240,7 @@ def _strip_unnecessary_license():
         else:
             new_lines.append(line)
             line_number += 1
-    text = "".join(new_lines)
-    if lines != new_lines:
-        with open("LICENSE", "w") as f:
-            f.write(text)
+    return "".join(new_lines)
 
 
 def verify(v, signature=True):
@@ -470,16 +450,6 @@ def verify_ci_artifacts(
         )
         subprocess.check_call(
             ["git", "checkout", "--quiet", "--detach", release_commit], cwd=checkout
-        )
-        subprocess.check_call(
-            ["git", "branch", "-f", f"releases-{v}", release_commit], cwd=checkout
-        )
-        subprocess.check_call(
-            ["git", "config", "user.name", "Apache Fory Release Verification"],
-            cwd=checkout,
-        )
-        subprocess.check_call(
-            ["git", "config", "user.email", "dev@fory.apache.org"], cwd=checkout
         )
         release_script = os.path.abspath(__file__)
         subprocess.check_call(

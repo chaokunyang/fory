@@ -191,6 +191,7 @@ public final class JsonSharedRegistry {
   private final Include defaultPropertyInclusion;
   private final boolean writeLongAsString;
   private final boolean escapeNonAscii;
+  private final boolean failOnMissingRequiredProperties;
   private final JsonByteArray.Format byteArrayFormat;
   private final ClassLoader classLoader;
   private final JsonMixinAnnotations mixinAnnotations;
@@ -250,6 +251,7 @@ public final class JsonSharedRegistry {
     defaultPropertyInclusion = config.defaultPropertyInclusion();
     writeLongAsString = config.writeLongAsString();
     escapeNonAscii = config.escapeNonAscii();
+    failOnMissingRequiredProperties = config.failOnMissingRequiredProperties();
     byteArrayFormat = config.byteArrayFormat();
     classLoader = config.classLoader();
     mixinAnnotations = new JsonMixinAnnotations(config);
@@ -1236,6 +1238,11 @@ public final class JsonSharedRegistry {
   @Internal
   public boolean escapeNonAscii() {
     return escapeNonAscii;
+  }
+
+  /** Returns whether required creator properties must appear in the input. */
+  public boolean failOnMissingRequiredProperties() {
+    return failOnMissingRequiredProperties;
   }
 
   /** Returns the default representation used when selecting ordinary byte-array codecs. */

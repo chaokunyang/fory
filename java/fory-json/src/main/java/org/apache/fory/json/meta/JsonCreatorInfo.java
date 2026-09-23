@@ -76,6 +76,7 @@ public final class JsonCreatorInfo {
   private final MethodHandle defaultConstructorInvoker;
   private final int[] defaultMaskBits;
   private final boolean[] parameterNullable;
+  private final boolean[] requiredParameters;
   private final Object fixedInstance;
   private final String[] parameterNames;
   private final JsonFieldInfo[] deferredFields;
@@ -88,7 +89,8 @@ public final class JsonCreatorInfo {
       Executable executable,
       JsonCreatorFieldInfo[] fields,
       Object[] defaults,
-      GeneratedJsonCodec<?> generatedCodec) {
+      GeneratedJsonCodec<?> generatedCodec,
+      boolean[] requiredParameters) {
     this(
         ownerType,
         executable,
@@ -103,6 +105,7 @@ public final class JsonCreatorInfo {
         null,
         null,
         null,
+        requiredParameters,
         null);
   }
 
@@ -120,7 +123,8 @@ public final class JsonCreatorInfo {
       String[] parameterNames,
       Constructor<?> defaultConstructor,
       int[] defaultMaskBits,
-      boolean[] parameterNullable) {
+      boolean[] parameterNullable,
+      boolean[] requiredParameters) {
     this(
         ownerType,
         executable,
@@ -135,6 +139,7 @@ public final class JsonCreatorInfo {
         defaultConstructor,
         defaultMaskBits,
         parameterNullable,
+        requiredParameters,
         null);
   }
 
@@ -146,6 +151,7 @@ public final class JsonCreatorInfo {
         null,
         new JsonCreatorFieldInfo[0],
         new Object[0],
+        null,
         null,
         null,
         null,
@@ -177,6 +183,7 @@ public final class JsonCreatorInfo {
       Constructor<?> defaultConstructor,
       int[] defaultMaskBits,
       boolean[] parameterNullable,
+      boolean[] requiredParameters,
       Object fixedInstance) {
     this.ownerType = ownerType;
     this.executable = executable;
@@ -189,6 +196,7 @@ public final class JsonCreatorInfo {
     this.defaultConstructor = defaultConstructor;
     this.defaultMaskBits = defaultMaskBits == null ? null : defaultMaskBits.clone();
     this.parameterNullable = parameterNullable == null ? null : parameterNullable.clone();
+    this.requiredParameters = requiredParameters == null ? null : requiredParameters.clone();
     this.fixedInstance = fixedInstance;
     this.parameterNames = parameterNames == null ? null : parameterNames.clone();
     this.defaultMethods = defaultMethods == null ? null : defaultMethods.clone();
@@ -239,6 +247,7 @@ public final class JsonCreatorInfo {
     defaultConstructorInvoker = source.defaultConstructorInvoker;
     defaultMaskBits = source.defaultMaskBits;
     parameterNullable = source.parameterNullable;
+    requiredParameters = source.requiredParameters;
     fixedInstance = source.fixedInstance;
     parameterNames = source.parameterNames;
     this.deferredFields = deferredFields;
@@ -356,7 +365,10 @@ public final class JsonCreatorInfo {
 
   public Object[] newArguments() {
     Object[] arguments = Arrays.copyOf(defaults, defaults.length + deferredFields.length);
-    if (defaultInvokers != null || defaultMaskBits != null || parameterNullable != null) {
+    if (defaultInvokers != null
+        || defaultMaskBits != null
+        || parameterNullable != null
+        || requiredParameters != null) {
       Arrays.fill(arguments, 0, defaults.length, MISSING);
     }
     if (deferredFields.length != 0) {
@@ -430,6 +442,7 @@ public final class JsonCreatorInfo {
     validateDeferredArguments(arguments);
     Object value;
     if (generatedCodec != null) {
+      prepareArguments(arguments);
       try {
         value = requireResult(generatedCodec.newInstance(arguments));
       } catch (Throwable cause) {
@@ -457,6 +470,7 @@ public final class JsonCreatorInfo {
     return defaultInvokers != null
         || defaultMaskBits != null
         || parameterNullable != null
+        || requiredParameters != null
         || deferredFields.length != 0;
   }
 
@@ -483,10 +497,20 @@ public final class JsonCreatorInfo {
   /** Evaluates one prevalidated language-defined constructor default. */
   @Internal
   public Object defaultValue(int index, Object[] arguments) {
+    // A reader type fallback is not a declaration default. Strict required-property checking
+    // must reject absence before invoking the zero/null factory, in generated and interpreted
+    // reads.
+    if (requiredParameters != null && requiredParameters[index]) {
+      throw missingArgument(index);
+    }
     MethodHandle invoker = defaultInvokers == null ? null : defaultInvokers[index];
     if (invoker == null) {
       if (defaultFactories != null && defaultFactories[index] != null) {
         return defaultFactories[index].get();
+      }
+      if (parameterNullable == null && requiredParameters != null) {
+        // Ignored Java parameters and optional containers keep their original typed defaults.
+        return defaults[index];
       }
       throw missingArgument(index);
     }
@@ -505,6 +529,12 @@ public final class JsonCreatorInfo {
   @Internal
   public ForyJsonException missingArgument(int index) {
     String name = parameterNames == null ? Integer.toString(index) : parameterNames[index];
+    for (JsonCreatorFieldInfo field : fields) {
+      if (field.argumentIndex() == index) {
+        name = field.name();
+        break;
+      }
+    }
     return new ForyJsonException(
         "Missing required JSON constructor property " + name + " for " + ownerType.getName());
   }
@@ -532,7 +562,7 @@ public final class JsonCreatorInfo {
   }
 
   private void prepareArguments(Object[] arguments) {
-    if (defaultInvokers == null) {
+    if (defaultInvokers == null && requiredParameters == null) {
       return;
     }
     for (int i = 0; i < defaults.length; i++) {

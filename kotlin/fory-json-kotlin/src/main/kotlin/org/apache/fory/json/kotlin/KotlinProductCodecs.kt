@@ -94,6 +94,7 @@ internal object KotlinProductCodecs {
       accessors,
       arrayOfNulls(names.size),
       types,
+      null,
     )
 
   private fun requireArguments(type: TypeRef<*>, count: Int): Array<TypeRef<*>> {

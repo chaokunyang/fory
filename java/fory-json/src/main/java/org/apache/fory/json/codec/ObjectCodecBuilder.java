@@ -31,10 +31,15 @@ import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.function.Supplier;
 import org.apache.fory.collection.Tuple2;
@@ -1504,6 +1509,8 @@ final class ObjectCodecBuilder {
     // crash while reading annotations from desugared Record constructor parameters.
     Parameter[] parameters = generatedCodec == null ? constructor.getParameters() : null;
     List<JsonCreatorFieldInfo> fields = new ArrayList<>(names.length);
+    boolean[] required =
+        annotations.registry.failOnMissingRequiredProperties() ? new boolean[names.length] : null;
     for (int i = 0; i < names.length; i++) {
       FieldBuilder builder = builders.get(names[i]);
       if (builder == null || !builder.hasLogicalMember()) {
@@ -1520,13 +1527,16 @@ final class ObjectCodecBuilder {
       } else {
         bindCreatorType(ownerType, constructor, i, parameterTypes[i], builder);
       }
-      if (builder.isAny() || builder.unwrappedAnnotation != null) {
-        continue;
-      }
       TypeRef<?> resolved =
           parameterTypes == null
               ? builder.logicalTypeRef(ownerType)
               : ownerType.resolveType(parameterTypes[i]);
+      if (required != null) {
+        required[i] = !isOptionalContainer(resolved.getRawType());
+      }
+      if (builder.isAny() || builder.unwrappedAnnotation != null) {
+        continue;
+      }
       fields.add(
           new JsonCreatorFieldInfo(
               builder.jsonName(namingStrategy),
@@ -1541,7 +1551,7 @@ final class ObjectCodecBuilder {
     JsonCreatorFieldInfo[] fieldArray = fields.toArray(new JsonCreatorFieldInfo[0]);
     rejectCreatorHashCollisions(fieldArray);
     return new JsonCreatorInfo(
-        type, constructor, fieldArray, creatorDefaults(rawTypes), generatedCodec);
+        type, constructor, fieldArray, creatorDefaults(rawTypes), generatedCodec, required);
   }
 
   private static JsonCreatorInfo buildCreatorInfo(
@@ -1622,6 +1632,15 @@ final class ObjectCodecBuilder {
     Class<?>[] rawTypes = creator.getParameterTypes();
     Parameter[] parameters = creator.getParameters();
     List<JsonCreatorFieldInfo> fields = new ArrayList<>(parameterTypes.length);
+    boolean[] required =
+        annotations.registry.failOnMissingRequiredProperties()
+            ? new boolean[parameterTypes.length]
+            : null;
+    if (required != null) {
+      for (int i = 0; i < required.length; i++) {
+        required[i] = !isOptionalContainer(ownerType.resolveType(parameterTypes[i]).getRawType());
+      }
+    }
     String[] propertyNames = annotation.value();
     if (propertyNames.length != 0) {
       if (propertyNames.length != parameterTypes.length) {
@@ -1772,7 +1791,7 @@ final class ObjectCodecBuilder {
     JsonCreatorFieldInfo[] fieldArray = fields.toArray(new JsonCreatorFieldInfo[0]);
     rejectCreatorHashCollisions(fieldArray);
     return new JsonCreatorInfo(
-        type, creator, fieldArray, creatorDefaults(rawTypes), generatedCodec);
+        type, creator, fieldArray, creatorDefaults(rawTypes), generatedCodec, required);
   }
 
   private static void validateObjectModelCreatorAnnotation(
@@ -1827,6 +1846,8 @@ final class ObjectCodecBuilder {
     Supplier<?>[] defaultFactories = objectModel.defaultFactories();
     int[] defaultMaskBits = objectModel.defaultMaskBits();
     TypeRef<?>[] logicalParameterTypes = objectModel.parameterTypes();
+    boolean[] required =
+        annotations.registry.failOnMissingRequiredProperties() ? new boolean[names.length] : null;
     Type[] parameterTypes = creator.getGenericParameterTypes();
     Class<?>[] rawTypes = creator.getParameterTypes();
     Executable annotationSource = declaration == null ? creator : declaration.annotationSource();
@@ -1884,6 +1905,13 @@ final class ObjectCodecBuilder {
         }
         continue;
       }
+      if (required != null) {
+        required[i] =
+            defaultMethods[i] == null
+                && defaultMaskBits[i] < 0
+                && !objectModel.parameterOptional(i)
+                && !isOptionalContainer(logicalParameterTypes[i].getRawType());
+      }
       if (!builder.isAny() && builder.unwrappedAnnotation == null) {
         TypeRef<?> resolved = logicalParameterTypes[i];
         fields.add(
@@ -1913,7 +1941,18 @@ final class ObjectCodecBuilder {
         names,
         objectModel.defaultConstructor(),
         defaultMaskBits,
-        objectModel.parameterNullable());
+        objectModel.parameterNullable(),
+        required);
+  }
+
+  private static boolean isOptionalContainer(Class<?> type) {
+    return type.isArray()
+        || Collection.class.isAssignableFrom(type)
+        || Map.class.isAssignableFrom(type)
+        || type == Optional.class
+        || type == OptionalInt.class
+        || type == OptionalLong.class
+        || type == OptionalDouble.class;
   }
 
   private static void validateGeneratedCreator(

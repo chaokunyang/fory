@@ -146,7 +146,11 @@ private[scala] object ScalaObjectModels {
         propertyNames,
         propertyGetters,
         propertySetters,
-        propertyTypes
+        propertyTypes,
+        logicalParameterTypes.map { parameterType =>
+          val rawType = parameterType.getRawType
+          rawType == classOf[Option[_]] || classOf[scala.collection.Iterable[_]].isAssignableFrom(rawType)
+        }
       )
     )
   }

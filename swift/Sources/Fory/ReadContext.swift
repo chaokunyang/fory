@@ -711,6 +711,7 @@ public final class ReadContext {
         if !typeInfoScopeStack.isEmpty {
             typeInfoScopeStack.removeAll(keepingCapacity: true)
         }
+        // Logical reset prevents stale lookup and reuses slots up to the largest root table.
         compatibleTypeDefTypeInfos.reset()
         metaStrings.resetReleasingUsedElements()
         remainingUnbackedContainerItems = 0

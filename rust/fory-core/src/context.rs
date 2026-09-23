@@ -85,7 +85,17 @@ impl<T> ContextCache<T> {
             // Fast path: same Fory instance as last time
             return Ok(self.cached_context.as_mut().unwrap());
         }
+        self.insert_result(id, create)
+    }
 
+    // Keep allocation and map updates out of each inlined root operation.
+    #[cold]
+    #[inline(never)]
+    fn insert_result<E>(
+        &mut self,
+        id: u64,
+        create: impl FnOnce() -> Result<Box<T>, E>,
+    ) -> Result<&mut T, E> {
         // Check if we need to swap with cached
         if self.cached_context.is_some() {
             // Move current cached to others
@@ -359,15 +369,6 @@ impl<'a> Drop for WriteContext<'a> {
     }
 }
 
-// Safety: WriteContext is only shared across threads via higher-level pooling code that
-// ensures single-threaded access while the context is in use. Users must never hold the same
-// instance on multiple threads simultaneously; that would violate the invariants and result in
-// undefined behavior. Under that assumption, marking it Send/Sync is sound.
-#[allow(clippy::needless_lifetimes)]
-unsafe impl<'a> Send for WriteContext<'a> {}
-#[allow(clippy::needless_lifetimes)]
-unsafe impl<'a> Sync for WriteContext<'a> {}
-
 /// Deserialization state container used on a single thread at a time.
 /// Sharing the same instance across threads simultaneously causes undefined behavior.
 pub struct ReadContext<'a> {
@@ -390,15 +391,6 @@ pub struct ReadContext<'a> {
     pub ref_reader: RefReader,
     current_depth: u32,
 }
-
-// Safety: ReadContext follows the same invariants as WriteContext—external orchestrators ensure
-// single-threaded use. Concurrent access to the same instance across threads is forbidden and
-// would result in undefined behavior. With exclusive use guaranteed, the Send/Sync markers are safe
-// even though Rc is used internally.
-#[allow(clippy::needless_lifetimes)]
-unsafe impl<'a> Send for ReadContext<'a> {}
-#[allow(clippy::needless_lifetimes)]
-unsafe impl<'a> Sync for ReadContext<'a> {}
 
 impl<'a> ReadContext<'a> {
     pub fn new(type_resolver: TypeResolver, config: Config) -> ReadContext<'a> {

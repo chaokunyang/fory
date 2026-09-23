@@ -30,6 +30,7 @@ import java.lang.reflect.WildcardType;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.reflect.TypeRef;
 
@@ -42,8 +43,12 @@ public final class JsonObjectModel {
   private final String[] parameterNames;
   private final Method[] accessors;
   private final Method[] defaultMethods;
+  private final Object defaultsReceiver;
+  private final Supplier<?>[] defaultFactories;
+  private final boolean referenceDefaults;
   private final int[] defaultMaskBits;
   private final boolean[] parameterNullable;
+  private final boolean[] parameterOptional;
   private final TypeRef<?>[] parameterTypes;
   private final String[] propertyNames;
   private final Method[] propertyGetters;
@@ -69,12 +74,65 @@ public final class JsonObjectModel {
       Method[] propertySetters,
       TypeRef<?>[] propertyTypes) {
     this(
+        constructor,
+        defaultConstructor,
+        parameterNames,
+        accessors,
+        defaultMethods,
+        null,
+        null,
+        true,
+        defaultMaskBits,
+        parameterNullable,
+        parameterTypes,
+        propertyNames,
+        propertyGetters,
+        propertySetters,
+        propertyTypes,
+        null);
+  }
+
+  /**
+   * Creates one ordinary language object model whose constructor defaults are instance methods on
+   * {@code defaultsReceiver}. Scala emits {@code $lessinit$greater$default$N} on the companion
+   * singleton and mirrors it as a static forwarder on the case class only for a top-level
+   * companion, so a case class declared inside an {@code object} binds its defaults on that
+   * singleton. Only declared compiler defaults belong in {@code defaultMethods}. Static defaults do
+   * not use {@code defaultsReceiver}; pass {@code null} when no instance default needs it.
+   * Type-default factories are evaluated only for missing parameters without a constructor default;
+   * mutable values must be newly allocated. Set {@code referenceDefaults} to false when the
+   * language requires a declared compiler default for omission, including for zero-argument models
+   * and body properties. {@code parameterOptional} identifies language optional/container types
+   * whose existing missing-value defaults remain usable with strict required-property checking; it
+   * does not declare a constructor default. Null means no language-specific exemptions.
+   */
+  public JsonObjectModel(
+      Constructor<?> constructor,
+      Constructor<?> defaultConstructor,
+      String[] parameterNames,
+      Method[] accessors,
+      Method[] defaultMethods,
+      Object defaultsReceiver,
+      Supplier<?>[] defaultFactories,
+      boolean referenceDefaults,
+      int[] defaultMaskBits,
+      boolean[] parameterNullable,
+      TypeRef<?>[] parameterTypes,
+      String[] propertyNames,
+      Method[] propertyGetters,
+      Method[] propertySetters,
+      TypeRef<?>[] propertyTypes,
+      boolean[] parameterOptional) {
+    this(
         (Executable) constructor,
         constructor,
         defaultConstructor,
         parameterNames,
         accessors,
         defaultMethods,
+        defaultsReceiver,
+        defaultFactories,
+        referenceDefaults,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -83,7 +141,8 @@ public final class JsonObjectModel {
         propertySetters,
         propertyTypes,
         allProperties(propertyNames.length),
-        new boolean[propertyNames.length]);
+        new boolean[propertyNames.length],
+        parameterOptional);
   }
 
   /** Creates a model for an explicitly selected constructor or static factory. */
@@ -108,6 +167,9 @@ public final class JsonObjectModel {
         parameterNames,
         accessors,
         defaultMethods,
+        null,
+        null,
+        true,
         defaultMaskBits,
         parameterNullable,
         parameterTypes,
@@ -116,7 +178,8 @@ public final class JsonObjectModel {
         propertySetters,
         propertyTypes,
         allProperties(propertyNames.length),
-        new boolean[propertyNames.length]);
+        new boolean[propertyNames.length],
+        null);
   }
 
   /** Creates a model with exact reconstructibility and deferred-required facts. */
@@ -135,15 +198,65 @@ public final class JsonObjectModel {
       Method[] propertySetters,
       TypeRef<?>[] propertyTypes,
       boolean[] propertyReconstructible,
-      boolean[] propertyRequired) {
+      boolean[] propertyRequired,
+      Supplier<?>[] defaultFactories) {
+    this(
+        creator,
+        invocationCreator,
+        defaultConstructor,
+        parameterNames,
+        accessors,
+        defaultMethods,
+        null,
+        defaultFactories,
+        true,
+        defaultMaskBits,
+        parameterNullable,
+        parameterTypes,
+        propertyNames,
+        propertyGetters,
+        propertySetters,
+        propertyTypes,
+        propertyReconstructible,
+        propertyRequired,
+        null);
+  }
+
+  private JsonObjectModel(
+      Executable creator,
+      Executable invocationCreator,
+      Constructor<?> defaultConstructor,
+      String[] parameterNames,
+      Method[] accessors,
+      Method[] defaultMethods,
+      Object defaultsReceiver,
+      Supplier<?>[] defaultFactories,
+      boolean referenceDefaults,
+      int[] defaultMaskBits,
+      boolean[] parameterNullable,
+      TypeRef<?>[] parameterTypes,
+      String[] propertyNames,
+      Method[] propertyGetters,
+      Method[] propertySetters,
+      TypeRef<?>[] propertyTypes,
+      boolean[] propertyReconstructible,
+      boolean[] propertyRequired,
+      boolean[] parameterOptional) {
     this.creator = Objects.requireNonNull(creator, "creator");
     this.invocationCreator = Objects.requireNonNull(invocationCreator, "invocationCreator");
     this.defaultConstructor = defaultConstructor;
     this.parameterNames = parameterNames.clone();
     this.accessors = accessors.clone();
     this.defaultMethods = defaultMethods.clone();
+    this.defaultsReceiver = defaultsReceiver;
+    this.defaultFactories = defaultFactories == null ? null : defaultFactories.clone();
+    this.referenceDefaults = referenceDefaults;
     this.defaultMaskBits = defaultMaskBits.clone();
     this.parameterNullable = parameterNullable.clone();
+    if (parameterOptional != null && parameterOptional.length != parameterNames.length) {
+      throw new IllegalArgumentException("Optional JSON parameters must match constructor arity");
+    }
+    this.parameterOptional = parameterOptional == null ? null : parameterOptional.clone();
     this.parameterTypes = parameterTypes.clone();
     this.propertyNames = propertyNames.clone();
     this.propertyGetters = propertyGetters.clone();
@@ -169,8 +282,12 @@ public final class JsonObjectModel {
     parameterNames = new String[0];
     accessors = new Method[0];
     defaultMethods = new Method[0];
+    defaultsReceiver = null;
+    defaultFactories = null;
+    referenceDefaults = false;
     defaultMaskBits = new int[0];
     parameterNullable = new boolean[0];
+    parameterOptional = null;
     parameterTypes = new TypeRef<?>[0];
     if (propertyGetters.length != propertyNames.length
         || propertySetters.length != propertyNames.length
@@ -252,6 +369,7 @@ public final class JsonObjectModel {
     if (parameterNames.length != count
         || accessors.length != count
         || defaultMethods.length != count
+        || defaultFactories != null && defaultFactories.length != count
         || defaultMaskBits.length != count
         || parameterNullable.length != count
         || parameterTypes.length != count) {
@@ -294,6 +412,7 @@ public final class JsonObjectModel {
       }
     }
     HashSet<String> names = new HashSet<>();
+    boolean hasInstanceDefault = false;
     for (int i = 0; i < parameterNames.length; i++) {
       String name = parameterNames[i];
       if (name == null || name.isEmpty() || !names.add(name)) {
@@ -303,6 +422,17 @@ public final class JsonObjectModel {
       if (defaultMethods[i] != null && defaultMaskBits[i] >= 0) {
         throw new IllegalArgumentException("A constructor parameter has two default mechanisms");
       }
+      if (defaultMethods[i] != null && !Modifier.isStatic(defaultMethods[i].getModifiers())) {
+        if (!defaultMethods[i].getDeclaringClass().isInstance(defaultsReceiver)) {
+          throw new IllegalArgumentException(
+              "JSON constructor default receiver does not own " + defaultMethods[i]);
+        }
+        hasInstanceDefault = true;
+      }
+    }
+    if (defaultsReceiver != null && !hasInstanceDefault) {
+      throw new IllegalArgumentException(
+          "A JSON constructor default receiver requires at least one instance default");
     }
     names.clear();
     for (int i = 0; i < propertyNames.length; i++) {
@@ -386,8 +516,29 @@ public final class JsonObjectModel {
     return accessors.clone();
   }
 
+  /**
+   * Returns declared constructor defaults, never implicit reader type fallbacks. Explicit default
+   * omission may evaluate these methods with the current object's preceding constructor values.
+   */
   public Method[] defaultMethods() {
     return defaultMethods.clone();
+  }
+
+  /** Returns whether this model permits constructor reference values for authorized properties. */
+  public boolean referenceDefaults() {
+    return referenceDefaults;
+  }
+
+  /** Returns the receiver of instance constructor-default methods, or null when they are static. */
+  public Object defaultsReceiver() {
+    return defaultsReceiver;
+  }
+
+  /**
+   * Returns type-default factories selected by the language module, or null if none are supplied.
+   */
+  public Supplier<?>[] defaultFactories() {
+    return defaultFactories == null ? null : defaultFactories.clone();
   }
 
   public int[] defaultMaskBits() {
@@ -426,6 +577,11 @@ public final class JsonObjectModel {
   /** Returns required-deferred flags aligned with {@link #propertyNames()}. */
   public boolean[] propertyRequired() {
     return propertyRequired.clone();
+  }
+
+  /** Returns whether a language optional/container parameter may use its existing type default. */
+  public boolean parameterOptional(int index) {
+    return parameterOptional != null && parameterOptional[index];
   }
 
   /** Returns exact compiler storage which is not part of fixed-instance JSON state. */

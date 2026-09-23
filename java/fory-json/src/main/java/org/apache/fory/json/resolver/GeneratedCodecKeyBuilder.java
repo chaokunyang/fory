@@ -19,6 +19,8 @@
 
 package org.apache.fory.json.resolver;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
 import org.apache.fory.json.codec.CodecUtils;
@@ -49,6 +51,7 @@ final class GeneratedCodecKeyBuilder {
     EXACT_CODEC,
     FACTORY,
     MIXIN,
+    SELF_REFERENCE,
     CYCLE_SLOT
   }
 
@@ -71,8 +74,14 @@ final class GeneratedCodecKeyBuilder {
     keyParts = new ArrayList<>();
     JsonSharedRegistry registry = resolver.sharedRegistry();
     if (!JsonTypeResolver.readerKind(kind)) {
-      keyParts.add(registry.writeNullFields());
+      keyParts.add(registry.defaultPropertyInclusion());
+      keyParts.add(registry.writeLongAsString());
+      keyParts.add(registry.escapeNonAscii());
+    } else {
+      keyParts.add(registry.failOnMissingRequiredProperties());
     }
+    // Both readers and writers store concrete byte-array codecs selected by this default.
+    keyParts.add(registry.byteArrayFormat());
     keyParts.add(registry.propertyDiscoveryEnabled());
     keyParts.add(registry.propertyNamingStrategy());
     addModelInputs(typeInfo, owner.unwrappedInfo(), registry);
@@ -100,9 +109,11 @@ final class GeneratedCodecKeyBuilder {
         rawType,
         typeInfo.typeRef(),
         elementType,
-        kind == JsonTypeResolver.CapabilityKind.UTF8_WRITER
-            ? Role.UTF8_COLLECTION_WRITER
-            : Role.UTF8_COLLECTION_READER,
+        kind == JsonTypeResolver.CapabilityKind.STRING_WRITER
+            ? Role.STRING_COLLECTION_WRITER
+            : kind == JsonTypeResolver.CapabilityKind.UTF8_WRITER
+                ? Role.UTF8_COLLECTION_WRITER
+                : Role.UTF8_COLLECTION_READER,
         owner instanceof CollectionCodec.StringCollectionCodec);
   }
 
@@ -122,6 +133,17 @@ final class GeneratedCodecKeyBuilder {
     if (unwrapped == null) {
       return;
     }
+    if (!JsonTypeResolver.readerKind(kind)) {
+      JsonUnwrappedInfo.WriteEntry[] steps = unwrapped.writeSteps();
+      for (int i = 0; i < steps.length; i++) {
+        if (steps[i].kind() == JsonUnwrappedInfo.GROUP) {
+          ObjectCodec<?> child = steps[i].group().childCodec();
+          add(Part.UNWRAPPED_FACTORY, i, resolver.factoryKey(child));
+          add(Part.UNWRAPPED_MIXIN, i, registry.mixinType(child.type()));
+        }
+      }
+      return;
+    }
     JsonUnwrappedInfo.Group[] groups = unwrapped.groups();
     for (int i = 0; i < groups.length; i++) {
       ObjectCodec<?> child = groups[i].childCodec();
@@ -136,7 +158,15 @@ final class GeneratedCodecKeyBuilder {
       JsonFieldInfo[] fields =
           owner.unwrappedInfo() == null ? owner.writeFields() : owner.unwrappedInfo().writeFields();
       for (JsonFieldInfo field : fields) {
+        addWriteInclusion(field);
         addRegistration(field.writeTypeInfo());
+      }
+      if (owner.unwrappedInfo() != null) {
+        for (JsonUnwrappedInfo.WriteEntry step : owner.unwrappedInfo().writeSteps()) {
+          if (step.kind() == JsonUnwrappedInfo.GROUP) {
+            addWriteInclusion(step.group().declaration().writeProperty());
+          }
+        }
       }
       if (any != null && (any.writeField() != null || any.writeGetter() != null)) {
         addRegistration(any.valueTypeInfo());
@@ -167,6 +197,12 @@ final class GeneratedCodecKeyBuilder {
   }
 
   private void addRegistration(JsonTypeInfo typeInfo) {
+    // Self calls and stored child capabilities have different generated constructor shapes.
+    // Subtype occurrences can have distinct owners even when their raw classes are identical.
+    if (resolver.canonicalObjectCodec(typeInfo) == owner) {
+      keyParts.add(Part.SELF_REFERENCE);
+      keyParts.add(occurrence);
+    }
     JsonSharedRegistry registry = resolver.sharedRegistry();
     String factoryKey = typeInfo.factoryKey();
     if (factoryKey != null) {
@@ -185,6 +221,31 @@ final class GeneratedCodecKeyBuilder {
       keyParts.add(mixinType);
     }
     occurrence++;
+  }
+
+  private void addWriteInclusion(JsonFieldInfo field) {
+    keyParts.add(field.writeNull());
+    keyParts.add(field.omitEmpty());
+    keyParts.add(field.omitDefault());
+    addMethod(field.defaultMethod());
+    for (Method dependency : field.defaultDependencies()) {
+      addMethod(dependency);
+    }
+  }
+
+  private void addMethod(Method method) {
+    keyParts.add(method != null);
+    if (method == null) {
+      return;
+    }
+    keyParts.add(method.getDeclaringClass());
+    keyParts.add(method.getName());
+    keyParts.add(method.getReturnType());
+    keyParts.add(Modifier.isStatic(method.getModifiers()));
+    keyParts.add(method.getParameterCount());
+    for (Class<?> type : method.getParameterTypes()) {
+      keyParts.add(type);
+    }
   }
 
   private void add(Part part, Object value) {

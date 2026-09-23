@@ -57,8 +57,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.json.annotation.JsonAnyProperty;
+import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
+import org.apache.fory.json.annotation.JsonProperty.Include;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonValidator;
 import org.apache.fory.json.codec.ClosedSubtypeCodec;
@@ -118,6 +120,32 @@ public class JsonAsyncCompilationTest {
             .id,
         4);
     assertSame(resolver.getObjectCodec(AsyncChild.class), owner);
+  }
+
+  @Test
+  public void naturalCacheTracksCompilation() throws Exception {
+    ControlledJson controlled = controlledJson();
+    JsonTypeResolver resolver = currentTypeResolver(controlled.json);
+    JsonValueCodec<Object> natural = resolver.getTypeInfo(Object.class, Object.class).valueCodec();
+    StringJsonWriter writer = new StringJsonWriter(controlled.json.config(), resolver);
+    AsyncChild value = child("cached", 1);
+    assertFalse(natural.isEmpty(writer, value));
+    JsonTypeInfo info = resolver.getRuntimeTypeInfo(AsyncChild.class);
+    ObjectCodec<?> owner = resolver.canonicalObjectCodec(info);
+    assertSame(info.stringWriter(), owner);
+    Field cached = ScalarCodecs.NaturalCodec.class.getDeclaredField("cachedTypeInfo");
+    cached.setAccessible(true);
+    assertSame(cached.get(natural), info);
+
+    controlled.executor.runAll();
+    assertNotSame(info.stringWriter(), owner);
+    assertNotSame(info.utf8Writer(), owner);
+    natural.writeString(writer, value);
+    assertEquals(writer.toJson(), "{\"id\":1,\"name\":\"cached\"}");
+    Utf8JsonWriter bytes = new Utf8JsonWriter(controlled.json.config(), resolver);
+    natural.writeUtf8(bytes, value);
+    assertEquals(new String(bytes.toJsonBytes(), StandardCharsets.UTF_8), writer.toJson());
+    assertSame(cached.get(natural), info);
   }
 
   @Test
@@ -182,6 +210,29 @@ public class JsonAsyncCompilationTest {
     assertNotSame(info.utf16Reader(), owner);
     assertNotSame(info.utf8Reader(), owner);
     assertEquals(json.fromJson("{\"name\":\"again\",\"id\":5}", AsyncCreator.class).id, 5);
+  }
+
+  @Test
+  public void requiredPropertiesSurviveReplacement() throws Exception {
+    ControlledJson controlled = controlledJson(new CodecRegistry(), 1, true);
+    ForyJson json = controlled.json;
+    JsonTypeResolver resolver = currentTypeResolver(json);
+    ObjectCodec<AsyncCreator> owner = resolver.getObjectCodec(AsyncCreator.class);
+    JsonTypeInfo info = resolver.getTypeInfo(AsyncCreator.class, AsyncCreator.class);
+    assertSame(info.utf8Reader(), owner);
+    for (int pass = 0; pass < 2; pass++) {
+      for (String text : new String[] {"{}", "{\"name\":\"中\"}"}) {
+        expectThrows(ForyJsonException.class, () -> json.fromJson(text, AsyncCreator.class));
+        expectThrows(
+            ForyJsonException.class,
+            () -> json.fromJson(text.getBytes(StandardCharsets.UTF_8), AsyncCreator.class));
+      }
+      assertEquals(json.fromJson("{\"id\":0,\"name\":null}", AsyncCreator.class).id, 0);
+      controlled.executor.runAll();
+      assertNotSame(info.latin1Reader(), owner);
+      assertNotSame(info.utf16Reader(), owner);
+      assertNotSame(info.utf8Reader(), owner);
+    }
   }
 
   @Test
@@ -729,10 +780,17 @@ public class JsonAsyncCompilationTest {
     Object initialFriendWriter = friendInfo.utf8Writer();
     Object initialChildrenWriter = writtenChildrenInfo.utf8Writer();
     Object initialFriendsWriter = writtenFriendsInfo.utf8Writer();
+    JsonTypeInfo[] stringGraph = {
+      rootInfo, childInfo, friendInfo, writtenChildrenInfo, writtenFriendsInfo
+    };
+    Object[] initialStringWriters = new Object[stringGraph.length];
+    for (int i = 0; i < stringGraph.length; i++) {
+      initialStringWriters[i] = stringGraph[i].stringWriter();
+    }
     assertEquals(new String(controlled.json.toJsonBytes(initial), StandardCharsets.UTF_8), input);
 
     int pendingTasks = controlled.executor.pendingTasks();
-    assertEquals(pendingTasks, 19);
+    assertEquals(pendingTasks, 21);
     for (int i = 0; i < pendingTasks; i++) {
       controlled.executor.runNext();
       boolean initialReaderGraph =
@@ -762,8 +820,20 @@ public class JsonAsyncCompilationTest {
               && writtenChildrenInfo.utf8Writer() != initialChildrenWriter
               && writtenFriendsInfo.utf8Writer() != initialFriendsWriter;
       assertTrue(initialWriterGraph || generatedWriterGraph);
+      int installedStringWriters = 0;
+      for (int j = 0; j < stringGraph.length; j++) {
+        if (stringGraph[j].stringWriter() != initialStringWriters[j]) {
+          installedStringWriters++;
+        }
+      }
+      assertTrue(installedStringWriters == 0 || installedStringWriters == stringGraph.length);
     }
 
+    for (int i = 0; i < stringGraph.length; i++) {
+      assertNotSame(stringGraph[i].stringWriter(), initialStringWriters[i]);
+    }
+    assertFinalField(writtenChildrenInfo.stringWriter(), "elementWriter", childInfo.stringWriter());
+    assertFinalField(writtenFriendsInfo.stringWriter(), "elementWriter", friendInfo.stringWriter());
     assertNotSame(rootInfo.utf8Reader(), rootOwner);
     assertNotSame(childInfo.utf8Reader(), childOwner);
     assertNotSame(friendInfo.utf8Reader(), friendOwner);
@@ -803,11 +873,13 @@ public class JsonAsyncCompilationTest {
     assertEquals(generated.children.get(8).id, 9);
     assertEquals(generated.friends.get(0).id, 10);
     assertEquals(new String(controlled.json.toJsonBytes(generated), StandardCharsets.UTF_8), input);
+    assertEquals(controlled.json.toJson(generated), input);
 
     AsyncCollections fallback = new AsyncCollections();
     fallback.children = new LinkedList<>(generated.children);
     fallback.friends = new LinkedList<>(generated.friends);
     assertEquals(new String(controlled.json.toJsonBytes(fallback), StandardCharsets.UTF_8), input);
+    assertEquals(controlled.json.toJson(fallback), input);
 
     AsyncCollections empty =
         controlled.json.fromJson(
@@ -1314,9 +1386,19 @@ public class JsonAsyncCompilationTest {
 
   private static ControlledJson controlledJson(CodecRegistry codecs, int concurrencyLevel)
       throws Exception {
+    return controlledJson(codecs, concurrencyLevel, false);
+  }
+
+  private static ControlledJson controlledJson(
+      CodecRegistry codecs, int concurrencyLevel, boolean failOnMissingRequiredProperties)
+      throws Exception {
     JsonConfig config =
         new JsonConfig(
+            Include.NON_NULL,
             false,
+            false,
+            failOnMissingRequiredProperties,
+            JsonByteArray.Format.BASE64,
             true,
             true,
             true,

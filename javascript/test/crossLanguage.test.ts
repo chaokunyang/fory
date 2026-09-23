@@ -364,6 +364,27 @@ describe("bool", () => {
 
     writeToFile(serializedData as Buffer);
   });
+  test("test_exact_field_tags", () => {
+    const fory = new Fory({
+      compatible: false,
+    });
+
+    @Type.struct(104, {
+      first: Type.int32().setId(15),
+      second: Type.int32().setId(65551),
+      last: Type.int32().setId(536870911),
+    })
+    class ExactFieldTags {
+      first: number = 0;
+      second: number = 0;
+      last: number = 0;
+    }
+    fory.register(ExactFieldTags);
+
+    const value = fory.deserialize(content) as ExactFieldTags;
+    expect(value).toEqual({ first: 39, second: 40, last: 41 });
+    writeToFile(fory.serialize(value) as Buffer);
+  });
   test("test_named_simple_struct", () => {
     // Same as test_simple_struct but with named registration
     const fory = new Fory({

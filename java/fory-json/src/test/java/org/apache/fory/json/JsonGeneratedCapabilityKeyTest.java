@@ -49,7 +49,9 @@ import javax.tools.ToolProvider;
 import org.apache.fory.json.annotation.JsonAnyGetter;
 import org.apache.fory.json.annotation.JsonAnySetter;
 import org.apache.fory.json.annotation.JsonCodec;
+import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.annotation.JsonMixin;
+import org.apache.fory.json.annotation.JsonProperty.Include;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.annotation.JsonUnwrapped;
@@ -286,7 +288,14 @@ public class JsonGeneratedCapabilityKeyTest {
 
   @Test
   public void unwrappedFactoryVersionsParent() throws Exception {
-    assertDifferentObjectClasses(unwrappedFactoryType(true), unwrappedFactoryType(false));
+    assertDifferentObjectClasses(
+        unwrappedFactoryType(true, UnwrappedFactoryModel.class),
+        unwrappedFactoryType(false, UnwrappedFactoryModel.class));
+    JsonTypeInfo first = unwrappedFactoryType(true, WriteOnlyFactoryModel.class);
+    JsonTypeInfo second = unwrappedFactoryType(false, WriteOnlyFactoryModel.class);
+    assertNotSame(first.stringWriter().getClass(), second.stringWriter().getClass());
+    assertNotSame(first.utf8Writer().getClass(), second.utf8Writer().getClass());
+    assertSame(first.latin1Reader().getClass(), second.latin1Reader().getClass());
   }
 
   @Test
@@ -357,6 +366,25 @@ public class JsonGeneratedCapabilityKeyTest {
   public void writeNullVersionsWriters() {
     ForyJson first = ForyJson.builder().withAsyncCompilation(false).build();
     ForyJson second = ForyJson.builder().writeNullFields(true).withAsyncCompilation(false).build();
+    JsonTypeInfo firstType =
+        JsonTestSupport.currentTypeResolver(first).getTypeInfo(Model.class, Model.class);
+    JsonTypeInfo secondType =
+        JsonTestSupport.currentTypeResolver(second).getTypeInfo(Model.class, Model.class);
+    assertNotSame(firstType.stringWriter().getClass(), secondType.stringWriter().getClass());
+    assertNotSame(firstType.utf8Writer().getClass(), secondType.utf8Writer().getClass());
+    assertSame(firstType.latin1Reader().getClass(), secondType.latin1Reader().getClass());
+    assertSame(firstType.utf16Reader().getClass(), secondType.utf16Reader().getClass());
+    assertSame(firstType.utf8Reader().getClass(), secondType.utf8Reader().getClass());
+  }
+
+  @Test
+  public void nonEmptyVersionsWriters() {
+    ForyJson first = ForyJson.builder().withAsyncCompilation(false).build();
+    ForyJson second =
+        ForyJson.builder()
+            .defaultPropertyInclusion(Include.NON_EMPTY)
+            .withAsyncCompilation(false)
+            .build();
     JsonTypeInfo firstType =
         JsonTestSupport.currentTypeResolver(first).getTypeInfo(Model.class, Model.class);
     JsonTypeInfo secondType =
@@ -735,7 +763,7 @@ public class JsonGeneratedCapabilityKeyTest {
         .getTypeInfo(FactoryModel.class, FactoryModel.class);
   }
 
-  private static JsonTypeInfo unwrappedFactoryType(boolean first) throws Exception {
+  private static JsonTypeInfo unwrappedFactoryType(boolean first, Class<?> type) throws Exception {
     JsonObjectModel model = factoryModel(first);
     JsonCodecFactory factory =
         new JsonCodecFactory() {
@@ -755,8 +783,7 @@ public class JsonGeneratedCapabilityKeyTest {
             .registerCodec(FactoryModel.class, factory)
             .withAsyncCompilation(false)
             .build();
-    return JsonTestSupport.currentTypeResolver(json)
-        .getTypeInfo(UnwrappedFactoryModel.class, UnwrappedFactoryModel.class);
+    return JsonTestSupport.currentTypeResolver(json).getTypeInfo(type, type);
   }
 
   @SuppressWarnings({"rawtypes", "unchecked"})
@@ -935,6 +962,12 @@ public class JsonGeneratedCapabilityKeyTest {
     @JsonUnwrapped public FactoryModel value;
 
     public UnwrappedFactoryModel() {}
+  }
+
+  public static final class WriteOnlyFactoryModel {
+    @JsonUnwrapped
+    @JsonIgnore(ignoreRead = true, ignoreWrite = false)
+    public FactoryModel value;
   }
 
   public static final class GetterAny {

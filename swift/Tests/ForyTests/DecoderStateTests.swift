@@ -23,6 +23,55 @@ private enum TypeInfoScopeTestError: Error {
     case expected
 }
 
+@ForyStruct
+private struct SchemaReuseValue {
+    var value: Int32 = 0
+}
+
+@Test
+func readContextReusesOverflowSchemas() throws {
+    let config = Config(compatible: true, maxSchemaVersionsPerType: 1)
+    let resolver = TypeResolver(config: config)
+    try resolver.register(SchemaReuseValue.self, id: 901)
+    try resolver.finishRegistration()
+    let local = try resolver.requireTypeInfo(for: SchemaReuseValue.self)
+    func metadata(_ name: String) throws -> TypeMeta {
+        try TypeMeta(
+            typeID: TypeId.structType.rawValue, userTypeID: 901,
+            namespace: .empty(specialChar1: ".", specialChar2: "_"),
+            typeName: .empty(specialChar1: "$", specialChar2: "_"), registerByName: false,
+            fields: [
+                TypeMeta.FieldInfo(
+                    fieldID: -1, fieldName: name,
+                    fieldType: TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false))
+            ])
+    }
+    let first = try metadata("first")
+    let firstHash = typeMetaHashFromHeader(try ByteBuffer(bytes: first.encode()).readUInt64())
+    _ = try resolver.cacheTypeInfo(first, forHeaderHash: firstHash, localTypeInfo: local, config: config)
+    for typed in [false, true] {
+        let buffer = ByteBuffer()
+        buffer.writeVarUInt32(TypeId.compatibleStruct.rawValue)
+        buffer.writeVarUInt32(0)
+        buffer.writeBytes(try metadata("second").encode())
+        let context = ReadContext(buffer: buffer, typeResolver: resolver, config: config)
+        weak var overflow: TypeInfo?
+        do {
+            let info = try typed ? context.readTypeInfo(for: SchemaReuseValue.self) : context.readTypeInfo()
+            overflow = info
+        }
+        #expect(overflow != nil)
+        context.reset()
+        // Reusing the slot must release its old owner without growing a schema-indexed cache.
+        buffer.clear()
+        buffer.writeVarUInt32(TypeId.compatibleStruct.rawValue)
+        buffer.writeVarUInt32(0)
+        buffer.writeBytes(try first.encode())
+        _ = try typed ? context.readTypeInfo(for: SchemaReuseValue.self) : context.readTypeInfo()
+        #expect(overflow == nil)
+    }
+}
+
 @Test
 func readContextResetReleasesMetaStrings() throws {
     let config = Config()
@@ -190,15 +239,11 @@ func remoteSchemaLogicalKeyLimitPersists() throws {
         return (header, typeInfo)
     }
 
-    func expectLogicalKeyLimit(_ typeMeta: TypeMeta) {
-        do {
-            _ = try cache(typeMeta)
-            Issue.record("expected remote logical type limit")
-        } catch ForyError.invalidData(let message) {
-            #expect(message.contains("logical type limit"))
-        } catch {
-            Issue.record("expected invalid data, got \(error)")
-        }
+    func expectUncached(_ typeMeta: TypeMeta) throws {
+        let first = try cache(typeMeta)
+        let second = try cache(typeMeta)
+        #expect(first.typeInfo !== second.typeInfo)
+        #expect(resolver.getTypeInfo(forHeaderHash: typeMetaHashFromHeader(first.header)) == nil)
     }
 
     var firstTypeInfo: TypeInfo?
@@ -216,11 +261,11 @@ func remoteSchemaLogicalKeyLimitPersists() throws {
     #expect(cachedHit.typeInfo === firstTypeInfo)
 
     let rejectedTypeID = firstUserTypeID + UInt32(keyLimit)
-    expectLogicalKeyLimit(
+    try expectUncached(
         try remoteTypeMeta(userTypeID: rejectedTypeID, fieldName: "rejectedA")
     )
-    // A rejected key must not become an existing key on a later version.
-    expectLogicalKeyLimit(
+    // An uncached key must not become an existing key on a later version.
+    try expectUncached(
         try remoteTypeMeta(userTypeID: rejectedTypeID, fieldName: "rejectedB")
     )
 
@@ -240,7 +285,7 @@ func remoteSchemaLogicalKeyLimitPersists() throws {
     let existingHit = try cache(existingVersion)
     #expect(existingHit.typeInfo === existing.typeInfo)
 
-    expectLogicalKeyLimit(
+    try expectUncached(
         try remoteTypeMeta(userTypeID: rejectedTypeID + 2)
     )
 }

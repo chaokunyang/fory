@@ -18,10 +18,26 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   tests solely because of that formatting pass. Verify formatting with `spotless:check` and inspect
   the diff/status instead.
 - Fory Java requires JDK `17+`.
+- JSON generated self calls must compare canonical ObjectCodec identity, not just the raw class.
+  Different instantiations such as Box<Box<Integer>> and Box<Integer> have different field codecs.
+  Apply the same rule to reader/writer dependency selection, any-properties, and unwrapped paths.
+  Generated class keys must distinguish self references from stored child capabilities because
+  they produce different constructor shapes, including for non-generic subtype occurrences.
+- Place regressions in the existing test class that owns the behavior and use semantic fixture and
+  test names. Do not create standalone test classes named after issue numbers.
 - Run Java `spotless` with JDK `21+`. If the current runtime is lower than 21, export `JAVA_HOME` to a JDK 21 installation before running `mvn spotless:check` or `mvn spotless:apply`.
 - `fory-core` targets Java 8 bytecode and `fory-format` targets Java 11 bytecode. Do not use newer APIs in those modules.
 - `fory-json` must not depend on or reference `jdk.incubator.vector`, including production and
   multi-release sources, module descriptors, Maven wiring, and optional runtime paths.
+- Each Fory JSON `JsonState` owns one shared main byte buffer while idle and transfers it to the
+  selected concrete reader or writer for a root operation. Reclaim the latest grown or swapped
+  array before clearing that component's buffer reference, including on failure. Keep hot paths
+  on concrete byte-array fields; do not add a buffer holder, reader/writer backreference, or
+  per-value handoff. Preserve the separate UTF16 input mirror and String writer widening scratch
+  because they can be used at the same time as the main buffer.
+- JSON reader reset methods take the decode buffer explicitly and assign it directly. The caller
+  owns initial allocation; do not add a decode-buffer null check, fallback allocation, or separate
+  setter to root setup. Keep capacity growth in the existing decoding owner.
 - Put a `fory-json` optimization in the earliest multi-release overlay whose public JDK APIs
   support it. In particular, `Math.multiplyHigh` and `VarHandle` implementations belong in the
   Java 9 overlay, not the Java 25 overlay; keep only the Java 8 compatibility implementation in
@@ -91,20 +107,37 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   and locale types, `Float16`, `BFloat16`, and user-defined types remain registerable. Field/type
   `@JsonCodec`, `@JsonFormat`, and semantic metadata remain separate from exact registry mutation
   and are fixed by the target class or effective Mixin.
+- Fory JSON `byte[]` defaults to a Base64 string; `byteArrayFormat` can select BASE64, BASE16,
+  or signed ARRAY globally. `@JsonByteArray` overrides that default for an exact byte-array field
+  or getter in both directions.
+  Keep selection in the existing property codec path, including Mixin, Java processor, Kotlin
+  KSP, and GraalVM handling. Numeric arrays use signed-byte semantics and graph-memory accounting;
+  Base64 and Base16 values remain binary leaves outside that budget. Resolve the format during
+  codec selection, not on each write; semantic unsigned arrays retain their module-owned format.
 - Fory JSON `ObjectCodec` instances are resolver-owned and must not be registered directly. A
   language module that supplies a custom object model must use a `JsonCodecFactory`. A configurable
   factory's stable key must cover every option that can change its created codec class, object
   model, or generated operations.
 - Do not add normal-JVM process-global caches keyed by user classes, generated classes, serializer
   classes, classloaders, or class-bound method handles. Prefer per-runtime state, immutable shared
-  metadata, or build-time-only template data. The only exception is Fory JSON's generated-role
-  class cache in `JsonCodegen`, backed by `ClassValueCache.newClassKeySoftCache`: ordinary-JVM
+  metadata, or build-time-only template data. Fory JSON's generated-role class cache in
+  `JsonCodegen`, backed by `ClassValueCache.newClassKeySoftCache`, is an exception: ordinary-JVM
   values may contain only generated-class keys, binary names, and completed generated classes, not
   codec instances, resolvers, configured classloaders, or `CodeGenerator`. Its GraalVM branch may
   be strong only during hosted analysis and must be reset after the frozen Native registry is
-  published. Do not extend this exception to another cache or retained value.
+  published. `JsonFieldAccessor` may also cache method-lambda visibility in a `ConcurrentHashMap`
+  keyed by `System.identityHashCode(loader)`, clearing it when its size exceeds 1024. Values hold
+  only a weak loader reference and the visibility boolean; verify referent identity on hits because
+  identity hashes can collide. Keep same-loader and bootstrap shortcuts ahead of the cache, and
+  classloader calls outside map callbacks. Do not add a reference queue or per-entry eviction for
+  this construction-time cache. Do not extend these exceptions to other caches or retained values.
 - Concrete serializers may opt into sharing only after auditing retained fields. Treat serializers retaining `TypeResolver`, `RefResolver`, mutable scratch buffers, runtime state, or classloader-sensitive state as non-shareable unless that state is externalized.
 - Resolver and serializer hot paths should keep the fast-path/null-slow-path shape obvious. Hoist repeated buffer or cache-state access into locals for multi-step operations and keep rebuild/restoration logic cold.
+- Java compatible metadata hash caches and depth hints retain the source `TypeInfo`, before
+  requested-target adaptation. Store target-specific results in the existing `transformedTypeInfo`
+  cache, keyed by target `Class` identity with source `Class` and primitive header-hash comparisons
+  in its entries; do not allocate tuple keys. Resolve local schemas only on metadata-cache or
+  target-conversion-cache misses. A hit must not repeat `matchingLocalTypeDef` or `getTypeDef`.
 - Remote metadata and class-token paths that materialize Java classes must keep
   `TypeResolver.loadClass` or an equivalent owner in the path so
   `TypeChecker.checkType` and `DisallowedList` run on the remote class name
@@ -159,6 +192,31 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - In `MemoryBuffer` and `MemoryOps` hot paths, duplicate small straight-line copy/read/write logic
   when that keeps control flow direct. Do not add private helper indirection to hot paths just to
   reduce local code duplication; keep helpers for slow, cold, or error paths.
+- `MemoryBuffer` semantic primitive-array `write*` and `read*` methods own the canonical
+  little-endian element order. Keep native bulk copy as the little-endian hot path and isolate
+  big-endian conversion in separate slow helpers; serializers must not duplicate that endian
+  branch. The explicit `copyTo*Array` and `copyFrom*Array` methods remain raw native-memory copies,
+  so their format owner must handle byte order when required.
+- Add a Java `MemoryBuffer` check only when its absence can cause a JVM or native crash, OOM, or
+  attacker-controlled memory amplification. Delayed, masked, less precise, or differently typed
+  failures do not justify a check, and neither does an incorrect decoded result without one of
+  those crash or memory consequences. Do not duplicate an array, `ByteBuffer`, `VarHandle`, stream,
+  or other existing bounds owner merely to move or normalize an error.
+- The JDK 25 `MemoryBuffer` overlay intentionally does not duplicate logical range checks around
+  indexed array, absolute `ByteBuffer`, or `VarHandle` access. Those JVM accessors own physical
+  bounds enforcement and already provide a controlled failure; the exact exception type, message,
+  and detection point are not contracts. Do not copy JDK 8-24 Unsafe-path checks into the overlay
+  solely to make invalid access fail earlier or more precisely. Keep an explicit check before
+  allocation, capacity growth, or another side effect when it is needed to prevent a crash, OOM, or
+  attacker-controlled memory amplification that the access owner cannot contain.
+- `MemoryAllocator.grow` owns the postcondition that a successful return leaves the buffer capacity
+  at least the requested capacity. Callers must reject invalid or overflowed requests before the
+  call, but must not recheck the allocator postcondition afterward; fix a violating allocator at
+  the allocator implementation.
+- Fory JSON floating-point parsing may materialize uncommon numeric tokens for JDK conversion
+  when that improves measured performance. Preserve direct compact-decimal paths and JSON grammar
+  validation; use `Float.parseFloat` for float fallbacks to avoid double rounding. Do not restore
+  expensive decimal-boundary construction merely to eliminate temporary allocations.
 - In JDK 25 Fory JSON C2-sensitive code, preserve measured, naturally large hot-method boundaries.
   A method that exceeds HotSpot's 325-byte hot-inline limit through real representation, scalar,
   array, collection, or generated-schema work is an independent subtree owner. Generated group

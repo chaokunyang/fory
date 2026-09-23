@@ -33,6 +33,11 @@ import java.lang.annotation.Target;
  * no members. On input, the property is created only when at least one of its flattened members is
  * present.
  *
+ * <p>{@link JsonProperty.Include#NON_DEFAULT} may omit the entire group before visiting its
+ * members. It requires the same explicit authorization and supported default as a named property.
+ * {@code ALWAYS} excludes a group from class-level default omission; a null group still has no
+ * members. Other explicit inclusion policies on the group are unsupported.
+ *
  * <p>The optional prefix and suffix are applied to each final child member name after the child's
  * {@link JsonProperty} name and the configured property naming strategy.
  *

@@ -24,6 +24,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Arrays;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.JsonConfig;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldNameHash;
@@ -45,12 +46,10 @@ import org.apache.fory.serializer.StringSerializer;
  * available when no byte mirror exists. Returned values never retain the reusable decode buffer.
  *
  * <p>This concrete owner implements UTF16 token probes, packed digit parsing, string decoding, and
- * field hashing. {@link #clear()} releases both borrowed representations and bounds the retained
- * decode workspace before the pooled state is reused.
+ * field hashing. {@link #clear()} releases both borrowed representations and the decode workspace
+ * after the owning pooled state has reclaimed the workspace.
  */
 public final class Utf16JsonReader extends JsonReader {
-  private static final int INITIAL_STRING_DECODE_BUFFER_SIZE = 1024;
-  private static final int RETAINED_STRING_DECODE_BUFFER_SIZE = 8192;
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
   private static final long BYTE_ONES = 0x0101010101010101L;
   private static final long BYTE_HIGH_BITS = 0x8080808080808080L;
@@ -75,9 +74,13 @@ public final class Utf16JsonReader extends JsonReader {
   private String input;
   private byte[] bytes;
   private int length;
-  private byte[] stringDecodeBuffer = new byte[INITIAL_STRING_DECODE_BUFFER_SIZE];
+  // The caller supplies decode storage on every reset; avoid a redundant null check or allocation
+  // on pooled root setup. Decoding owns any subsequent growth.
+  private byte[] stringDecodeBuffer;
+
   // Keep the cache after hot representation fields; an inherited reference shifts their offsets.
   private final FieldNameCache fieldNameCache;
+  private ZoneIdCache zoneIdCache;
 
   public Utf16JsonReader(JsonConfig config, JsonTypeResolver typeResolver) {
     super(config, typeResolver);
@@ -87,6 +90,14 @@ public final class Utf16JsonReader extends JsonReader {
     // The configured limit belongs to each reader; pooled-state concurrency must not divide it.
     int maxEntries = config.maxCachedFieldNames();
     fieldNameCache = maxEntries == 0 ? null : new FieldNameCache(maxEntries);
+  }
+
+  @Override
+  ZoneIdCache zoneIds() {
+    if (zoneIdCache == null) {
+      zoneIdCache = new ZoneIdCache();
+    }
+    return zoneIdCache;
   }
 
   @Override
@@ -355,12 +366,15 @@ public final class Utf16JsonReader extends JsonReader {
     return candidate;
   }
 
-  public Utf16JsonReader(JsonConfig config, JsonTypeResolver typeResolver, String input) {
+  public Utf16JsonReader(
+      JsonConfig config, JsonTypeResolver typeResolver, String input, byte[] decodeBuffer) {
     this(config, typeResolver);
-    reset(input);
+    reset(input, decodeBuffer);
   }
 
-  public Utf16JsonReader reset(String input) {
+  /** Resets the input and borrows the caller's non-null decode buffer until {@link #clear()}. */
+  public Utf16JsonReader reset(String input, byte[] decodeBuffer) {
+    stringDecodeBuffer = decodeBuffer;
     this.input = input;
     if (StringSerializer.isBytesBackedString()) {
       byte coder = StringSerializer.getStringCoder(input);
@@ -380,13 +394,15 @@ public final class Utf16JsonReader extends JsonReader {
   }
 
   /**
-   * Resets this reader with a String and its exact native-layout UTF16 byte mirror.
+   * Resets this reader with a String, its exact native-layout UTF16 byte mirror, and the caller's
+   * non-null decode buffer.
    *
    * <p>The caller owns creating the mirror. Its first {@code input.length() * 2} bytes must encode
    * the same UTF16 code units in the layout used by {@link StringSerializer}; this method validates
    * capacity but does not compare the mirror on the hot setup path.
    */
-  public Utf16JsonReader reset(String input, byte[] bytes) {
+  public Utf16JsonReader reset(String input, byte[] bytes, byte[] decodeBuffer) {
+    stringDecodeBuffer = decodeBuffer;
     int length = input.length();
     if (length > (Integer.MAX_VALUE >>> 1)) {
       throw new IllegalArgumentException("String is too large");
@@ -408,9 +424,22 @@ public final class Utf16JsonReader extends JsonReader {
     bytes = null;
     length = 0;
     position = 0;
-    if (stringDecodeBuffer.length > RETAINED_STRING_DECODE_BUFFER_SIZE) {
-      stringDecodeBuffer = new byte[RETAINED_STRING_DECODE_BUFFER_SIZE];
+    stringDecodeBuffer = null;
+  }
+
+  /** Returns the current storage, including any growth, before {@link #clear()} detaches it. */
+  @Internal
+  public byte[] getStringDecodeBuffer() {
+    return stringDecodeBuffer;
+  }
+
+  @Override
+  public char peekToken() {
+    skipWhitespaceFast();
+    if (position >= length) {
+      throw error("Expected token");
     }
+    return charAtFast(position);
   }
 
   public boolean consumeToken(char expected) {
@@ -537,7 +566,8 @@ public final class Utf16JsonReader extends JsonReader {
     return tryReadNullToken();
   }
 
-  private boolean tryReadNullLiteral() {
+  @Override
+  protected boolean tryReadNullLiteral() {
     if (startsWithAscii("null")) {
       position += 4;
       return true;
@@ -568,7 +598,8 @@ public final class Utf16JsonReader extends JsonReader {
     return value;
   }
 
-  private boolean readBooleanToken() {
+  @Override
+  protected boolean readBooleanToken() {
     if (position < length && charAtFast(position) == '"') {
       return readQuotedBooleanValue();
     }
@@ -2091,6 +2122,31 @@ public final class Utf16JsonReader extends JsonReader {
         out = putUtf16Char(outBytes, out, (char) ch);
         return readStringUtf16Tail(outBytes, out, nextStringChar());
       }
+      // Copy the plain characters up to the next stop character in one pass. Without this the whole
+      // remainder of a string is decoded one character at a time once the first escape is seen.
+      if (LITTLE_ENDIAN && bytes != null) {
+        int runStart = position;
+        int wordEnd = length - 4;
+        while (position <= wordEnd) {
+          long word = LittleEndian.getInt64(bytes, position << 1);
+          long nonLatin = word & UTF16_NON_LATIN_BYTES;
+          long stopMask = utf16StringStopMask(word, nonLatin) | nonLatin;
+          if (stopMask != 0) {
+            position += Long.numberOfTrailingZeros(stopMask) >>> 4;
+            break;
+          }
+          position += 4;
+        }
+        int run = position - runStart;
+        if (run > 0) {
+          outBytes = ensureStringDecodeCapacity(outBytes, out + run);
+          byte[] localBytes = bytes;
+          for (int i = 0, offset = runStart << 1; i < run; i++, offset += 2) {
+            outBytes[out + i] = localBytes[offset];
+          }
+          out += run;
+        }
+      }
       ch = nextStringChar();
     }
   }
@@ -2268,6 +2324,9 @@ public final class Utf16JsonReader extends JsonReader {
     int year = parse4(dateStart);
     int month = parse2(dateStart + 5);
     int day = parse2(dateStart + 8);
+    if (year < 0 || month < 0 || day < 0) {
+      return null;
+    }
     int end = dateStart + 10;
     char ch = charAtFast(end);
     if (ch == '"') {
@@ -2304,6 +2363,9 @@ public final class Utf16JsonReader extends JsonReader {
     int day = parse2(start + 8);
     int hour = parse2(start + 11);
     int minute = parse2(start + 14);
+    if (year < 0 || month < 0 || day < 0 || hour < 0 || minute < 0) {
+      return null;
+    }
     return tryReadIsoOffsetDateTimeTail(start + 16, inputLength, year, month, day, hour, minute);
   }
 
@@ -2313,6 +2375,9 @@ public final class Utf16JsonReader extends JsonReader {
     int nano = 0;
     if (index < inputLength && charAtFast(index) == ':') {
       second = parse2(index + 1);
+      if (second < 0) {
+        return null;
+      }
       index += 3;
       if (index < inputLength && charAtFast(index) == '.') {
         int fractionStart = index + 1;
@@ -2321,7 +2386,7 @@ public final class Utf16JsonReader extends JsonReader {
           fractionEnd++;
         }
         if (fractionEnd == fractionStart) {
-          throw new IllegalArgumentException();
+          return null;
         }
         if (fractionEnd - fractionStart > 9) {
           throw error("OffsetDateTime fractional seconds exceed nanosecond precision");
@@ -2412,6 +2477,9 @@ public final class Utf16JsonReader extends JsonReader {
     if (charAtFast(end) != '"') {
       return Long.MIN_VALUE;
     }
+    if (hour < 0 || minute < 0 || second < 0) {
+      return Long.MIN_VALUE;
+    }
     int total = hour * 3600 + minute * 60 + second;
     if (offset == '-') {
       total = -total;
@@ -2431,14 +2499,17 @@ public final class Utf16JsonReader extends JsonReader {
   }
 
   private int parse4(int index) {
-    return parse2(index) * 100 + parse2(index + 2);
+    int high = parse2(index);
+    int low = parse2(index + 2);
+    return high < 0 || low < 0 ? -1 : high * 100 + low;
   }
 
   private int parse2(int index) {
     int high = charAtFast(index) - '0';
     int low = charAtFast(index + 1) - '0';
     if (high < 0 || high > 9 || low < 0 || low > 9) {
-      throw new IllegalArgumentException();
+      // A JSON escape can occur inside a digit pair; let the decoded-text parser handle it.
+      return -1;
     }
     return high * 10 + low;
   }

@@ -175,7 +175,7 @@ func WithMaxTypeMetaBytes(size int) Option {
 	}
 }
 
-// WithMaxSchemaVersionsPerType sets the maximum accepted remote metadata versions for one logical type.
+// WithMaxSchemaVersionsPerType sets the maximum cached remote metadata versions for one logical type.
 func WithMaxSchemaVersionsPerType(size int) Option {
 	if size <= 0 {
 		panic("MaxSchemaVersionsPerType must be positive")
@@ -185,7 +185,7 @@ func WithMaxSchemaVersionsPerType(size int) Option {
 	}
 }
 
-// WithMaxAverageSchemaVersionsPerType sets the average remote metadata version limit across accepted remote types.
+// WithMaxAverageSchemaVersionsPerType sets the average cached remote metadata version limit across cached remote types.
 func WithMaxAverageSchemaVersionsPerType(size int) Option {
 	if size <= 0 {
 		panic("MaxAverageSchemaVersionsPerType must be positive")

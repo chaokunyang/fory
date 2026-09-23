@@ -17,7 +17,7 @@
  * under the License.
  */
 
-import Fory, { Type } from "../packages/core/index";
+import Fory, { ReadContext, Type, WriteContext } from "../packages/core/index";
 import { CodegenRegistry } from "../packages/core/lib/gen/router";
 import { BinaryReader } from "../packages/core/lib/reader";
 import { ConfigFlags, RefFlags, TypeId } from "../packages/core/lib/type";
@@ -95,6 +95,44 @@ describe("map", () => {
         ["world", 456],
       ]),
     });
+  });
+
+  test("should root map use declared key and value types", () => {
+    // A root Type.map(...) registration previously fell back to the internal
+    // any-typed map serializer, silently discarding declared key/value types:
+    // declared float32 must narrow, while dynamic dispatch keeps float64.
+    const fory = new Fory({ compatible: false });
+    const { serialize, deserialize } = fory.register(Type.map(Type.string(), Type.float32()));
+    expect(deserialize(serialize(new Map([["a", 0.1]])))).toEqual(
+      new Map([["a", Math.fround(0.1)]]),
+    );
+
+    // The dynamic map serializer must stay untouched by the registration.
+    expect(fory.deserialize(fory.serialize(new Map([[1, "x"]])))).toEqual(new Map([[1, "x"]]));
+  });
+
+  test.each([false, true])("registers map before ext codec (%s)", (compatible) => {
+    class MapExtension {
+      constructor(public id = 0) {}
+    }
+    Type.ext(922)(MapExtension);
+
+    const fory = new Fory({ compatible });
+    const keys = fory.register(Type.map(Type.ext(922), Type.string()));
+    const values = fory.register(Type.map(Type.string(), Type.ext(922)));
+    fory.register(MapExtension, {
+      write(context: WriteContext, value: MapExtension) {
+        context.writeUint8(value.id);
+      },
+      read(context: ReadContext, result: MapExtension) {
+        result.id = context.readUint8();
+      },
+    });
+
+    const keyInput = new Map([[new MapExtension(7), "key"]]);
+    const valueInput = new Map([["value", new MapExtension(9)]]);
+    expect(keys.deserialize(keys.serialize(keyInput))).toEqual(keyInput);
+    expect(values.deserialize(values.serialize(valueInput))).toEqual(valueInput);
   });
 
   test("preserves shared dynamic map entries", () => {
@@ -212,5 +250,37 @@ describe("map", () => {
       expect(fory.readContext.depth).toBe(0);
       expect(serializer.deserialize(valid)).toEqual(value);
     }
+  });
+
+  test("should large declared map work", () => {
+    // The generated map write must reserve writer capacity for its entries.
+    // Without it, unchecked DataView writes past the buffer end threw a
+    // RangeError once the map body outgrew the initial buffer.
+    const fory = new Fory({ compatible: false });
+    const { serialize, deserialize } = fory.register(
+      Type.struct(
+        { namespace: "example", typeName: "BigMap" },
+        { m: Type.map(Type.int32({ encoding: "fixed" }), Type.int32({ encoding: "fixed" })) },
+      ),
+    );
+    const m = new Map<number, number>();
+    for (let i = 0; i < 30000; i++) {
+      m.set(i, i + 1);
+    }
+    expect(deserialize(serialize({ m })).m.get(29999)).toBe(30000);
+  });
+
+  test("should large any-typed map work", () => {
+    // A map with dynamic key/value types writes through MapAnySerializer,
+    // which must reserve writer capacity per entry.
+    // Numeric entries only: string bodies reserve internally, which would
+    // mask a missing per-entry reserve.
+    const fory = new Fory({ compatible: false });
+    const { serialize, deserialize } = fory.register(Type.map(Type.any(), Type.any()));
+    const m = new Map<any, any>();
+    for (let i = 0; i < 30000; i++) {
+      m.set(i, i % 2 === 0 ? BigInt(i) : i * 3);
+    }
+    expect(deserialize(serialize(m))).toEqual(m);
   });
 });

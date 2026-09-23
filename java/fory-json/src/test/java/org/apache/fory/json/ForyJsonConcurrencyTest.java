@@ -25,6 +25,7 @@ import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -59,7 +60,7 @@ public class ForyJsonConcurrencyTest {
         new Thread(
             () -> {
               try {
-                assertEquals(json.toJson(new BlockingValue()), "null");
+                assertEquals(json.toJson(new BlockingValue()), "[\"held\\n\"]");
               } catch (Throwable t) {
                 firstFailure.set(t);
               }
@@ -95,6 +96,43 @@ public class ForyJsonConcurrencyTest {
     second.join();
     assertFailure(firstFailure.get());
     assertFailure(secondFailure.get());
+  }
+
+  @Test
+  public void concurrentBufferIsolation() throws Exception {
+    CountDownLatch rootEntered = new CountDownLatch(1);
+    CountDownLatch releaseRoot = new CountDownLatch(1);
+    ForyJson json =
+        ForyJson.builder()
+            .withConcurrencyLevel(2)
+            .registerCodec(BlockingValue.class, new BlockingCodec(rootEntered, releaseRoot))
+            .build();
+    AtomicReference<Throwable> failure = new AtomicReference<>();
+    Thread writer =
+        new Thread(
+            () -> {
+              try {
+                assertEquals(json.toJson(new BlockingValue()), "[\"held\\n\"]");
+              } catch (Throwable t) {
+                failure.set(t);
+              }
+            });
+    writer.start();
+    try {
+      await(rootEntered);
+      // The first state holds a partially written document while the second state's readers
+      // decode into their workspace. Neither may overwrite the paused writer's bytes.
+      assertEquals(json.fromJson("\"overwritten\\n\"", String.class), "overwritten\n");
+      assertEquals(
+          json.fromJson("\"overwritten\\n\"".getBytes(StandardCharsets.UTF_8), String.class),
+          "overwritten\n");
+      assertEquals(json.fromJson("\"\u4e2d\\n\"", String.class), "\u4e2d\n");
+    } finally {
+      releaseRoot.countDown();
+      writer.join(TimeUnit.SECONDS.toMillis(30));
+    }
+    assertTrue(!writer.isAlive(), "Writer did not finish");
+    assertFailure(failure.get());
   }
 
   private static void await(CountDownLatch latch) throws InterruptedException {
@@ -135,6 +173,8 @@ public class ForyJsonConcurrencyTest {
 
     @Override
     public void write(JsonWriter writer, BlockingValue value) {
+      writer.writeArrayStart();
+      writer.writeString("held\n");
       entered.countDown();
       try {
         assertTrue(release.await(30, TimeUnit.SECONDS), "Timed out waiting to release root codec");
@@ -142,7 +182,7 @@ public class ForyJsonConcurrencyTest {
         Thread.currentThread().interrupt();
         throw new AssertionError(e);
       }
-      writer.writeNull();
+      writer.writeArrayEnd();
     }
 
     @Override

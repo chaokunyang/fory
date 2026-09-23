@@ -94,6 +94,13 @@ final case class SimpleStruct(
     @ForyField(id = 536870911) last: Int)
     derives ForySerializer
 
+@ForyStruct
+final case class ExactFieldTags(
+    @ForyField(id = 15) first: Int,
+    @ForyField(id = 65551) second: Int,
+    @ForyField(id = 536870911) last: Int)
+    derives ForySerializer
+
 @ForyStruct(evolution = Evolution.ENABLED)
 final case class EvolvingOverrideStruct(f1: String) derives ForySerializer
 
@@ -370,6 +377,7 @@ object ScalaXlangPeer {
       case "test_string_serializer" => roundTripValues(dataFile, newFory())
       case "test_cross_language_serializer" => roundTripValues(dataFile, crossLanguageFory())
       case "test_simple_struct" => roundTripValues(dataFile, simpleStructFory(false))
+      case "test_exact_field_tags" => roundTripValues(dataFile, exactFieldTagsFory())
       case "test_named_simple_struct" => roundTripValues(dataFile, simpleStructFory(true))
       case "test_struct_evolving_override" => roundTripValues(dataFile, evolvingOverrideFory())
       case "test_list" | "test_map" | "test_item" => roundTripValues(dataFile, itemFory())
@@ -579,6 +587,12 @@ object ScalaXlangPeer {
       registerStruct(fory, classOf[Item], 102L)
       registerStruct(fory, classOf[SimpleStruct], 103L)
     }
+    fory
+  }
+
+  private def exactFieldTagsFory(): Fory = {
+    val fory = newFory(compatible = false)
+    registerStruct(fory, classOf[ExactFieldTags], 104L)
     fory
   }
 

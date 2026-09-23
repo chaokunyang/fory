@@ -137,6 +137,17 @@ struct SimpleStruct {
               (f7, fory::F(65551)), f8, (last, fory::F(536870911)));
 };
 
+struct ExactFieldTags {
+  int32_t first;
+  int32_t second;
+  int32_t last;
+  bool operator==(const ExactFieldTags &other) const {
+    return first == other.first && second == other.second && last == other.last;
+  }
+  FORY_STRUCT(ExactFieldTags, (first, fory::F(15)), (second, fory::F(65551)),
+              (last, fory::F(536870911)));
+};
+
 struct EvolvingOverrideStruct {
   std::string f1;
   bool operator==(const EvolvingOverrideStruct &other) const {
@@ -938,6 +949,7 @@ namespace {
 void run_test_buffer(const std::string &data_file);
 void run_test_buffer_var(const std::string &data_file);
 void run_test_murmur_hash3(const std::string &data_file);
+void run_test_exact_field_tags(const std::string &data_file);
 void run_test_string_serializer(const std::string &data_file);
 void run_test_cross_language_serializer(const std::string &data_file);
 void run_test_simple_struct(const std::string &data_file);
@@ -1030,6 +1042,8 @@ int main(int argc, char **argv) {
       run_test_cross_language_serializer(data_file);
     } else if (case_name == "test_simple_struct") {
       run_test_simple_struct(data_file);
+    } else if (case_name == "test_exact_field_tags") {
+      run_test_exact_field_tags(data_file);
     } else if (case_name == "test_named_simple_struct") {
       run_test_simple_named_struct(data_file);
     } else if (case_name == "test_struct_evolving_override") {
@@ -1564,6 +1578,21 @@ void run_test_simple_struct(const std::string &data_file) {
   auto value = read_next<SimpleStruct>(fory, buffer);
   if (!(value == expected)) {
     fail("SimpleStruct mismatch");
+  }
+  std::vector<uint8_t> out;
+  append_serialized(fory, value, out);
+  write_file(data_file, out);
+}
+
+void run_test_exact_field_tags(const std::string &data_file) {
+  auto fory = build_fory(false, true);
+  ensure_ok(fory.register_struct<ExactFieldTags>(104),
+            "register ExactFieldTags");
+  auto bytes = read_file(data_file);
+  Buffer buffer = make_buffer(bytes);
+  auto value = read_next<ExactFieldTags>(fory, buffer);
+  if (!(value == ExactFieldTags{39, 40, 41})) {
+    fail("ExactFieldTags mismatch");
   }
   std::vector<uint8_t> out;
   append_serialized(fory, value, out);

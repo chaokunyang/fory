@@ -428,6 +428,17 @@ TEST(SerializationTest, BoolVectorReadsCheckBodyBeforeAllocation) {
   EXPECT_TRUE(read_ctx.has_error());
 }
 
+TEST(SerializationTest, PrimitiveVectorWriteChecksCompleteRange) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  WriteContext write_ctx(fory.config(), fory.type_resolver().clone());
+
+  EXPECT_FALSE(detail::reserve_primitive_vector(
+      write_ctx, std::numeric_limits<uint32_t>::max()));
+  EXPECT_TRUE(write_ctx.has_error());
+  EXPECT_EQ(write_ctx.buffer().writer_index(), 0U);
+}
+
 TEST(SerializationTest, FixedPrimitiveArrayRejectsWrongByteSize) {
   auto fory =
       Fory::builder().xlang(true).compatible(false).track_ref(false).build();
@@ -734,6 +745,105 @@ TEST(SerializationTest, DurationUsesSecondsAndNanosecondsPayload) {
     EXPECT_EQ(read_ctx.buffer().reader_index(),
               write_ctx.buffer().writer_index());
   }
+}
+
+TEST(SerializationTest, DurationCarrierBounds) {
+  struct TestCase {
+    int64_t seconds;
+    int32_t nanos;
+    int64_t expected;
+  };
+  const std::vector<TestCase> valid = {
+      {-9'223'372'037, 145'224'192, std::numeric_limits<int64_t>::min()},
+      {9'223'372'036, 854'775'807, std::numeric_limits<int64_t>::max()},
+      {9'223'372'037, -200'000'000, 9'223'372'036'800'000'000},
+  };
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+
+  for (const TestCase &test_case : valid) {
+    Buffer buffer;
+    buffer.write_var_int64(test_case.seconds);
+    buffer.write_int32(test_case.nanos);
+    ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+    read_ctx.attach(buffer);
+    Duration value = Serializer<Duration>::read_data(read_ctx);
+    ASSERT_FALSE(read_ctx.has_error()) << read_ctx.error().to_string();
+    EXPECT_EQ(value.count(), test_case.expected);
+  }
+
+  for (const auto &parts :
+       {std::pair<int64_t, int32_t>{-9'223'372'037, 145'224'191},
+        std::pair<int64_t, int32_t>{9'223'372'036, 854'775'808}}) {
+    Buffer buffer;
+    buffer.write_var_int64(parts.first);
+    buffer.write_int32(parts.second);
+    ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+    read_ctx.attach(buffer);
+    Serializer<Duration>::read_data(read_ctx);
+    EXPECT_TRUE(read_ctx.has_error());
+  }
+}
+
+TEST(SerializationTest, TimestampCarrierBounds) {
+  struct TestCase {
+    int64_t seconds;
+    uint32_t nanos;
+    int64_t expected;
+  };
+  const std::vector<TestCase> valid = {
+      {-9'223'372'037, 145'224'192, std::numeric_limits<int64_t>::min()},
+      {9'223'372'036, 854'775'807, std::numeric_limits<int64_t>::max()},
+      {-9'223'372'038, 4'294'967'295, -9'223'372'033'705'032'705},
+  };
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+
+  for (const TestCase &test_case : valid) {
+    Buffer buffer;
+    buffer.write_int64(test_case.seconds);
+    buffer.write_uint32(test_case.nanos);
+    ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+    read_ctx.attach(buffer);
+    Timestamp value = Serializer<Timestamp>::read_data(read_ctx);
+    ASSERT_FALSE(read_ctx.has_error()) << read_ctx.error().to_string();
+    EXPECT_EQ(value.time_since_epoch().count(), test_case.expected);
+  }
+
+  for (const auto &parts :
+       {std::pair<int64_t, uint32_t>{-9'223'372'037, 145'224'191},
+        std::pair<int64_t, uint32_t>{9'223'372'036, 854'775'808}}) {
+    Buffer buffer;
+    buffer.write_int64(parts.first);
+    buffer.write_uint32(parts.second);
+    ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+    read_ctx.attach(buffer);
+    Serializer<Timestamp>::read_data(read_ctx);
+    EXPECT_TRUE(read_ctx.has_error());
+  }
+}
+
+TEST(SerializationTest, ChronoTemporalBounds) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+
+  Buffer duration_buffer;
+  duration_buffer.write_var_int64(9'223'372'036);
+  duration_buffer.write_int32(854'775'808);
+  ReadContext duration_ctx(fory.config(), fory.type_resolver().clone());
+  duration_ctx.attach(duration_buffer);
+  Serializer<std::chrono::nanoseconds>::read_data(duration_ctx);
+  EXPECT_TRUE(duration_ctx.has_error());
+
+  using ChronoTimestamp = std::chrono::time_point<std::chrono::system_clock,
+                                                  std::chrono::nanoseconds>;
+  Buffer timestamp_buffer;
+  timestamp_buffer.write_int64(-9'223'372'037);
+  timestamp_buffer.write_uint32(145'224'191);
+  ReadContext timestamp_ctx(fory.config(), fory.type_resolver().clone());
+  timestamp_ctx.attach(timestamp_buffer);
+  Serializer<ChronoTimestamp>::read_data(timestamp_ctx);
+  EXPECT_TRUE(timestamp_ctx.has_error());
 }
 
 TEST(SerializationTest, DurationSkipConsumesSecondsAndNanosecondsPayload) {
@@ -1788,7 +1898,7 @@ TEST(SerializationTest, StaticMapChecksOwner) {
   }
 }
 
-TEST(SerializationTest, RemoteSchemaLimitRejectsExtraVersions) {
+TEST(SerializationTest, RemoteSchemaOverflowIsUncached) {
   Config config;
   config.compatible = true;
   config.max_schema_versions_per_type = 1;
@@ -1798,11 +1908,22 @@ TEST(SerializationTest, RemoteSchemaLimitRejectsExtraVersions) {
       ctx, make_remote_type_meta("Unknown", "first_value"));
   ASSERT_TRUE(first.ok()) << first.error().to_string();
 
-  auto second = append_and_read_type_meta(
-      ctx, make_remote_type_meta("Unknown", "second_value"));
-  EXPECT_FALSE(second.ok());
-  ASSERT_FALSE(second.ok());
-  EXPECT_EQ(second.error().code(), ErrorCode::InvalidData);
+  auto overflow_bytes = make_remote_type_meta("Unknown", "second_value");
+  auto second = append_and_read_type_meta(ctx, overflow_bytes);
+  ASSERT_TRUE(second.ok()) << second.error().to_string();
+  Buffer reference;
+  reference.write_var_uint32(1);
+  ctx.attach(reference);
+  auto referenced = ctx.read_type_meta();
+  ASSERT_TRUE(referenced.ok());
+  EXPECT_EQ(second.value(), referenced.value());
+  ctx.detach();
+  overflow_bytes.back() ^= 1;
+  EXPECT_FALSE(append_and_read_type_meta(ctx, overflow_bytes).ok());
+  auto cached = append_and_read_type_meta(
+      ctx, make_remote_type_meta("Unknown", "first_value"));
+  ASSERT_TRUE(cached.ok());
+  EXPECT_EQ(first.value(), cached.value());
 }
 
 TEST(SerializationTest, RemoteNonStructTypeMetaUsesSchemaLimit) {
@@ -1817,9 +1938,7 @@ TEST(SerializationTest, RemoteNonStructTypeMetaUsesSchemaLimit) {
 
   auto second = append_and_read_type_meta(
       ctx, make_remote_non_struct_type_meta(TypeId::NAMED_EXT, "RemoteEnum"));
-  EXPECT_FALSE(second.ok());
-  ASSERT_FALSE(second.ok());
-  EXPECT_EQ(second.error().code(), ErrorCode::InvalidData);
+  ASSERT_TRUE(second.ok()) << second.error().to_string();
 }
 
 TEST(SerializationTest, ExactLocalNonStructTypeMetaBypassesLimit) {
@@ -1895,16 +2014,10 @@ TEST(SerializationTest, RemoteSchemaKeyLimitPersists) {
     ASSERT_TRUE(accepted.ok()) << i << ": " << accepted.error().to_string();
   }
 
-  auto rejected_bytes = make_remote_type_meta("RemoteOverflow", "value");
-  auto rejected = append_and_read_type_meta(ctx, rejected_bytes);
-  ASSERT_FALSE(rejected.ok());
-  EXPECT_EQ(rejected.error().code(), ErrorCode::InvalidData);
-  EXPECT_NE(rejected.error().message().find("logical type limit"),
-            std::string::npos);
-
-  auto rejected_again = append_and_read_type_meta(ctx, rejected_bytes);
-  ASSERT_FALSE(rejected_again.ok());
-  EXPECT_EQ(rejected_again.error().code(), ErrorCode::InvalidData);
+  auto overflow_bytes = make_remote_type_meta("RemoteOverflow", "value");
+  ASSERT_TRUE(append_and_read_type_meta(ctx, overflow_bytes).ok());
+  overflow_bytes.back() ^= 1;
+  EXPECT_FALSE(append_and_read_type_meta(ctx, overflow_bytes).ok());
 
   auto existing_version = append_and_read_type_meta(
       ctx, make_remote_type_meta("Remote0", "second_value"));

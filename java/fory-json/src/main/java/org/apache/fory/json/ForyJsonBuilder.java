@@ -24,7 +24,9 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.annotation.JsonMixin;
+import org.apache.fory.json.annotation.JsonProperty.Include;
 import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.resolver.CodecRegistry;
@@ -49,7 +51,11 @@ import org.apache.fory.platform.GraalvmSupport;
  * discovery but continues to discover eligible instance fields across the class hierarchy.
  */
 public final class ForyJsonBuilder {
-  private boolean writeNullFields;
+  private Include defaultPropertyInclusion = Include.NON_NULL;
+  private boolean writeLongAsString;
+  private boolean escapeNonAscii;
+  private boolean failOnMissingRequiredProperties;
+  private JsonByteArray.Format byteArrayFormat = JsonByteArray.Format.BASE64;
   private boolean codegenEnabled = true;
   private boolean asyncCompilationEnabled = true;
   private boolean propertyDiscoveryEnabled = true;
@@ -69,14 +75,108 @@ public final class ForyJsonBuilder {
   ForyJsonBuilder() {}
 
   /**
-   * Sets the default null-inclusion policy for object properties.
+   * Sets the default property inclusion to {@code ALWAYS} when true or {@code NON_NULL} when false.
    *
-   * <p>This setting applies only when a logical property's merged {@code JsonProperty.include}
-   * value is {@code DEFAULT}. {@code ALWAYS} and {@code NON_NULL} override it. Exact custom codecs
-   * own their complete representation and do not observe this property-selection setting.
+   * <p>This method and {@link #defaultPropertyInclusion(Include)} update the same setting; the last
+   * call wins. Explicit property inclusion overrides the default.
    */
   public ForyJsonBuilder writeNullFields(boolean writeNullFields) {
-    this.writeNullFields = writeNullFields;
+    defaultPropertyInclusion = writeNullFields ? Include.ALWAYS : Include.NON_NULL;
+    return this;
+  }
+
+  /**
+   * Sets inclusion for properties without an explicit property or class inclusion policy.
+   *
+   * <p>The default is {@code NON_NULL}. {@code NON_EMPTY} additionally omits empty CharSequence
+   * values, arrays, collections, maps, and absent JDK Optional values, plus None and supported
+   * strict Scala collections when the Scala module is installed. Root values and container entries
+   * are not filtered. Built-in Java empty checks bypass codecs; other values use the selected
+   * codec's {@code isEmpty}, whose default is false. Kotlin properties follow this policy even when
+   * omission changes the value restored by a constructor default or causes a missing-property read
+   * failure. Other language models may retain properties needed for reconstruction.
+   *
+   * <p>{@link Include#NON_DEFAULT} is rejected here: default omission requires explicit property
+   * authorization through {@link org.apache.fory.json.annotation.JsonProperty#include()} or class
+   * authorization through {@link org.apache.fory.json.annotation.JsonInclude}. The caller must
+   * confirm stable defaults, side-effect-safe evaluation, and equivalent missing-field recovery.
+   *
+   * @throws IllegalArgumentException if inclusion is {@code DEFAULT} or {@code NON_DEFAULT}
+   * @throws NullPointerException if inclusion is null
+   */
+  public ForyJsonBuilder defaultPropertyInclusion(Include inclusion) {
+    Objects.requireNonNull(inclusion, "inclusion");
+    if (inclusion == Include.DEFAULT) {
+      throw new IllegalArgumentException("Default property inclusion must be concrete");
+    }
+    if (inclusion == Include.NON_DEFAULT) {
+      throw new IllegalArgumentException(
+          "NON_DEFAULT requires explicit @JsonProperty or @JsonInclude authorization on the model");
+    }
+    defaultPropertyInclusion = inclusion;
+    return this;
+  }
+
+  /**
+   * Writes signed 64-bit integer values owned by Fory's built-in JSON codecs as quoted decimal
+   * strings. This includes {@code long}/{@link Long}, {@code AtomicLong}, {@code AtomicLongArray},
+   * {@code OptionalLong}, and generic containers whose declared value is {@code Long}. Disabled by
+   * default.
+   *
+   * <p>This setting also applies to corresponding 64-bit unsigned scalar bindings installed by a
+   * language module. Exact custom codecs and occurrence-level codec or format annotations retain
+   * ownership of their complete representation.
+   */
+  public ForyJsonBuilder writeLongAsString(boolean writeLongAsString) {
+    this.writeLongAsString = writeLongAsString;
+    return this;
+  }
+
+  /**
+   * Escapes characters above U+007F in JSON string values and names. Disabled by default.
+   *
+   * <p>Escapes use lowercase hexadecimal digits, with supplementary characters represented by two
+   * UTF-16 surrogate escapes. This applies to String, UTF-8, stream, and pretty output. Raw JSON
+   * supplied by the caller is preserved unchanged. Reading is unaffected.
+   *
+   * <p>The setting is fixed when {@link #build()} is called. Reuse two instances when both output
+   * policies are needed.
+   */
+  public ForyJsonBuilder escapeNonAscii(boolean escapeNonAscii) {
+    this.escapeNonAscii = escapeNonAscii;
+    return this;
+  }
+
+  /**
+   * Rejects missing required constructor or factory properties. Disabled by default.
+   *
+   * <p>Declared language defaults and existing optional/container defaults still apply. Ordinary
+   * properties without declared defaults must appear instead of receiving zero, false, or null.
+   * Explicit JSON null remains subject to the existing type and nullability rules. Ignored
+   * properties, ordinary no-argument beans, and post-constructor properties keep their existing
+   * behavior. This setting applies to Fory-owned object codecs, including nested objects.
+   *
+   * <p>Writing is unaffected. An inclusion policy that omits a required property can produce JSON
+   * rejected by an instance with this setting enabled.
+   */
+  public ForyJsonBuilder failOnMissingRequiredProperties(boolean enabled) {
+    failOnMissingRequiredProperties = enabled;
+    return this;
+  }
+
+  /**
+   * Sets the default representation for {@code byte[]} roots, properties, and container values in
+   * both reading and writing. The default is {@link JsonByteArray.Format#BASE64}.
+   *
+   * <p>{@link JsonByteArray} on a property or its Mixin overrides this setting. Custom occurrence
+   * codecs and language-module unsigned arrays retain their own representation. Base16 writes
+   * lowercase hexadecimal digits without a prefix and accepts either case when reading. Numeric
+   * arrays use signed values in {@code [-128, 127]}. Formats are not detected automatically.
+   *
+   * @throws NullPointerException if format is null
+   */
+  public ForyJsonBuilder byteArrayFormat(JsonByteArray.Format format) {
+    byteArrayFormat = Objects.requireNonNull(format, "format");
     return this;
   }
 
@@ -192,10 +292,10 @@ public final class ForyJsonBuilder {
   }
 
   /**
-   * Sets the maximum byte-buffer capacity retained by each pooled String and UTF-8 writer.
+   * Sets the maximum retained capacity of each reusable output or string-decoding byte buffer.
    *
-   * <p>This bounds reusable writer storage after a root operation; it does not limit JSON output
-   * size.
+   * <p>This bounds retained buffer capacity after a root operation; it does not limit JSON input or
+   * output size or the total memory used by this instance.
    */
   public ForyJsonBuilder withBufferSizeLimitBytes(int bufferSizeLimitBytes) {
     if (bufferSizeLimitBytes < 1) {
@@ -296,7 +396,11 @@ public final class ForyJsonBuilder {
     ModuleInstaller.InstalledModules installed =
         ModuleInstaller.install(new ArrayList<>(modules), codecRegistry, mixins);
     return new JsonConfig(
-        writeNullFields,
+        defaultPropertyInclusion,
+        writeLongAsString,
+        escapeNonAscii,
+        failOnMissingRequiredProperties,
+        byteArrayFormat,
         effectiveCodegen,
         effectiveAsyncCompilation,
         propertyDiscoveryEnabled,

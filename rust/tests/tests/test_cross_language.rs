@@ -72,6 +72,16 @@ struct SimpleStruct {
     last: i32,
 }
 
+#[derive(ForyStruct, Debug, PartialEq)]
+struct ExactFieldTags {
+    #[fory(id = 15)]
+    first: i32,
+    #[fory(id = 65551)]
+    second: i32,
+    #[fory(id = 536870911)]
+    last: i32,
+}
+
 #[derive(ForyStruct, Debug, PartialEq, Default)]
 struct EvolvingOverrideStruct {
     f1: String,
@@ -446,6 +456,24 @@ fn test_simple_struct() {
     let new_local_obj: SimpleStruct = fory.deserialize(&new_bytes).unwrap();
     assert_eq!(new_local_obj, local_obj);
     fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_exact_field_tags() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+    let mut fory = Fory::builder().compatible(false).xlang(true).build();
+    fory.register::<ExactFieldTags>(104).unwrap();
+
+    let expected = ExactFieldTags {
+        first: 39,
+        second: 40,
+        last: 41,
+    };
+    let value: ExactFieldTags = fory.deserialize(&bytes).unwrap();
+    assert_eq!(value, expected);
+    fs::write(&data_file_path, fory.serialize(&value).unwrap()).unwrap();
 }
 
 #[test]

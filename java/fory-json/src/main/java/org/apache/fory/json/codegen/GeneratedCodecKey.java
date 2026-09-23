@@ -42,6 +42,7 @@ public final class GeneratedCodecKey {
     LATIN1_READER("Latin1Reader"),
     UTF16_READER("Utf16Reader"),
     UTF8_READER("Utf8Reader"),
+    STRING_COLLECTION_WRITER("StringCollectionWriter"),
     UTF8_COLLECTION_WRITER("Utf8CollectionWriter"),
     UTF8_COLLECTION_READER("Utf8CollectionReader");
 
@@ -183,7 +184,9 @@ public final class GeneratedCodecKey {
   }
 
   private static boolean collectionRole(Role role) {
-    return role == Role.UTF8_COLLECTION_WRITER || role == Role.UTF8_COLLECTION_READER;
+    return role == Role.STRING_COLLECTION_WRITER
+        || role == Role.UTF8_COLLECTION_WRITER
+        || role == Role.UTF8_COLLECTION_READER;
   }
 
   private static int valuesHash(Object[] values) {

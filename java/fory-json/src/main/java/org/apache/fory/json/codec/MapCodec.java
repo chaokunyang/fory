@@ -98,6 +98,17 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
   private static final MapKeyCodec OBJECT_KEY_CODEC =
       new MapKeyCodec() {
         @Override
+        public void writeName(JsonWriter writer, Object key) {
+          if (key instanceof Integer) {
+            writer.writeIntFieldName((int) key);
+          } else if (key instanceof Long) {
+            writer.writeLongFieldName((long) key);
+          } else {
+            MapKeyCodec.super.writeName(writer, key);
+          }
+        }
+
+        @Override
         public String toName(Object key) {
           if (key instanceof String) {
             return (String) key;
@@ -188,6 +199,9 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
       }
       if (valueCodec == ScalarCodecs.LongCodec.BOXED) {
         return new StringLongMapCodec(factory, valueTypeInfo);
+      }
+      if (valueCodec == ScalarCodecs.LongAsStringCodec.BOXED) {
+        return new StringLongAsStringMapCodec(factory, valueTypeInfo);
       }
       if (valueCodec == ScalarCodecs.ShortCodec.BOXED) {
         return new StringShortMapCodec(factory, valueTypeInfo);
@@ -1037,8 +1051,8 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
     }
   }
 
-  public static final class StringLongMapCodec extends StringNumberMapCodec {
-    private StringLongMapCodec(MapFactory factory, JsonTypeInfo valueTypeInfo) {
+  public static class StringLongMapCodec extends StringNumberMapCodec {
+    protected StringLongMapCodec(MapFactory factory, JsonTypeInfo valueTypeInfo) {
       super(factory, valueTypeInfo);
     }
 
@@ -1060,6 +1074,17 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
     @Override
     Object readUtf8Value(Utf8JsonReader reader) {
       return reader.tryReadNullToken() ? nullValue() : reader.readLongValue();
+    }
+  }
+
+  private static final class StringLongAsStringMapCodec extends StringLongMapCodec {
+    private StringLongAsStringMapCodec(MapFactory factory, JsonTypeInfo valueTypeInfo) {
+      super(factory, valueTypeInfo);
+    }
+
+    @Override
+    void writeNumber(JsonWriter writer, Object value) {
+      writer.writeLongAsString((long) value);
     }
   }
 

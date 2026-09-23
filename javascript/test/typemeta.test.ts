@@ -140,6 +140,56 @@ function replaceFirstBytesWithDifferentLength(
 }
 
 describe("typemeta", () => {
+  test.each([false, true])(
+    "reuses overflow metadata slots across roots (registered=%s)",
+    (registered) => {
+      const childId = 7040;
+      const rootId = 7041;
+      const create = (extra?: string) => {
+        const fory = new Fory({ compatible: true, maxSchemaVersionsPerType: 1 });
+        const fields: Record<string, TypeInfo> = { value: Type.int32().setId(1) };
+        if (extra !== undefined) {
+          fields[extra] = Type.int32().setId(extra === "extraA" ? 2 : 3);
+        }
+        fory.register(Type.struct(childId, fields));
+        const root = fory.register(
+          Type.struct(rootId, {
+            first: Type.struct(childId).setId(1),
+            second: Type.struct(childId).setId(2),
+          }),
+        );
+        return { fory, root };
+      };
+      const firstWriter = create("extraA");
+      const secondWriter = create("extraB");
+      const reader = create();
+      const decode = registered
+        ? reader.root.deserialize
+        : (bytes: Uint8Array) => reader.fory.deserialize(bytes);
+      const context = (reader.fory as any).readContext;
+      const first = firstWriter.root.serialize({
+        first: { value: 17, extraA: 1 },
+        second: { value: 19, extraA: 2 },
+      });
+      const overflow = secondWriter.root.serialize({
+        first: { value: 29, extraB: 3 },
+        second: { value: 31, extraB: 4 },
+      });
+      expect(decode(first)).toEqual({ first: { value: 17 }, second: { value: 19 } });
+      const cached = context.cachedTypeMeta;
+      for (let i = 0; i < 2; i++) {
+        expect(decode(overflow)).toEqual({ first: { value: 29 }, second: { value: 31 } });
+        expect(context.typeMeta).toHaveLength(2);
+        expect(context.typeMetaCache.size).toBe(1);
+        expect(context.cachedTypeMeta).toBe(cached);
+        expect(() => decode(overflow.subarray(0, overflow.length - 1))).toThrow();
+        expect(context.typeMeta).toHaveLength(2);
+        expect(context.typeMetaCache.size).toBe(1);
+      }
+      expect(decode(first)).toEqual({ first: { value: 17 }, second: { value: 19 } });
+    },
+  );
+
   test("splits dotted names", () => {
     const structInfo = Type.struct({ typeName: "com.example.User" }, {});
     expect(structInfo.namespace).toBe("com.example");
@@ -391,7 +441,6 @@ describe("typemeta", () => {
     expect(() => reader.deserialize(malformed)).toThrow("Duplicate field id 1");
     expect(readContext.typeMeta).toHaveLength(0);
     expect(readContext.typeMetaCache.size).toBe(0);
-    expect(readContext.compatibleReadSerializers.size).toBe(0);
     expect(readContext.totalAcceptedSchemaVersions).toBe(0);
     expect(readContext.remoteSchemaVersionsByType).toBeUndefined();
     expect(reader.deserialize(valid)).toEqual(value);
@@ -642,7 +691,7 @@ describe("typemeta", () => {
       context.genSerializerByTypeMetaRuntime(remoteTypeMeta, localTypeInfo, 123),
     ).toBeDefined();
     expect(context.genSerializerByTypeMetaRuntime(remoteTypeMeta)).toBeDefined();
-    expect((context as any).compatibleReadSerializers.size).toBe(0);
+    expect((context as any).compatibleReadSerializers.has(remoteTypeMeta)).toBe(false);
 
     const localTypeMeta = TypeMeta.fromTypeInfo(localTypeInfo, (readerFory as any).typeResolver);
     context.reset(typeMetaRecord(remoteTypeMeta));
@@ -967,7 +1016,7 @@ describe("typemeta", () => {
     readContext.reset(frame(TypeId.NAMED_ENUM, metadata));
     expect(() => AnyHelper.detectSerializer(readContext)).toThrow("TypeMeta wire type mismatch");
     expect((readContext as any).typeMetaCache.size).toBe(0);
-    expect((readContext as any).compatibleReadSerializers.size).toBe(0);
+    expect((readContext as any).typeMeta).toHaveLength(0);
     expect((readContext as any).totalAcceptedSchemaVersions).toBe(0);
     expect((readContext as any).remoteSchemaVersionsByType).toBeUndefined();
     expect((readContext as any).typeMeta).toHaveLength(0);
@@ -1048,7 +1097,9 @@ describe("typemeta", () => {
       return AnyHelper.detectSerializer(context);
     };
     const cachedReader = (fory: Fory) =>
-      (fory as any).readContext.compatibleReadSerializers.get(remoteTypeMeta.getHash()).serializer;
+      (fory as any).readContext.compatibleReadSerializers.get(
+        (fory as any).readContext.typeMetaCache.get(remoteTypeMeta.getHash()),
+      ).serializer;
 
     const anyFirst = createReader();
     const anyOwner = detectAny(anyFirst.fory);
@@ -1169,7 +1220,11 @@ describe("typemeta", () => {
     expect(() => reader.deserialize(wrongBytes)).toThrow("Compatible TypeMeta owner mismatch");
     expect(readContext.typeMeta).toHaveLength(1);
     expect(readContext.typeMetaCache.has(writerChildMeta.getHash())).toBe(false);
-    expect(readContext.compatibleReadSerializers.has(writerChildMeta.getHash())).toBe(false);
+    expect(
+      readContext.compatibleReadSerializers.has(
+        readContext.typeMetaCache.get(writerChildMeta.getHash()),
+      ),
+    ).toBe(false);
 
     expect(readerWriterChild.deserialize(writerChild.serialize({ value: 8 }))).toEqual({
       value: 8,
@@ -1177,7 +1232,11 @@ describe("typemeta", () => {
     expect(readContext.typeMetaCache.has(writerChildMeta.getHash())).toBe(false);
     expect(() => reader.deserialize(wrongBytes)).toThrow("Compatible TypeMeta owner mismatch");
     expect(readContext.typeMeta).toHaveLength(1);
-    expect(readContext.compatibleReadSerializers.has(writerChildMeta.getHash())).toBe(false);
+    expect(
+      readContext.compatibleReadSerializers.has(
+        readContext.typeMetaCache.get(writerChildMeta.getHash()),
+      ),
+    ).toBe(false);
 
     const localChildType = Type.struct(readerChildId, {
       value: Type.int32().setId(1),
@@ -1282,7 +1341,6 @@ describe("typemeta", () => {
     expect(generatedReaders).toBe(0);
     expect(typeResolver.getSerializerById(TypeId.COMPATIBLE_STRUCT, typeId)).toBeUndefined();
     expect(readContext.typeMetaCache.size).toBe(1);
-    expect(readContext.compatibleReadSerializers.size).toBe(0);
   });
 
   test("keeps non-compatible unknown structs registration-only", () => {
@@ -1332,7 +1390,6 @@ describe("typemeta", () => {
       "generated reader rejected",
     );
     expect(readContext.typeMetaCache.has(remoteHash)).toBe(false);
-    expect(readContext.compatibleReadSerializers.has(remoteHash)).toBe(false);
     expect(readContext.totalAcceptedSchemaVersions).toBe(0);
     expect(readContext.remoteSchemaVersionsByType).toBeUndefined();
   });
@@ -2951,6 +3008,32 @@ describe("typemeta", () => {
     const result = readerReg.deserialize(writerReg.serialize(value));
 
     expect(result).toBeInstanceOf(EmptyWrapper);
+  });
+
+  // Bytes a spec-conformant peer (for example Java) emits for a named struct
+  // with namespace "example", typeName "Type_1", and one fixed int32 field
+  // "v". The type name uses LOWER_UPPER_DIGIT_SPECIAL, where char value 63 is
+  // "_" per the spec's type-name special-char set ("$", "_").
+  const specTypeNameMetaBytes = new Uint8Array([
+    16, 64, 45, 74, 58, 106, 49, 48, 161, 21, 18, 224, 99, 214, 64, 22, 90, 193, 226, 127, 168, 64,
+    4, 84,
+  ]);
+
+  test("decodes spec char value 63 in type names as underscore", () => {
+    const reader = new BinaryReader({});
+    reader.reset(specTypeNameMetaBytes);
+    const decoded = TypeMeta.fromBytes(reader);
+    expect(decoded.getTypeName()).toBe("Type_1");
+  });
+
+  test("encodes underscore type names with the spec charset", () => {
+    const meta = TypeMeta.fromTypeInfo(
+      Type.struct(
+        { namespace: "example", typeName: "Type_1" },
+        { v: Type.int32({ encoding: "fixed" }) },
+      ),
+    );
+    expect(Array.from(meta.toBytes())).toEqual(Array.from(specTypeNameMetaBytes));
   });
 });
 

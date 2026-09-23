@@ -84,6 +84,9 @@ internal object KotlinProductCodecs {
       names,
       accessors,
       arrayOfNulls(names.size),
+      null,
+      Array(names.size) { KotlinMetadataModels.typeDefault(types[it]) },
+      false,
       IntArray(names.size) { -1 },
       BooleanArray(names.size) { nullable(types[it]) },
       types,
@@ -91,6 +94,7 @@ internal object KotlinProductCodecs {
       accessors,
       arrayOfNulls(names.size),
       types,
+      null,
     )
 
   private fun requireArguments(type: TypeRef<*>, count: Int): Array<TypeRef<*>> {

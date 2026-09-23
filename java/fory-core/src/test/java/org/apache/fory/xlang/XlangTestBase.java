@@ -576,7 +576,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     LocalDate day = LocalDate.of(2021, 11, 23);
     fory.serialize(buffer, day);
     Instant instant = Instant.ofEpochSecond(100);
-    fory.serialize(buffer, instant);
+    // A Date must use the same timestamp body that peers and dynamic Java reads map to Instant.
+    fory.serialize(buffer, Date.from(instant));
     fory.serialize(buffer, new boolean[] {true, false});
     fory.serialize(buffer, new byte[] {1, Byte.MAX_VALUE});
     fory.serialize(buffer, new short[] {1, Short.MAX_VALUE});
@@ -652,6 +653,40 @@ public abstract class XlangTestBase extends ForyTestBase {
 
     @ForyField(id = 536870911)
     int last; // Changed from Integer to int to match Rust
+  }
+
+  @Data
+  @ForyStruct
+  static class ExactFieldTags {
+    @ForyField(id = 15)
+    int first;
+
+    @ForyField(id = 65551)
+    int second;
+
+    @ForyField(id = 536870911)
+    int last;
+  }
+
+  @Test(
+      groups = {"xlang", "field-tag"},
+      dataProvider = "enableCodegenParallel")
+  public void testExactFieldTags(boolean enableCodegen) throws IOException {
+    Fory fory =
+        Fory.builder().withXlang(true).withCompatible(false).withCodegen(enableCodegen).build();
+    fory.register(ExactFieldTags.class, 104);
+    ExactFieldTags value = new ExactFieldTags();
+    value.first = 39;
+    value.second = 40;
+    value.last = 41;
+    serDeCheck(fory, value);
+
+    MemoryBuffer buffer = MemoryUtils.buffer(64);
+    fory.serialize(buffer, value);
+    ExecutionContext ctx =
+        prepareExecution("test_exact_field_tags", buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+    Assert.assertEquals(fory.deserialize(readBuffer(ctx.dataFile())), value);
   }
 
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")

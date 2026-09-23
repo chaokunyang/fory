@@ -407,35 +407,33 @@ final class GeneratedCodecInstantiator {
   }
 
   @SuppressWarnings("unchecked")
-  static Utf8WriterCodec<Object> instantiateUtf8CollectionWriter(
-      Class<?> type, Utf8WriterCodec<Object> fallback) {
+  static <T> T instantiateCollectionWriter(Class<?> type, Class<T> codecType, T fallback) {
     try {
       if (AndroidSupport.IS_ANDROID) {
-        Constructor<?> constructor = type.getDeclaredConstructor(Utf8WriterCodec.class);
+        Constructor<?> constructor = type.getDeclaredConstructor(codecType);
         constructor.setAccessible(true);
-        return (Utf8WriterCodec<Object>) constructor.newInstance(fallback);
+        return (T) constructor.newInstance(fallback);
       }
-      MethodHandle constructor = constructor(type, Utf8WriterCodec.class);
-      return (Utf8WriterCodec<Object>) constructor.invoke(fallback);
+      MethodHandle constructor = constructor(type, codecType);
+      return (T) constructor.invoke(fallback);
     } catch (Throwable e) {
-      throw new ForyJsonException("Cannot instantiate generated JSON UTF8 collection writer", e);
+      throw new ForyJsonException("Cannot instantiate generated JSON collection writer", e);
     }
   }
 
   @SuppressWarnings("unchecked")
-  static Utf8WriterCodec<Object> instantiateUtf8CollectionWriter(
-      Class<?> type, Utf8WriterCodec<Object> fallback, Utf8WriterCodec<Object> elementWriter) {
+  static <T> T instantiateCollectionWriter(
+      Class<?> type, Class<T> codecType, T fallback, T elementWriter) {
     try {
       if (AndroidSupport.IS_ANDROID) {
-        Constructor<?> constructor =
-            type.getDeclaredConstructor(Utf8WriterCodec.class, Utf8WriterCodec.class);
+        Constructor<?> constructor = type.getDeclaredConstructor(codecType, codecType);
         constructor.setAccessible(true);
-        return (Utf8WriterCodec<Object>) constructor.newInstance(fallback, elementWriter);
+        return (T) constructor.newInstance(fallback, elementWriter);
       }
-      MethodHandle constructor = constructor(type, Utf8WriterCodec.class, Utf8WriterCodec.class);
-      return (Utf8WriterCodec<Object>) constructor.invoke(fallback, elementWriter);
+      MethodHandle constructor = constructor(type, codecType, codecType);
+      return (T) constructor.invoke(fallback, elementWriter);
     } catch (Throwable e) {
-      throw new ForyJsonException("Cannot instantiate generated JSON UTF8 collection writer", e);
+      throw new ForyJsonException("Cannot instantiate generated JSON collection writer", e);
     }
   }
 

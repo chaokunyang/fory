@@ -26,6 +26,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Map;
+import org.apache.fory.json.annotation.JsonByteArray;
+import org.apache.fory.json.annotation.JsonProperty.Include;
 import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Utf16JsonReader;
@@ -42,7 +44,11 @@ import org.apache.fory.serializer.StringSerializer;
 final class JsonTestSupport {
   private static final JsonConfig CONFIG =
       new JsonConfig(
+          Include.NON_NULL,
           false,
+          false,
+          false,
+          JsonByteArray.Format.BASE64,
           false,
           false,
           true,
@@ -107,15 +113,15 @@ final class JsonTestSupport {
   }
 
   static Utf8JsonReader newUtf8Reader(byte[] input) {
-    return new Utf8JsonReader(CONFIG, newResolver(), input);
+    return new Utf8JsonReader(CONFIG, newResolver(), input, new byte[1024]);
   }
 
   static Latin1JsonReader newLatin1Reader(byte[] input) {
-    return new Latin1JsonReader(CONFIG, newResolver(), input);
+    return new Latin1JsonReader(CONFIG, newResolver(), input, new byte[1024]);
   }
 
   static Latin1JsonReader newLatin1Reader(String input) {
-    return new Latin1JsonReader(CONFIG, newResolver(), input);
+    return new Latin1JsonReader(CONFIG, newResolver(), input, new byte[1024]);
   }
 
   static Utf16JsonReader newUtf16Reader() {
@@ -123,7 +129,7 @@ final class JsonTestSupport {
   }
 
   static Utf16JsonReader newUtf16Reader(String input) {
-    return new Utf16JsonReader(CONFIG, newResolver(), input);
+    return new Utf16JsonReader(CONFIG, newResolver(), input, new byte[1024]);
   }
 
   @SuppressWarnings("unchecked")

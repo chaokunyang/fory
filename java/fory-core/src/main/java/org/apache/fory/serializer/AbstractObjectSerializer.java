@@ -111,6 +111,16 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     this.objectGraphMemoryBytes = GraphMemoryEstimates.shallowObjectBytes(type);
   }
 
+  // Keep exception construction and message formatting off the field write success path.
+  protected static void throwNullFieldException(String fieldName) {
+    throw new IllegalArgumentException(
+        "Non-nullable field "
+            + fieldName
+            + " is null. Use @Nullable on the field type to allow null values."
+            + " For Java-only serialization, use Fory.builder().withXlang(false);"
+            + " unannotated reference fields are nullable by default in this mode.");
+  }
+
   static void writeField(
       WriteContext writeContext,
       TypeResolver typeResolver,
@@ -130,6 +140,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       RefMode refMode,
       MemoryBuffer buffer,
       Object fieldValue) {
+    if (fieldValue == null && refMode == RefMode.NONE) {
+      throwNullFieldException(fieldInfo.qualifiedFieldName);
+    }
     if (fieldInfo.useDeclaredTypeInfo) {
       Serializer<Object> serializer = fieldInfo.typeInfo.getSerializer();
       if (refMode == RefMode.TRACKING) {
@@ -379,9 +392,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       Object fieldValue,
       SerializationFieldInfo fieldInfo) {
     if (fieldValue == null) {
-      throw new IllegalArgumentException(
-          "Non-nullable field has null value. In xlang mode, fields are non-nullable by default. "
-              + "Use @Nullable on the field type to allow null values.");
+      throwNullFieldException(fieldInfo.qualifiedFieldName);
     }
     // add time types serialization here.
     switch (fieldInfo.dispatchId) {
@@ -480,6 +491,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer,
       Object fieldValue) {
+    if (fieldValue == null && fieldInfo.refMode == RefMode.NONE) {
+      throwNullFieldException(fieldInfo.qualifiedFieldName);
+    }
     if (fieldInfo.refMode == RefMode.TRACKING) {
       if (refWriter.writeRefOrNull(buffer, fieldValue)) {
         return;

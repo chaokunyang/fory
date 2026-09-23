@@ -133,10 +133,6 @@ final class Fory {
     _writeContext.prepare(buffer, trackRef: trackRef);
     try {
       buffer.writeUint8(_xlangHeaderFlag);
-      if (value == null) {
-        _writeContext.writeRootValue(null, trackRef: trackRef);
-        return;
-      }
       _writeContext.writeRootValue(value, trackRef: trackRef);
     } finally {
       _writeContext.reset();

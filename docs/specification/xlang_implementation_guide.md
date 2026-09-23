@@ -1188,14 +1188,20 @@ no local header was available before parsing, this miss-only path may lazily
 build local metadata and compare its 52-bit header hash with the validated
 received hash. Hash equality selects local metadata without a byte or field
 comparison and without consuming a remote schema-version count.
-Otherwise, check schema-version limits, build the required read state, publish
-to the persistent metadata cache, and then record the schema count. Failed or
+Otherwise, build and validate the required read state. If the schema-version and
+logical-type cache quotas have room, publish to the persistent metadata cache
+and then record the schema count. A full cache does not reject valid metadata:
+continue decoding without caching it or its derived serializers and layouts.
+Existing metadata references own this uncached state for their required lifetime.
+Root reset must prevent stale logical lookup and cumulative growth across requests.
+Reusable backing slots may retain bounded values until overwritten; immediate
+physical clearing is not required. Failed or
 incompatible metadata must not publish to the persistent cache and must not
 consume schema-version counts. Pure id-based enum, ext, and typed-union values
 do not carry TypeDef or TypeMeta bodies and must stay on the normal type-id plus
 user-type-id path. Compatible named enum, ext, and union metadata normally has
-one version, but it still counts against accepted remote metadata totals when it
-is sent as shared metadata and is a non-local metadata miss. `maxTypeFields`
+one version, but it still counts against cached remote metadata totals when it
+is published after a non-local metadata miss. `maxTypeFields`
 applies only to struct field lists.
 
 The miss-only local candidate must be derived inside the metadata owner from
@@ -1204,6 +1210,12 @@ checks. Compare only its 52-bit header hash with the validated received hash.
 Do not retain or compare metadata bytes or fields, thread extra expected-type
 parameters through callers for revalidation, or add parallel accepted-header
 state. Cache hits never repeat miss-time work.
+
+In Java, the header hash identifies the wire schema, while a requested target class can require a
+different `TypeInfo` for that same schema. Hash-only metadata caches and depth hints retain the
+source `TypeInfo`. The existing target-conversion cache retains the result for each target class,
+source class, and header hash. Local-schema selection occurs only on a metadata or target-conversion
+cache miss; subsequent hits reuse the selected result without querying local TypeDef metadata.
 
 When a statically declared compatible named enum, ext, or union field reads
 shared metadata, the decoded metadata must match the declared type id,

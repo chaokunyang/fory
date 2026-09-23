@@ -20,6 +20,7 @@
 package org.apache.fory.builder;
 
 import static org.apache.fory.codegen.Expression.Invoke.inlineInvoke;
+import static org.apache.fory.platform.JdkVersion.JDK8_ARM;
 import static org.apache.fory.type.TypeUtils.CLASS_TYPE;
 import static org.apache.fory.type.TypeUtils.OBJECT_ARRAY_TYPE;
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
@@ -59,6 +60,7 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
+import org.apache.fory.platform.internal._UnsafeUtils;
 import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.ObjectInstantiators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -787,27 +789,45 @@ public abstract class CodecBuilder {
   }
 
   protected Expression unsafePutChar(Expression base, Expression pos, Expression value) {
+    if (JDK8_ARM) {
+      return new StaticInvoke(_UnsafeUtils.class, "putChar", base, pos, value);
+    }
     return unsafeInvoke("putChar", base, pos, value);
   }
 
   protected Expression unsafePutShort(Expression base, Expression pos, Expression value) {
+    if (JDK8_ARM) {
+      return new StaticInvoke(_UnsafeUtils.class, "putShort", base, pos, value);
+    }
     return unsafeInvoke("putShort", base, pos, value);
   }
 
   protected Expression unsafePutInt(Expression base, Expression pos, Expression value) {
+    if (JDK8_ARM) {
+      return new StaticInvoke(_UnsafeUtils.class, "putInt", base, pos, value);
+    }
     return unsafeInvoke("putInt", base, pos, value);
   }
 
   protected Expression unsafePutLong(Expression base, Expression pos, Expression value) {
+    if (JDK8_ARM) {
+      return new StaticInvoke(_UnsafeUtils.class, "putLong", base, pos, value);
+    }
     return unsafeInvoke("putLong", base, pos, value);
   }
 
   protected Expression unsafePutFloat(Expression base, Expression pos, Expression value) {
+    if (JDK8_ARM) {
+      return new StaticInvoke(_UnsafeUtils.class, "putFloat", base, pos, value);
+    }
     return unsafeInvoke("putFloat", base, pos, value);
   }
 
   /** Build unsafePutDouble operation. */
   protected Expression unsafePutDouble(Expression base, Expression pos, Expression value) {
+    if (JDK8_ARM) {
+      return new StaticInvoke(_UnsafeUtils.class, "putDouble", base, pos, value);
+    }
     return unsafeInvoke("putDouble", base, pos, value);
   }
 
@@ -821,7 +841,10 @@ public abstract class CodecBuilder {
   }
 
   protected Expression unsafeGetChar(Expression base, Expression pos) {
-    Inlineable expr = unsafeInvoke("getChar", PRIMITIVE_CHAR_TYPE, base, pos);
+    Inlineable expr =
+        JDK8_ARM
+            ? new StaticInvoke(_UnsafeUtils.class, "getChar", PRIMITIVE_CHAR_TYPE, base, pos)
+            : unsafeInvoke("getChar", PRIMITIVE_CHAR_TYPE, base, pos);
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Character.class, "reverseBytes", PRIMITIVE_CHAR_TYPE, expr.inline());
     }
@@ -829,7 +852,10 @@ public abstract class CodecBuilder {
   }
 
   protected Expression unsafeGetShort(Expression base, Expression pos) {
-    Inlineable expr = unsafeInvoke("getShort", PRIMITIVE_SHORT_TYPE, base, pos);
+    Inlineable expr =
+        JDK8_ARM
+            ? new StaticInvoke(_UnsafeUtils.class, "getShort", PRIMITIVE_SHORT_TYPE, base, pos)
+            : unsafeInvoke("getShort", PRIMITIVE_SHORT_TYPE, base, pos);
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Short.class, "reverseBytes", PRIMITIVE_SHORT_TYPE, expr.inline());
     }
@@ -837,7 +863,10 @@ public abstract class CodecBuilder {
   }
 
   protected Expression unsafeGetInt(Expression base, Expression pos) {
-    Inlineable expr = unsafeInvoke("getInt", PRIMITIVE_INT_TYPE, base, pos);
+    Inlineable expr =
+        JDK8_ARM
+            ? new StaticInvoke(_UnsafeUtils.class, "getInt", PRIMITIVE_INT_TYPE, base, pos)
+            : unsafeInvoke("getInt", PRIMITIVE_INT_TYPE, base, pos);
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Integer.class, "reverseBytes", PRIMITIVE_INT_TYPE, expr.inline());
     }
@@ -845,7 +874,10 @@ public abstract class CodecBuilder {
   }
 
   protected Expression unsafeGetLong(Expression base, Expression pos) {
-    Inlineable expr = unsafeInvoke("getLong", PRIMITIVE_LONG_TYPE, base, pos);
+    Inlineable expr =
+        JDK8_ARM
+            ? new StaticInvoke(_UnsafeUtils.class, "getLong", PRIMITIVE_LONG_TYPE, base, pos)
+            : unsafeInvoke("getLong", PRIMITIVE_LONG_TYPE, base, pos);
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Long.class, "reverseBytes", PRIMITIVE_LONG_TYPE, expr.inline());
     }
@@ -853,7 +885,10 @@ public abstract class CodecBuilder {
   }
 
   protected Expression unsafeGetFloat(Expression base, Expression pos) {
-    Inlineable expr = unsafeInvoke("getInt", PRIMITIVE_INT_TYPE, base, pos);
+    Inlineable expr =
+        JDK8_ARM
+            ? new StaticInvoke(_UnsafeUtils.class, "getInt", PRIMITIVE_INT_TYPE, base, pos)
+            : unsafeInvoke("getInt", PRIMITIVE_INT_TYPE, base, pos);
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Integer.class, "reverseBytes", PRIMITIVE_INT_TYPE, expr.inline());
     }
@@ -861,7 +896,10 @@ public abstract class CodecBuilder {
   }
 
   protected Expression unsafeGetDouble(Expression base, Expression pos) {
-    Inlineable expr = unsafeInvoke("getLong", PRIMITIVE_LONG_TYPE, base, pos);
+    Inlineable expr =
+        JDK8_ARM
+            ? new StaticInvoke(_UnsafeUtils.class, "getLong", PRIMITIVE_LONG_TYPE, base, pos)
+            : unsafeInvoke("getLong", PRIMITIVE_LONG_TYPE, base, pos);
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Long.class, "reverseBytes", PRIMITIVE_LONG_TYPE, expr.inline());
     }

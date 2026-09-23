@@ -21,6 +21,7 @@ package org.apache.fory.json.kotlin
 
 import java.lang.reflect.Modifier
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -35,6 +36,7 @@ import kotlin.time.TimedValue
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import org.apache.fory.json.ForyJsonException
+import org.apache.fory.json.annotation.JsonByteArray
 import org.apache.fory.json.codec.DirectUnboxedValueCodec
 import org.apache.fory.json.reader.JsonReader
 import org.apache.fory.json.writer.JsonWriter
@@ -86,8 +88,84 @@ class KotlinBuiltInCodecsTest {
 
   private val fory = ForyJsonKotlin.builder().withAsyncCompilation(false).build()
 
+  data class BinaryFields(
+    val label: String,
+    val bytes: ByteArray,
+    val nested: List<ByteArray>,
+    val unsigned: UByteArray
+  )
+
+  @Test
+  fun byteArrayFormats() {
+    val bytes = byteArrayOf(1, -2, 3)
+    val formats =
+      mapOf(
+        JsonByteArray.Format.BASE64 to "\"Af4D\"",
+        JsonByteArray.Format.BASE16 to "\"01fe03\"",
+        JsonByteArray.Format.ARRAY to "[1,-2,3]"
+      )
+    for (codegen in listOf(false, true)) {
+      for ((format, encoded) in formats) {
+        val json =
+          ForyJsonKotlin.builder()
+            .byteArrayFormat(format)
+            .withCodegen(codegen)
+            .withAsyncCompilation(false)
+            .build()
+        assertEquals(encoded, json.toJson(bytes, jsonTypeRef<ByteArray>()))
+        assertContentEquals(bytes, json.fromJson(encoded, jsonTypeRef<ByteArray>()))
+        assertContentEquals(
+          bytes,
+          json.fromJson(encoded.encodeToByteArray(), jsonTypeRef<ByteArray>())
+        )
+        val value = BinaryFields("汉", bytes, listOf(bytes), ubyteArrayOf(1u, 254u, 3u))
+        val text = json.toJson(value)
+        assertTrue(text.contains("\"bytes\":$encoded"), text)
+        assertTrue(text.contains("\"nested\":[$encoded]"), text)
+        assertTrue(text.contains("\"unsigned\":[1,254,3]"), text)
+        assertEquals(text, json.toJsonBytes(value).decodeToString())
+        for (input in listOf(text, json.toPrettyJson(value))) {
+          for (decoded in
+            listOf(
+              json.fromJson(input, BinaryFields::class.java),
+              json.fromJson(input.encodeToByteArray(), BinaryFields::class.java)
+            )) {
+            assertContentEquals(bytes, decoded.bytes)
+            assertContentEquals(bytes, decoded.nested.single())
+            assertContentEquals(value.unsigned, decoded.unsigned)
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun nonAsciiEscaping() {
+    val value = mapOf("é" to listOf("汉😀"))
+    val type = jsonTypeRef<Map<String, List<String>>>()
+    val expected = "{\"\\u00e9\":[\"\\u6c49\\ud83d\\ude00\"]}"
+    for (codegen in listOf(false, true)) {
+      val json =
+        ForyJsonKotlin.builder()
+          .escapeNonAscii(true)
+          .withCodegen(codegen)
+          .withAsyncCompilation(false)
+          .build()
+      assertEquals(expected, json.toJson(value, type))
+      assertEquals(expected, json.toJsonBytes(value, type).decodeToString())
+      assertEquals(value, json.fromJson(expected, type))
+      assertEquals(value, json.fromJson(json.toPrettyJsonBytes(value), type))
+      val fields = BinaryFields("汉😀", byteArrayOf(1), emptyList(), ubyteArrayOf())
+      val text = json.toJson(fields)
+      assertTrue(text.contains("\"label\":\"\\u6c49\\ud83d\\ude00\""))
+      assertEquals(text, json.toJsonBytes(fields).decodeToString())
+      assertEquals(fields.label, json.fromJson(text, BinaryFields::class.java).label)
+    }
+  }
+
   @Test
   fun products() {
+    val fory = ForyJsonKotlin.builder().writeNullFields(true).withAsyncCompilation(false).build()
     val pairType = jsonTypeRef<Pair<Int?, String>>()
     val pair = Pair(null, "right")
     assertEquals("{\"first\":null,\"second\":\"right\"}", fory.toJson(pair, pairType))
@@ -275,7 +353,7 @@ class KotlinBuiltInCodecsTest {
       "{\"ubyte\":255,\"ushort\":65535,\"uint\":4294967295," +
         "\"ulong\":18446744073709551615,\"nullable\":null,\"tag\":\"ascii\"}"
     val utf16Json = latin1Json.replace("ascii", "\u4e2d")
-    forEachJsonMode { json ->
+    forEachJsonMode({ writeNullFields(true) }) { json ->
       assertEquals(latin1Json, json.toJson(latin1, type))
       assertEquals(latin1, json.fromJson(latin1Json, type))
       assertEquals(utf16, json.fromJson(utf16Json, type))
@@ -469,7 +547,7 @@ class KotlinBuiltInCodecsTest {
       "{\"zero\":\"PT0S\",\"negative\":\"-PT0.000000001S\",\"nullable\":null,\"tag\":\"ascii\"}"
     val utf16Json =
       "{\"zero\":\"PT0S\",\"negative\":\"-PT0.000000001S\",\"nullable\":null,\"tag\":\"\u4e2d\"}"
-    forEachJsonMode { json ->
+    forEachJsonMode({ writeNullFields(true) }) { json ->
       assertEquals(latin1Json, json.toJson(latin1Holder, holderType))
       assertEquals(latin1Holder, json.fromJson(latin1Json, holderType))
       assertEquals(utf16Holder, json.fromJson(utf16Json, holderType))
@@ -545,6 +623,7 @@ class KotlinBuiltInCodecsTest {
 
   @Test
   fun timedValue() {
+    val fory = ForyJsonKotlin.builder().writeNullFields(true).withAsyncCompilation(false).build()
     val type = jsonTypeRef<TimedValue<String>>()
     val value = TimedValue("done", 2.seconds + 17.nanoseconds)
     assertEquals(value, fory.fromJson(fory.toJson(value, type), type))
@@ -570,6 +649,7 @@ class KotlinBuiltInCodecsTest {
 
   @Test
   fun nullOnly() {
+    val fory = ForyJsonKotlin.builder().writeNullFields(true).withAsyncCompilation(false).build()
     val value = NullOnly(null)
     assertEquals(
       value,
@@ -617,7 +697,7 @@ class KotlinBuiltInCodecsTest {
     readName: String,
     writeName: String,
   ) {
-    val direct = KotlinUnsignedCodecs.scalar(typeId, false, false) as DirectUnboxedValueCodec
+    val direct = KotlinUnsignedCodecs.scalar(typeId, false, false, false) as DirectUnboxedValueCodec
     assertEquals(carrier, direct.carrierType())
     val readMethod = direct.readCarrierMethod()
     assertEquals(readName, readMethod.name)

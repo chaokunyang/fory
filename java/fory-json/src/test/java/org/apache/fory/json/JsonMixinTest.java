@@ -37,7 +37,7 @@ import java.util.UUID;
 import org.apache.fory.json.annotation.JsonAnyGetter;
 import org.apache.fory.json.annotation.JsonAnyProperty;
 import org.apache.fory.json.annotation.JsonAnySetter;
-import org.apache.fory.json.annotation.JsonBase64;
+import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonIgnore;
@@ -68,6 +68,102 @@ public class JsonMixinTest extends ForyJsonTestModels {
   @Factory(dataProvider = "enableCodegen")
   public JsonMixinTest(boolean codegen) {
     super(codegen);
+  }
+
+  @Test
+  public void naturalScalarMixins() {
+    ForyJson json =
+        newJsonBuilder()
+            .registerMixin(BooleanMixin.class)
+            .registerMixin(IntegerMixin.class)
+            .build();
+    for (Object value : new Object[] {true, false, Integer.MIN_VALUE, 0, Integer.MAX_VALUE}) {
+      String expected = "\"scalar:" + value + "\"";
+      assertEquals(json.toJson(value), expected);
+      assertEquals(json.toJson(value, Object.class), expected);
+      assertEquals(
+          new String(json.toJsonBytes(value, Object.class), StandardCharsets.UTF_8), expected);
+      NaturalScalarTarget target = new NaturalScalarTarget();
+      target.value = value;
+      assertEquals(json.toJson(target), "{\"value\":" + expected + "}");
+      assertEquals(
+          new String(json.toJsonBytes(target), StandardCharsets.UTF_8),
+          "{\"value\":" + expected + "}");
+      Map<String, Object> map = new LinkedHashMap<>();
+      map.put("value", value);
+      assertEquals(
+          json.toJson(map, new TypeRef<Map<String, Object>>() {}), "{\"value\":" + expected + "}");
+      assertEquals(
+          new String(
+              json.toJsonBytes(map, new TypeRef<Map<String, Object>>() {}), StandardCharsets.UTF_8),
+          "{\"value\":" + expected + "}");
+      List<Object> list = Arrays.asList("\u0100", value, null);
+      expected = "[\"\u0100\"," + expected + ",null]";
+      assertEquals(json.toJson(list, new TypeRef<List<Object>>() {}), expected);
+      assertEquals(
+          new String(
+              json.toJsonBytes(list, new TypeRef<List<Object>>() {}), StandardCharsets.UTF_8),
+          expected);
+    }
+    ForyJson denied =
+        newJsonBuilder()
+            .registerMixin(BooleanMixin.class)
+            .registerMixin(IntegerMixin.class)
+            .withTypeChecker(
+                (name, context) ->
+                    !name.equals(Boolean.class.getName()) && !name.equals(Integer.class.getName()))
+            .build();
+    for (Object value : new Object[] {true, 1}) {
+      assertThrows(RuntimeException.class, () -> denied.toJson(value, Object.class));
+      assertThrows(RuntimeException.class, () -> denied.toJsonBytes(value, Object.class));
+    }
+  }
+
+  public static final class NaturalScalarTarget {
+    public Object value;
+  }
+
+  @JsonMixin(target = Boolean.class)
+  @JsonCodec(ScalarMixinCodec.class)
+  public interface BooleanMixin {}
+
+  @JsonMixin(target = Integer.class)
+  @JsonCodec(ScalarMixinCodec.class)
+  public interface IntegerMixin {}
+
+  public static final class ScalarMixinCodec implements JsonValueCodec<Object> {
+    @Override
+    public void writeString(StringJsonWriter writer, Object value) {
+      writer.writeString("scalar:" + value);
+    }
+
+    @Override
+    public void writeUtf8(Utf8JsonWriter writer, Object value) {
+      writer.writeString("scalar:" + value);
+    }
+
+    @Override
+    public Object readLatin1(Latin1JsonReader reader) {
+      return read(reader.readString());
+    }
+
+    @Override
+    public Object readUtf16(Utf16JsonReader reader) {
+      return read(reader.readString());
+    }
+
+    @Override
+    public Object readUtf8(Utf8JsonReader reader) {
+      return read(reader.readString());
+    }
+
+    private Object read(String value) {
+      String scalar = value.substring("scalar:".length());
+      if (scalar.equals("true") || scalar.equals("false")) {
+        return Boolean.valueOf(scalar);
+      }
+      return Integer.valueOf(scalar);
+    }
   }
 
   @Test
@@ -267,7 +363,7 @@ public class JsonMixinTest extends ForyJsonTestModels {
         newJsonBuilder().registerMixin(RepresentationRemoveMixin.class).build();
     assertEquals(
         representation.toJson(new RepresentationRemoveTarget()),
-        "{\"name\":\"name\",\"raw\":\"1\",\"bytes\":[1],"
+        "{\"name\":\"name\",\"raw\":\"1\",\"bytes\":\"AQ==\","
             + "\"child\":{\"label\":\"kid\"},\"hidden\":7}");
 
     ForyJson anyField = newJsonBuilder().registerMixin(AnyFieldRemoveMixin.class).build();
@@ -437,7 +533,7 @@ public class JsonMixinTest extends ForyJsonTestModels {
                 + mixinName
                 + " {\n"
                 + "  @JsonProperty(\"display_name\") String name;\n"
-                + "  @JsonBase64 byte[] bytes;\n"
+                + "  @JsonByteArray(JsonByteArray.Format.BASE64) byte[] bytes;\n"
                 + "  "
                 + mixinName
                 + "(\n"
@@ -511,7 +607,9 @@ public class JsonMixinTest extends ForyJsonTestModels {
     String name;
 
     @JsonRawValue String body;
-    @JsonBase64 byte[] bytes;
+
+    @JsonByteArray(JsonByteArray.Format.BASE64)
+    byte[] bytes;
 
     @JsonUnwrapped(prefix = "child_")
     BasicChild child;
@@ -830,7 +928,9 @@ public class JsonMixinTest extends ForyJsonTestModels {
     public String name = "name";
 
     @JsonRawValue public String raw = "1";
-    @JsonBase64 public byte[] bytes = new byte[] {1};
+
+    @JsonByteArray(JsonByteArray.Format.ARRAY)
+    public byte[] bytes = new byte[] {1};
 
     @JsonUnwrapped(prefix = "child_")
     public BasicChild child = new BasicChild("kid");
@@ -846,7 +946,7 @@ public class JsonMixinTest extends ForyJsonTestModels {
     @JsonMixinRemove(JsonRawValue.class)
     String raw;
 
-    @JsonMixinRemove(JsonBase64.class)
+    @JsonMixinRemove(JsonByteArray.class)
     byte[] bytes;
 
     @JsonMixinRemove(JsonUnwrapped.class)

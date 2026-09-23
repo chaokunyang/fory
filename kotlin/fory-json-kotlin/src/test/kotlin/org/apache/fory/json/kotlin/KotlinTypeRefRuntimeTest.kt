@@ -19,6 +19,9 @@
 
 package org.apache.fory.json.kotlin
 
+import java.io.ByteArrayOutputStream
+import kotlin.reflect.jvm.kotlinFunction
+import kotlin.reflect.typeOf
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -27,6 +30,7 @@ import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.annotation.JsonMixin
 import org.apache.fory.json.annotation.JsonMixinRemove
 import org.apache.fory.json.annotation.JsonSubTypes
+import org.apache.fory.reflect.TypeRef
 
 private typealias StringTokenBox = TokenBox<String>
 
@@ -35,6 +39,20 @@ data class TokenBox<T>(val value: T)
 data class CovariantBox<out T>(val value: T)
 
 data class NonNullBoundBox<T : Any>(val value: T)
+
+data class TokenResponse<T>(val flag: Boolean, val data: T? = null, val msg: String? = null)
+
+data class TokenEmployee(val id: Long, val name: String)
+
+class TokenController {
+  fun employees(): TokenResponse<List<TokenEmployee>> =
+    TokenResponse(true, listOf(TokenEmployee(1, "Alice")))
+
+  fun nullableEmployees(): TokenResponse<List<TokenEmployee?>> =
+    TokenResponse(true, listOf(TokenEmployee(1, "Alice"), null))
+
+  fun <T> echo(value: T): T = value
+}
 
 class InvariantBox<T>(val value: T) {
   override fun equals(other: Any?): Boolean = other is InvariantBox<*> && value == other.value
@@ -79,6 +97,62 @@ data class ContributedProjectionHolder(val value: InvariantBox<out ContributedPr
 interface ProjectionContributionMixin
 
 class KotlinTypeRefRuntimeTest {
+  @Test
+  fun reflectedGenericRoot() {
+    val method = TokenController::class.java.getMethod("employees")
+    val type = jsonTypeRef<Any?>(method.kotlinFunction!!.returnType)
+    val value: Any = TokenController().employees()
+    assertEquals<TypeRef<*>>(jsonTypeRef<TokenResponse<List<TokenEmployee>>>(), type)
+    forEachJsonMode { json ->
+      val output = ByteArrayOutputStream()
+      json.writeJsonTo(value, type, output)
+      assertEquals(
+        """{"flag":true,"data":[{"id":1,"name":"Alice"}]}""",
+        output.toString("UTF-8"),
+      )
+      assertEquals(value, json.fromJson(output.toByteArray(), type))
+      assertEquals(
+        TokenResponse<List<TokenEmployee>>(true),
+        json.fromJson("""{"flag":true}""", type)
+      )
+      assertFailsWith<ForyJsonException> { json.fromJson("""{"flag":true,"data":[null]}""", type) }
+    }
+    val json = newKotlinJson(KotlinJsonTestMode.INTERPRETED)
+    assertFailsWith<ForyJsonException> {
+      json.writeJsonTo(value, TypeRef.of<Any>(method.genericReturnType), ByteArrayOutputStream())
+    }
+  }
+
+  @Test
+  fun reflectedNullableElements() {
+    val method = TokenController::class.java.getMethod("nullableEmployees")
+    val type = jsonTypeRef<Any?>(method.kotlinFunction!!.returnType)
+    val value = TokenController().nullableEmployees()
+    assertEquals<TypeRef<*>>(jsonTypeRef<TokenResponse<List<TokenEmployee?>>>(), type)
+    forEachJsonMode { json ->
+      assertEquals(value, json.fromJson(json.toJsonBytes(value, type), type))
+    }
+  }
+
+  @Test
+  fun runtimeSemanticTypes() {
+    val type = jsonTypeRef<Any?>(typeOf<TokenBox<List<ULong?>>?>())
+    assertEquals<TypeRef<*>>(jsonTypeRef<TokenBox<List<ULong?>>?>(), type)
+    val value = TokenBox(listOf(ULong.MAX_VALUE, null))
+    forEachJsonMode { json ->
+      assertEquals(value, json.fromJson(json.toJson(value, type), type))
+      assertEquals(null, json.fromJson(json.toJson(null, type), type))
+    }
+  }
+
+  @Test
+  fun incompleteRuntimeTypes() {
+    val method = TokenController::class.java.getMethod("echo", Any::class.java)
+    assertFailsWith<ForyJsonException> { jsonTypeRef<Any?>(method.kotlinFunction!!.returnType) }
+    assertFailsWith<ForyJsonException> { jsonTypeRef<Any?>(typeOf<TokenBox<*>>()) }
+    assertFailsWith<ForyJsonException> { jsonTypeRef<Any?>(typeOf<InvariantBox<in String>>()) }
+  }
+
   @Test
   fun typeAliasUsesExpandedBinding() {
     val alias = jsonTypeRef<StringTokenBox>()

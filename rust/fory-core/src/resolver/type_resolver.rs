@@ -30,7 +30,32 @@ use chrono::{Duration as ChronoDuration, NaiveDate, NaiveDateTime};
 use std::rc::Rc;
 use std::vec;
 
+use std::hash::{BuildHasherDefault, Hasher};
 use std::{any::Any, collections::HashMap};
+
+// Only compiler-produced TypeIds from local registrations use this hasher.
+// TypeId already supplies a hash through write_u64; repeating SipHash on every
+// root dispatch is unnecessary. The byte path also supports other Hash encodings.
+#[derive(Default)]
+struct TypeIdHasher(u64);
+
+impl Hasher for TypeIdHasher {
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    #[inline]
+    fn write_u64(&mut self, value: u64) {
+        self.0 = value;
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 = (self.0 ^ u64::from(*byte)).wrapping_mul(0x100000001b3);
+        }
+    }
+}
 
 #[inline(always)]
 fn supports_type_def(type_id: u32) -> bool {
@@ -713,8 +738,9 @@ fn ensure_ext_category<S: Serializer>() -> Result<(), Error> {
 pub struct TypeResolver {
     internal_type_info_by_id: Vec<Option<Rc<TypeInfo>>>,
     user_type_info_by_id: HashMap<u32, Rc<TypeInfo>>,
-    provider_type_info_map: HashMap<std::any::TypeId, Rc<TypeInfo>>,
-    target_type_info_map: HashMap<std::any::TypeId, Rc<TypeInfo>>,
+    provider_type_info_map:
+        HashMap<std::any::TypeId, Rc<TypeInfo>, BuildHasherDefault<TypeIdHasher>>,
+    target_type_info_map: HashMap<std::any::TypeId, Rc<TypeInfo>, BuildHasherDefault<TypeIdHasher>>,
     type_info_map_by_name: HashMap<(String, String), Rc<TypeInfo>>,
     type_info_map_by_meta_string_name: HashMap<(Rc<MetaString>, Rc<MetaString>), Rc<TypeInfo>>,
     partial_type_infos: HashMap<std::any::TypeId, TypeInfo>,
@@ -730,12 +756,6 @@ pub struct TypeResolver {
     xlang: bool,
 }
 
-// Safety: TypeResolver instances are only shared through higher-level synchronization that
-// guarantees thread confinement for mutations, so marking them Send/Sync preserves existing
-// invariants despite internal Rc usage.
-unsafe impl Send for TypeResolver {}
-unsafe impl Sync for TypeResolver {}
-
 const NO_TYPE_ID: TypeId = TypeId::UNKNOWN;
 
 impl Default for TypeResolver {
@@ -743,8 +763,8 @@ impl Default for TypeResolver {
         let mut registry = TypeResolver {
             internal_type_info_by_id: vec![None; INTERNAL_TYPE_ID_LIMIT],
             user_type_info_by_id: HashMap::new(),
-            provider_type_info_map: HashMap::new(),
-            target_type_info_map: HashMap::new(),
+            provider_type_info_map: HashMap::default(),
+            target_type_info_map: HashMap::default(),
             type_info_map_by_name: HashMap::new(),
             type_info_map_by_meta_string_name: HashMap::new(),
             type_id_index: Vec::new(),
@@ -1230,8 +1250,8 @@ impl TypeResolver {
     #[cold]
     #[inline(never)]
     pub(crate) fn build_final_type_resolver(&self) -> Result<TypeResolver, Error> {
-        let mut provider_type_info_map = HashMap::new();
-        let mut target_type_info_map = HashMap::new();
+        let mut provider_type_info_map = HashMap::default();
+        let mut target_type_info_map = HashMap::default();
         let mut type_info_map_by_name = HashMap::new();
         let mut type_info_map_by_meta_string_name = HashMap::new();
         let type_id_index = self.type_id_index.clone();
@@ -1384,13 +1404,13 @@ impl TypeResolver {
             .map(|(k, v)| (*k, get_or_clone_type_info(v)))
             .collect();
 
-        let provider_type_info_map: HashMap<std::any::TypeId, Rc<TypeInfo>> = self
+        let provider_type_info_map: HashMap<_, _, BuildHasherDefault<TypeIdHasher>> = self
             .provider_type_info_map
             .iter()
             .map(|(k, v)| (*k, get_or_clone_type_info(v)))
             .collect();
 
-        let target_type_info_map: HashMap<std::any::TypeId, Rc<TypeInfo>> = self
+        let target_type_info_map: HashMap<_, _, BuildHasherDefault<TypeIdHasher>> = self
             .target_type_info_map
             .iter()
             .map(|(k, v)| (*k, get_or_clone_type_info(v)))

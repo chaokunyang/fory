@@ -23,22 +23,53 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.codec.AbstractJsonValueCodec
+import org.apache.fory.json.codec.JsonValueCodec
 import org.apache.fory.json.reader.JsonReader
+import org.apache.fory.json.reader.Latin1JsonReader
+import org.apache.fory.json.reader.Utf16JsonReader
+import org.apache.fory.json.reader.Utf8JsonReader
 import org.apache.fory.json.writer.JsonWriter
+import org.apache.fory.json.writer.StringJsonWriter
+import org.apache.fory.json.writer.Utf8JsonWriter
 import org.apache.fory.serializer.GraphMemoryEstimates
 
-private[scala] object ScalaBigIntCodec extends AbstractJsonValueCodec[BigInt] {
+private[scala] object ScalaBigIntCodec extends JsonValueCodec[BigInt] {
   private val OwnerBytes = GraphMemoryEstimates.shallowObjectBytes(classOf[BigInt])
 
-  override def write(writer: JsonWriter, value: BigInt): Unit = {
+  override def writeString(writer: StringJsonWriter, value: BigInt): Unit = {
     if (value == null) writer.writeNull() else writer.writeBigInteger(value.bigInteger)
   }
 
-  override def read(reader: JsonReader): BigInt = {
+  override def writeUtf8(writer: Utf8JsonWriter, value: BigInt): Unit = {
+    if (value == null) writer.writeNull() else writer.writeBigInteger(value.bigInteger)
+  }
+
+  override def readLatin1(reader: Latin1JsonReader): BigInt = {
     if (reader.tryReadNullToken()) return null
     val value = reader.readBigInteger()
     reader.reserveGraphMemory(OwnerBytes)
     BigInt(value)
+  }
+
+  override def readUtf16(reader: Utf16JsonReader): BigInt = {
+    if (reader.tryReadNullToken()) return null
+    val value = reader.readBigInteger()
+    reader.reserveGraphMemory(OwnerBytes)
+    BigInt(value)
+  }
+
+  override def readUtf8(reader: Utf8JsonReader): BigInt = {
+    val token = reader.peekToken()
+    if (token == 'n' && reader.tryReadNullToken()) return null
+    val number = if (token == '"') reader.readBigInteger() else reader.readNumber()
+    reader.reserveGraphMemory(OwnerBytes)
+    // The integer representation distinguishes native integer tokens from decimal/exponent tokens.
+    // A compact value can use Scala's primitive storage without retaining a Java magnitude.
+    number match {
+      case value: java.lang.Long => BigInt(value.longValue())
+      case value: java.math.BigInteger => BigInt(value)
+      case _ => throw new ForyJsonException("Expected JSON integer")
+    }
   }
 }
 
@@ -82,6 +113,8 @@ private[scala] object ScalaStringBuilderCodec
 
 private[scala] final class ScalaRangeCodec(exclusive: Boolean)
     extends AbstractJsonValueCodec[Range] {
+  override def isEmpty(writer: JsonWriter, value: Range): Boolean = value.isEmpty
+
   private val OwnerBytes = GraphMemoryEstimates.shallowObjectBytes(classOf[Range])
 
   override def write(writer: JsonWriter, value: Range): Unit = {
@@ -168,7 +201,8 @@ private[scala] final class ScalaDurationCodec(finiteOnly: Boolean)
       case scala.concurrent.duration.Duration.MinusInf =>
         writer.writeFieldName("special")
         writer.writeString("MINUS_INF")
-      case scala.concurrent.duration.Duration.Undefined =>
+      // Undefined.equals is always false, so a stable-identifier pattern fails on Scala 2.
+      case undefined if undefined eq scala.concurrent.duration.Duration.Undefined =>
         writer.writeFieldName("special")
         writer.writeString("UNDEFINED")
       case _ => throw invalidDuration()

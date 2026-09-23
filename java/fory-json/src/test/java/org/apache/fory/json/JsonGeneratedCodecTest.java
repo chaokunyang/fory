@@ -34,6 +34,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import org.apache.fory.json.codec.Utf8WriterCodec;
@@ -48,6 +49,7 @@ import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
+import org.apache.fory.reflect.TypeRef;
 import org.testng.annotations.Test;
 
 public class JsonGeneratedCodecTest extends ForyJsonTestModels {
@@ -150,6 +152,19 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
 
     assertEquals(json.toJson(utf16Value), utf16);
     assertEquals(new String(json.toJsonBytes(utf16Value), StandardCharsets.UTF_8), utf16);
+    String pretty = json.toPrettyJson(utf16Value);
+    assertEquals(new String(json.toPrettyJsonBytes(utf16Value), StandardCharsets.UTF_8), pretty);
+    assertObjectCollections(json.fromJson(pretty, ObjectCollections.class), ZH_TEXT);
+    utf16Value.values = new LinkedList<>(utf16Value.values);
+    assertEquals(json.toJson(utf16Value), utf16);
+    assertEquals(json.toPrettyJson(utf16Value), pretty);
+    if (codegen) {
+      JsonTypeInfo collection =
+          JsonTestSupport.currentTypeResolver(json)
+              .getTypeInfo(new TypeRef<List<TokenValues>>() {});
+      assertTrue(collection.stringWriter().getClass().getName().contains("StringCollectionWriter"));
+      assertTrue(collection.utf8Writer().getClass().getName().contains("Utf8CollectionWriter"));
+    }
     assertGeneratedWhenSupported(json, ObjectCollections.class, codegen);
     assertGeneratedWhenSupported(json, TokenValues.class, codegen);
   }

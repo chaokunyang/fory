@@ -508,17 +508,31 @@ final class StaticSerializerSourceWriter {
   }
 
   private void appendDirectWrite(SourceField field) {
-    if (canEmitDirectStringField(field)) {
+    if (canEmitDirectStringField(field) || canEmitDirectArrayField(field)) {
+      String fieldValue = "fieldValue" + field.id;
+      // Read once so record accessors and getters are not invoked again by the null check.
       builder
-          .append("          writeContext.writeString(")
+          .append("          ")
+          .append(field.erasedType)
+          .append(" ")
+          .append(fieldValue)
+          .append(" = ")
           .append(field.readExpression("value"))
-          .append(");\n");
-      return;
-    }
-    if (canEmitDirectArrayField(field)) {
+          .append(";\n");
       builder
-          .append("          fieldInfo.serializer.write(writeContext, ")
-          .append(field.readExpression("value"))
+          .append("          if (")
+          .append(fieldValue)
+          .append(" == null) {\n")
+          .append("            throwNullFieldException(\"")
+          .append(escape(field.declaringClass + "." + field.name))
+          .append("\");\n")
+          .append("          }\n");
+      builder
+          .append(
+              canEmitDirectStringField(field)
+                  ? "          writeContext.writeString("
+                  : "          fieldInfo.serializer.write(writeContext, ")
+          .append(fieldValue)
           .append(");\n");
       return;
     }

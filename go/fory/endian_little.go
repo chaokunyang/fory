@@ -15,10 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//go:build amd64 || arm64 || 386 || arm || loong64 || mips64le || mipsle || ppc64le || riscv64 || wasm
+//go:build amd64 || arm64 || 386 || arm || loong64 || ppc64le || riscv64 || wasm
 
 package fory
 
-// isLittleEndian is a compile-time constant for little-endian architectures.
-// This enables dead code elimination - the compiler removes big-endian branches entirely.
-const isLittleEndian = true
+const (
+	isLittleEndian        = true
+	useNativeEndianAccess = true
+)

@@ -33,7 +33,6 @@ import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.collection.BiMap;
 import org.apache.fory.collection.ConcurrentIdentityMap;
 import org.apache.fory.collection.Tuple2;
-import org.apache.fory.exception.ForyException;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.MetaString;
@@ -223,7 +222,10 @@ public final class SharedRegistry {
     if (existing != null) {
       return existing;
     }
-    int versionsForType = checkRemoteTypeLimit(remoteTypeKey);
+    int versionsForType = remoteTypeVersionCount(remoteTypeKey);
+    if (versionsForType < 0) {
+      return typeDef;
+    }
     TypeDef canonicalTypeDef = typeDefByHeaderHash.putIfAbsent(headerHash, typeDef);
     if (canonicalTypeDef == null) {
       canonicalTypeDef = typeDef;
@@ -237,34 +239,21 @@ public final class SharedRegistry {
     return canonicalTypeDef;
   }
 
-  synchronized void checkRemoteTypeDefLimit(TypeDef typeDef, Object remoteTypeKey) {
+  synchronized boolean canCacheRemoteTypeDef(TypeDef typeDef, Object remoteTypeKey) {
     if (remoteTypeDefByHeaderHash.containsKey(TypeDef.headerHash(typeDef.getId()))) {
-      return;
+      return true;
     }
-    checkRemoteTypeLimit(remoteTypeKey);
+    return remoteTypeVersionCount(remoteTypeKey) >= 0;
   }
 
-  private int checkRemoteTypeLimit(Object remoteTypeKey) {
+  private int remoteTypeVersionCount(Object remoteTypeKey) {
     int versionsForType = remoteTypeDefVersionsByType.getOrDefault(remoteTypeKey, 0);
     if (versionsForType == 0 && remoteTypeDefVersionsByType.size() >= MAX_REMOTE_TYPE_DEF_KEYS) {
-      throw new ForyException(
-          "Remote type limit exceeded: "
-              + remoteTypeDefVersionsByType.size()
-              + " accepted remote types >= "
-              + MAX_REMOTE_TYPE_DEF_KEYS
-              + ". The data may be malicious.");
+      return -1;
     }
     int maxSchemaVersionsPerType = maxSchemaVersionsPerType();
     if (versionsForType >= maxSchemaVersionsPerType) {
-      throw new ForyException(
-          "Remote schema version limit exceeded for type "
-              + remoteTypeKey
-              + ": "
-              + versionsForType
-              + " >= "
-              + maxSchemaVersionsPerType
-              + ". The data may be malicious. If the data is not malicious, please increase "
-              + "maxSchemaVersionsPerType.");
+      return -1;
     }
     int acceptedRemoteTypeCount =
         versionsForType == 0
@@ -276,15 +265,7 @@ public final class SharedRegistry {
             (long) MIN_REMOTE_TYPE_DEF_LIMIT,
             (long) acceptedRemoteTypeCount * maxAverageSchemaVersionsPerType);
     if (totalAcceptedSchemaVersions >= globalLimit) {
-      throw new ForyException(
-          "Remote schema version limit exceeded: "
-              + totalAcceptedSchemaVersions
-              + " metadata versions for "
-              + acceptedRemoteTypeCount
-              + " accepted remote types exceeds the average limit "
-              + maxAverageSchemaVersionsPerType
-              + ". The data may be malicious. If the data is not malicious, please increase "
-              + "maxAverageSchemaVersionsPerType.");
+      return -1;
     }
     return versionsForType;
   }
@@ -402,7 +383,9 @@ public final class SharedRegistry {
 
   public List<Descriptor> getOrCreateTypeDefDescriptors(
       TypeDef typeDef, Class<?> type, java.util.function.Supplier<List<Descriptor>> factory) {
-    if (GraalvmSupport.isGraalBuildTime()) {
+    // Derived schema data must not outlive an uncached remote TypeDef.
+    if (GraalvmSupport.isGraalBuildTime()
+        || !typeDefByHeaderHash.containsKey(TypeDef.headerHash(typeDef.getId()))) {
       return Collections.unmodifiableList(new ArrayList<>(factory.get()));
     }
     TypeDefDescriptorsKey key = new TypeDefDescriptorsKey(typeDef.getId(), type);
@@ -433,7 +416,8 @@ public final class SharedRegistry {
       boolean descriptorsGroupedOrdered,
       java.util.function.Function<Descriptor, Descriptor> descriptorUpdator,
       java.util.function.Supplier<DescriptorGrouper> factory) {
-    if (GraalvmSupport.isGraalBuildTime()) {
+    if (GraalvmSupport.isGraalBuildTime()
+        || !typeDefByHeaderHash.containsKey(TypeDef.headerHash(typeDef.getId()))) {
       return factory.get();
     }
     TypeDefDescriptorGrouperKey key =

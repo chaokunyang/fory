@@ -17,23 +17,14 @@
  * under the License.
  */
 
-package org.apache.fory.json.annotation;
+package org.apache.fory.json.examples
 
-import java.lang.annotation.Documented;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import org.apache.fory.json.scala.ScalaJsonCodec
 
-/**
- * Selects a quoted standard Base64 JSON string as the representation of one exact {@code byte[]}
- * field or getter.
- *
- * <p>Writing encodes the bytes without an intermediate String, and reading decodes the JSON string
- * directly into bytes. Null inclusion and omission follow the property's normal configuration, and
- * an included null is written as JSON {@code null}.
- */
-@Documented
-@Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.METHOD})
-public @interface JsonBase64 {}
+object EnumSchemas {
+  sealed trait State
+  case object Ready extends State
+  case object Done extends State
+
+  val codec: ScalaJsonCodec[State] = ScalaJsonCodec.stringEnum[State]
+}

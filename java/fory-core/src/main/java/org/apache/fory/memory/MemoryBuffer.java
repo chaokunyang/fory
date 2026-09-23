@@ -18,6 +18,7 @@
 
 package org.apache.fory.memory;
 
+import static org.apache.fory.platform.JdkVersion.JDK8_ARM;
 import static org.apache.fory.util.Preconditions.checkArgument;
 import static org.apache.fory.util.Preconditions.checkNotNull;
 
@@ -206,11 +207,6 @@ public final class MemoryBuffer {
    * @param streamReader a reader for reading from a stream.
    */
   private MemoryBuffer(byte[] buffer, int offset, int length, ForyStreamReader streamReader) {
-    checkArgument(offset >= 0 && length >= 0);
-    if (offset + length > buffer.length) {
-      throw new IllegalArgumentException(
-          String.format("%d exceeds buffer size %d", offset + length, buffer.length));
-    }
     initHeapBuffer(buffer, offset, length);
     if (streamReader != null) {
       this.streamReader = streamReader;
@@ -256,7 +252,7 @@ public final class MemoryBuffer {
 
   private void initOffHeapBuffer(long offHeapAddress, int size, ByteBuffer offHeapBuffer) {
     this.offHeapBuffer = offHeapBuffer;
-    if (offHeapAddress <= 0) {
+    if (offHeapAddress <= 0 || size < 0) {
       throw new IllegalArgumentException("negative pointer or size");
     }
     if (offHeapAddress >= Long.MAX_VALUE - Integer.MAX_VALUE) {
@@ -285,6 +281,10 @@ public final class MemoryBuffer {
   }
 
   public void initByteBuffer(ByteBuffer buffer, int size) {
+    if (!AndroidSupport.IS_ANDROID && size > buffer.capacity()) {
+      throw new IllegalArgumentException(
+          String.format("size %d exceeds ByteBuffer capacity %d", size, buffer.capacity()));
+    }
     if (buffer.isDirect()) {
       if (AndroidSupport.IS_ANDROID) {
         MemoryOps.throwDirectByteBufferUnsupported();
@@ -330,12 +330,17 @@ public final class MemoryBuffer {
   }
 
   public void initHeapBuffer(byte[] buffer, int offset, int length) {
+    if (buffer == null) {
+      throw new NullPointerException("buffer");
+    }
+    if (offset < 0 || length < 0 || offset > buffer.length - length) {
+      throw new IllegalArgumentException(
+          String.format(
+              "offset %d and length %d exceed buffer size %d", offset, length, buffer.length));
+    }
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.initHeapBuffer(this, buffer, offset, length);
     } else {
-      if (buffer == null) {
-        throw new NullPointerException("buffer");
-      }
       this.heapMemory = buffer;
       this.heapOffset = offset;
       final long startPos = BYTE_ARRAY_OFFSET + offset;
@@ -359,7 +364,21 @@ public final class MemoryBuffer {
   }
 
   public void increaseSize(int diff) {
-    this.addressLimit = address + (size += diff);
+    long maxSize;
+    if (heapMemory != null) {
+      maxSize = heapMemory.length - heapOffset;
+    } else if (offHeapBuffer != null) {
+      // The owner's position is mutable, so derive this view's fixed offset from its base address.
+      maxSize = getAddress(offHeapBuffer) + offHeapBuffer.capacity() - address;
+    } else {
+      maxSize = size;
+    }
+    if (diff < 0 || maxSize < size || diff > maxSize - size) {
+      throwOOBException();
+    }
+    int newSize = size + diff;
+    this.addressLimit = address + newSize;
+    this.size = newSize;
   }
 
   /**
@@ -624,7 +643,12 @@ public final class MemoryBuffer {
     }
     final long pos = address + index;
     checkPosition(index, pos, 2);
-    char c = UNSAFE.getChar(heapMemory, pos);
+    char c;
+    if (JDK8_ARM) {
+      c = (char) _UnsafeUtils.getShortBytes(heapMemory, pos);
+    } else {
+      c = UNSAFE.getChar(heapMemory, pos);
+    }
     return LITTLE_ENDIAN ? c : Character.reverseBytes(c);
   }
 
@@ -634,7 +658,12 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.unsafeGetChar(this, index);
     }
-    char c = UNSAFE.getChar(heapMemory, address + index);
+    char c;
+    if (JDK8_ARM) {
+      c = (char) _UnsafeUtils.getShortBytes(heapMemory, address + index);
+    } else {
+      c = UNSAFE.getChar(heapMemory, address + index);
+    }
     return LITTLE_ENDIAN ? c : Character.reverseBytes(c);
   }
 
@@ -647,7 +676,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Character.reverseBytes(value);
       }
-      UNSAFE.putChar(heapMemory, pos, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putShortBytes(heapMemory, pos, (short) value);
+      } else {
+        UNSAFE.putChar(heapMemory, pos, value);
+      }
     }
   }
 
@@ -660,7 +693,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Character.reverseBytes(value);
       }
-      UNSAFE.putChar(heapMemory, address + index, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putShortBytes(heapMemory, address + index, (short) value);
+      } else {
+        UNSAFE.putChar(heapMemory, address + index, value);
+      }
     }
   }
 
@@ -670,7 +707,12 @@ public final class MemoryBuffer {
     }
     final long pos = address + index;
     checkPosition(index, pos, 2);
-    short v = UNSAFE.getShort(heapMemory, pos);
+    short v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getShortBytes(heapMemory, pos);
+    } else {
+      v = UNSAFE.getShort(heapMemory, pos);
+    }
     return LITTLE_ENDIAN ? v : Short.reverseBytes(v);
   }
 
@@ -683,7 +725,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Short.reverseBytes(value);
       }
-      UNSAFE.putShort(heapMemory, pos, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putShortBytes(heapMemory, pos, value);
+      } else {
+        UNSAFE.putShort(heapMemory, pos, value);
+      }
     }
   }
 
@@ -693,7 +739,12 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.unsafeGetInt16(this, index);
     }
-    short v = UNSAFE.getShort(heapMemory, address + index);
+    short v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getShortBytes(heapMemory, address + index);
+    } else {
+      v = UNSAFE.getShort(heapMemory, address + index);
+    }
     return LITTLE_ENDIAN ? v : Short.reverseBytes(v);
   }
 
@@ -706,7 +757,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Short.reverseBytes(value);
       }
-      UNSAFE.putShort(heapMemory, address + index, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putShortBytes(heapMemory, address + index, value);
+      } else {
+        UNSAFE.putShort(heapMemory, address + index, value);
+      }
     }
   }
 
@@ -716,7 +771,12 @@ public final class MemoryBuffer {
     }
     final long pos = address + index;
     checkPosition(index, pos, 4);
-    int v = UNSAFE.getInt(heapMemory, pos);
+    int v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getIntFromShorts(heapMemory, pos);
+    } else {
+      v = UNSAFE.getInt(heapMemory, pos);
+    }
     return LITTLE_ENDIAN ? v : Integer.reverseBytes(v);
   }
 
@@ -729,7 +789,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Integer.reverseBytes(value);
       }
-      UNSAFE.putInt(heapMemory, pos, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, pos, value);
+      } else {
+        UNSAFE.putInt(heapMemory, pos, value);
+      }
     }
   }
 
@@ -739,7 +803,12 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.unsafeGetInt32(this, index);
     }
-    int v = UNSAFE.getInt(heapMemory, address + index);
+    int v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getIntFromShorts(heapMemory, address + index);
+    } else {
+      v = UNSAFE.getInt(heapMemory, address + index);
+    }
     return LITTLE_ENDIAN ? v : Integer.reverseBytes(v);
   }
 
@@ -752,7 +821,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Integer.reverseBytes(value);
       }
-      UNSAFE.putInt(heapMemory, address + index, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, address + index, value);
+      } else {
+        UNSAFE.putInt(heapMemory, address + index, value);
+      }
     }
   }
 
@@ -762,7 +835,12 @@ public final class MemoryBuffer {
     }
     final long pos = address + index;
     checkPosition(index, pos, 8);
-    long v = UNSAFE.getLong(heapMemory, pos);
+    long v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getLongFromInts(heapMemory, pos);
+    } else {
+      v = UNSAFE.getLong(heapMemory, pos);
+    }
     return LITTLE_ENDIAN ? v : Long.reverseBytes(v);
   }
 
@@ -775,7 +853,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Long.reverseBytes(value);
       }
-      UNSAFE.putLong(heapMemory, pos, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putLongAsInts(heapMemory, pos, value);
+      } else {
+        UNSAFE.putLong(heapMemory, pos, value);
+      }
     }
   }
 
@@ -785,7 +867,12 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.unsafeGetInt64(this, index);
     }
-    long v = UNSAFE.getLong(heapMemory, address + index);
+    long v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getLongFromInts(heapMemory, address + index);
+    } else {
+      v = UNSAFE.getLong(heapMemory, address + index);
+    }
     return LITTLE_ENDIAN ? v : Long.reverseBytes(v);
   }
 
@@ -798,7 +885,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Long.reverseBytes(value);
       }
-      UNSAFE.putLong(heapMemory, address + index, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putLongAsInts(heapMemory, address + index, value);
+      } else {
+        UNSAFE.putLong(heapMemory, address + index, value);
+      }
     }
   }
 
@@ -808,7 +899,12 @@ public final class MemoryBuffer {
     }
     final long pos = address + index;
     checkPosition(index, pos, 4);
-    int v = UNSAFE.getInt(heapMemory, pos);
+    int v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getIntFromShorts(heapMemory, pos);
+    } else {
+      v = UNSAFE.getInt(heapMemory, pos);
+    }
     if (!LITTLE_ENDIAN) {
       v = Integer.reverseBytes(v);
     }
@@ -825,7 +921,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         v = Integer.reverseBytes(v);
       }
-      UNSAFE.putInt(heapMemory, pos, v);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, pos, v);
+      } else {
+        UNSAFE.putInt(heapMemory, pos, v);
+      }
     }
   }
 
@@ -835,7 +935,12 @@ public final class MemoryBuffer {
     }
     final long pos = address + index;
     checkPosition(index, pos, 8);
-    long v = UNSAFE.getLong(heapMemory, pos);
+    long v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getLongFromInts(heapMemory, pos);
+    } else {
+      v = UNSAFE.getLong(heapMemory, pos);
+    }
     if (!LITTLE_ENDIAN) {
       v = Long.reverseBytes(v);
     }
@@ -852,7 +957,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         v = Long.reverseBytes(v);
       }
-      UNSAFE.putLong(heapMemory, pos, v);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putLongAsInts(heapMemory, pos, v);
+      } else {
+        UNSAFE.putLong(heapMemory, pos, v);
+      }
     }
   }
 
@@ -884,7 +993,7 @@ public final class MemoryBuffer {
     this.writerIndex = writerIndex;
   }
 
-  private void throwOOBExceptionForWriteIndex(int writerIndex) {
+  private void throwOOBExceptionForWriteIndex(long writerIndex) {
     throw new IndexOutOfBoundsException(
         String.format(
             "writerIndex: %d (expected: 0 <= writerIndex <= size(%d))", writerIndex, size));
@@ -917,9 +1026,12 @@ public final class MemoryBuffer {
 
   /** Increase writer index and grow buffer if needed. */
   public void increaseWriterIndex(int diff) {
-    int writerIdx = writerIndex + diff;
-    ensure(writerIdx);
-    this.writerIndex = writerIdx;
+    long writerIdx = (long) writerIndex + diff;
+    if (writerIdx < 0 || writerIdx > Integer.MAX_VALUE) {
+      throwOOBExceptionForWriteIndex(writerIdx);
+    }
+    ensure((int) writerIdx);
+    this.writerIndex = (int) writerIdx;
   }
 
   public void writeBoolean(boolean value) {
@@ -983,7 +1095,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Character.reverseBytes(value);
       }
-      UNSAFE.putChar(heapMemory, pos, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putShortBytes(heapMemory, pos, (short) value);
+      } else {
+        UNSAFE.putChar(heapMemory, pos, value);
+      }
       writerIndex = newIdx;
     }
   }
@@ -998,7 +1114,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Short.reverseBytes(value);
       }
-      UNSAFE.putShort(heapMemory, address + writerIdx, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putShortBytes(heapMemory, address + writerIdx, value);
+      } else {
+        UNSAFE.putShort(heapMemory, address + writerIdx, value);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1013,7 +1133,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Integer.reverseBytes(value);
       }
-      UNSAFE.putInt(heapMemory, address + writerIdx, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, address + writerIdx, value);
+      } else {
+        UNSAFE.putInt(heapMemory, address + writerIdx, value);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1028,7 +1152,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Long.reverseBytes(value);
       }
-      UNSAFE.putLong(heapMemory, address + writerIdx, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putLongAsInts(heapMemory, address + writerIdx, value);
+      } else {
+        UNSAFE.putLong(heapMemory, address + writerIdx, value);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1044,7 +1172,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         v = Integer.reverseBytes(v);
       }
-      UNSAFE.putInt(heapMemory, address + writerIdx, v);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, address + writerIdx, v);
+      } else {
+        UNSAFE.putInt(heapMemory, address + writerIdx, v);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1060,7 +1192,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         v = Long.reverseBytes(v);
       }
-      UNSAFE.putLong(heapMemory, address + writerIdx, v);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putLongAsInts(heapMemory, address + writerIdx, v);
+      } else {
+        UNSAFE.putLong(heapMemory, address + writerIdx, v);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1160,7 +1296,11 @@ public final class MemoryBuffer {
       return diff;
     }
     if (value >>> 14 == 0) {
-      UNSAFE.putInt(heapMemory, address + writerIdx, encoded);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, address + writerIdx, encoded);
+      } else {
+        UNSAFE.putInt(heapMemory, address + writerIdx, encoded);
+      }
       writerIndex += 2;
       return 2;
     }
@@ -1196,7 +1336,11 @@ public final class MemoryBuffer {
       return putVarUInt32BigEndian(index, encoded, value);
     }
     if (value >>> 14 == 0) {
-      UNSAFE.putInt(heapMemory, address + index, encoded);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, address + index, encoded);
+      } else {
+        UNSAFE.putInt(heapMemory, address + index, encoded);
+      }
       return 2;
     }
     return continuePutVarUInt32(index, encoded, value);
@@ -1206,26 +1350,42 @@ public final class MemoryBuffer {
     // 0x1fc000: 0b1111111 << 14
     encoded |= (((value & 0x1fc000) << 2) | 0x8000);
     if (value >>> 21 == 0) {
-      UNSAFE.putInt(heapMemory, address + index, encoded);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, address + index, encoded);
+      } else {
+        UNSAFE.putInt(heapMemory, address + index, encoded);
+      }
       return 3;
     }
     // 0xfe00000: 0b1111111 << 21
     encoded |= ((value & 0xfe00000) << 3) | 0x800000;
     if (value >>> 28 == 0) {
-      UNSAFE.putInt(heapMemory, address + index, encoded);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, address + index, encoded);
+      } else {
+        UNSAFE.putInt(heapMemory, address + index, encoded);
+      }
       return 4;
     }
     // 5-byte case: bits 28-31 go to the 5th byte
     // Need long for the final write to include the 5th byte
     long encodedLong = Integer.toUnsignedLong(encoded) | 0x80000000L;
     encodedLong |= (long) (value >>> 28) << 32;
-    UNSAFE.putLong(heapMemory, address + index, encodedLong);
+    if (JDK8_ARM) {
+      _UnsafeUtils.putLongAsInts(heapMemory, address + index, encodedLong);
+    } else {
+      UNSAFE.putLong(heapMemory, address + index, encodedLong);
+    }
     return 5;
   }
 
   private int putVarUInt32BigEndian(int index, int encoded, int value) {
     if (value >>> 14 == 0) {
-      UNSAFE.putInt(heapMemory, address + index, Integer.reverseBytes(encoded));
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, address + index, Integer.reverseBytes(encoded));
+      } else {
+        UNSAFE.putInt(heapMemory, address + index, Integer.reverseBytes(encoded));
+      }
       return 2;
     }
     return continuePutVarUInt32BigEndian(index, encoded, value);
@@ -1235,20 +1395,32 @@ public final class MemoryBuffer {
     // 0x1fc000: 0b1111111 << 14
     encoded |= (((value & 0x1fc000) << 2) | 0x8000);
     if (value >>> 21 == 0) {
-      UNSAFE.putInt(heapMemory, address + index, Integer.reverseBytes(encoded));
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, address + index, Integer.reverseBytes(encoded));
+      } else {
+        UNSAFE.putInt(heapMemory, address + index, Integer.reverseBytes(encoded));
+      }
       return 3;
     }
     // 0xfe00000: 0b1111111 << 21
     encoded |= ((value & 0xfe00000) << 3) | 0x800000;
     if (value >>> 28 == 0) {
-      UNSAFE.putInt(heapMemory, address + index, Integer.reverseBytes(encoded));
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, address + index, Integer.reverseBytes(encoded));
+      } else {
+        UNSAFE.putInt(heapMemory, address + index, Integer.reverseBytes(encoded));
+      }
       return 4;
     }
     // 5-byte case: bits 28-31 go to the 5th byte
     // Need long for the final write to include the 5th byte
     long encodedLong = Integer.toUnsignedLong(encoded) | 0x80000000L;
     encodedLong |= (long) (value >>> 28) << 32;
-    UNSAFE.putLong(heapMemory, address + index, Long.reverseBytes(encodedLong));
+    if (JDK8_ARM) {
+      _UnsafeUtils.putLongAsInts(heapMemory, address + index, Long.reverseBytes(encodedLong));
+    } else {
+      UNSAFE.putLong(heapMemory, address + index, Long.reverseBytes(encodedLong));
+    }
     return 5;
   }
 
@@ -1274,7 +1446,11 @@ public final class MemoryBuffer {
       return putVarUint36SmallBigEndian(index, encoded, value);
     }
     if (value >>> 14 == 0) {
-      UNSAFE.putInt(heapMemory, address + index, (int) encoded);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, address + index, (int) encoded);
+      } else {
+        UNSAFE.putInt(heapMemory, address + index, (int) encoded);
+      }
       return 2;
     }
     return continuePutVarUint36Small(index, encoded, value);
@@ -1284,24 +1460,51 @@ public final class MemoryBuffer {
     // 0x1fc000: 0b1111111 << 14
     encoded |= (((value & 0x1fc000) << 2) | 0x8000);
     if (value >>> 21 == 0) {
-      UNSAFE.putInt(heapMemory, address + index, (int) encoded);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, address + index, (int) encoded);
+      } else {
+        UNSAFE.putInt(heapMemory, address + index, (int) encoded);
+      }
       return 3;
     }
     // 0xfe00000: 0b1111111 << 21
     encoded |= ((value & 0xfe00000) << 3) | 0x800000;
     if (value >>> 28 == 0) {
-      UNSAFE.putInt(heapMemory, address + index, (int) encoded);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, address + index, (int) encoded);
+      } else {
+        UNSAFE.putInt(heapMemory, address + index, (int) encoded);
+      }
       return 4;
     }
-    // 0xff0000000: 0b11111111 << 28. Note eight `1` here instead of seven.
-    encoded |= ((value & 0xff0000000L) << 4) | 0x80000000L;
-    UNSAFE.putLong(heapMemory, address + index, encoded);
-    return 5;
+    // The fifth byte carries seven data bits. Bit 35 uses a sixth byte so this
+    // specialized string-header encoding stays standard VarUint64 on the wire.
+    encoded |= ((value & 0x7f0000000L) << 4) | 0x80000000L;
+    if (value >>> 35 == 0) {
+      if (JDK8_ARM) {
+        _UnsafeUtils.putLongAsInts(heapMemory, address + index, encoded);
+      } else {
+        UNSAFE.putLong(heapMemory, address + index, encoded);
+      }
+      return 5;
+    }
+    encoded |= 0x8000000000L | ((value >>> 35) << 40);
+    if (JDK8_ARM) {
+      _UnsafeUtils.putLongAsInts(heapMemory, address + index, encoded);
+    } else {
+      UNSAFE.putLong(heapMemory, address + index, encoded);
+    }
+    return 6;
   }
 
   private int putVarUint36SmallBigEndian(int index, long encoded, long value) {
     if (value >>> 14 == 0) {
-      UNSAFE.putInt(heapMemory, address + index, Integer.reverseBytes((int) encoded));
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(
+            heapMemory, address + index, Integer.reverseBytes((int) encoded));
+      } else {
+        UNSAFE.putInt(heapMemory, address + index, Integer.reverseBytes((int) encoded));
+      }
       return 2;
     }
     return continuePutVarUint36SmallBigEndian(index, encoded, value);
@@ -1311,19 +1514,41 @@ public final class MemoryBuffer {
     // 0x1fc000: 0b1111111 << 14
     encoded |= (((value & 0x1fc000) << 2) | 0x8000);
     if (value >>> 21 == 0) {
-      UNSAFE.putInt(heapMemory, address + index, Integer.reverseBytes((int) encoded));
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(
+            heapMemory, address + index, Integer.reverseBytes((int) encoded));
+      } else {
+        UNSAFE.putInt(heapMemory, address + index, Integer.reverseBytes((int) encoded));
+      }
       return 3;
     }
     // 0xfe00000: 0b1111111 << 21
     encoded |= ((value & 0xfe00000) << 3) | 0x800000;
     if (value >>> 28 == 0) {
-      UNSAFE.putInt(heapMemory, address + index, Integer.reverseBytes((int) encoded));
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(
+            heapMemory, address + index, Integer.reverseBytes((int) encoded));
+      } else {
+        UNSAFE.putInt(heapMemory, address + index, Integer.reverseBytes((int) encoded));
+      }
       return 4;
     }
-    // 0xff0000000: 0b11111111 << 28. Note eight `1` here instead of seven.
-    encoded |= ((value & 0xff0000000L) << 4) | 0x80000000L;
-    UNSAFE.putLong(heapMemory, address + index, Long.reverseBytes(encoded));
-    return 5;
+    encoded |= ((value & 0x7f0000000L) << 4) | 0x80000000L;
+    if (value >>> 35 == 0) {
+      if (JDK8_ARM) {
+        _UnsafeUtils.putLongAsInts(heapMemory, address + index, Long.reverseBytes(encoded));
+      } else {
+        UNSAFE.putLong(heapMemory, address + index, Long.reverseBytes(encoded));
+      }
+      return 5;
+    }
+    encoded |= 0x8000000000L | ((value >>> 35) << 40);
+    if (JDK8_ARM) {
+      _UnsafeUtils.putLongAsInts(heapMemory, address + index, Long.reverseBytes(encoded));
+    } else {
+      UNSAFE.putLong(heapMemory, address + index, Long.reverseBytes(encoded));
+    }
+    return 6;
   }
 
   /**
@@ -1372,7 +1597,11 @@ public final class MemoryBuffer {
     } else {
       UNSAFE.putByte(heapMemory, pos, (byte) first);
       // zero out 4 bytes, so that `bit 7` value can be trusted.
-      UNSAFE.putInt(heapMemory, pos + 1, 0);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, pos + 1, 0);
+      } else {
+        UNSAFE.putInt(heapMemory, pos + 1, 0);
+      }
       UNSAFE.putByte(heapMemory, pos + numPaddingBytes - 1, (byte) (0x40));
       writerIndex = writerIdx + numPaddingBytes;
       return numPaddingBytes;
@@ -1395,7 +1624,11 @@ public final class MemoryBuffer {
     } else {
       UNSAFE.putByte(heapMemory, pos + 1, (byte) (value >>> 6));
       // zero out 4 bytes, so that `bit 7` value can be trusted.
-      UNSAFE.putInt(heapMemory, pos + 2, 0);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, pos + 2, 0);
+      } else {
+        UNSAFE.putInt(heapMemory, pos + 2, 0);
+      }
       if (numPaddingBytes > 2) {
         UNSAFE.putByte(heapMemory, pos + numPaddingBytes - 1, (byte) (0x40));
         writerIndex = writerIdx + numPaddingBytes;
@@ -1425,7 +1658,11 @@ public final class MemoryBuffer {
     } else {
       UNSAFE.putByte(heapMemory, pos + 2, (byte) (value >>> 12));
       // zero out 4 bytes, so that `bit 7` value can be trusted.
-      UNSAFE.putInt(heapMemory, pos + 3, 0);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, pos + 3, 0);
+      } else {
+        UNSAFE.putInt(heapMemory, pos + 3, 0);
+      }
       if (numPaddingBytes == 4) {
         UNSAFE.putByte(heapMemory, pos + numPaddingBytes - 1, (byte) (0x40));
         writerIndex = writerIdx + numPaddingBytes;
@@ -1456,7 +1693,11 @@ public final class MemoryBuffer {
     } else {
       UNSAFE.putByte(heapMemory, pos + 3, (byte) (value >>> 18));
       // zero out 4 bytes, so that `bit 7` value can be trusted.
-      UNSAFE.putInt(heapMemory, pos + 4, 0);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, pos + 4, 0);
+      } else {
+        UNSAFE.putInt(heapMemory, pos + 4, 0);
+      }
       UNSAFE.putByte(heapMemory, pos + numPaddingBytes + 3, (byte) (0x40));
       writerIndex = writerIdx + numPaddingBytes + 4;
       return numPaddingBytes + 4;
@@ -1482,7 +1723,11 @@ public final class MemoryBuffer {
     } else {
       UNSAFE.putByte(heapMemory, pos + 4, (byte) (value >>> 24));
       // zero out 4 bytes, so that `bit 7` value can be trusted.
-      UNSAFE.putInt(heapMemory, pos + 5, 0);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, pos + 5, 0);
+      } else {
+        UNSAFE.putInt(heapMemory, pos + 5, 0);
+      }
       UNSAFE.putByte(heapMemory, pos + numPaddingBytes + 3, (byte) (0x40));
       writerIndex = writerIdx + numPaddingBytes + 4;
       return numPaddingBytes + 4;
@@ -1509,7 +1754,11 @@ public final class MemoryBuffer {
     } else {
       UNSAFE.putByte(heapMemory, pos + 5, (byte) (value >>> 30));
       // zero out 4 bytes, so that `bit 7` value can be trusted.
-      UNSAFE.putInt(heapMemory, pos + 6, 0);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, pos + 6, 0);
+      } else {
+        UNSAFE.putInt(heapMemory, pos + 6, 0);
+      }
       if (numPaddingBytes == 1) {
         UNSAFE.putByte(heapMemory, pos + 8, (byte) (0x40));
         writerIndex = writerIdx + 9;
@@ -1530,7 +1779,7 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.writeVarInt64(this, value);
     }
-    ensure(writerIndex + 9);
+    grow(9);
     return _unsafeWriteVarUInt64((value << 1) ^ (value >> 63));
   }
 
@@ -1550,7 +1799,7 @@ public final class MemoryBuffer {
     }
     // Var long encoding algorithm is based kryo UnsafeMemoryOutput.writeVarInt64.
     // var long are written using little endian byte order.
-    ensure(writerIndex + 9);
+    grow(9);
     return _unsafeWriteVarUInt64(value);
   }
 
@@ -1654,7 +1903,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         v = Integer.reverseBytes(v);
       }
-      UNSAFE.putInt(heapMemory, pos, v);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, pos, v);
+      } else {
+        UNSAFE.putInt(heapMemory, pos, v);
+      }
       this.writerIndex = writerIndex + 4;
       return 4;
     } else {
@@ -1662,7 +1915,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Long.reverseBytes(value);
       }
-      UNSAFE.putLong(heapMemory, pos + 1, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putLongAsInts(heapMemory, pos + 1, value);
+      } else {
+        UNSAFE.putLong(heapMemory, pos + 1, value);
+      }
       this.writerIndex = writerIndex + 9;
       return 9;
     }
@@ -1693,7 +1950,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         v = Integer.reverseBytes(v);
       }
-      UNSAFE.putInt(heapMemory, pos, v);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putIntAsShorts(heapMemory, pos, v);
+      } else {
+        UNSAFE.putInt(heapMemory, pos, v);
+      }
       this.writerIndex = writerIndex + 4;
       return 4;
     } else {
@@ -1701,7 +1962,11 @@ public final class MemoryBuffer {
       if (!LITTLE_ENDIAN) {
         value = Long.reverseBytes(value);
       }
-      UNSAFE.putLong(heapMemory, pos + 1, value);
+      if (JDK8_ARM) {
+        _UnsafeUtils.putLongAsInts(heapMemory, pos + 1, value);
+      } else {
+        UNSAFE.putLong(heapMemory, pos + 1, value);
+      }
       this.writerIndex = writerIndex + 9;
       return 9;
     }
@@ -1745,18 +2010,31 @@ public final class MemoryBuffer {
       MemoryOps.writeBooleansWithSize(this, values);
     } else {
       writeVarUInt32Small7(values.length);
-      writeBooleans(values, 0, values.length);
+      writeBooleans(values);
     }
   }
 
+  // Full-array overloads own their source range and stay direct so serializers do not inline the
+  // larger arbitrary-range validation path. Offset/count overloads below retain that validation.
   public void writeBooleans(boolean[] values) {
-    writeBooleans(values, 0, values.length);
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.writeBooleans(this, values, 0, values.length);
+    } else {
+      final int writerIdx = writerIndex;
+      final int newIdx = writerIdx + values.length;
+      ensure(newIdx);
+      copyMemory(values, BOOLEAN_ARRAY_OFFSET, heapMemory, address + writerIdx, values.length);
+      writerIndex = newIdx;
+    }
   }
 
   public void writeBooleans(boolean[] values, int offset, int numElements) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.writeBooleans(this, values, offset, numElements);
     } else {
+      if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
+        throwOOBException();
+      }
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numElements;
       ensure(newIdx);
@@ -1772,28 +2050,48 @@ public final class MemoryBuffer {
     } else {
       int numBytes = Math.multiplyExact(values.length, 2);
       writeVarUInt32Small7(numBytes);
-      writeChars(values, 0, values.length);
+      writeChars(values);
     }
   }
 
   public void writeChars(char[] values) {
-    writeChars(values, 0, values.length);
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.writeChars(this, values, 0, values.length);
+    } else {
+      int numBytes = Math.multiplyExact(values.length, 2);
+      final int writerIdx = writerIndex;
+      final int newIdx = writerIdx + numBytes;
+      ensure(newIdx);
+      if (LITTLE_ENDIAN) {
+        copyMemory(values, CHAR_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      } else {
+        writeCharsBigEndian(values, 0, values.length, writerIdx);
+      }
+      writerIndex = newIdx;
+    }
   }
 
   public void writeChars(char[] values, int offset, int numElements) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.writeChars(this, values, offset, numElements);
     } else {
+      if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
+        throwOOBException();
+      }
       int numBytes = Math.multiplyExact(numElements, 2);
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(
-          values,
-          CHAR_ARRAY_OFFSET + ((long) offset << 1),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            values,
+            CHAR_ARRAY_OFFSET + ((long) offset << 1),
+            heapMemory,
+            address + writerIdx,
+            numBytes);
+      } else {
+        writeCharsBigEndian(values, offset, numElements, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1804,28 +2102,48 @@ public final class MemoryBuffer {
     } else {
       int numBytes = Math.multiplyExact(values.length, 2);
       writeVarUInt32Small7(numBytes);
-      writeShorts(values, 0, values.length);
+      writeShorts(values);
     }
   }
 
   public void writeShorts(short[] values) {
-    writeShorts(values, 0, values.length);
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.writeShorts(this, values, 0, values.length);
+    } else {
+      int numBytes = Math.multiplyExact(values.length, 2);
+      final int writerIdx = writerIndex;
+      final int newIdx = writerIdx + numBytes;
+      ensure(newIdx);
+      if (LITTLE_ENDIAN) {
+        copyMemory(values, SHORT_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      } else {
+        writeShortsBigEndian(values, 0, values.length, writerIdx);
+      }
+      writerIndex = newIdx;
+    }
   }
 
   public void writeShorts(short[] values, int offset, int numElements) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.writeShorts(this, values, offset, numElements);
     } else {
+      if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
+        throwOOBException();
+      }
       int numBytes = Math.multiplyExact(numElements, 2);
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(
-          values,
-          SHORT_ARRAY_OFFSET + ((long) offset << 1),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            values,
+            SHORT_ARRAY_OFFSET + ((long) offset << 1),
+            heapMemory,
+            address + writerIdx,
+            numBytes);
+      } else {
+        writeShortsBigEndian(values, offset, numElements, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1836,28 +2154,48 @@ public final class MemoryBuffer {
     } else {
       int numBytes = Math.multiplyExact(values.length, 4);
       writeVarUInt32Small7(numBytes);
-      writeInts(values, 0, values.length);
+      writeInts(values);
     }
   }
 
   public void writeInts(int[] values) {
-    writeInts(values, 0, values.length);
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.writeInts(this, values, 0, values.length);
+    } else {
+      int numBytes = Math.multiplyExact(values.length, 4);
+      final int writerIdx = writerIndex;
+      final int newIdx = writerIdx + numBytes;
+      ensure(newIdx);
+      if (LITTLE_ENDIAN) {
+        copyMemory(values, INT_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      } else {
+        writeIntsBigEndian(values, 0, values.length, writerIdx);
+      }
+      writerIndex = newIdx;
+    }
   }
 
   public void writeInts(int[] values, int offset, int numElements) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.writeInts(this, values, offset, numElements);
     } else {
+      if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
+        throwOOBException();
+      }
       int numBytes = Math.multiplyExact(numElements, 4);
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(
-          values,
-          INT_ARRAY_OFFSET + ((long) offset << 2),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            values,
+            INT_ARRAY_OFFSET + ((long) offset << 2),
+            heapMemory,
+            address + writerIdx,
+            numBytes);
+      } else {
+        writeIntsBigEndian(values, offset, numElements, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1868,28 +2206,48 @@ public final class MemoryBuffer {
     } else {
       int numBytes = Math.multiplyExact(values.length, 8);
       writeVarUInt32Small7(numBytes);
-      writeLongs(values, 0, values.length);
+      writeLongs(values);
     }
   }
 
   public void writeLongs(long[] values) {
-    writeLongs(values, 0, values.length);
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.writeLongs(this, values, 0, values.length);
+    } else {
+      int numBytes = Math.multiplyExact(values.length, 8);
+      final int writerIdx = writerIndex;
+      final int newIdx = writerIdx + numBytes;
+      ensure(newIdx);
+      if (LITTLE_ENDIAN) {
+        copyMemory(values, LONG_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      } else {
+        writeLongsBigEndian(values, 0, values.length, writerIdx);
+      }
+      writerIndex = newIdx;
+    }
   }
 
   public void writeLongs(long[] values, int offset, int numElements) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.writeLongs(this, values, offset, numElements);
     } else {
+      if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
+        throwOOBException();
+      }
       int numBytes = Math.multiplyExact(numElements, 8);
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(
-          values,
-          LONG_ARRAY_OFFSET + ((long) offset << 3),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            values,
+            LONG_ARRAY_OFFSET + ((long) offset << 3),
+            heapMemory,
+            address + writerIdx,
+            numBytes);
+      } else {
+        writeLongsBigEndian(values, offset, numElements, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1900,28 +2258,48 @@ public final class MemoryBuffer {
     } else {
       int numBytes = Math.multiplyExact(values.length, 4);
       writeVarUInt32Small7(numBytes);
-      writeFloats(values, 0, values.length);
+      writeFloats(values);
     }
   }
 
   public void writeFloats(float[] values) {
-    writeFloats(values, 0, values.length);
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.writeFloats(this, values, 0, values.length);
+    } else {
+      int numBytes = Math.multiplyExact(values.length, 4);
+      final int writerIdx = writerIndex;
+      final int newIdx = writerIdx + numBytes;
+      ensure(newIdx);
+      if (LITTLE_ENDIAN) {
+        copyMemory(values, FLOAT_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      } else {
+        writeFloatsBigEndian(values, 0, values.length, writerIdx);
+      }
+      writerIndex = newIdx;
+    }
   }
 
   public void writeFloats(float[] values, int offset, int numElements) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.writeFloats(this, values, offset, numElements);
     } else {
+      if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
+        throwOOBException();
+      }
       int numBytes = Math.multiplyExact(numElements, 4);
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(
-          values,
-          FLOAT_ARRAY_OFFSET + ((long) offset << 2),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            values,
+            FLOAT_ARRAY_OFFSET + ((long) offset << 2),
+            heapMemory,
+            address + writerIdx,
+            numBytes);
+      } else {
+        writeFloatsBigEndian(values, offset, numElements, writerIdx);
+      }
       writerIndex = newIdx;
     }
   }
@@ -1932,44 +2310,112 @@ public final class MemoryBuffer {
     } else {
       int numBytes = Math.multiplyExact(values.length, 8);
       writeVarUInt32Small7(numBytes);
-      writeDoubles(values, 0, values.length);
+      writeDoubles(values);
     }
   }
 
   public void writeDoubles(double[] values) {
-    writeDoubles(values, 0, values.length);
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.writeDoubles(this, values, 0, values.length);
+    } else {
+      int numBytes = Math.multiplyExact(values.length, 8);
+      final int writerIdx = writerIndex;
+      final int newIdx = writerIdx + numBytes;
+      ensure(newIdx);
+      if (LITTLE_ENDIAN) {
+        copyMemory(values, DOUBLE_ARRAY_OFFSET, heapMemory, address + writerIdx, numBytes);
+      } else {
+        writeDoublesBigEndian(values, 0, values.length, writerIdx);
+      }
+      writerIndex = newIdx;
+    }
   }
 
   public void writeDoubles(double[] values, int offset, int numElements) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.writeDoubles(this, values, offset, numElements);
     } else {
+      if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
+        throwOOBException();
+      }
       int numBytes = Math.multiplyExact(numElements, 8);
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      copyMemory(
-          values,
-          DOUBLE_ARRAY_OFFSET + ((long) offset << 3),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            values,
+            DOUBLE_ARRAY_OFFSET + ((long) offset << 3),
+            heapMemory,
+            address + writerIdx,
+            numBytes);
+      } else {
+        writeDoublesBigEndian(values, offset, numElements, writerIdx);
+      }
       writerIndex = newIdx;
+    }
+  }
+
+  // Big-endian JVMs use the scalar little-endian primitives here. Keeping these methods separate
+  // leaves native bulk copy as the only little-endian hot path.
+  private void writeCharsBigEndian(char[] values, int offset, int length, int writerIdx) {
+    for (int i = 0; i < length; i++) {
+      _unsafePutInt16(writerIdx + i * 2, (short) values[offset + i]);
+    }
+  }
+
+  private void writeShortsBigEndian(short[] values, int offset, int length, int writerIdx) {
+    for (int i = 0; i < length; i++) {
+      _unsafePutInt16(writerIdx + i * 2, values[offset + i]);
+    }
+  }
+
+  private void writeIntsBigEndian(int[] values, int offset, int length, int writerIdx) {
+    for (int i = 0; i < length; i++) {
+      _unsafePutInt32(writerIdx + i * 4, values[offset + i]);
+    }
+  }
+
+  private void writeLongsBigEndian(long[] values, int offset, int length, int writerIdx) {
+    for (int i = 0; i < length; i++) {
+      _unsafePutInt64(writerIdx + i * 8, values[offset + i]);
+    }
+  }
+
+  private void writeFloatsBigEndian(float[] values, int offset, int length, int writerIdx) {
+    for (int i = 0; i < length; i++) {
+      _unsafePutInt32(writerIdx + i * 4, Float.floatToRawIntBits(values[offset + i]));
+    }
+  }
+
+  private void writeDoublesBigEndian(double[] values, int offset, int length, int writerIdx) {
+    for (int i = 0; i < length; i++) {
+      _unsafePutInt64(writerIdx + i * 8, Double.doubleToRawLongBits(values[offset + i]));
     }
   }
 
   /** For off-heap buffer, this will make a heap buffer internally. */
   public void grow(int neededSize) {
-    int length = writerIndex + neededSize;
+    long length = (long) writerIndex + neededSize;
     if (length > size) {
-      globalAllocator.grow(this, length);
+      growSlow(length);
     }
+  }
+
+  private void growSlow(long length) {
+    if (length < 0 || length > Integer.MAX_VALUE) {
+      throwOOBException();
+    }
+    // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
+    globalAllocator.grow(this, (int) length);
   }
 
   /** For off-heap buffer, this will make a heap buffer internally. */
   public void ensure(int length) {
-    if (length > size) {
-      globalAllocator.grow(this, length);
+    // Negative extents are overflowed writer positions. Compare as unsigned so the common path
+    // keeps one branch while overflow rejection and allocation stay cold before any Unsafe access.
+    if (Integer.compareUnsigned(length, size) > 0) {
+      growSlow(length);
     }
   }
 
@@ -2027,14 +2473,25 @@ public final class MemoryBuffer {
   }
 
   public void increaseReaderIndex(int diff) {
-    int readerIdx = readerIndex;
-    readerIndex = readerIdx += diff;
-    if (readerIdx < 0) {
-      throwIndexOOBExceptionForRead();
-    } else if (readerIdx > size) {
-      // in this case, diff must be greater than 0.
-      streamReader.fillBuffer(readerIdx - size);
+    long newReaderIdx = (long) readerIndex + diff;
+    if (newReaderIdx >= 0 && newReaderIdx <= size) {
+      readerIndex = (int) newReaderIdx;
+      return;
     }
+    increaseReaderIndexSlow(diff, newReaderIdx);
+  }
+
+  private void increaseReaderIndexSlow(int diff, long newReaderIdx) {
+    if (newReaderIdx < 0 || newReaderIdx > Integer.MAX_VALUE) {
+      throwIndexOOBExceptionForRead();
+    }
+    int readerIdx = (int) newReaderIdx;
+    streamReader.fillBuffer(readerIdx - size);
+    newReaderIdx = (long) readerIndex + diff;
+    if (newReaderIdx < 0 || newReaderIdx > size) {
+      throwIndexOOBExceptionForRead();
+    }
+    readerIndex = (int) newReaderIdx;
   }
 
   public long getUnsafeReaderAddress() {
@@ -2099,7 +2556,12 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(2 - remaining);
     }
     readerIndex = readerIdx + 2;
-    char c = UNSAFE.getChar(heapMemory, address + readerIdx);
+    char c;
+    if (JDK8_ARM) {
+      c = (char) _UnsafeUtils.getShortBytes(heapMemory, address + readerIdx);
+    } else {
+      c = UNSAFE.getChar(heapMemory, address + readerIdx);
+    }
     return LITTLE_ENDIAN ? c : Character.reverseBytes(c);
   }
 
@@ -2114,7 +2576,12 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(2 - remaining);
     }
     readerIndex = readerIdx + 2;
-    short v = UNSAFE.getShort(heapMemory, address + readerIdx);
+    short v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getShortBytes(heapMemory, address + readerIdx);
+    } else {
+      v = UNSAFE.getShort(heapMemory, address + readerIdx);
+    }
     return LITTLE_ENDIAN ? v : Short.reverseBytes(v);
   }
 
@@ -2133,7 +2600,11 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(2 - remaining);
     }
     readerIndex = readerIdx + 2;
-    return UNSAFE.getShort(heapMemory, address + readerIdx);
+    if (JDK8_ARM) {
+      return _UnsafeUtils.getShortBytes(heapMemory, address + readerIdx);
+    } else {
+      return UNSAFE.getShort(heapMemory, address + readerIdx);
+    }
   }
 
   // Reduce method body for better inline in the caller.
@@ -2151,7 +2622,11 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(2 - remaining);
     }
     readerIndex = readerIdx + 2;
-    return Short.reverseBytes(UNSAFE.getShort(heapMemory, address + readerIdx));
+    if (JDK8_ARM) {
+      return Short.reverseBytes(_UnsafeUtils.getShortBytes(heapMemory, address + readerIdx));
+    } else {
+      return Short.reverseBytes(UNSAFE.getShort(heapMemory, address + readerIdx));
+    }
   }
 
   public int readInt32() {
@@ -2165,7 +2640,12 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(4 - remaining);
     }
     readerIndex = readerIdx + 4;
-    int v = UNSAFE.getInt(heapMemory, address + readerIdx);
+    int v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getIntFromShorts(heapMemory, address + readerIdx);
+    } else {
+      v = UNSAFE.getInt(heapMemory, address + readerIdx);
+    }
     return LITTLE_ENDIAN ? v : Integer.reverseBytes(v);
   }
 
@@ -2184,7 +2664,11 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(4 - remaining);
     }
     readerIndex = readerIdx + 4;
-    return UNSAFE.getInt(heapMemory, address + readerIdx);
+    if (JDK8_ARM) {
+      return _UnsafeUtils.getIntFromShorts(heapMemory, address + readerIdx);
+    } else {
+      return UNSAFE.getInt(heapMemory, address + readerIdx);
+    }
   }
 
   // Reduce method body for better inline in the caller.
@@ -2202,7 +2686,11 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(4 - remaining);
     }
     readerIndex = readerIdx + 4;
-    return Integer.reverseBytes(UNSAFE.getInt(heapMemory, address + readerIdx));
+    if (JDK8_ARM) {
+      return Integer.reverseBytes(_UnsafeUtils.getIntFromShorts(heapMemory, address + readerIdx));
+    } else {
+      return Integer.reverseBytes(UNSAFE.getInt(heapMemory, address + readerIdx));
+    }
   }
 
   public long readInt64() {
@@ -2216,7 +2704,12 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(8 - remaining);
     }
     readerIndex = readerIdx + 8;
-    long v = UNSAFE.getLong(heapMemory, address + readerIdx);
+    long v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getLongFromInts(heapMemory, address + readerIdx);
+    } else {
+      v = UNSAFE.getLong(heapMemory, address + readerIdx);
+    }
     return LITTLE_ENDIAN ? v : Long.reverseBytes(v);
   }
 
@@ -2235,7 +2728,11 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(8 - remaining);
     }
     readerIndex = readerIdx + 8;
-    return UNSAFE.getLong(heapMemory, address + readerIdx);
+    if (JDK8_ARM) {
+      return _UnsafeUtils.getLongFromInts(heapMemory, address + readerIdx);
+    } else {
+      return UNSAFE.getLong(heapMemory, address + readerIdx);
+    }
   }
 
   // Reduce method body for better inline in the caller.
@@ -2253,7 +2750,11 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(8 - remaining);
     }
     readerIndex = readerIdx + 8;
-    return Long.reverseBytes(UNSAFE.getLong(heapMemory, address + readerIdx));
+    if (JDK8_ARM) {
+      return Long.reverseBytes(_UnsafeUtils.getLongFromInts(heapMemory, address + readerIdx));
+    } else {
+      return Long.reverseBytes(UNSAFE.getLong(heapMemory, address + readerIdx));
+    }
   }
 
   /** Read signed fory Tagged(Small Long as Int) encoded long. */
@@ -2286,7 +2787,12 @@ public final class MemoryBuffer {
     if (diff < 4) {
       streamReader.fillBuffer(4 - diff);
     }
-    int i = UNSAFE.getInt(heapMemory, address + readIdx);
+    int i;
+    if (JDK8_ARM) {
+      i = _UnsafeUtils.getIntFromShorts(heapMemory, address + readIdx);
+    } else {
+      i = UNSAFE.getInt(heapMemory, address + readIdx);
+    }
     if ((i & 0b1) != 0b1) {
       readerIndex = readIdx + 4;
       return i >>> 1; // unsigned right shift
@@ -2296,7 +2802,11 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(9 - diff);
     }
     readerIndex = readIdx + 9;
-    return UNSAFE.getLong(heapMemory, address + readIdx + 1);
+    if (JDK8_ARM) {
+      return _UnsafeUtils.getLongFromInts(heapMemory, address + readIdx + 1);
+    } else {
+      return UNSAFE.getLong(heapMemory, address + readIdx + 1);
+    }
   }
 
   @CodegenInvoke
@@ -2311,7 +2821,12 @@ public final class MemoryBuffer {
     if (diff < 4) {
       streamReader.fillBuffer(4 - diff);
     }
-    int i = Integer.reverseBytes(UNSAFE.getInt(heapMemory, address + readIdx));
+    int i;
+    if (JDK8_ARM) {
+      i = Integer.reverseBytes(_UnsafeUtils.getIntFromShorts(heapMemory, address + readIdx));
+    } else {
+      i = Integer.reverseBytes(UNSAFE.getInt(heapMemory, address + readIdx));
+    }
     if ((i & 0b1) != 0b1) {
       readerIndex = readIdx + 4;
       return i >>> 1; // unsigned right shift
@@ -2321,7 +2836,11 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(9 - diff);
     }
     readerIndex = readIdx + 9;
-    return Long.reverseBytes(UNSAFE.getLong(heapMemory, address + readIdx + 1));
+    if (JDK8_ARM) {
+      return Long.reverseBytes(_UnsafeUtils.getLongFromInts(heapMemory, address + readIdx + 1));
+    } else {
+      return Long.reverseBytes(UNSAFE.getLong(heapMemory, address + readIdx + 1));
+    }
   }
 
   @CodegenInvoke
@@ -2338,7 +2857,12 @@ public final class MemoryBuffer {
     if (diff < 4) {
       streamReader.fillBuffer(4 - diff);
     }
-    int i = UNSAFE.getInt(heapMemory, address + readIdx);
+    int i;
+    if (JDK8_ARM) {
+      i = _UnsafeUtils.getIntFromShorts(heapMemory, address + readIdx);
+    } else {
+      i = UNSAFE.getInt(heapMemory, address + readIdx);
+    }
     if ((i & 0b1) != 0b1) {
       readerIndex = readIdx + 4;
       return i >> 1;
@@ -2348,7 +2872,11 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(9 - diff);
     }
     readerIndex = readIdx + 9;
-    return UNSAFE.getLong(heapMemory, address + readIdx + 1);
+    if (JDK8_ARM) {
+      return _UnsafeUtils.getLongFromInts(heapMemory, address + readIdx + 1);
+    } else {
+      return UNSAFE.getLong(heapMemory, address + readIdx + 1);
+    }
   }
 
   @CodegenInvoke
@@ -2364,7 +2892,12 @@ public final class MemoryBuffer {
     if (diff < 4) {
       streamReader.fillBuffer(4 - diff);
     }
-    int i = Integer.reverseBytes(UNSAFE.getInt(heapMemory, address + readIdx));
+    int i;
+    if (JDK8_ARM) {
+      i = Integer.reverseBytes(_UnsafeUtils.getIntFromShorts(heapMemory, address + readIdx));
+    } else {
+      i = Integer.reverseBytes(UNSAFE.getInt(heapMemory, address + readIdx));
+    }
     if ((i & 0b1) != 0b1) {
       readerIndex = readIdx + 4;
       return i >> 1;
@@ -2374,7 +2907,11 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(9 - diff);
     }
     readerIndex = readIdx + 9;
-    return Long.reverseBytes(UNSAFE.getLong(heapMemory, address + readIdx + 1));
+    if (JDK8_ARM) {
+      return Long.reverseBytes(_UnsafeUtils.getLongFromInts(heapMemory, address + readIdx + 1));
+    } else {
+      return Long.reverseBytes(UNSAFE.getLong(heapMemory, address + readIdx + 1));
+    }
   }
 
   public float readFloat32() {
@@ -2389,7 +2926,12 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(4 - remaining);
     }
     readerIndex = readerIdx + 4;
-    int v = UNSAFE.getInt(heapMemory, address + readerIdx);
+    int v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getIntFromShorts(heapMemory, address + readerIdx);
+    } else {
+      v = UNSAFE.getInt(heapMemory, address + readerIdx);
+    }
     if (!LITTLE_ENDIAN) {
       v = Integer.reverseBytes(v);
     }
@@ -2411,7 +2953,11 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(4 - remaining);
     }
     readerIndex = readerIdx + 4;
-    return Float.intBitsToFloat(UNSAFE.getInt(heapMemory, address + readerIdx));
+    if (JDK8_ARM) {
+      return Float.intBitsToFloat(_UnsafeUtils.getIntFromShorts(heapMemory, address + readerIdx));
+    } else {
+      return Float.intBitsToFloat(UNSAFE.getInt(heapMemory, address + readerIdx));
+    }
   }
 
   // Reduce method body for better inline in the caller.
@@ -2429,8 +2975,13 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(4 - remaining);
     }
     readerIndex = readerIdx + 4;
-    return Float.intBitsToFloat(
-        Integer.reverseBytes(UNSAFE.getInt(heapMemory, address + readerIdx)));
+    if (JDK8_ARM) {
+      return Float.intBitsToFloat(
+          Integer.reverseBytes(_UnsafeUtils.getIntFromShorts(heapMemory, address + readerIdx)));
+    } else {
+      return Float.intBitsToFloat(
+          Integer.reverseBytes(UNSAFE.getInt(heapMemory, address + readerIdx)));
+    }
   }
 
   public double readFloat64() {
@@ -2445,7 +2996,12 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(8 - remaining);
     }
     readerIndex = readerIdx + 8;
-    long v = UNSAFE.getLong(heapMemory, address + readerIdx);
+    long v;
+    if (JDK8_ARM) {
+      v = _UnsafeUtils.getLongFromInts(heapMemory, address + readerIdx);
+    } else {
+      v = UNSAFE.getLong(heapMemory, address + readerIdx);
+    }
     if (!LITTLE_ENDIAN) {
       v = Long.reverseBytes(v);
     }
@@ -2467,7 +3023,11 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(8 - remaining);
     }
     readerIndex = readerIdx + 8;
-    return Double.longBitsToDouble(UNSAFE.getLong(heapMemory, address + readerIdx));
+    if (JDK8_ARM) {
+      return Double.longBitsToDouble(_UnsafeUtils.getLongFromInts(heapMemory, address + readerIdx));
+    } else {
+      return Double.longBitsToDouble(UNSAFE.getLong(heapMemory, address + readerIdx));
+    }
   }
 
   // Reduce method body for better inline in the caller.
@@ -2485,8 +3045,13 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(8 - remaining);
     }
     readerIndex = readerIdx + 8;
-    return Double.longBitsToDouble(
-        Long.reverseBytes(UNSAFE.getLong(heapMemory, address + readerIdx)));
+    if (JDK8_ARM) {
+      return Double.longBitsToDouble(
+          Long.reverseBytes(_UnsafeUtils.getLongFromInts(heapMemory, address + readerIdx)));
+    } else {
+      return Double.longBitsToDouble(
+          Long.reverseBytes(UNSAFE.getLong(heapMemory, address + readerIdx)));
+    }
   }
 
   /** Reads the 1-5 byte int part of a varint. */
@@ -2518,7 +3083,12 @@ public final class MemoryBuffer {
     } else {
       long address = this.address;
       // | 1bit + 7bits | 1bit + 7bits | 1bit + 7bits | 1bit + 7bits |
-      int fourByteValue = UNSAFE.getInt(heapMemory, address + readIdx);
+      int fourByteValue;
+      if (JDK8_ARM) {
+        fourByteValue = _UnsafeUtils.getIntFromShorts(heapMemory, address + readIdx);
+      } else {
+        fourByteValue = UNSAFE.getInt(heapMemory, address + readIdx);
+      }
       // Duplicate and manual inline for performance.
       // noinspection Duplicates
       readIdx++;
@@ -2567,7 +3137,13 @@ public final class MemoryBuffer {
       result = readVarUInt32Slow();
     } else {
       long address = this.address;
-      int fourByteValue = Integer.reverseBytes(UNSAFE.getInt(heapMemory, address + readIdx));
+      int fourByteValue;
+      if (JDK8_ARM) {
+        fourByteValue =
+            Integer.reverseBytes(_UnsafeUtils.getIntFromShorts(heapMemory, address + readIdx));
+      } else {
+        fourByteValue = Integer.reverseBytes(UNSAFE.getInt(heapMemory, address + readIdx));
+      }
       // Duplicate and manual inline for performance.
       // noinspection Duplicates
       readIdx++;
@@ -2605,13 +3181,18 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.readVarUint36Small(this);
     }
-    // Android exits above. Keep JVM small-varint bulk reads as raw Unsafe loads instead of calling
-    // `_unsafeGet*` helpers; those helpers carry Android/endian branches and can break inlining.
+    // Android exits above. Use the narrow Unsafe access owner instead of `_unsafeGet*` helpers;
+    // those buffer helpers carry Android/endian branches and can break inlining.
     // Duplicate and manual inline for performance.
     // noinspection Duplicates
     int readIdx = readerIndex;
     if (size - readIdx >= 9) {
-      long bulkValue = UNSAFE.getLong(heapMemory, address + readIdx++);
+      long bulkValue;
+      if (JDK8_ARM) {
+        bulkValue = _UnsafeUtils.getLongFromInts(heapMemory, address + readIdx++);
+      } else {
+        bulkValue = UNSAFE.getLong(heapMemory, address + readIdx++);
+      }
       if (!LITTLE_ENDIAN) {
         bulkValue = Long.reverseBytes(bulkValue);
       }
@@ -2644,8 +3225,11 @@ public final class MemoryBuffer {
       result |= (bulkValue >>> 3) & 0xfe00000;
       if ((bulkValue & 0x80000000L) != 0) {
         readIdx++;
-        // 0xff0000000: 0b11111111 << 28
-        result |= (bulkValue >>> 4) & 0xff0000000L;
+        result |= (bulkValue >>> 4) & 0x7f0000000L;
+        if ((bulkValue & 0x8000000000L) != 0) {
+          readIdx++;
+          result |= (bulkValue >>> 5) & 0x800000000L;
+        }
       }
     }
     readerIndex = readIdx;
@@ -2670,7 +3254,11 @@ public final class MemoryBuffer {
           result |= (b & 0x7F) << 21;
           if ((b & 0x80) != 0) {
             b = readByte();
-            result |= (b & 0xFF) << 28;
+            result |= (b & 0x7F) << 28;
+            if ((b & 0x80) != 0) {
+              b = readByte();
+              result |= (b & 0x01) << 35;
+            }
           }
         }
       }
@@ -2722,7 +3310,12 @@ public final class MemoryBuffer {
       return readVarUInt32Slow();
     }
     // | 1bit + 7bits | 1bit + 7bits | 1bit + 7bits | 1bit + 7bits |
-    int fourByteValue = UNSAFE.getInt(heapMemory, address + readIdx);
+    int fourByteValue;
+    if (JDK8_ARM) {
+      fourByteValue = _UnsafeUtils.getIntFromShorts(heapMemory, address + readIdx);
+    } else {
+      fourByteValue = UNSAFE.getInt(heapMemory, address + readIdx);
+    }
     if (!LITTLE_ENDIAN) {
       fourByteValue = Integer.reverseBytes(fourByteValue);
     }
@@ -2787,7 +3380,12 @@ public final class MemoryBuffer {
     }
     int readIdx = readerIndex;
     if (size - readIdx >= 5) {
-      int fourByteValue = UNSAFE.getInt(heapMemory, address + readIdx++);
+      int fourByteValue;
+      if (JDK8_ARM) {
+        fourByteValue = _UnsafeUtils.getIntFromShorts(heapMemory, address + readIdx++);
+      } else {
+        fourByteValue = UNSAFE.getInt(heapMemory, address + readIdx++);
+      }
       if (!LITTLE_ENDIAN) {
         fourByteValue = Integer.reverseBytes(fourByteValue);
       }
@@ -2853,7 +3451,12 @@ public final class MemoryBuffer {
       result = readVarUInt64Slow();
     } else {
       long address = this.address;
-      long bulkValue = UNSAFE.getLong(heapMemory, address + readIdx);
+      long bulkValue;
+      if (JDK8_ARM) {
+        bulkValue = _UnsafeUtils.getLongFromInts(heapMemory, address + readIdx);
+      } else {
+        bulkValue = UNSAFE.getLong(heapMemory, address + readIdx);
+      }
       // Duplicate and manual inline for performance.
       // noinspection Duplicates
       readIdx++;
@@ -2886,7 +3489,12 @@ public final class MemoryBuffer {
       result = readVarUInt64Slow();
     } else {
       long address = this.address;
-      long bulkValue = Long.reverseBytes(UNSAFE.getLong(heapMemory, address + readIdx));
+      long bulkValue;
+      if (JDK8_ARM) {
+        bulkValue = Long.reverseBytes(_UnsafeUtils.getLongFromInts(heapMemory, address + readIdx));
+      } else {
+        bulkValue = Long.reverseBytes(UNSAFE.getLong(heapMemory, address + readIdx));
+      }
       // Duplicate and manual inline for performance.
       // noinspection Duplicates
       readIdx++;
@@ -2916,7 +3524,12 @@ public final class MemoryBuffer {
       return readVarUInt64Slow();
     }
     // varint are written using little endian byte order, so read by little endian byte order.
-    long bulkValue = UNSAFE.getLong(heapMemory, address + readIdx);
+    long bulkValue;
+    if (JDK8_ARM) {
+      bulkValue = _UnsafeUtils.getLongFromInts(heapMemory, address + readIdx);
+    } else {
+      bulkValue = UNSAFE.getLong(heapMemory, address + readIdx);
+    }
     if (!LITTLE_ENDIAN) {
       bulkValue = Long.reverseBytes(bulkValue);
     }
@@ -3156,12 +3769,20 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.readBytesAsInt64(this, len);
     }
+    if (len <= 0 || len > 8) {
+      throwOOBException();
+    }
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
     if (remaining >= 8) {
       readerIndex = readerIdx + len;
-      long v = UNSAFE.getLong(heapMemory, address + readerIdx);
+      long v;
+      if (JDK8_ARM) {
+        v = _UnsafeUtils.getLongFromInts(heapMemory, address + readerIdx);
+      } else {
+        v = UNSAFE.getLong(heapMemory, address + readerIdx);
+      }
       v = (LITTLE_ENDIAN ? v : Long.reverseBytes(v)) & (0xffffffffffffffffL >>> ((8 - len) * 8));
       return v;
     }
@@ -3233,7 +3854,12 @@ public final class MemoryBuffer {
     if (size - readIdx >= 5) {
       // Android exits above. Keep this small-size fast path as a raw JVM load; `_unsafeGetInt32`
       // carries Android/endian branches and can grow the method enough to disturb inlining.
-      int fourByteValue = UNSAFE.getInt(heapMemory, address + readIdx++);
+      int fourByteValue;
+      if (JDK8_ARM) {
+        fourByteValue = _UnsafeUtils.getIntFromShorts(heapMemory, address + readIdx++);
+      } else {
+        fourByteValue = UNSAFE.getInt(heapMemory, address + readIdx++);
+      }
       if (!LITTLE_ENDIAN) {
         fourByteValue = Integer.reverseBytes(fourByteValue);
       }
@@ -3311,6 +3937,9 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readByteArrayBytes(this, values, numBytes);
     } else {
+      if (numBytes < 0 || numBytes > values.length) {
+        throwOOBException();
+      }
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readTo(values, 0, numBytes);
@@ -3334,6 +3963,9 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readBooleanArrayBytes(this, values, numBytes);
     } else {
+      if (numBytes < 0 || numBytes > values.length) {
+        throwOOBException();
+      }
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readBooleans(values, 0, numBytes);
@@ -3352,12 +3984,19 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readCharArrayBytes(this, values, numBytes);
     } else {
+      if (numBytes < 0 || (numBytes & 1) != 0 || (numBytes >>> 1) > values.length) {
+        throwOOBException();
+      }
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readChars(values, 0, numBytes >>> 1);
         return;
       }
-      copyMemory(heapMemory, address + readerIdx, values, CHAR_ARRAY_OFFSET, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(heapMemory, address + readerIdx, values, CHAR_ARRAY_OFFSET, numBytes);
+      } else {
+        readCharsBigEndian(values, 0, numBytes >>> 1, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3370,12 +4009,19 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readInt16ArrayBytes(this, values, numBytes);
     } else {
+      if (numBytes < 0 || (numBytes & 1) != 0 || (numBytes >>> 1) > values.length) {
+        throwOOBException();
+      }
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readShorts(values, 0, numBytes >>> 1);
         return;
       }
-      copyMemory(heapMemory, address + readerIdx, values, SHORT_ARRAY_OFFSET, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(heapMemory, address + readerIdx, values, SHORT_ARRAY_OFFSET, numBytes);
+      } else {
+        readShortsBigEndian(values, 0, numBytes >>> 1, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3388,12 +4034,19 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readInt32ArrayBytes(this, values, numBytes);
     } else {
+      if (numBytes < 0 || (numBytes & 3) != 0 || (numBytes >>> 2) > values.length) {
+        throwOOBException();
+      }
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readInts(values, 0, numBytes >>> 2);
         return;
       }
-      copyMemory(heapMemory, address + readerIdx, values, INT_ARRAY_OFFSET, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(heapMemory, address + readerIdx, values, INT_ARRAY_OFFSET, numBytes);
+      } else {
+        readIntsBigEndian(values, 0, numBytes >>> 2, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3406,12 +4059,19 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readInt64ArrayBytes(this, values, numBytes);
     } else {
+      if (numBytes < 0 || (numBytes & 7) != 0 || (numBytes >>> 3) > values.length) {
+        throwOOBException();
+      }
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readLongs(values, 0, numBytes >>> 3);
         return;
       }
-      copyMemory(heapMemory, address + readerIdx, values, LONG_ARRAY_OFFSET, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(heapMemory, address + readerIdx, values, LONG_ARRAY_OFFSET, numBytes);
+      } else {
+        readLongsBigEndian(values, 0, numBytes >>> 3, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3424,12 +4084,19 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readFloat32ArrayBytes(this, values, numBytes);
     } else {
+      if (numBytes < 0 || (numBytes & 3) != 0 || (numBytes >>> 2) > values.length) {
+        throwOOBException();
+      }
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readFloats(values, 0, numBytes >>> 2);
         return;
       }
-      copyMemory(heapMemory, address + readerIdx, values, FLOAT_ARRAY_OFFSET, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(heapMemory, address + readerIdx, values, FLOAT_ARRAY_OFFSET, numBytes);
+      } else {
+        readFloatsBigEndian(values, 0, numBytes >>> 2, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3442,12 +4109,19 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readFloat64ArrayBytes(this, values, numBytes);
     } else {
+      if (numBytes < 0 || (numBytes & 7) != 0 || (numBytes >>> 3) > values.length) {
+        throwOOBException();
+      }
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readDoubles(values, 0, numBytes >>> 3);
         return;
       }
-      copyMemory(heapMemory, address + readerIdx, values, DOUBLE_ARRAY_OFFSET, numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(heapMemory, address + readerIdx, values, DOUBLE_ARRAY_OFFSET, numBytes);
+      } else {
+        readDoublesBigEndian(values, 0, numBytes >>> 3, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3489,12 +4163,16 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      copyMemory(
-          heapMemory,
-          address + readerIdx,
-          chars,
-          CHAR_ARRAY_OFFSET + ((long) offset << 1),
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            heapMemory,
+            address + readerIdx,
+            chars,
+            CHAR_ARRAY_OFFSET + ((long) offset << 1),
+            numBytes);
+      } else {
+        readCharsBigEndian(chars, offset, numElements, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3527,12 +4205,16 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          SHORT_ARRAY_OFFSET + ((long) offset << 1),
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            heapMemory,
+            address + readerIdx,
+            values,
+            SHORT_ARRAY_OFFSET + ((long) offset << 1),
+            numBytes);
+      } else {
+        readShortsBigEndian(values, offset, numElements, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3551,12 +4233,16 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          INT_ARRAY_OFFSET + ((long) offset << 2),
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            heapMemory,
+            address + readerIdx,
+            values,
+            INT_ARRAY_OFFSET + ((long) offset << 2),
+            numBytes);
+      } else {
+        readIntsBigEndian(values, offset, numElements, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3575,12 +4261,16 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          LONG_ARRAY_OFFSET + ((long) offset << 3),
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            heapMemory,
+            address + readerIdx,
+            values,
+            LONG_ARRAY_OFFSET + ((long) offset << 3),
+            numBytes);
+      } else {
+        readLongsBigEndian(values, offset, numElements, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3599,12 +4289,16 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          FLOAT_ARRAY_OFFSET + ((long) offset << 2),
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            heapMemory,
+            address + readerIdx,
+            values,
+            FLOAT_ARRAY_OFFSET + ((long) offset << 2),
+            numBytes);
+      } else {
+        readFloatsBigEndian(values, offset, numElements, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3623,13 +4317,53 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          DOUBLE_ARRAY_OFFSET + ((long) offset << 3),
-          numBytes);
+      if (LITTLE_ENDIAN) {
+        copyMemory(
+            heapMemory,
+            address + readerIdx,
+            values,
+            DOUBLE_ARRAY_OFFSET + ((long) offset << 3),
+            numBytes);
+      } else {
+        readDoublesBigEndian(values, offset, numElements, readerIdx);
+      }
       readerIndex = readerIdx + numBytes;
+    }
+  }
+
+  private void readCharsBigEndian(char[] values, int offset, int length, int readerIdx) {
+    for (int i = 0; i < length; i++) {
+      values[offset + i] = (char) _unsafeGetInt16(readerIdx + i * 2);
+    }
+  }
+
+  private void readShortsBigEndian(short[] values, int offset, int length, int readerIdx) {
+    for (int i = 0; i < length; i++) {
+      values[offset + i] = _unsafeGetInt16(readerIdx + i * 2);
+    }
+  }
+
+  private void readIntsBigEndian(int[] values, int offset, int length, int readerIdx) {
+    for (int i = 0; i < length; i++) {
+      values[offset + i] = _unsafeGetInt32(readerIdx + i * 4);
+    }
+  }
+
+  private void readLongsBigEndian(long[] values, int offset, int length, int readerIdx) {
+    for (int i = 0; i < length; i++) {
+      values[offset + i] = _unsafeGetInt64(readerIdx + i * 8);
+    }
+  }
+
+  private void readFloatsBigEndian(float[] values, int offset, int length, int readerIdx) {
+    for (int i = 0; i < length; i++) {
+      values[offset + i] = Float.intBitsToFloat(_unsafeGetInt32(readerIdx + i * 4));
+    }
+  }
+
+  private void readDoublesBigEndian(double[] values, int offset, int length, int readerIdx) {
+    for (int i = 0; i < length; i++) {
+      values[offset + i] = Double.longBitsToDouble(_unsafeGetInt64(readerIdx + i * 8));
     }
   }
 
@@ -3911,11 +4645,12 @@ public final class MemoryBuffer {
 
   public byte[] getBytes(int index, int length) {
     if (index == 0 && heapMemory != null && heapOffset == 0) {
-      // Arrays.copyOf is an intrinsics, which is faster
+      // Keep Arrays.copyOf's zero-padding contract: row-format writers use it for trailing
+      // alignment beyond the buffer's current logical size. Callers own the requested output size.
       return Arrays.copyOf(heapMemory, length);
     }
-    if (index + length > size) {
-      throwIndexOOBExceptionForRead(length);
+    if (index < 0 || length < 0 || index > size - length) {
+      throwOOBException();
     }
     byte[] data = new byte[length];
     get(index, data, 0, length);
@@ -3923,10 +4658,11 @@ public final class MemoryBuffer {
   }
 
   public void getBytes(int index, byte[] dst, int dstIndex, int length) {
-    if (dstIndex > dst.length - length) {
-      throwOOBException();
-    }
-    if (index > size - length) {
+    if (index < 0
+        || dstIndex < 0
+        || length < 0
+        || dstIndex > dst.length - length
+        || index > size - length) {
       throwOOBException();
     }
     get(index, dst, dstIndex, length);
@@ -3937,7 +4673,7 @@ public final class MemoryBuffer {
   }
 
   public MemoryBuffer slice(int offset, int length) {
-    if (offset + length > size) {
+    if (offset < 0 || length < 0 || offset > size - length) {
       throwOOBExceptionForRange(offset, length);
     }
     if (heapMemory != null) {
@@ -3993,6 +4729,9 @@ public final class MemoryBuffer {
     if (len == 0) {
       return buf2 != null;
     }
+    checkArgument(len >= 0);
+    checkArgument(offset1 >= 0 && offset1 <= size - len);
+    checkArgument(buf2 != null && offset2 >= 0 && offset2 <= buf2.size - len);
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.equalTo(this, buf2, offset1, offset2, len);
     }
@@ -4041,8 +4780,16 @@ public final class MemoryBuffer {
     }
     if (UNALIGNED || (((leftOffset + i) % 8 == 0) && ((rightOffset + i) % 8 == 0))) {
       while (i <= length - 8) {
-        if (UNSAFE.getLong(leftBase, leftOffset + i)
-            != UNSAFE.getLong(rightBase, rightOffset + i)) {
+        long left;
+        long right;
+        if (JDK8_ARM) {
+          left = _UnsafeUtils.getLongFromInts(leftBase, leftOffset + i);
+          right = _UnsafeUtils.getLongFromInts(rightBase, rightOffset + i);
+        } else {
+          left = UNSAFE.getLong(leftBase, leftOffset + i);
+          right = UNSAFE.getLong(rightBase, rightOffset + i);
+        }
+        if (left != right) {
           return false;
         }
         i += 8;
@@ -4099,11 +4846,15 @@ public final class MemoryBuffer {
       int newSize =
           newCapacity < BUFFER_GROW_STEP_THRESHOLD
               ? newCapacity << 1
-              : (int) Math.min(newCapacity * 1.5d, Integer.MAX_VALUE - 8);
+              : largeGrowthCapacity(newCapacity);
 
       byte[] data = new byte[newSize];
       buffer.get(0, data, 0, buffer.size());
       buffer.initHeapBuffer(data, 0, data.length);
+    }
+
+    private static int largeGrowthCapacity(int newCapacity) {
+      return Math.max(newCapacity, (int) Math.min(newCapacity * 1.5d, Integer.MAX_VALUE - 8));
     }
   }
 
@@ -4178,6 +4929,7 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.directByteBufferUnsupported();
     }
+    checkArgument(size <= buffer.remaining());
     long offHeapAddress = getAddress(buffer) + buffer.position();
     return new MemoryBuffer(offHeapAddress, size, buffer, streamReader);
   }

@@ -45,11 +45,12 @@ import org.apache.fory.json.JsonConfig;
 import org.apache.fory.json.annotation.JsonAnyGetter;
 import org.apache.fory.json.annotation.JsonAnyProperty;
 import org.apache.fory.json.annotation.JsonAnySetter;
-import org.apache.fory.json.annotation.JsonBase64;
+import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.annotation.JsonIgnore;
+import org.apache.fory.json.annotation.JsonInclude;
 import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonMixinRemove;
 import org.apache.fory.json.annotation.JsonProperty;
@@ -69,11 +70,12 @@ final class JsonMixinAnnotations {
         JsonAnyGetter.class,
         JsonAnyProperty.class,
         JsonAnySetter.class,
-        JsonBase64.class,
+        JsonByteArray.class,
         JsonCodec.class,
         JsonCreator.class,
         JsonFormat.class,
         JsonIgnore.class,
+        JsonInclude.class,
         JsonProperty.class,
         JsonPropertyOrder.class,
         JsonRawValue.class,

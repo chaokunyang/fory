@@ -21,8 +21,8 @@ license: |
 
 Fory JSON provides these mapping and validation annotations in
 `org.apache.fory.json.annotation`:
-`JsonAnyGetter`, `JsonAnyProperty`, `JsonAnySetter`, `JsonBase64`, `JsonCodec`, `JsonCreator`, `JsonFormat`,
-`JsonIgnore`, `JsonProperty`, `JsonPropertyOrder`, `JsonRawValue`, `JsonSubTypes`, `JsonUnwrapped`,
+`JsonAnyGetter`, `JsonAnyProperty`, `JsonAnySetter`, `JsonByteArray`, `JsonCodec`, `JsonCreator`, `JsonFormat`,
+`JsonIgnore`, `JsonInclude`, `JsonProperty`, `JsonPropertyOrder`, `JsonRawValue`, `JsonSubTypes`, `JsonUnwrapped`,
 `JsonValidator`, and `JsonValue`. `JsonType` is a separate build-time model marker. They are
 Fory JSON APIs, not Jackson, Gson, or Fory binary-protocol compatibility annotations.
 
@@ -125,7 +125,7 @@ above.
 
 ## `JsonProperty`
 
-`JsonProperty` configures the canonical name, serialization index, and null inclusion of one
+`JsonProperty` configures the canonical name, serialization index, and value inclusion of one
 complete logical property. An annotation on a field, getter, or setter applies to the merged
 field/getter/setter group.
 
@@ -154,9 +154,42 @@ public final class User {
 
 The supported inclusion values are:
 
-- `DEFAULT`: use `ForyJsonBuilder.writeNullFields`.
+- `DEFAULT`: inherit `JsonInclude` on the class, then `ForyJsonBuilder.defaultPropertyInclusion`
+  (initially `NON_NULL`).
 - `ALWAYS`: write the property even when its selected value is null.
 - `NON_NULL`: omit a null value.
+- `NON_EMPTY`: omit null, zero-length `CharSequence` values (including strings) and Java arrays,
+  empty `java.util.Collection` and `java.util.Map` values, and absent
+  JDK `Optional`, `OptionalInt`, `OptionalLong`, and `OptionalDouble` values.
+  With the Scala module, also omit `None` and supported empty strict Scala collections and maps.
+- `NON_DEFAULT`: explicitly authorize omission when the property equals a supported default.
+  Different values, including null or empty values, remain included. Properties without defaults
+  remain included under both field-level and class-level authorization.
+  See [Default omission](#jsoninclude-and-default-omission).
+
+```java
+public final class Response {
+  @JsonProperty(include = JsonProperty.Include.NON_EMPTY)
+  public java.util.List<String> items;
+}
+```
+
+With an empty `items` list, this object writes `{}`. Explicit property inclusion overrides the
+class and builder defaults. Java empty-value checks run directly, even with a custom codec.
+Other types use the selected codec's `isEmpty(writer, value)`, which defaults to `false`.
+A custom codec must override it to define empty values; writing `""` or `{}` alone does not make
+an ordinary object empty. An empty `byte[]` is empty with Base64, Base16, or numeric-array
+representation. See [Custom codecs](custom-codecs.md#custom-empty-values).
+
+Filtering is shallow: `0`, `false`, a list containing null, a list containing an empty list, and a
+present Optional containing an empty list remain included. Root values, collection elements, Map
+entries, and Any entries are not filtered by property inclusion. Raw JSON String properties are
+checked as strings without parsing their text.
+
+Kotlin properties follow the configured inclusion even when omission changes the value restored by
+a default or causes a missing-property read failure; see
+[Kotlin inclusion](kotlin.md#immutable-classes-and-compiler-defaults). Scala retains its
+[required-constructor-property rules](scala.md#case-classes-and-annotations).
 
 Inclusion affects writing only. A non-default inclusion is invalid for a creator-only property with
 no write source. Repeating the same declaration is allowed; conflicting explicit names, indexes, or
@@ -168,8 +201,103 @@ order before unindexed properties. Indexes must be non-negative, may contain gap
 unique among writable properties. `-1` means unspecified; lower values are invalid. An index on a
 setter-only, creator-only, or write-ignored property is invalid.
 
-`NON_EMPTY`, aliases, formatting, and independent read/write names are not supported.
+Aliases and independent read/write names are not supported.
 `JsonProperty` cannot be combined with an Any logical property or declared on a `JsonAnySetter`.
+
+## `JsonInclude` and default omission
+
+Defaults may depend on constructor arguments, time, randomness, or external state. Being able to
+evaluate a default does not prove that omitting it preserves the value. `NON_DEFAULT` therefore
+requires explicit authorization on each property, or batch authorization on its class:
+
+```java
+import org.apache.fory.json.annotation.JsonInclude;
+import org.apache.fory.json.annotation.JsonProperty;
+import org.apache.fory.json.annotation.JsonProperty.Include;
+
+@JsonInclude(Include.NON_DEFAULT)
+public final class Options {
+  public int retries = 3;
+  public String label = "default";
+  @JsonProperty(include = Include.ALWAYS)
+  public long timestamp;
+}
+```
+
+An unchanged `Options` writes `{"timestamp":0}`. To authorize only `retries`, remove `JsonInclude`
+and put `@JsonProperty(include = Include.NON_DEFAULT)` on that field. Property policies override
+class policies, which override the builder default. Class annotations are not inherited by
+subclasses. `DEFAULT` on a class uses the builder setting.
+
+Class-level authorization covers **future added properties** too. Maintainers must confirm stable
+defaults, safe evaluation, and matching missing-field recovery for each new property, or exclude it
+with `ALWAYS`. `defaultPropertyInclusion(NON_DEFAULT)` immediately throws a configuration error:
+global authorization would silently apply this contract to unrelated models. `NON_EMPTY` does not
+grant default-evaluation authorization.
+
+Both field-level and class-level `NON_DEFAULT` retain properties without defaults, including required
+constructor parameters and Kotlin `lateinit` properties. Their null, zero, false, and empty values are written;
+reader fallbacks do not make them defaulted properties. Java models without a no-argument
+construction path selected by the reader retain their authorized properties.
+Use `ALWAYS` to retain a property with an unstable or unsupported default. Mixins follow the same rules.
+
+| Model                                                                                | Supported default source                                                                   |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Scala constructor property                                                           | Declared compiler default method, evaluated on each write with actual preceding parameters |
+| Java ordinary no-argument model                                                      | One reference object constructed using the reader's no-argument constructor                |
+| Kotlin selected constructor with defaults for every parameter                        | One reference object constructed using those language defaults                             |
+| Ordinary Kotlin no-argument model                                                    | One reference object using that constructor                                                |
+| Required properties without defaults                                                 | Retained under both field-level and class-level authorization                              |
+| Kotlin defaulted property when the selected constructor also has required parameters | Rejected: no reference object can be constructed without inventing required arguments      |
+| Scala default method with unavailable dependencies                                   | Rejected                                                                                   |
+
+Reference construction happens once per initialized model metadata, not once per serialization.
+Distinct declared and dynamic model occurrences can initialize separately. Authorization permits
+the **entire constructor**, other field initializers, and Kotlin `init` blocks to execute. Models
+without `NON_DEFAULT` do not create a reference object. An alternative no-argument constructor
+cannot replace a different selected creator. Construction or authorized-property access failures
+report the model and property; there is no silent fallback or allocation bypassing constructors.
+
+The caller guarantees stable defaults, no externally visible effects from comparison evaluation,
+and recovery of the same logical value when the field is missing. Fory does not prove purity or
+analyze default expressions. A Scala dependent method can be safe when it receives the actual
+parameters and reading restores the same context. A fixed Java/Kotlin reference cannot represent
+a default that changes with the current input: for `low=1, high=low+1`, omitting `high=2` from an
+object with `low=5` would restore `high=6`. Retain `high` with `ALWAYS` in that situation.
+
+Primitive comparisons use their values. Floating-point comparisons distinguish positive and
+negative zero and retain non-finite values for normal output. Arrays compare exact array types and
+contents, recursively for nested arrays; other references use `equals`. Cyclic deep comparison is
+unsupported. Reading is independent: explicit null is not missing, and mutable reference defaults
+are never shared with decoded objects.
+
+Existing Mixins can authorize defaults without modifying a model:
+
+```java
+import org.apache.fory.json.ForyJson;
+import org.apache.fory.json.annotation.JsonMixin;
+import org.apache.fory.json.annotation.JsonProperty;
+import org.apache.fory.json.annotation.JsonProperty.Include;
+
+final class RetryPolicy {
+  public int retries = 3;
+  public long timestamp;
+}
+
+@JsonMixin(target = RetryPolicy.class)
+abstract class RetryPolicyMixin {
+  @JsonProperty(include = Include.NON_DEFAULT)
+  int retries;
+}
+
+// A class-level @JsonInclude on a Mixin can also supply the target's class policy.
+var json = ForyJson.builder().registerMixin(RetryPolicyMixin.class).build();
+json.toJson(new RetryPolicy()); // {"timestamp":0}
+```
+
+For Android or Native Image, continue using the existing `@JsonType` or Mixin build setup.
+Kotlin applications using R8/ProGuard must run JSON KSP. Default evaluation takes place at runtime,
+not during annotation processing. See [Kotlin](kotlin.md).
 
 ## `JsonPropertyOrder`
 
@@ -356,30 +484,70 @@ Any-property features are independent.
 as a trusted raw root value. That combination is serialization-only: the ordinary one-String
 `JsonCreator` cannot turn an input object or array into a String.
 
-## `JsonBase64`
+## `JsonByteArray`
 
-`JsonBase64` selects a quoted standard Base64 JSON string for one exact `byte[]` field or getter:
+`JsonByteArray` selects `BASE64`, `BASE16`, or `ARRAY` for one exact `byte[]` field or getter, in
+both reading and writing. It overrides the builder's `byteArrayFormat`, whose default is `BASE64`:
 
 ```java
-import org.apache.fory.json.annotation.JsonBase64;
+import org.apache.fory.json.annotation.JsonByteArray;
 
 public final class Attachment {
-  @JsonBase64
+  @JsonByteArray(JsonByteArray.Format.ARRAY)
+  public byte[] numbers;
+
+  @JsonByteArray(JsonByteArray.Format.BASE64)
   public byte[] content;
+
+  @JsonByteArray(JsonByteArray.Format.BASE16)
+  public byte[] hex;
 }
 ```
 
-Bytes `{1, 2, 3}` are written as `{"content":"AQID"}` and decoded back to the original array.
-Fory writes the Base64 characters directly to the JSON output and decodes directly from the JSON
-input without creating an intermediate String. Standard Base64 padding is preserved. Java null
-follows the property's normal inclusion rule and reads from JSON null as null.
+For bytes `{1, -2, 3}`, `numbers` is written as `[1,-2,3]`, `content` as `"Af4D"`, and `hex` as
+`"01fe03"`. `BASE16` writes lowercase hexadecimal digits without a prefix or separators; it reads
+uppercase or lowercase digits, including JSON string escapes, and rejects odd-length or invalid
+hexadecimal strings.
+`ARRAY` reads JSON arrays using the signed byte range `[-128, 127]`; `BASE64` reads standard
+Base64 strings and preserves padding when writing. Each representation also accepts JSON null,
+and null output follows the property's normal inclusion rule. The default Base64 codec does not
+accept numeric-array input; select `ARRAY` for a property that uses that format.
 
-The annotation is not a type-use annotation and does not change ordinary unannotated `byte[]`
-properties, container elements, or Map values. It cannot share a logical property with
-`JsonRawValue`, an occurrence `JsonCodec`, `JsonFormat`, or an Any declaration. The equivalent explicit codec is
-`@JsonCodec(Base64ByteArrayCodec.class)`.
+The format is required when the annotation is present. It applies only to the annotated byte-array
+property, not to container elements or map values. Mixin declarations can select or remove it.
+It cannot share a logical property with `JsonRawValue`, an occurrence `JsonCodec`, `JsonFormat`,
+or an Any declaration. Conflicting formats on the field and getter of one property are rejected.
+
+Base64 and Base16 values are binary leaves excluded from the graph-memory budget. Numeric arrays count their
+array storage against that budget; see [Security](security.md#depth-and-graph-memory-limits).
 
 ## `JsonFormat`
+
+Use `@JsonFormat(shape = JsonFormat.Shape.STRING)` on a Boolean or numeric field to write its JSON
+token text inside quotes, for example `false` as `"false"` or `7` as `"7"`. It also applies to a
+matching creator or setter parameter, including Scala constructor properties, and can be supplied through
+a Mixin without changing the model:
+
+```java
+import org.apache.fory.json.annotation.JsonFormat;
+
+public class Metrics {
+  @JsonFormat(shape = JsonFormat.Shape.STRING)
+  public boolean active;
+
+  @JsonFormat(shape = JsonFormat.Shape.STRING)
+  public long count;
+}
+```
+
+Readers accept both quoted and native tokens using the declared scalar type's normal range and
+null rules. Null references remain JSON `null`, subject to the property's inclusion policy.
+Supported types are Boolean and the primitive/boxed numeric types, `BigInteger`, `BigDecimal`,
+and Scala `BigInt`/`BigDecimal` with the Scala module. Non-finite floating-point values retain
+their existing string representation (`"NaN"`, `"Infinity"`, or `"-Infinity"`).
+Combining string shape with a pattern, timezone, or a custom value representation is rejected.
+The existing direct-wrapper rules below also apply to scalar string shape; this does not
+recursively stringify arbitrary objects or change map keys.
 
 Use `JsonFormat` on a date/time field to select its JSON text pattern in both directions. Patterns
 use `DateTimeFormatter` syntax and the root locale:
@@ -433,13 +601,13 @@ a daylight saving time overlap. Omitting `timezone` preserves the default behavi
 above. Invalid zone identifiers and a non-empty `timezone` on other supported date/time types are
 rejected.
 
-`JsonFormat` is a field annotation, not a type-use annotation. A record component works through its
-generated field. Nested wrappers, Map keys, raw or wildcard direct children, JSON Any values, and
+`JsonFormat` configures a logical property through its field, creator parameter, or setter parameter; it is not a
+type-use annotation. Record components are supported. Nested wrappers, Map keys, raw or wildcard direct children, JSON Any values, and
 unwrapped values are intentionally rejected. Types with ambiguous formatting semantics, including
 legacy and SQL date types, `Duration`, `Period`, `TimeZone`, `ZoneId`, and `ZoneOffset`, are not
 supported. A wrapper with a complete registered, annotation-selected, polymorphic, or `JsonValue`
 representation is also rejected because that representation owns the whole wrapper.
-`JsonFormat` cannot share a field with `JsonCodec`, `JsonBase64`, `JsonRawValue`, `JsonAnyProperty`,
+`JsonFormat` cannot share a field with `JsonCodec`, `JsonByteArray`, `JsonRawValue`, `JsonAnyProperty`,
 `JsonUnwrapped`, or `JsonValue`.
 
 ## `JsonUnwrapped`
@@ -487,7 +655,10 @@ before dynamic Any handling.
 Fory rejects duplicate final names, recursive chains made only of unwrapped properties,
 parameterized children, JSON Any children, polymorphic or custom-codec child roots, and scalar,
 array, collection, or Map children. Use `JsonAnyProperty`, `JsonAnyGetter`, or `JsonAnySetter` to
-flatten a Map. `JsonProperty.value`, non-default `JsonProperty.include`, `JsonCodec`, and `JsonFormat` are not
+flatten a Map. An unwrapped group may use `NON_DEFAULT` to omit the whole group when it matches
+its authorized default, or `ALWAYS` to opt out of a class default policy. Its children's policies
+still govern each emitted member. Other explicit group inclusion policies, `JsonProperty.value`,
+`JsonCodec`, and `JsonFormat` are not
 valid on an unwrapped property; ordinary child leaf properties may still use them.
 
 ## Dynamic Object Members

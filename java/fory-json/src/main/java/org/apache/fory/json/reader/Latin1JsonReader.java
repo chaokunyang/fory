@@ -47,13 +47,11 @@ import org.apache.fory.serializer.StringSerializer;
  * input or the reusable decode buffer.
  *
  * <p>This concrete owner implements representation-specific token probes, packed digit parsing,
- * string decoding, and field hashing. {@link #clear()} releases the input reference and bounds the
- * retained decode workspace before the owning pooled state is reused.
+ * string decoding, and field hashing. {@link #clear()} releases the input and decode workspace
+ * references after the owning pooled state has reclaimed the workspace.
  */
 public final class Latin1JsonReader extends JsonReader {
   private static final byte[] EMPTY_BYTES = new byte[0];
-  private static final int INITIAL_STRING_DECODE_BUFFER_SIZE = 1024;
-  private static final int RETAINED_STRING_DECODE_BUFFER_SIZE = 8192;
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
   private static final long BYTE_ONES = 0x0101010101010101L;
   private static final int INT_BYTE_ONES = 0x01010101;
@@ -79,9 +77,13 @@ public final class Latin1JsonReader extends JsonReader {
   // JSON syntax bytes are ASCII, so hot token checks can compare signed bytes directly.
   // Latin1 string content and field-name hashing must keep unsigned byte conversion.
   private byte[] input;
-  private byte[] stringDecodeBuffer = new byte[INITIAL_STRING_DECODE_BUFFER_SIZE];
+  // The caller supplies decode storage on every reset; avoid a redundant null check or allocation
+  // on pooled root setup. Decoding owns any subsequent growth.
+  private byte[] stringDecodeBuffer;
+
   // Keep the cache after hot representation fields; an inherited reference shifts their offsets.
   private final FieldNameCache fieldNameCache;
+  private ZoneIdCache zoneIdCache;
 
   public Latin1JsonReader(JsonConfig config, JsonTypeResolver typeResolver) {
     super(config, typeResolver);
@@ -89,6 +91,40 @@ public final class Latin1JsonReader extends JsonReader {
     // The configured limit belongs to each reader; pooled-state concurrency must not divide it.
     int maxEntries = config.maxCachedFieldNames();
     fieldNameCache = maxEntries == 0 ? null : new FieldNameCache(maxEntries);
+  }
+
+  @Override
+  ZoneIdCache zoneIds() {
+    if (zoneIdCache == null) {
+      zoneIdCache = new ZoneIdCache();
+    }
+    return zoneIdCache;
+  }
+
+  @Override
+  boolean matchesZoneId(int start, int end, byte[] expected) {
+    int length = expected.length;
+    if (length != end - start) {
+      return false;
+    }
+    byte[] bytes = input;
+    if (length >= Long.BYTES) {
+      int last = length - Long.BYTES;
+      for (int i = 0; i < last; i += Long.BYTES) {
+        if (LittleEndian.getInt64(bytes, start + i) != LittleEndian.getInt64(expected, i)) {
+          return false;
+        }
+      }
+      // Both ranges were proved by the scanned token and equal length. The overlapping last
+      // word compares every tail byte without reading beyond either range.
+      return LittleEndian.getInt64(bytes, start + last) == LittleEndian.getInt64(expected, last);
+    }
+    for (int i = 0; i < length; i++) {
+      if (bytes[start + i] != expected[i]) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @Override
@@ -129,6 +165,11 @@ public final class Latin1JsonReader extends JsonReader {
   }
 
   @Override
+  public byte[] readBase16() {
+    return readBase16(input);
+  }
+
+  @Override
   protected long scanStringHash(int start, int end) {
     long hash = JsonFieldNameHash.MAGIC_HASH_CODE;
     long value = 0;
@@ -162,7 +203,8 @@ public final class Latin1JsonReader extends JsonReader {
         cursor += 4;
         hash = JsonFieldNameHash.update(hash, low);
         decodedLength++;
-      } else if (latin1 && ch != 0 && decodedLength < Long.BYTES) {
+      } else if (latin1 && ch <= 0xff && ch != 0 && decodedLength < Long.BYTES) {
+        // Latin1 source bytes can contain escapes for non-Latin1 decoded characters.
         value = JsonFieldNameHash.value(value, decodedLength++, ch);
       } else {
         if (latin1) {
@@ -326,24 +368,30 @@ public final class Latin1JsonReader extends JsonReader {
     return candidate;
   }
 
-  public Latin1JsonReader(JsonConfig config, JsonTypeResolver typeResolver, byte[] input) {
+  public Latin1JsonReader(
+      JsonConfig config, JsonTypeResolver typeResolver, byte[] input, byte[] decodeBuffer) {
     this(config, typeResolver);
-    reset(input);
+    reset(input, decodeBuffer);
   }
 
-  public Latin1JsonReader(JsonConfig config, JsonTypeResolver typeResolver, String input) {
+  public Latin1JsonReader(
+      JsonConfig config, JsonTypeResolver typeResolver, String input, byte[] decodeBuffer) {
     this(config, typeResolver);
-    reset(input);
+    reset(input, decodeBuffer);
   }
 
-  public Latin1JsonReader reset(byte[] input) {
+  /** Resets the input and borrows the caller's non-null decode buffer until {@link #clear()}. */
+  public Latin1JsonReader reset(byte[] input, byte[] decodeBuffer) {
+    stringDecodeBuffer = decodeBuffer;
     this.input = input;
     position = 0;
     reset();
     return this;
   }
 
-  public Latin1JsonReader reset(String input) {
+  /** Resets the input and borrows the caller's non-null decode buffer until {@link #clear()}. */
+  public Latin1JsonReader reset(String input, byte[] decodeBuffer) {
+    stringDecodeBuffer = decodeBuffer;
     if (!StringSerializer.isBytesBackedString()) {
       throw new IllegalStateException("Latin1JsonReader requires byte-backed strings");
     }
@@ -361,9 +409,22 @@ public final class Latin1JsonReader extends JsonReader {
     reset();
     input = EMPTY_BYTES;
     position = 0;
-    if (stringDecodeBuffer.length > RETAINED_STRING_DECODE_BUFFER_SIZE) {
-      stringDecodeBuffer = new byte[RETAINED_STRING_DECODE_BUFFER_SIZE];
+    stringDecodeBuffer = null;
+  }
+
+  /** Returns the current storage, including any growth, before {@link #clear()} detaches it. */
+  @Internal
+  public byte[] getStringDecodeBuffer() {
+    return stringDecodeBuffer;
+  }
+
+  @Override
+  public char peekToken() {
+    skipWhitespaceFast();
+    if (position >= input.length) {
+      throw error("Expected token");
     }
+    return (char) (input[position] & 0xff);
   }
 
   public boolean consumeToken(char expected) {
@@ -488,7 +549,8 @@ public final class Latin1JsonReader extends JsonReader {
     return tryReadNullToken();
   }
 
-  private boolean tryReadNullLiteral() {
+  @Override
+  protected boolean tryReadNullLiteral() {
     if (startsWithAscii("null")) {
       position += 4;
       return true;
@@ -519,7 +581,8 @@ public final class Latin1JsonReader extends JsonReader {
     return value;
   }
 
-  private boolean readBooleanToken() {
+  @Override
+  protected boolean readBooleanToken() {
     if (position < input.length && input[position] == '"') {
       return readQuotedBooleanValue();
     }
@@ -1098,32 +1161,9 @@ public final class Latin1JsonReader extends JsonReader {
         || bytes[start + 36] != '"') {
       throw new IllegalArgumentException();
     }
-    long msb = parseHex(bytes, start, 8);
-    msb = (msb << 16) | parseHex(bytes, start + 9, 4);
-    msb = (msb << 16) | parseHex(bytes, start + 14, 4);
-    long lsb = parseHex(bytes, start + 19, 4);
-    lsb = (lsb << 48) | parseHex(bytes, start + 24, 12);
+    UUID value = parseUuidBytes(bytes, start);
     position = start + 37;
-    return new UUID(msb, lsb);
-  }
-
-  private static long parseHex(byte[] bytes, int offset, int length) {
-    long value = 0;
-    for (int i = 0; i < length; i++) {
-      value = (value << 4) | hexValue(bytes[offset + i]);
-    }
     return value;
-  }
-
-  private static int hexValue(int ch) {
-    if (ch >= '0' && ch <= '9') {
-      return ch - '0';
-    }
-    int lower = ch | 0x20;
-    if (lower >= 'a' && lower <= 'f') {
-      return lower - 'a' + 10;
-    }
-    throw new IllegalArgumentException();
   }
 
   private double readDoubleToken() {
@@ -2036,6 +2076,9 @@ public final class Latin1JsonReader extends JsonReader {
     int year = parse4(bytes, dateStart);
     int month = parse2(bytes, dateStart + 5);
     int day = parse2(bytes, dateStart + 8);
+    if (year < 0 || month < 0 || day < 0) {
+      return null;
+    }
     int end = dateStart + 10;
     int ch = bytes[end];
     if (ch == '"') {
@@ -2073,6 +2116,9 @@ public final class Latin1JsonReader extends JsonReader {
     int day = parse2(bytes, start + 8);
     int hour = parse2(bytes, start + 11);
     int minute = parse2(bytes, start + 14);
+    if (year < 0 || month < 0 || day < 0 || hour < 0 || minute < 0) {
+      return null;
+    }
     return tryReadIsoOffsetDateTimeTail(bytes, start + 16, length, year, month, day, hour, minute);
   }
 
@@ -2082,6 +2128,9 @@ public final class Latin1JsonReader extends JsonReader {
     int nano = 0;
     if (index < length && bytes[index] == ':') {
       second = parse2(bytes, index + 1);
+      if (second < 0) {
+        return null;
+      }
       index += 3;
       if (index < length && bytes[index] == '.') {
         int fractionStart = index + 1;
@@ -2090,7 +2139,7 @@ public final class Latin1JsonReader extends JsonReader {
           fractionEnd++;
         }
         if (fractionEnd == fractionStart) {
-          throw new IllegalArgumentException();
+          return null;
         }
         if (fractionEnd - fractionStart > 9) {
           throw error("OffsetDateTime fractional seconds exceed nanosecond precision");
@@ -2182,6 +2231,9 @@ public final class Latin1JsonReader extends JsonReader {
     if (bytes[end] != '"') {
       return Long.MIN_VALUE;
     }
+    if (hour < 0 || minute < 0 || second < 0) {
+      return Long.MIN_VALUE;
+    }
     int total = hour * 3600 + minute * 60 + second;
     if (offset == '-') {
       total = -total;
@@ -2201,14 +2253,17 @@ public final class Latin1JsonReader extends JsonReader {
   }
 
   private static int parse4(byte[] bytes, int index) {
-    return parse2(bytes, index) * 100 + parse2(bytes, index + 2);
+    int high = parse2(bytes, index);
+    int low = parse2(bytes, index + 2);
+    return high < 0 || low < 0 ? -1 : high * 100 + low;
   }
 
   private static int parse2(byte[] bytes, int index) {
     int high = bytes[index] - '0';
     int low = bytes[index + 1] - '0';
     if (high < 0 || high > 9 || low < 0 || low > 9) {
-      throw new IllegalArgumentException();
+      // A JSON escape can occur inside a digit pair; let the decoded-text parser handle it.
+      return -1;
     }
     return high * 10 + low;
   }
@@ -2720,6 +2775,24 @@ public final class Latin1JsonReader extends JsonReader {
       } else {
         bytes = ensureStringDecodeCapacity(bytes, out + 1);
         bytes[out++] = (byte) ch;
+      }
+      // Copy the plain characters up to the next stop character in one pass. Without this the whole
+      // remainder of a string is decoded one character at a time once the first escape is seen.
+      int runStart = position;
+      int wordEnd = input.length - Long.BYTES;
+      while (position <= wordEnd) {
+        long stopMask = stringStopMask(LittleEndian.getInt64(input, position));
+        if (stopMask != 0) {
+          position += Long.numberOfTrailingZeros(stopMask) >>> 3;
+          break;
+        }
+        position += Long.BYTES;
+      }
+      int run = position - runStart;
+      if (run > 0) {
+        bytes = ensureStringDecodeCapacity(bytes, out + run);
+        System.arraycopy(input, runStart, bytes, out, run);
+        out += run;
       }
       if (position >= input.length) {
         throw error("Unterminated string");

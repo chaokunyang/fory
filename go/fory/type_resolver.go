@@ -506,6 +506,9 @@ func (r *TypeResolver) RegisterStruct(type_ reflect.Type, typeID TypeId, userTyp
 
 	switch type_.Kind() {
 	case reflect.Struct:
+		if err := validateForyTags(type_); err != nil {
+			return err
+		}
 		if err := validateOptionalFields(type_); err != nil {
 			return err
 		}
@@ -670,6 +673,9 @@ func (r *TypeResolver) registerStructByName(type_ reflect.Type, namespace, typeN
 	}
 	if typeName == "" {
 		return fmt.Errorf("typeName must be non-empty")
+	}
+	if err := validateForyTags(type_); err != nil {
+		return err
 	}
 	tag := joinRegisteredName(namespace, typeName)
 	serializer := newStructSerializer(type_, tag)
@@ -1435,7 +1441,7 @@ func (r *TypeResolver) getTypeDef(typ reflect.Type, create bool) (*TypeDef, erro
 }
 
 //go:noinline
-func (r *TypeResolver) checkRemoteTypeDefLimit(td *TypeDef) (any, error) {
+func (r *TypeResolver) remoteTypeDefCacheKey(td *TypeDef) (any, error) {
 	var typeKey any
 	if td.registerByName {
 		if td.nsName == nil || td.typeName == nil {
@@ -1455,14 +1461,10 @@ func (r *TypeResolver) checkRemoteTypeDefLimit(td *TypeDef) (any, error) {
 	}
 	versionsForType := r.remoteSchemaVersionsByType[typeKey]
 	if versionsForType == 0 && len(r.remoteSchemaVersionsByType) >= maxRemoteTypeKeys {
-		return nil, fmt.Errorf(
-			"remote logical type limit exceeded: %d >= %d. The data may be malicious",
-			len(r.remoteSchemaVersionsByType), maxRemoteTypeKeys)
+		return nil, nil
 	}
 	if versionsForType >= r.fory.config.MaxSchemaVersionsPerType {
-		return nil, fmt.Errorf(
-			"remote schema version limit exceeded for type %v: %d >= %d. The data may be malicious. If the data is not malicious, please increase MaxSchemaVersionsPerType",
-			typeKey, versionsForType, r.fory.config.MaxSchemaVersionsPerType)
+		return nil, nil
 	}
 	acceptedTypeCount := len(r.remoteSchemaVersionsByType)
 	if versionsForType == 0 {
@@ -1471,9 +1473,7 @@ func (r *TypeResolver) checkRemoteTypeDefLimit(td *TypeDef) (any, error) {
 	if r.totalAcceptedSchemaVersions >= int64(minRemoteTypeDefLimit) &&
 		r.totalAcceptedSchemaVersions/int64(acceptedTypeCount) >=
 			int64(r.fory.config.MaxAverageSchemaVersionsPerType) {
-		return nil, fmt.Errorf(
-			"remote schema version limit exceeded: %d metadata versions for %d accepted remote types exceeds the average limit %d. The data may be malicious. If the data is not malicious, please increase MaxAverageSchemaVersionsPerType",
-			r.totalAcceptedSchemaVersions, acceptedTypeCount, r.fory.config.MaxAverageSchemaVersionsPerType)
+		return nil, nil
 	}
 	return typeKey, nil
 }
@@ -1616,7 +1616,7 @@ func (r *TypeResolver) readTypeDefInfo(
 			}
 		}
 	}
-	typeKey, limitErr := r.checkRemoteTypeDefLimit(td)
+	typeKey, limitErr := r.remoteTypeDefCacheKey(td)
 	if limitErr != nil {
 		err.SetError(limitErr)
 		return nil
@@ -1634,8 +1634,11 @@ func (r *TypeResolver) readTypeDefInfo(
 			return nil
 		}
 	}
-	r.defIdToTypeDef[identity] = td
-	r.recordRemoteTypeDef(typeKey)
+	// Quotas limit retention only; root metadata references keep uncached owners alive.
+	if typeKey != nil {
+		r.defIdToTypeDef[identity] = td
+		r.recordRemoteTypeDef(typeKey)
+	}
 	context.readTypeInfos = append(context.readTypeInfos, typeInfo)
 	return typeInfo
 }
@@ -2347,6 +2350,8 @@ func (m *MetaContext) Reset() {
 	m.hasFirstType = false
 	m.typeMapActive = false
 	m.firstTypePtr = 0
+	// Logical reset prevents stale lookup; later roots overwrite the reusable slots.
+	// Retention follows the largest root table, not all previously received schemas.
 	if m.readTypeInfos != nil {
 		m.readTypeInfos = m.readTypeInfos[:0]
 	}

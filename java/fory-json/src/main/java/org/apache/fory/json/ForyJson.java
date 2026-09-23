@@ -168,9 +168,12 @@ public final class ForyJson {
    * writeString} method instead of invoking a {@code ForyJson} root API.
    */
   public String toJson(Object value) {
-    PooledState entry = acquire();
+    return toJson(value, acquire());
+  }
+
+  private String toJson(Object value, PooledState entry) {
     JsonState state = entry.state;
-    StringJsonWriter writer = state.stringWriter;
+    StringJsonWriter writer = state.stringWriter();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -186,7 +189,8 @@ public final class ForyJson {
       return writer.toJson();
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -227,6 +231,20 @@ public final class ForyJson {
   }
 
   /**
+   * Serializes one JSON document with two-space object and array indentation and LF line breaks.
+   * Colons have a space on each side; empty containers are {@code { }} and {@code [ ]}. No trailing
+   * line break is added. The format belongs to this call, not the instance.
+   *
+   * <p>Like {@link #toJson(Object)}, this operation is not reentrant on the same instance.
+   */
+  public String toPrettyJson(Object value) {
+    PooledState entry = acquire();
+    // Root cleanup restores compact output, so only pretty calls need to select a format.
+    entry.state.stringWriter.setPrettyPrint(true);
+    return toJson(value, entry);
+  }
+
+  /**
    * Serializes {@code value} as one complete JSON document in a detached UTF-8 byte array.
    *
    * <p>This root API is not reentrant on the same instance. A custom codec invoked by this
@@ -234,9 +252,12 @@ public final class ForyJson {
    * writeUtf8} method instead of invoking a {@code ForyJson} root API.
    */
   public byte[] toJsonBytes(Object value) {
-    PooledState entry = acquire();
+    return toJsonBytes(value, acquire());
+  }
+
+  private byte[] toJsonBytes(Object value, PooledState entry) {
     JsonState state = entry.state;
-    Utf8JsonWriter writer = state.utf8Writer;
+    Utf8JsonWriter writer = state.utf8Writer();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -252,7 +273,8 @@ public final class ForyJson {
       return writer.toJsonBytes();
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -286,6 +308,17 @@ public final class ForyJson {
   }
 
   /**
+   * Serializes a detached UTF-8 document using the format described by {@link
+   * #toPrettyJson(Object)}. Like {@link #toJsonBytes(Object)}, this operation is not reentrant on
+   * the same instance.
+   */
+  public byte[] toPrettyJsonBytes(Object value) {
+    PooledState entry = acquire();
+    entry.state.utf8Writer.setPrettyPrint(true);
+    return toJsonBytes(value, entry);
+  }
+
+  /**
    * Serializes {@code value} as UTF-8 JSON to {@code output}.
    *
    * <p>The complete document is buffered before one write to the stream. This method neither
@@ -299,7 +332,7 @@ public final class ForyJson {
     Objects.requireNonNull(output, "output");
     PooledState entry = acquire();
     JsonState state = entry.state;
-    Utf8JsonWriter writer = state.utf8Writer;
+    Utf8JsonWriter writer = state.utf8Writer();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -316,7 +349,8 @@ public final class ForyJson {
       writer.writeTo(output);
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -354,7 +388,7 @@ public final class ForyJson {
   private String toJsonDeclared(Object value, Class<?> type) {
     PooledState entry = acquire();
     JsonState state = entry.state;
-    StringJsonWriter writer = state.stringWriter;
+    StringJsonWriter writer = state.stringWriter();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -365,7 +399,8 @@ public final class ForyJson {
       return writer.toJson();
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -375,7 +410,7 @@ public final class ForyJson {
   private String toJsonDeclared(Object value, TypeRef<?> type) {
     PooledState entry = acquire();
     JsonState state = entry.state;
-    StringJsonWriter writer = state.stringWriter;
+    StringJsonWriter writer = state.stringWriter();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -386,7 +421,8 @@ public final class ForyJson {
       return writer.toJson();
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -396,7 +432,7 @@ public final class ForyJson {
   private byte[] toJsonBytesDeclared(Object value, Class<?> type) {
     PooledState entry = acquire();
     JsonState state = entry.state;
-    Utf8JsonWriter writer = state.utf8Writer;
+    Utf8JsonWriter writer = state.utf8Writer();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -408,7 +444,8 @@ public final class ForyJson {
       return writer.toJsonBytes();
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -418,7 +455,7 @@ public final class ForyJson {
   private byte[] toJsonBytesDeclared(Object value, TypeRef<?> type) {
     PooledState entry = acquire();
     JsonState state = entry.state;
-    Utf8JsonWriter writer = state.utf8Writer;
+    Utf8JsonWriter writer = state.utf8Writer();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -429,7 +466,8 @@ public final class ForyJson {
       return writer.toJsonBytes();
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -440,7 +478,7 @@ public final class ForyJson {
     Objects.requireNonNull(output, "output");
     PooledState entry = acquire();
     JsonState state = entry.state;
-    Utf8JsonWriter writer = state.utf8Writer;
+    Utf8JsonWriter writer = state.utf8Writer();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -451,7 +489,8 @@ public final class ForyJson {
       writer.writeTo(output);
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -462,7 +501,7 @@ public final class ForyJson {
     Objects.requireNonNull(output, "output");
     PooledState entry = acquire();
     JsonState state = entry.state;
-    Utf8JsonWriter writer = state.utf8Writer;
+    Utf8JsonWriter writer = state.utf8Writer();
     try {
       state.typeResolver.lockJIT();
       try {
@@ -473,7 +512,8 @@ public final class ForyJson {
       writer.writeTo(output);
     } finally {
       try {
-        writer.reset();
+        state.buffer = writer.getBuffer();
+        writer.clear();
       } finally {
         release(entry);
       }
@@ -779,7 +819,14 @@ public final class ForyJson {
   }
 
   private void release(PooledState entry) {
-    entry.release();
+    try {
+      JsonState state = entry.state;
+      if (state.buffer.length > state.bufferSizeLimitBytes) {
+        state.buffer = new byte[state.bufferSizeLimitBytes];
+      }
+    } finally {
+      entry.release();
+    }
   }
 
   private PooledState acquireContended(int slotIndex) {
@@ -829,6 +876,8 @@ public final class ForyJson {
   }
 
   private Object readJavaStringValue(String json, Class<?> type, JsonState state) {
+    // Older JDKs read the coder through Unsafe, which can crash on a null String.
+    Objects.requireNonNull(json, "json");
     if (StringSerializer.isBytesBackedString()) {
       byte coder = StringSerializer.getStringCoder(json);
       if (StringSerializer.isLatin1Coder(coder)) {
@@ -844,6 +893,8 @@ public final class ForyJson {
   }
 
   private Object readJavaStringValue(String json, TypeRef<?> type, JsonState state) {
+    // Validate before the Unsafe coder access, as in the Class-based root path.
+    Objects.requireNonNull(json, "json");
     if (StringSerializer.isBytesBackedString()) {
       byte coder = StringSerializer.getStringCoder(json);
       if (StringSerializer.isLatin1Coder(coder)) {
@@ -1012,6 +1063,12 @@ public final class ForyJson {
     private final Utf8JsonReader utf8Reader;
     private final Latin1JsonReader latin1Reader;
     private final Utf16JsonReader utf16Reader;
+    // Only the leased root's concrete reader or writer holds this array while active. Reclaim
+    // its latest array before clearing it; an idle component must not retain an old growth array.
+    // Keep the UTF16 input mirror and String writer's widening scratch separate: each can be live
+    // alongside the main workspace. No buffer holder or reader/writer backreference is needed.
+    private byte[] buffer;
+    private final int bufferSizeLimitBytes;
     private byte[] charBackedUtf16Bytes;
     private Class<?> lastRuntimeRootType;
     private JsonTypeInfo lastRuntimeRootInfo;
@@ -1024,21 +1081,37 @@ public final class ForyJson {
 
     private JsonState(JsonConfig config, JsonSharedRegistry sharedRegistry) {
       typeResolver = new JsonTypeResolver(sharedRegistry);
-      utf8Writer = new Utf8JsonWriter(config, typeResolver, new byte[INITIAL_BUFFER_SIZE]);
-      stringWriter = new StringJsonWriter(config, typeResolver, new byte[INITIAL_BUFFER_SIZE]);
+      bufferSizeLimitBytes = config.bufferSizeLimitBytes();
+      buffer = new byte[Math.min(INITIAL_BUFFER_SIZE, bufferSizeLimitBytes)];
+      utf8Writer = new Utf8JsonWriter(config, typeResolver, null);
+      stringWriter = new StringJsonWriter(config, typeResolver, null);
       utf8Reader = new Utf8JsonReader(config, typeResolver);
       latin1Reader = new Latin1JsonReader(config, typeResolver);
       utf16Reader = new Utf16JsonReader(config, typeResolver);
       charBackedUtf16Bytes = EMPTY_BYTES;
     }
 
+    private Utf8JsonWriter utf8Writer() {
+      utf8Writer.setBuffer(buffer);
+      buffer = null;
+      return utf8Writer;
+    }
+
+    private StringJsonWriter stringWriter() {
+      stringWriter.setBuffer(buffer);
+      buffer = null;
+      return stringWriter;
+    }
+
     private Latin1JsonReader latin1Reader(String input) {
-      latin1Reader.reset(input);
+      latin1Reader.reset(input, buffer);
+      buffer = null;
       return latin1Reader;
     }
 
     private Utf16JsonReader utf16Reader(String input) {
-      utf16Reader.reset(input);
+      utf16Reader.reset(input, buffer);
+      buffer = null;
       return utf16Reader;
     }
 
@@ -1060,30 +1133,46 @@ public final class ForyJson {
       }
       // JDK 8 char[]-backed Strings are converted once so parsing still uses UTF16 byte loads.
       StringSerializer.copyStringCharsToBytes(input, bytes);
-      utf16Reader.reset(input, bytes);
+      utf16Reader.reset(input, bytes, buffer);
+      buffer = null;
       return utf16Reader;
     }
 
     private Utf8JsonReader utf8Reader(byte[] input) {
       // Keep full-array roots on the direct reset so the existing hot path does not pay the range
       // validation branches.
-      utf8Reader.reset(input);
+      utf8Reader.reset(input, buffer);
+      buffer = null;
       return utf8Reader;
     }
 
     private Utf8JsonReader utf8Reader(byte[] input, int offset, int length) {
-      utf8Reader.reset(input, offset, length);
+      utf8Reader.reset(input, offset, length, buffer);
+      buffer = null;
       return utf8Reader;
     }
 
     // Clear only readers reset by the current public parse entry; clearing the unused readers shows
     // up on small byte-input parses and does not release additional retained input.
     private void clearStringReaders() {
+      // Only the selected representation borrowed the workspace. Setup can fail before either
+      // reader is selected, in which case the state still owns its array.
+      byte[] latin1Bytes = latin1Reader.getStringDecodeBuffer();
+      byte[] utf16Bytes = utf16Reader.getStringDecodeBuffer();
+      if (latin1Bytes != null) {
+        buffer = latin1Bytes;
+      } else if (utf16Bytes != null) {
+        buffer = utf16Bytes;
+      }
       latin1Reader.clear();
       utf16Reader.clear();
     }
 
     private void clearUtf8Reader() {
+      byte[] bytes = utf8Reader.getStringDecodeBuffer();
+      if (bytes != null) {
+        buffer = bytes;
+      }
       utf8Reader.clear();
     }
 

@@ -102,7 +102,7 @@ final class StringWriterCodegen extends JsonWriterCodegen {
           markUtf16PrefixField(property, commaKnown, fields, i);
         }
       }
-      if (property.writeNull()) {
+      if (property.writeNull() && !property.omitEmpty() && !property.omitDefault()) {
         commaKnown = true;
       }
     }
@@ -183,7 +183,10 @@ final class StringWriterCodegen extends JsonWriterCodegen {
         method = "writeObjectStartWithIntField";
         break;
       case LONG:
-        method = "writeObjectStartWithLongField";
+        method =
+            property.writesLongAsString()
+                ? "writeObjectStartWithLongAsStringField"
+                : "writeObjectStartWithLongField";
         break;
       default:
         throw new ForyJsonException(
@@ -212,7 +215,20 @@ final class StringWriterCodegen extends JsonWriterCodegen {
       boolean commaKnown,
       Expression index,
       Expression writer) {
-    String method = longValue ? "writeLongField" : "writeIntField";
+    if (pretty) {
+      return new Expression.ListExpression(
+          writeFieldName(property, id, commaKnown, index, writer),
+          new Expression.Invoke(
+              writer,
+              longValue
+                  ? property.writesLongAsString() ? "writeLongAsString" : "writeLong"
+                  : "writeInt",
+              value));
+    }
+    String method =
+        longValue
+            ? property.writesLongAsString() ? "writeLongAsStringField" : "writeLongField"
+            : "writeIntField";
     if (commaKnown) {
       if (canPackUtf16Prefix(property, true)) {
         return new Expression.Invoke(
@@ -252,6 +268,9 @@ final class StringWriterCodegen extends JsonWriterCodegen {
   @Override
   Expression writeFieldName(
       JsonFieldInfo property, int id, boolean commaKnown, Expression index, Expression writer) {
+    if (pretty) {
+      return prettyFieldName(id, commaKnown, index, writer);
+    }
     if (commaKnown) {
       if (canPackUtf16Prefix(property, true)) {
         return new Expression.Invoke(
@@ -277,7 +296,7 @@ final class StringWriterCodegen extends JsonWriterCodegen {
   @Override
   Expression writeNullField(
       JsonFieldInfo property, int id, boolean commaKnown, Expression index, Expression writer) {
-    if (commaKnown && canPackUtf16Prefix(property, true)) {
+    if (!pretty && commaKnown && canPackUtf16Prefix(property, true)) {
       return new Expression.Invoke(
           writer, "writeNullField", stringPackedPrefixArgs(property, id, true));
     }

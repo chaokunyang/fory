@@ -1233,6 +1233,12 @@ def bump_version(**kwargs):
                 _normalize_java_version(new_version),
                 _update_scala_version,
             )
+            _bump_version(
+                "benchmarks/scala",
+                "build.sbt",
+                _normalize_java_version(new_version),
+                _update_scala_benchmark_version,
+            )
         elif lang == "kotlin":
             bump_kotlin_version(_normalize_java_version(new_version))
         elif lang == "rust":
@@ -1585,6 +1591,15 @@ def _update_scala_version(lines, v):
             lines[index] = f'val foryVersion = "{v}"\n'
             break
     return lines
+
+
+def _update_scala_benchmark_version(lines, v):
+    v = _normalize_java_version(v)
+    for index, line in enumerate(lines):
+        if '"org.apache.fory" %% "fory-json-scala"' in line:
+            lines[index] = re.sub(VERSION_PATTERN, v, line)
+            return lines
+    raise ValueError("No Fory dependency found in Scala benchmark build")
 
 
 def _update_kotlin_version(lines, v):

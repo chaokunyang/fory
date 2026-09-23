@@ -1350,7 +1350,7 @@ void main() {
       _readTypeMeta(reader, valid);
     });
 
-    test('remote schema limit rejects extra versions', () {
+    test('remote schema overflow is uncached', () {
       const name = 'example.Unknown';
       final reader = TypeResolver(Config(maxSchemaVersionsPerType: 1));
       _rememberSchema(_SchemaLocal, <GeneratedFieldInfo>[]);
@@ -1368,7 +1368,9 @@ void main() {
 
       _readTypeMeta(reader, first);
 
-      expect(() => _readTypeMeta(reader, second), throwsA(isA<StateError>()));
+      final overflow = _readTypeMetaBuffer(reader, Buffer.wrap(second));
+      final repeated = _readTypeMetaBuffer(reader, Buffer.wrap(second));
+      expect(repeated, isNot(same(overflow)));
     });
 
     test(
@@ -1410,16 +1412,14 @@ void main() {
         reader.registerGenerated(_SchemaLocal, id: rejectedId);
         writer.registerGenerated(_SchemaRemoteA, id: rejectedId);
         final rejectedBytes = writeRegisteredTypeMeta(writer, rejectedId);
-        final exceedsKeyLimit = throwsA(
-          isA<StateError>().having(
-            (error) => error.toString(),
-            'message',
-            contains('logical type limit'),
-          ),
+        final overflow = _readTypeMetaBuffer(
+          reader,
+          Buffer.wrap(rejectedBytes),
         );
-
-        expect(() => _readTypeMeta(reader, rejectedBytes), exceedsKeyLimit);
-        expect(() => _readTypeMeta(reader, rejectedBytes), exceedsKeyLimit);
+        expect(
+          _readTypeMetaBuffer(reader, Buffer.wrap(rejectedBytes)),
+          isNot(same(overflow)),
+        );
 
         // Checked-cache hits and exact-local TypeDefs do not consume or check
         // the remote logical-key limit.
@@ -1438,7 +1438,10 @@ void main() {
 
         // Rejection and the exact-local hit above must not publish or count the
         // rejected remote key.
-        expect(() => _readTypeMeta(reader, rejectedBytes), exceedsKeyLimit);
+        expect(
+          _readTypeMetaBuffer(reader, Buffer.wrap(rejectedBytes)),
+          isNot(same(overflow)),
+        );
       },
       timeout: const Timeout(Duration(minutes: 2)),
     );

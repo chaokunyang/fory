@@ -131,6 +131,10 @@ abstract class JsonReaderCodegen {
 
   abstract Expression tryReadNextFieldNameColon(String name);
 
+  Expression tryReadOrderedCreatorField(String name) {
+    return tryReadNextFieldNameColon(name);
+  }
+
   abstract Expression readEnumField(
       JsonGeneratedCodecBuilder builder,
       JsonFieldInfo property,
@@ -256,7 +260,7 @@ abstract class JsonReaderCodegen {
     this.any = any;
     ownerType = type;
     storesSelfReader =
-        JsonCodegen.storesSelfReader(type, properties, creatorInfo != null, any, resolver);
+        JsonCodegen.storesSelfReader(owner, properties, creatorInfo != null, any, resolver);
     if (creatorInfo != null) {
       return genAnyCreatorReaderCode(builder, type, creatorInfo);
     }
@@ -1077,7 +1081,7 @@ abstract class JsonReaderCodegen {
               arguments, field.argumentIndex(), readCreatorValue(builder, field, i));
       next =
           new Expression.If(
-              tryReadNextFieldNameColon(field.name()),
+              tryReadOrderedCreatorField(field.name()),
               new Expression.ListExpression(
                   read, new Expression.If(consumeOrderedCommaOrEndObjectExpr(), next)),
               creatorSlowReturn(type, creatorInfo, arguments));
@@ -1307,12 +1311,34 @@ abstract class JsonReaderCodegen {
       inputs[i] = new Expression.Cast(arguments.values[i], TypeRef.of(dependencies[i])).inline();
     }
     Expression value =
-        new Expression.StaticInvoke(
-            method.getDeclaringClass(),
-            method.getName(),
-            TypeRef.of(method.getReturnType()),
-            inputs);
+        Modifier.isStatic(method.getModifiers())
+            ? new Expression.StaticInvoke(
+                method.getDeclaringClass(),
+                method.getName(),
+                TypeRef.of(method.getReturnType()),
+                inputs)
+            : new Expression.Invoke(
+                defaultsReceiver(method),
+                method.getName(),
+                TypeRef.of(method.getReturnType()),
+                inputs);
     return new Expression.Cast(value, TypeRef.of(parameterType));
+  }
+
+  /**
+   * Reads the language singleton that owns instance constructor defaults, such as a Scala
+   * companion. Each defaulted parameter needs its own expression, because generated code for one
+   * expression instance is emitted once at its first use site, and every use site here is a
+   * separate missing-argument block, so a shared instance would reference a local declared in a
+   * sibling block.
+   */
+  private Expression defaultsReceiver(Method method) {
+    return new Expression.Cast(
+        new Expression.Invoke(
+            fieldRef("creator", JsonCreatorInfo.class),
+            "defaultsReceiver",
+            TypeRef.of(Object.class)),
+        TypeRef.of(method.getDeclaringClass()));
   }
 
   private Expression finishCreator(
@@ -1468,11 +1494,13 @@ abstract class JsonReaderCodegen {
       if (method == null) {
         int maskBit = creator.defaultMaskBit(i);
         if (maskBit < 0) {
-          body.append("throw ")
-              .append(creatorExpression)
-              .append(".missingArgument(")
+          body.append("arguments[")
               .append(i)
-              .append(");\n");
+              .append("] = ")
+              .append(creatorExpression)
+              .append(".defaultValue(")
+              .append(i)
+              .append(", arguments);\n");
         } else {
           body.append("arguments[")
               .append(i)
@@ -1485,13 +1513,19 @@ abstract class JsonReaderCodegen {
               .append(";\n");
         }
       } else {
-        body.append("arguments[")
-            .append(i)
-            .append("] = ")
-            .append(ctx.type(method.getDeclaringClass()))
-            .append('.')
-            .append(method.getName())
-            .append('(');
+        body.append("arguments[").append(i).append("] = ");
+        if (Modifier.isStatic(method.getModifiers())) {
+          body.append(ctx.type(method.getDeclaringClass()));
+        } else {
+          // Fetched on the missing-argument branch, not once per construction: a creator whose
+          // properties are all present must not pay for a receiver it never reads.
+          body.append("((")
+              .append(ctx.type(method.getDeclaringClass()))
+              .append(") ")
+              .append(creatorExpression)
+              .append(".defaultsReceiver())");
+        }
+        body.append('.').append(method.getName()).append('(');
         Class<?>[] dependencies = method.getParameterTypes();
         for (int j = 0; j < dependencies.length; j++) {
           if (j != 0) {
@@ -1593,7 +1627,11 @@ abstract class JsonReaderCodegen {
     if (type == char.class) {
       return Expression.Literal.ofChar((char) 0);
     }
-    return new Expression.Literal(type == float.class ? 0F : 0D, TypeRef.of(type));
+    // A numeric conditional would promote 0F to Double before boxing the literal.
+    if (type == float.class) {
+      return new Expression.Literal(0F, TypeRef.of(type));
+    }
+    return new Expression.Literal(0D, TypeRef.of(type));
   }
 
   private Expression readCreatorValue(
@@ -2344,7 +2382,8 @@ abstract class JsonReaderCodegen {
         new Expression.Variable(
             "routeIndex",
             new Expression.Invoke(
-                    fieldRef("unwrapped", JsonUnwrappedInfo.class),
+                    // A user type named Unwrapped produces a local named unwrapped.
+                    fieldRef("this.unwrapped", JsonUnwrappedInfo.class),
                     "match",
                     TypeRef.of(int.class),
                     true,
@@ -4127,8 +4166,8 @@ abstract class JsonReaderCodegen {
   }
 
   private boolean storesAnyReader(Class<?> type) {
-    return resolver.canonicalObjectCodec(any.valueTypeInfo()) == null
-        || any.valueTypeInfo().rawType() != type;
+    return any.valueTypeInfo().rawType() != type
+        || resolver.canonicalObjectCodec(any.valueTypeInfo()) != objectOwner;
   }
 
   private Expression anyReaderRef() {
@@ -4539,7 +4578,9 @@ abstract class JsonReaderCodegen {
 
   final boolean storesReadObjectCodec(Class<?> type, JsonFieldInfo property) {
     Class<?> nestedType = readNestedType(property);
-    return nestedType != null && nestedType != type;
+    return nestedType != null
+        && (nestedType != type
+            || resolver.canonicalObjectCodec(property.readTypeInfo()) != objectOwner);
   }
 
   private Expression readField(
@@ -4813,6 +4854,7 @@ abstract class JsonReaderCodegen {
   final Expression readObjectValue(Class<?> type, JsonFieldInfo property, int id) {
     Expression codec =
         property.readRawType() == type
+                && resolver.canonicalObjectCodec(property.readTypeInfo()) == objectOwner
             ? nestedSelfReaderRef()
             : usesReaderSlot(property.readTypeInfo())
                 ? readerFromSlot(fieldRef("o" + id, JsonTypeInfo.class))

@@ -22,6 +22,7 @@ import types
 
 import typing
 from abc import ABC, abstractmethod
+from collections import abc
 
 from pyfory.annotation import ArrayMeta, RefMeta
 from pyfory.policy import DEFAULT_POLICY
@@ -32,6 +33,9 @@ from pyfory.type_id import TypeId
 _TYPE_NAMESPACE_GETTER = type.__dict__["__dict__"].__get__
 _TYPE_MRO_GETTER = type.__dict__["__mro__"].__get__
 _MODULE_NAMESPACE_GETTER = types.ModuleType.__dict__["__dict__"].__get__
+_SEQUENCE_TYPES = (list, typing.List, abc.Sequence, abc.MutableSequence)
+_SET_TYPES = (set, typing.Set, abc.Set, abc.MutableSet)
+_MAPPING_TYPES = (dict, typing.Dict, abc.Mapping, abc.MutableMapping)
 
 try:
     from typing import Annotated
@@ -367,6 +371,13 @@ def infer_field(field_name, type_, visitor: TypeVisitor, types_path=None):
     origin = _get_origin(type_) or getattr(type_, "__origin__", type_)
     origin = origin or type_
     args = _get_args(type_)
+    if origin in (abc.Sequence, abc.MutableSequence):
+        return visitor.visit_list(field_name, args[0] if args else typing.Any, types_path=types_path)
+    if origin in (abc.Set, abc.MutableSet):
+        return visitor.visit_set(field_name, args[0] if args else typing.Any, types_path=types_path)
+    if origin in (abc.Mapping, abc.MutableMapping):
+        key_type, value_type = args if args else (typing.Any, typing.Any)
+        return visitor.visit_dict(field_name, key_type, value_type, types_path=types_path)
     if args:
         if origin is list or origin == typing.List:
             elem_type = args[0]
@@ -579,6 +590,8 @@ def load_class(classname: str, policy=None):
 
 
 # This method is derived from https://github.com/ericvsmith/dataclasses/blob/5f6568c3468f872e8f447dc20666628387786397/dataclass_tools.py.
+# Copyright 2017-2022 Eric V. Smith, all rights reserved.
+# Licensed under the Apache License, Version 2.0.
 def dataslots(cls):
     # Need to create a new class, since we can't set __slots__
     #  after a class has been created.

@@ -171,20 +171,24 @@ public final class JsonCodegen {
   }
 
   @Internal
-  public Class<?> compileUtf8CollectionWriter(GeneratedCodecKey key) {
+  public Class<?> compileCollectionWriter(GeneratedCodecKey key) {
     Class<?> elementType = key.collectionElementClass();
     String generatedPackage = CodeGenerator.getPackage(elementType);
     return compile(
         key,
         elementType,
         compiler ->
-            compiler.buildUtf8CollectionWriter(generatedPackage, key.stringCollectionElements()));
+            compiler.buildCollectionWriter(
+                generatedPackage,
+                key.stringCollectionElements(),
+                key.role() == GeneratedCodecKey.Role.UTF8_COLLECTION_WRITER));
   }
 
-  private Class<?> buildUtf8CollectionWriter(String generatedPackage, boolean stringElements) {
+  private Class<?> buildCollectionWriter(
+      String generatedPackage, boolean stringElements, boolean utf8) {
     String className = className();
     String code =
-        new Utf8CollectionWriterCodegen().genCode(generatedPackage, className, stringElements);
+        new CollectionWriterCodegen().genCode(generatedPackage, className, stringElements, utf8);
     return compileCodecClass(generatedPackage, className, code);
   }
 
@@ -322,8 +326,11 @@ public final class JsonCodegen {
       for (JsonFieldInfo field : unwrapped.writeFields()) {
         addWriteInvocations(invocations, field);
       }
-      for (JsonUnwrappedInfo.Group group : unwrapped.groups()) {
-        JsonFieldAccessor accessor = group.declaration().writeAccessor();
+      for (JsonUnwrappedInfo.WriteEntry step : unwrapped.writeSteps()) {
+        if (step.kind() != JsonUnwrappedInfo.GROUP) {
+          continue;
+        }
+        JsonFieldAccessor accessor = step.group().declaration().writeAccessor();
         Method getter = accessor == null ? null : accessor.getter();
         if (getter != null && !DirectMethodCodegen.sourceNameable(getter)) {
           addInvocation(invocations, DirectMethodCodegen.getterInvocation(getter));
@@ -344,6 +351,12 @@ public final class JsonCodegen {
     Method getter = field.writeGetter();
     if (getter != null && !DirectMethodCodegen.sourceNameable(getter)) {
       addInvocation(invocations, DirectMethodCodegen.getterInvocation(getter));
+    }
+    // Default dependencies need the same JVM-name bridges as ordinary property getters.
+    for (Method dependency : field.defaultDependencies()) {
+      if (!DirectMethodCodegen.sourceNameable(dependency)) {
+        addInvocation(invocations, DirectMethodCodegen.getterInvocation(dependency));
+      }
     }
     if (field.writeDirectUnboxedValueCodec() != null) {
       addInvocation(
@@ -1134,9 +1147,9 @@ public final class JsonCodegen {
         return false;
       }
       Method defaultMethod = creator.defaultMethod(i);
-      // JsonCreatorInfo guarantees that a default method belongs to the creator owner and that its
-      // dependency types are the preceding creator parameters. The generated reader still invokes
-      // that exact method, so validate its access from the final definition context as well.
+      // JsonCreatorInfo validates compiler defaults and module-selected value factories. Their
+      // dependencies, if any, are preceding creator parameters. The generated reader invokes that
+      // exact method on its declaring class, so validate access from the final definition context.
       if (defaultMethod != null && !canCall(defaultMethod)) {
         return false;
       }
@@ -1220,7 +1233,7 @@ public final class JsonCodegen {
   public static boolean usesUtf8WriteCodec(JsonFieldInfo field, JsonTypeResolver resolver) {
     return usesWriteCodec(field)
         || field.writeKind() == JsonFieldKind.COLLECTION
-            && resolver.exactUtf8WriterCollection(field.writeTypeInfo()) != null;
+            && resolver.exactWriterCollection(field.writeTypeInfo()) != null;
   }
 
   static boolean writesStringCollectionDirectly(JsonFieldInfo field) {
@@ -1274,6 +1287,9 @@ public final class JsonCodegen {
     if (typeInfo.usesAnnotationCodec()) {
       return StringWriterCodec.class;
     }
+    if (resolver.exactWriterCollection(typeInfo) != null) {
+      return StringWriterCodec.class;
+    }
     if (resolver.canonicalObjectCodec(typeInfo) != null) {
       return StringWriterCodec.class;
     }
@@ -1288,7 +1304,7 @@ public final class JsonCodegen {
     if (typeInfo.usesAnnotationCodec()) {
       return Utf8WriterCodec.class;
     }
-    if (resolver.exactUtf8WriterCollection(typeInfo) != null) {
+    if (resolver.exactWriterCollection(typeInfo) != null) {
       return Utf8WriterCodec.class;
     }
     if (resolver.canonicalObjectCodec(typeInfo) != null) {
@@ -1345,14 +1361,15 @@ public final class JsonCodegen {
     if (any == null || any.readField() == null && any.readSetter() == null) {
       return false;
     }
-    if (storesSelfReader(
-        owner.type(), owner.readFields(), owner.creatorInfo() != null, any, resolver)) {
+    if (storesSelfReader(owner, owner.readFields(), owner.creatorInfo() != null, any, resolver)) {
       return true;
     }
     JsonUnwrappedInfo unwrapped = owner.unwrappedInfo();
     if (unwrapped != null) {
       for (JsonUnwrappedInfo.ReadRoute route : unwrapped.readRoutes()) {
-        if (route.field() != null && readNestedType(route.field(), resolver) == owner.type()) {
+        if (route.field() != null
+            && readNestedType(route.field(), resolver) != null
+            && resolver.canonicalObjectCodec(route.field().readTypeInfo()) == owner) {
           return true;
         }
       }
@@ -1361,19 +1378,20 @@ public final class JsonCodegen {
   }
 
   static boolean storesSelfReader(
-      Class<?> type,
+      ObjectCodec<?> owner,
       JsonFieldInfo[] properties,
       boolean creator,
       AnyInfo any,
       JsonTypeResolver resolver) {
-    if (any.valueRawType() == type && resolver.canonicalObjectCodec(any.valueTypeInfo()) != null) {
+    if (resolver.canonicalObjectCodec(any.valueTypeInfo()) == owner) {
       return true;
     }
     if (creator) {
       return false;
     }
     for (JsonFieldInfo property : properties) {
-      if (readNestedType(property, resolver) == type) {
+      if (readNestedType(property, resolver) != null
+          && resolver.canonicalObjectCodec(property.readTypeInfo()) == owner) {
         return true;
       }
     }
@@ -1387,6 +1405,16 @@ public final class JsonCodegen {
     }
     if (property.writeGetter() != null && !canCall(property.writeGetter())) {
       return false;
+    }
+    if (property.defaultMethod() != null) {
+      if (!canCall(property.defaultMethod())) {
+        return false;
+      }
+      for (Method dependency : property.defaultDependencies()) {
+        if (!canCall(dependency)) {
+          return false;
+        }
+      }
     }
     if (field != null && !canCompileField(field)) {
       return false;

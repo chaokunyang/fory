@@ -102,7 +102,9 @@ import org.apache.fory.json.JsonConfig;
 import org.apache.fory.json.JsonTypeCheckContext;
 import org.apache.fory.json.JsonTypeChecker;
 import org.apache.fory.json.PropertyNamingStrategy;
+import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.annotation.JsonCodec;
+import org.apache.fory.json.annotation.JsonProperty.Include;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonSubTypes.Inclusion;
 import org.apache.fory.json.annotation.JsonType;
@@ -186,7 +188,11 @@ public final class JsonSharedRegistry {
   private final ExecutorService compilationService;
   private final boolean propertyDiscoveryEnabled;
   private final PropertyNamingStrategy propertyNamingStrategy;
-  private final boolean writeNullFields;
+  private final Include defaultPropertyInclusion;
+  private final boolean writeLongAsString;
+  private final boolean escapeNonAscii;
+  private final boolean failOnMissingRequiredProperties;
+  private final JsonByteArray.Format byteArrayFormat;
   private final ClassLoader classLoader;
   private final JsonMixinAnnotations mixinAnnotations;
   private final IdentityHashMap<Class<?>, JsonSubTypesInfo> subTypesCache;
@@ -242,7 +248,11 @@ public final class JsonSharedRegistry {
     typeCheckCacheLock = typeChecker == null ? null : new Object();
     this.propertyDiscoveryEnabled = config.propertyDiscoveryEnabled();
     propertyNamingStrategy = config.propertyNamingStrategy();
-    writeNullFields = config.writeNullFields();
+    defaultPropertyInclusion = config.defaultPropertyInclusion();
+    writeLongAsString = config.writeLongAsString();
+    escapeNonAscii = config.escapeNonAscii();
+    failOnMissingRequiredProperties = config.failOnMissingRequiredProperties();
+    byteArrayFormat = config.byteArrayFormat();
     classLoader = config.classLoader();
     mixinAnnotations = new JsonMixinAnnotations(config);
     exactCodecs = new IdentityHashMap<>();
@@ -360,8 +370,8 @@ public final class JsonSharedRegistry {
     return generatedClassFuture(key, () -> codegen.compileUtf8Reader(key, owner, resolver));
   }
 
-  CompletableFuture<Class<?>> utf8CollectionWriterClass(GeneratedCodecKey key) {
-    return generatedClassFuture(key, () -> codegen.compileUtf8CollectionWriter(key));
+  CompletableFuture<Class<?>> collectionWriterClass(GeneratedCodecKey key) {
+    return generatedClassFuture(key, () -> codegen.compileCollectionWriter(key));
   }
 
   CompletableFuture<Class<?>> utf8CollectionReaderClass(GeneratedCodecKey key) {
@@ -957,7 +967,11 @@ public final class JsonSharedRegistry {
         return new ResolvedCodec(ScalarCodecs.OptionalIntCodec.NON_NULL, null);
       }
       if (rawType == OptionalLong.class) {
-        return new ResolvedCodec(ScalarCodecs.OptionalLongCodec.NON_NULL, null);
+        return new ResolvedCodec(
+            writeLongAsString
+                ? ScalarCodecs.OptionalLongAsStringCodec.NON_NULL
+                : ScalarCodecs.OptionalLongCodec.NON_NULL,
+            null);
       }
       return new ResolvedCodec(ScalarCodecs.OptionalDoubleCodec.NON_NULL, null);
     }
@@ -975,6 +989,9 @@ public final class JsonSharedRegistry {
     JsonValueCodec<?> codec = exactCodecs.get(rawType);
     if (codec != null) {
       return new ResolvedCodec(codec, null);
+    }
+    if (rawType == Object.class) {
+      return new ResolvedCodec(localResolver.naturalCodec(), null);
     }
     if (rawType == Class.class) {
       // JSON strings must not be treated as class-loading authority by the default codecs.
@@ -1148,9 +1165,7 @@ public final class JsonSharedRegistry {
   public JsonFieldKind kind(Class<?> type) {
     // A registered codec owns the full representation. Resolve that choice before object metadata
     // and codegen specialize fields so generated and interpreted paths cannot bypass the codec.
-    if (customCodecs.get(type) != null
-        || customCodecs.getFactory(type) != null
-        || runtimeFactories.containsKey(type)) {
+    if (hasRegisteredCodec(type)) {
       return JsonFieldKind.OBJECT;
     }
     if (type == boolean.class || type == Boolean.class) {
@@ -1211,8 +1226,29 @@ public final class JsonSharedRegistry {
     return propertyNamingStrategy;
   }
 
-  boolean writeNullFields() {
-    return writeNullFields;
+  Include defaultPropertyInclusion() {
+    return defaultPropertyInclusion;
+  }
+
+  boolean writeLongAsString() {
+    return writeLongAsString;
+  }
+
+  /** Returns the fixed escaping policy used to prepare writer tokens. */
+  @Internal
+  public boolean escapeNonAscii() {
+    return escapeNonAscii;
+  }
+
+  /** Returns whether required creator properties must appear in the input. */
+  public boolean failOnMissingRequiredProperties() {
+    return failOnMissingRequiredProperties;
+  }
+
+  /** Returns the default representation used when selecting ordinary byte-array codecs. */
+  @Internal
+  public JsonByteArray.Format byteArrayFormat() {
+    return byteArrayFormat;
   }
 
   ClassLoader classLoader() {
@@ -1282,6 +1318,12 @@ public final class JsonSharedRegistry {
 
   JsonValueCodec<?> customCodec(Class<?> type) {
     return customCodecs.get(type);
+  }
+
+  boolean hasRegisteredCodec(Class<?> type) {
+    return customCodecs.get(type) != null
+        || customCodecs.getFactory(type) != null
+        || runtimeFactories.containsKey(type);
   }
 
   JsonCodecDeclaration codecDeclaration(Class<?> targetType) {
@@ -1743,7 +1785,7 @@ public final class JsonSharedRegistry {
       }
       classes[i] = subtype;
     }
-    return new JsonSubTypesInfo(inclusion, property, classes, names);
+    return new JsonSubTypesInfo(inclusion, property, classes, names, escapeNonAscii);
   }
 
   private JsonSubTypesInfo buildInferredSubTypesInfo(
@@ -1806,7 +1848,8 @@ public final class JsonSharedRegistry {
       classes = java.util.Arrays.copyOf(classes, accepted);
       names = java.util.Arrays.copyOf(names, accepted);
     }
-    return new JsonSubTypesInfo(annotation.inclusion(), annotation.property(), classes, names);
+    return new JsonSubTypesInfo(
+        annotation.inclusion(), annotation.property(), classes, names, escapeNonAscii);
   }
 
   private static void validateSubtype(Class<?> baseType, Class<?> subtype) {
@@ -2058,7 +2101,7 @@ public final class JsonSharedRegistry {
     DisallowedList.checkNotInDisallowedList(className);
     // Built-in codec exemption follows the same Class identity key as exact codec dispatch. A
     // same-named class from another loader must still pass the configured checker.
-    if (exactCodecs.containsKey(type) && customCodecs.get(type) == null) {
+    if ((type == Object.class || exactCodecs.containsKey(type)) && customCodecs.get(type) == null) {
       return true;
     }
     JsonTypeChecker checker = typeChecker;
@@ -2092,7 +2135,7 @@ public final class JsonSharedRegistry {
     DisallowedList.checkNotInDisallowedList(className);
     // A JsonValueCodec registration has no authority over a map-key occurrence. Preserve the
     // ordinary exact built-in exemption even when the same raw class has a registered value codec.
-    if (exactCodecs.containsKey(type)) {
+    if (type == Object.class || exactCodecs.containsKey(type)) {
       return true;
     }
     JsonTypeChecker checker = typeChecker;
@@ -2136,7 +2179,6 @@ public final class JsonSharedRegistry {
   }
 
   private void registerExactCodecs() {
-    exactCodecs.put(Object.class, ScalarCodecs.NaturalCodec.INSTANCE);
     exactCodecs.put(void.class, ScalarCodecs.VoidCodec.INSTANCE);
     exactCodecs.put(Void.class, ScalarCodecs.VoidCodec.INSTANCE);
     exactCodecs.put(Number.class, ScalarCodecs.NumberCodec.INSTANCE);
@@ -2146,8 +2188,14 @@ public final class JsonSharedRegistry {
     exactCodecs.put(Boolean.class, ScalarCodecs.BooleanCodec.BOXED);
     exactCodecs.put(int.class, ScalarCodecs.IntCodec.PRIMITIVE);
     exactCodecs.put(Integer.class, ScalarCodecs.IntCodec.BOXED);
-    exactCodecs.put(long.class, ScalarCodecs.LongCodec.PRIMITIVE);
-    exactCodecs.put(Long.class, ScalarCodecs.LongCodec.BOXED);
+    exactCodecs.put(
+        long.class,
+        writeLongAsString
+            ? ScalarCodecs.LongAsStringCodec.PRIMITIVE
+            : ScalarCodecs.LongCodec.PRIMITIVE);
+    exactCodecs.put(
+        Long.class,
+        writeLongAsString ? ScalarCodecs.LongAsStringCodec.BOXED : ScalarCodecs.LongCodec.BOXED);
     exactCodecs.put(short.class, ScalarCodecs.ShortCodec.PRIMITIVE);
     exactCodecs.put(Short.class, ScalarCodecs.ShortCodec.BOXED);
     exactCodecs.put(byte.class, ScalarCodecs.ByteCodec.PRIMITIVE);
@@ -2168,8 +2216,16 @@ public final class JsonSharedRegistry {
     exactCodecs.put(AtomicBoolean.class, ScalarCodecs.AtomicBooleanCodec.INSTANCE);
     exactCodecs.put(AtomicInteger.class, ScalarCodecs.AtomicIntegerCodec.INSTANCE);
     exactCodecs.put(AtomicIntegerArray.class, ScalarCodecs.AtomicIntegerArrayCodec.INSTANCE);
-    exactCodecs.put(AtomicLong.class, ScalarCodecs.AtomicLongCodec.INSTANCE);
-    exactCodecs.put(AtomicLongArray.class, ScalarCodecs.AtomicLongArrayCodec.INSTANCE);
+    exactCodecs.put(
+        AtomicLong.class,
+        writeLongAsString
+            ? ScalarCodecs.AtomicLongAsStringCodec.INSTANCE
+            : ScalarCodecs.AtomicLongCodec.INSTANCE);
+    exactCodecs.put(
+        AtomicLongArray.class,
+        writeLongAsString
+            ? ScalarCodecs.AtomicLongArrayAsStringCodec.INSTANCE
+            : ScalarCodecs.AtomicLongArrayCodec.INSTANCE);
     exactCodecs.put(Currency.class, ScalarCodecs.CurrencyCodec.INSTANCE);
     exactCodecs.put(File.class, ScalarCodecs.FileCodec.INSTANCE);
     exactCodecs.put(URI.class, ScalarCodecs.UriCodec.INSTANCE);
@@ -2201,7 +2257,11 @@ public final class JsonSharedRegistry {
     exactCodecs.put(MinguoDate.class, ScalarCodecs.MinguoDateCodec.INSTANCE);
     exactCodecs.put(ThaiBuddhistDate.class, ScalarCodecs.ThaiBuddhistDateCodec.INSTANCE);
     exactCodecs.put(OptionalInt.class, ScalarCodecs.OptionalIntCodec.INSTANCE);
-    exactCodecs.put(OptionalLong.class, ScalarCodecs.OptionalLongCodec.INSTANCE);
+    exactCodecs.put(
+        OptionalLong.class,
+        writeLongAsString
+            ? ScalarCodecs.OptionalLongAsStringCodec.INSTANCE
+            : ScalarCodecs.OptionalLongCodec.INSTANCE);
     exactCodecs.put(OptionalDouble.class, ScalarCodecs.OptionalDoubleCodec.INSTANCE);
     exactCodecs.put(ByteBuffer.class, ScalarCodecs.ByteBufferCodec.INSTANCE);
     GuavaCodecs.registerExactCodecs(exactCodecs);

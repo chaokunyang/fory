@@ -36,6 +36,41 @@ public class KspRetentionResourceTest {
     assertTrue(regularFiles(Path.of("target/ksp-classes")).isEmpty())
 
     val account = rules("PlatformAccount")
+    val defaults = rules("PlatformDefaults")
+    assertTrue(
+      defaults.contains(
+        "<init>(int,java.util.List,int,int,kotlin.jvm.internal.DefaultConstructorMarker);"
+      ),
+      defaults
+    )
+    assertTrue(defaults.contains("java.util.List getValues();"), defaults)
+    assertTrue(
+      defaults.contains("@interface org.apache.fory.json.annotation.JsonInclude"),
+      defaults
+    )
+    assertTrue(
+      defaults.contains("@interface org.apache.fory.json.annotation.JsonProperty"),
+      defaults
+    )
+    val defaultMixin =
+      Files.readString(
+        generatedResources.resolve(
+          "META-INF/proguard/fory-json-mixin-$PACKAGE.PlatformDefaultMixin.pro"
+        )
+      )
+    assertTrue(defaultMixin.contains("class $PACKAGE.PlatformDefaultTarget"), defaultMixin)
+    assertTrue(defaultMixin.contains("class $PACKAGE.PlatformDefaultMixin"), defaultMixin)
+    assertTrue(
+      defaultMixin.contains(
+        "<init>(java.lang.String,int,kotlin.jvm.internal.DefaultConstructorMarker);"
+      ),
+      defaultMixin
+    )
+    assertTrue(defaultMixin.contains("java.lang.String getText();"), defaultMixin)
+    assertTrue(
+      defaultMixin.contains("@interface org.apache.fory.json.annotation.JsonInclude"),
+      defaultMixin
+    )
     assertTrue(account.contains("kotlin.jvm.internal.DefaultConstructorMarker"), account)
     val value = rules("PlatformId")
     assertTrue(value.contains("constructor-impl"), value)
@@ -47,7 +82,15 @@ public class KspRetentionResourceTest {
     assertTrue(sealed.contains("class $PACKAGE.PlatformSquare"), sealed)
     assertTrue(sealed.contains("class $PACKAGE.PlatformOpen"), sealed)
     assertFalse(sealed.contains("class $PACKAGE.PlatformOpenDescendant"), sealed)
-    assertConstructor(rules("PlatformRoot"), "$PACKAGE.PlatformTokenCodec")
+    val root = rules("PlatformRoot")
+    assertConstructor(root, "$PACKAGE.PlatformTokenCodec")
+    assertTrue(
+      root.contains("@interface org.apache.fory.json.annotation.JsonByteArray"),
+      root,
+    )
+    assertConstructor(root, "org.apache.fory.json.codec.Base64ByteArrayCodec")
+    assertConstructor(root, "org.apache.fory.json.codec.Base16ByteArrayCodec")
+    assertConstructor(root, "org.apache.fory.json.codec.ArrayCodec\$SignedByteArrayCodec")
     assertConstructor(
       rules("PlatformDirectOverride"),
       "$PACKAGE.PlatformDirectOverrideCodec",
@@ -99,6 +142,7 @@ public class KspRetentionResourceTest {
         "META-INF/proguard/fory-json-$PACKAGE.PlatformAccount.pro",
         "META-INF/proguard/fory-json-$PACKAGE.PlatformBox.pro",
         "META-INF/proguard/fory-json-$PACKAGE.PlatformCircle.pro",
+        "META-INF/proguard/fory-json-$PACKAGE.PlatformDefaults.pro",
         "META-INF/proguard/fory-json-$PACKAGE.PlatformDirectOverride.pro",
         "META-INF/proguard/fory-json-$PACKAGE.PlatformId.pro",
         "META-INF/proguard/fory-json-$PACKAGE.PlatformMarker.pro",
@@ -107,6 +151,7 @@ public class KspRetentionResourceTest {
         "META-INF/proguard/fory-json-$PACKAGE.PlatformShape.pro",
         "META-INF/proguard/fory-json-$PACKAGE.PlatformSquare.pro",
         "META-INF/proguard/fory-json-mixin-$PACKAGE.PlatformJavaProfileMixin.pro",
+        "META-INF/proguard/fory-json-mixin-$PACKAGE.PlatformDefaultMixin.pro",
         "META-INF/proguard/fory-json-mixin-$PACKAGE.PlatformMixinOverrideAnnotations.pro",
       )
   }

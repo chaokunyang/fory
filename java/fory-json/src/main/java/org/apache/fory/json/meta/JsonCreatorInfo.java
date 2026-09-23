@@ -29,6 +29,7 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Supplier;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.json.ForyJsonException;
@@ -64,14 +65,18 @@ public final class JsonCreatorInfo {
   private final JsonCreatorFieldInfo[] fields;
   private final Object[] defaults;
   private final long[] hashes;
+  private final int[] indexes;
   private final MethodHandle invoker;
   private final GeneratedJsonCodec<?> generatedCodec;
   private final Method[] defaultMethods;
+  private final Object defaultsReceiver;
+  private final Supplier<?>[] defaultFactories;
   private final MethodHandle[] defaultInvokers;
   private final Constructor<?> defaultConstructor;
   private final MethodHandle defaultConstructorInvoker;
   private final int[] defaultMaskBits;
   private final boolean[] parameterNullable;
+  private final boolean[] requiredParameters;
   private final Object fixedInstance;
   private final String[] parameterNames;
   private final JsonFieldInfo[] deferredFields;
@@ -84,7 +89,8 @@ public final class JsonCreatorInfo {
       Executable executable,
       JsonCreatorFieldInfo[] fields,
       Object[] defaults,
-      GeneratedJsonCodec<?> generatedCodec) {
+      GeneratedJsonCodec<?> generatedCodec,
+      boolean[] requiredParameters) {
     this(
         ownerType,
         executable,
@@ -97,6 +103,9 @@ public final class JsonCreatorInfo {
         null,
         null,
         null,
+        null,
+        null,
+        requiredParameters,
         null);
   }
 
@@ -109,10 +118,13 @@ public final class JsonCreatorInfo {
       Object[] defaults,
       GeneratedJsonCodec<?> generatedCodec,
       Method[] defaultMethods,
+      Object defaultsReceiver,
+      Supplier<?>[] defaultFactories,
       String[] parameterNames,
       Constructor<?> defaultConstructor,
       int[] defaultMaskBits,
-      boolean[] parameterNullable) {
+      boolean[] parameterNullable,
+      boolean[] requiredParameters) {
     this(
         ownerType,
         executable,
@@ -121,10 +133,13 @@ public final class JsonCreatorInfo {
         defaults,
         generatedCodec,
         defaultMethods,
+        defaultsReceiver,
+        defaultFactories,
         parameterNames,
         defaultConstructor,
         defaultMaskBits,
         parameterNullable,
+        requiredParameters,
         null);
   }
 
@@ -136,6 +151,9 @@ public final class JsonCreatorInfo {
         null,
         new JsonCreatorFieldInfo[0],
         new Object[0],
+        null,
+        null,
+        null,
         null,
         null,
         null,
@@ -159,10 +177,13 @@ public final class JsonCreatorInfo {
       Object[] defaults,
       GeneratedJsonCodec<?> generatedCodec,
       Method[] defaultMethods,
+      Object defaultsReceiver,
+      Supplier<?>[] defaultFactories,
       String[] parameterNames,
       Constructor<?> defaultConstructor,
       int[] defaultMaskBits,
       boolean[] parameterNullable,
+      boolean[] requiredParameters,
       Object fixedInstance) {
     this.ownerType = ownerType;
     this.executable = executable;
@@ -175,13 +196,16 @@ public final class JsonCreatorInfo {
     this.defaultConstructor = defaultConstructor;
     this.defaultMaskBits = defaultMaskBits == null ? null : defaultMaskBits.clone();
     this.parameterNullable = parameterNullable == null ? null : parameterNullable.clone();
+    this.requiredParameters = requiredParameters == null ? null : requiredParameters.clone();
     this.fixedInstance = fixedInstance;
     this.parameterNames = parameterNames == null ? null : parameterNames.clone();
     this.defaultMethods = defaultMethods == null ? null : defaultMethods.clone();
+    this.defaultsReceiver = defaultsReceiver;
+    this.defaultFactories = defaultFactories == null ? null : defaultFactories.clone();
     defaultInvokers =
         this.defaultMethods == null
             ? null
-            : buildDefaultInvokers(ownerType, executable, this.defaultMethods);
+            : buildDefaultInvokers(ownerType, executable, this.defaultMethods, defaultsReceiver);
     defaultConstructorInvoker =
         defaultConstructor == null
             ? null
@@ -193,10 +217,16 @@ public final class JsonCreatorInfo {
         generatedCodec == null && invocationExecutable != null
             ? buildInvoker(invocationExecutable, defaults.length, defaults.length)
             : null;
-    hashes = new long[this.fields.length];
-    for (int i = 0; i < this.fields.length; i++) {
-      hashes[i] = this.fields[i].nameHash();
+    int tableSize = fields.length;
+    if (tableSize > 4) {
+      tableSize = 1;
+      while (tableSize < fields.length * 4) {
+        tableSize <<= 1;
+      }
     }
+    hashes = new long[tableSize];
+    indexes = fields.length <= 4 ? null : new int[tableSize];
+    indexFields();
   }
 
   private JsonCreatorInfo(
@@ -210,11 +240,14 @@ public final class JsonCreatorInfo {
     defaults = source.defaults;
     generatedCodec = source.generatedCodec;
     defaultMethods = source.defaultMethods;
+    defaultsReceiver = source.defaultsReceiver;
+    defaultFactories = source.defaultFactories;
     defaultInvokers = source.defaultInvokers;
     defaultConstructor = source.defaultConstructor;
     defaultConstructorInvoker = source.defaultConstructorInvoker;
     defaultMaskBits = source.defaultMaskBits;
     parameterNullable = source.parameterNullable;
+    requiredParameters = source.requiredParameters;
     fixedInstance = source.fixedInstance;
     parameterNames = source.parameterNames;
     this.deferredFields = deferredFields;
@@ -234,10 +267,16 @@ public final class JsonCreatorInfo {
             ? buildInvoker(
                 invocationExecutable, defaults.length, defaults.length + deferredFields.length)
             : null;
-    hashes = new long[fields.length];
-    for (int i = 0; i < fields.length; i++) {
-      hashes[i] = fields[i].nameHash();
+    int tableSize = fields.length;
+    if (tableSize > 4) {
+      tableSize = 1;
+      while (tableSize < fields.length * 4) {
+        tableSize <<= 1;
+      }
     }
+    hashes = new long[tableSize];
+    indexes = fields.length <= 4 ? null : new int[tableSize];
+    indexFields();
   }
 
   /** Extends construction with deferred properties and required-presence flags. */
@@ -326,7 +365,10 @@ public final class JsonCreatorInfo {
 
   public Object[] newArguments() {
     Object[] arguments = Arrays.copyOf(defaults, defaults.length + deferredFields.length);
-    if (defaultInvokers != null || defaultMaskBits != null || parameterNullable != null) {
+    if (defaultInvokers != null
+        || defaultMaskBits != null
+        || parameterNullable != null
+        || requiredParameters != null) {
       Arrays.fill(arguments, 0, defaults.length, MISSING);
     }
     if (deferredFields.length != 0) {
@@ -335,13 +377,47 @@ public final class JsonCreatorInfo {
     return arguments;
   }
 
-  public int index(long hash) {
-    // Creator arity is deliberately finite and normally small. A linear exact-hash table avoids a
-    // second object graph and is allocation-free.
-    for (int i = 0; i < hashes.length; i++) {
-      if (hashes[i] == hash) {
-        return i;
+  private void indexFields() {
+    if (indexes == null) {
+      for (int i = 0; i < fields.length; i++) {
+        hashes[i] = fields[i].nameHash();
       }
+      return;
+    }
+    int mask = hashes.length - 1;
+    for (int i = 0; i < fields.length; i++) {
+      long hash = fields[i].nameHash();
+      int slot = (int) (hash ^ (hash >>> 32)) & mask;
+      while (indexes[slot] != 0 && hashes[slot] != hash) {
+        slot = (slot + 1) & mask;
+      }
+      // Store the ordered field index, not its potentially different construction-workspace slot.
+      // Preserve first-match lookup when metadata contains the same name more than once.
+      if (indexes[slot] == 0) {
+        hashes[slot] = hash;
+        indexes[slot] = i + 1;
+      }
+    }
+  }
+
+  public int index(long hash) {
+    // Tiny schemas need fewer comparisons than table probes, especially for unknown fields.
+    if (indexes == null) {
+      for (int i = 0; i < hashes.length; i++) {
+        if (hashes[i] == hash) {
+          return i;
+        }
+      }
+      return -1;
+    }
+    int mask = hashes.length - 1;
+    int slot = (int) (hash ^ (hash >>> 32)) & mask;
+    int index;
+    while ((index = indexes[slot]) != 0) {
+      if (hashes[slot] == hash) {
+        return index - 1;
+      }
+      slot = (slot + 1) & mask;
     }
     return -1;
   }
@@ -366,6 +442,7 @@ public final class JsonCreatorInfo {
     validateDeferredArguments(arguments);
     Object value;
     if (generatedCodec != null) {
+      prepareArguments(arguments);
       try {
         value = requireResult(generatedCodec.newInstance(arguments));
       } catch (Throwable cause) {
@@ -393,6 +470,7 @@ public final class JsonCreatorInfo {
     return defaultInvokers != null
         || defaultMaskBits != null
         || parameterNullable != null
+        || requiredParameters != null
         || deferredFields.length != 0;
   }
 
@@ -400,7 +478,8 @@ public final class JsonCreatorInfo {
   @Internal
   public boolean hasDefault(int index) {
     return defaultInvokers != null && defaultInvokers[index] != null
-        || defaultMaskBits != null && defaultMaskBits[index] >= 0;
+        || defaultMaskBits != null && defaultMaskBits[index] >= 0
+        || defaultFactories != null && defaultFactories[index] != null;
   }
 
   /** Returns one prevalidated language-defined constructor default method. */
@@ -409,11 +488,30 @@ public final class JsonCreatorInfo {
     return defaultMethods == null ? null : defaultMethods[index];
   }
 
+  /** Returns the receiver of instance constructor defaults, or null when they are static. */
+  @Internal
+  public Object defaultsReceiver() {
+    return defaultsReceiver;
+  }
+
   /** Evaluates one prevalidated language-defined constructor default. */
   @Internal
   public Object defaultValue(int index, Object[] arguments) {
+    // A reader type fallback is not a declaration default. Strict required-property checking
+    // must reject absence before invoking the zero/null factory, in generated and interpreted
+    // reads.
+    if (requiredParameters != null && requiredParameters[index]) {
+      throw missingArgument(index);
+    }
     MethodHandle invoker = defaultInvokers == null ? null : defaultInvokers[index];
     if (invoker == null) {
+      if (defaultFactories != null && defaultFactories[index] != null) {
+        return defaultFactories[index].get();
+      }
+      if (parameterNullable == null && requiredParameters != null) {
+        // Ignored Java parameters and optional containers keep their original typed defaults.
+        return defaults[index];
+      }
       throw missingArgument(index);
     }
     try {
@@ -431,6 +529,12 @@ public final class JsonCreatorInfo {
   @Internal
   public ForyJsonException missingArgument(int index) {
     String name = parameterNames == null ? Integer.toString(index) : parameterNames[index];
+    for (JsonCreatorFieldInfo field : fields) {
+      if (field.argumentIndex() == index) {
+        name = field.name();
+        break;
+      }
+    }
     return new ForyJsonException(
         "Missing required JSON constructor property " + name + " for " + ownerType.getName());
   }
@@ -458,7 +562,7 @@ public final class JsonCreatorInfo {
   }
 
   private void prepareArguments(Object[] arguments) {
-    if (defaultInvokers == null) {
+    if (defaultInvokers == null && requiredParameters == null) {
       return;
     }
     for (int i = 0; i < defaults.length; i++) {
@@ -501,9 +605,10 @@ public final class JsonCreatorInfo {
       if (argument == MISSING) {
         int bit = defaultMaskBits[i];
         if (bit < 0) {
-          throw missingArgument(i);
+          arguments[i] = defaultValue(i, arguments);
+        } else {
+          useDefault = true;
         }
-        useDefault = true;
       } else if (argument == null
           && parameterNullable != null
           && !parameterNullable[i]
@@ -596,7 +701,7 @@ public final class JsonCreatorInfo {
   }
 
   private static MethodHandle[] buildDefaultInvokers(
-      Class<?> ownerType, Executable executable, Method[] defaultMethods) {
+      Class<?> ownerType, Executable executable, Method[] defaultMethods, Object defaultsReceiver) {
     if (defaultMethods.length != executable.getParameterCount()) {
       throw new ForyJsonException("Constructor default count does not match " + executable);
     }
@@ -607,9 +712,17 @@ public final class JsonCreatorInfo {
       if (method == null) {
         continue;
       }
-      if ((method.getDeclaringClass() != ownerType
-              || !java.lang.reflect.Modifier.isStatic(method.getModifiers()))
-          || !method.getName().equals("$lessinit$greater$default$" + (i + 1))
+      // Only declared compiler defaults belong here. Reader type fallbacks use defaultFactories
+      // and cannot authorize NON_DEFAULT omission.
+      boolean instanceDefault = !java.lang.reflect.Modifier.isStatic(method.getModifiers());
+      Class<?> declaringClass = method.getDeclaringClass();
+      boolean constructorDefault =
+          method.getName().equals("$lessinit$greater$default$" + (i + 1))
+              && (instanceDefault
+                  ? declaringClass.isInstance(defaultsReceiver)
+                      && declaringClass.getName().equals(ownerType.getName() + "$")
+                  : declaringClass == ownerType);
+      if (!constructorDefault
           || method.getParameterCount() > i
           || !java.lang.reflect.Modifier.isPublic(method.getModifiers())
           || !boxed(parameterTypes[i]).isAssignableFrom(boxed(method.getReturnType()))) {
@@ -622,8 +735,10 @@ public final class JsonCreatorInfo {
         }
       }
       try {
-        MethodHandle target =
-            _JDKAccess._trustedLookup(method.getDeclaringClass()).unreflect(method);
+        MethodHandle target = _JDKAccess._trustedLookup(declaringClass).unreflect(method);
+        if (instanceDefault) {
+          target = target.bindTo(defaultsReceiver);
+        }
         invokers[i] = workspaceInvoker(target, dependencyTypes);
       } catch (IllegalAccessException e) {
         throw new ForyJsonException("Cannot access JSON constructor default " + method, e);

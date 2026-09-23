@@ -19,19 +19,31 @@
 
 package org.apache.fory.json.meta;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonFormat;
+import org.apache.fory.json.annotation.JsonProperty.Include;
 import org.apache.fory.json.codec.CodecUtils;
 import org.apache.fory.json.codec.DirectUnboxedValueCodec;
 import org.apache.fory.json.codec.JsonValueCodec;
+import org.apache.fory.json.codec.ScalarCodecs;
 import org.apache.fory.json.codec.TransparentUnboxedValueCodec;
 import org.apache.fory.json.codec.UnboxedValueCodec;
 import org.apache.fory.json.reader.JsonReader;
@@ -41,9 +53,11 @@ import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.JsonStringEscaper;
+import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.memory.NativeByteOrder;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.TypeRef;
 
 /**
@@ -81,13 +95,17 @@ public final class JsonFieldInfo {
   private static final int KIND_RAW_STRING = 16;
   private static final int KIND_NULL = 17;
   private static final int KIND_UNBOXED = 18;
+  private static final int KIND_LONG_AS_STRING = 19;
+  private static final int KIND_BOOLEAN_AS_STRING = 20;
   private static final int WRITE_NULL_MASK = Integer.MIN_VALUE;
   private static final int REQUIRE_NON_NULL_MASK = 1 << 30;
-  private static final int READ_INDEX_MASK = REQUIRE_NON_NULL_MASK - 1;
+  private static final int OMIT_EMPTY_MASK = 1 << 29;
+  private static final int READ_INDEX_MASK = OMIT_EMPTY_MASK - 1;
   private static final byte[] TRUE_BYTES = "true".getBytes(StandardCharsets.ISO_8859_1);
   private static final byte[] FALSE_BYTES = "false".getBytes(StandardCharsets.ISO_8859_1);
 
   private final String name;
+  private final boolean escapeNonAscii;
   private final Field writeField;
   private final Method writeGetter;
   private final Field readField;
@@ -150,10 +168,235 @@ public final class JsonFieldInfo {
   private JsonTypeInfo readOccurrenceTypeInfo;
   private UnboxedValueCodec writeUnboxedValueCodec;
   private UnboxedValueCodec readUnboxedValueCodec;
+  private Method defaultMethod;
+  private Method[] defaultDependencies;
+  private Object defaultsReceiver;
+  private MethodHandle defaultInvoker;
+
+  /** Binds a declared default to the current object's constructor properties during cold setup. */
+  public void bindDefault(Method method, Object receiver, Method[] dependencies) {
+    try {
+      MethodHandle target = _JDKAccess._trustedLookup(method.getDeclaringClass()).unreflect(method);
+      if (!Modifier.isStatic(method.getModifiers())) {
+        target = target.bindTo(receiver);
+      }
+      if (dependencies.length == 0) {
+        target = MethodHandles.dropArguments(target, 0, Object.class);
+      } else {
+        MethodHandle[] getters = new MethodHandle[dependencies.length];
+        for (int i = 0; i < getters.length; i++) {
+          Method getter = dependencies[i];
+          getters[i] =
+              _JDKAccess._trustedLookup(getter.getDeclaringClass())
+                  .unreflect(getter)
+                  .asType(MethodType.methodType(method.getParameterTypes()[i], Object.class));
+        }
+        target = MethodHandles.filterArguments(target, 0, getters);
+        target =
+            MethodHandles.permuteArguments(
+                target,
+                MethodType.methodType(method.getReturnType(), Object.class),
+                new int[getters.length]);
+      }
+      defaultInvoker = target.asType(MethodType.methodType(writeRawType, Object.class));
+      defaultMethod = method;
+      defaultDependencies = dependencies.clone();
+      defaultsReceiver = receiver;
+    } catch (IllegalAccessException e) {
+      throw new ForyJsonException("Cannot access declared JSON default " + method, e);
+    }
+  }
+
+  public boolean omitDefault() {
+    return defaultInvoker != null;
+  }
+
+  /** Extracts one authorized default from a model's single initialization-time reference object. */
+  public void bindDefaultValue(Object reference) {
+    Object value = defaultWriteValue(reference);
+    defaultInvoker =
+        MethodHandles.dropArguments(
+            MethodHandles.constant(Object.class, value).asType(MethodType.methodType(writeRawType)),
+            0,
+            Object.class);
+  }
+
+  public Method defaultMethod() {
+    return defaultMethod;
+  }
+
+  public Method[] defaultDependencies() {
+    return defaultDependencies == null ? new Method[0] : defaultDependencies.clone();
+  }
+
+  public Object defaultsReceiver() {
+    return defaultsReceiver;
+  }
+
+  public Object defaultValue(Object object) {
+    try {
+      return defaultInvoker.invoke(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  private boolean defaultBoolean(Object object) {
+    try {
+      return (boolean) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  private byte defaultByte(Object object) {
+    try {
+      return (byte) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  private short defaultShort(Object object) {
+    try {
+      return (short) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  private int defaultInt(Object object) {
+    try {
+      return (int) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  private long defaultLong(Object object) {
+    try {
+      return (long) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  private float defaultFloat(Object object) {
+    try {
+      return (float) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  private double defaultDouble(Object object) {
+    try {
+      return (double) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  private char defaultChar(Object object) {
+    try {
+      return (char) defaultInvoker.invokeExact(object);
+    } catch (Throwable e) {
+      throw defaultFailure(e);
+    }
+  }
+
+  private ForyJsonException defaultFailure(Throwable cause) {
+    if (cause instanceof Error) {
+      throw (Error) cause;
+    }
+    return new ForyJsonException("JSON default failed for " + name, cause);
+  }
+
+  /** Compares defaults without conflating signed zero or hiding non-finite JSON values. */
+  public static boolean defaultEquals(float value, float defaultValue) {
+    return Float.isFinite(value)
+        && Float.floatToRawIntBits(value) == Float.floatToRawIntBits(defaultValue);
+  }
+
+  public static boolean defaultEquals(double value, double defaultValue) {
+    return Double.isFinite(value)
+        && Double.doubleToRawLongBits(value) == Double.doubleToRawLongBits(defaultValue);
+  }
+
+  public static boolean defaultEquals(Object value, Object defaultValue) {
+    if (value == null || defaultValue == null) {
+      return value == defaultValue;
+    }
+    Class<?> type = value.getClass();
+    if (type == Float.class && defaultValue.getClass() == Float.class) {
+      return defaultEquals(((Float) value).floatValue(), ((Float) defaultValue).floatValue());
+    }
+    if (type == Double.class && defaultValue.getClass() == Double.class) {
+      return defaultEquals(((Double) value).doubleValue(), ((Double) defaultValue).doubleValue());
+    }
+    if (type.isArray()) {
+      if (type != defaultValue.getClass()
+          || Array.getLength(value) != Array.getLength(defaultValue)) {
+        return false;
+      }
+      if (type == boolean[].class) {
+        return Arrays.equals((boolean[]) value, (boolean[]) defaultValue);
+      }
+      if (type == byte[].class) {
+        return Arrays.equals((byte[]) value, (byte[]) defaultValue);
+      }
+      if (type == short[].class) {
+        return Arrays.equals((short[]) value, (short[]) defaultValue);
+      }
+      if (type == char[].class) {
+        return Arrays.equals((char[]) value, (char[]) defaultValue);
+      }
+      if (type == int[].class) {
+        return Arrays.equals((int[]) value, (int[]) defaultValue);
+      }
+      if (type == long[].class) {
+        return Arrays.equals((long[]) value, (long[]) defaultValue);
+      }
+      if (type == float[].class) {
+        float[] values = (float[]) value;
+        float[] defaults = (float[]) defaultValue;
+        for (int i = 0; i < values.length; i++) {
+          if (!defaultEquals(values[i], defaults[i])) {
+            return false;
+          }
+        }
+        return true;
+      }
+      if (type == double[].class) {
+        double[] values = (double[]) value;
+        double[] defaults = (double[]) defaultValue;
+        for (int i = 0; i < values.length; i++) {
+          if (!defaultEquals(values[i], defaults[i])) {
+            return false;
+          }
+        }
+        return true;
+      }
+      Object[] values = (Object[]) value;
+      Object[] defaults = (Object[]) defaultValue;
+      for (int i = 0; i < values.length; i++) {
+        if (!defaultEquals(values[i], defaults[i])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return value.equals(defaultValue);
+  }
+
+  /** Compares an already-read unwrapped property before entering its child members. */
+  public boolean isDefault(Object object, Object value) {
+    return omitDefault() && defaultEquals(value, defaultValue(object));
+  }
 
   public JsonFieldInfo(
       String name,
-      boolean writeNull,
+      Include inclusion,
       Field writeField,
       Method writeGetter,
       Field readField,
@@ -165,11 +408,13 @@ public final class JsonFieldInfo {
       JsonCodec codecAnnotation,
       Class<? extends JsonValueCodec<?>> valueCodecClass,
       JsonFormat formatAnnotation,
-      boolean rawValue) {
+      boolean rawValue,
+      boolean escapeNonAscii) {
     this.name = name;
-    // Write-null, required-value, and read-index metadata become immutable with ObjectCodec.
-    // Packing both flags above the read index avoids enlarging every field-metadata object.
-    readIndexAndWriteNull = writeNull ? WRITE_NULL_MASK : 0;
+    this.escapeNonAscii = escapeNonAscii;
+    // Inclusion, required-value, and read-index metadata become immutable with ObjectCodec.
+    // Packing the flags above the read index avoids enlarging every field-metadata object.
+    readIndexAndWriteNull = inclusion == Include.ALWAYS ? WRITE_NULL_MASK : 0;
     nameHash = JsonFieldNameHash.hash(name);
     this.writeField = writeField;
     this.writeGetter = writeGetter;
@@ -202,6 +447,14 @@ public final class JsonFieldInfo {
                 : resolvedObjectModelType;
     this.readRawType =
         readTypeRef == null ? null : readUnboxedRequired ? readFallback : readTypeRef.getRawType();
+    // A lowered value-class carrier is not the logical property value. An empty String carrier
+    // does not make its non-null application value class empty.
+    if (inclusion == Include.NON_EMPTY
+        && !writeUnboxedRequired
+        && writeRawType != null
+        && !writeRawType.isPrimitive()) {
+      readIndexAndWriteNull |= OMIT_EMPTY_MASK;
+    }
     this.codecAnnotation = codecAnnotation;
     this.valueCodecClass = valueCodecClass;
     this.formatAnnotation = formatAnnotation;
@@ -225,8 +478,8 @@ public final class JsonFieldInfo {
     writeArrayComponentType =
         writeKind == JsonFieldKind.ARRAY ? writeRawType.getComponentType() : null;
     writeElementRawType = writeElementType == null ? null : knownRawType(writeElementType);
-    String stringPrefix = JsonStringEscaper.escapedNamePrefix(name, true);
-    String utf8Prefix = JsonStringEscaper.escapedNamePrefix(name, false);
+    String stringPrefix = JsonStringEscaper.escapedNamePrefix(name, escapeNonAscii ? 0x7f : 0xff);
+    String utf8Prefix = JsonStringEscaper.escapedNamePrefix(name, escapeNonAscii ? 0x7f : 0xffff);
     stringNamePrefix = stringPrefix.getBytes(StandardCharsets.ISO_8859_1);
     stringCommaNamePrefix = ("," + stringPrefix).getBytes(StandardCharsets.ISO_8859_1);
     stringUtf16NamePrefix = toUtf16Bytes(stringNamePrefix);
@@ -303,7 +556,7 @@ public final class JsonFieldInfo {
     JsonFieldInfo copy =
         new JsonFieldInfo(
             transformedName,
-            writeNull(),
+            omitEmpty() ? Include.NON_EMPTY : writeNull() ? Include.ALWAYS : Include.NON_NULL,
             writeField,
             writeGetter,
             readField,
@@ -315,8 +568,16 @@ public final class JsonFieldInfo {
             codecAnnotation,
             valueCodecClass,
             formatAnnotation,
-            writesRawString());
+            writesRawString(),
+            escapeNonAscii);
     copy.setReadIndex(readIndex());
+    copy.defaultMethod = defaultMethod;
+    copy.defaultDependencies = defaultDependencies;
+    copy.defaultsReceiver = defaultsReceiver;
+    copy.defaultInvoker = defaultInvoker;
+    if (writeNull()) {
+      copy.includeNullWrite();
+    }
     if (requiresNonNullWrite()) {
       copy.requireNonNullWrite();
     }
@@ -332,9 +593,75 @@ public final class JsonFieldInfo {
     return readIndexAndWriteNull < 0;
   }
 
+  /** Returns whether non-null empty logical values are omitted before writing a field token. */
+  public boolean omitEmpty() {
+    return (readIndexAndWriteNull & OMIT_EMPTY_MASK) != 0;
+  }
+
+  /**
+   * Returns whether the logical write type can contain an empty value, independently of its
+   * carrier.
+   */
+  public boolean mayBeEmpty() {
+    Class<?> type = writeTypeRef == null ? null : writeTypeRef.getRawType();
+    return type != null
+        && (type.isArray()
+            || CharSequence.class.isAssignableFrom(type)
+            || Collection.class.isAssignableFrom(type)
+            || Map.class.isAssignableFrom(type)
+            || type == Optional.class
+            || type == OptionalInt.class
+            || type == OptionalLong.class
+            || type == OptionalDouble.class
+            || !Modifier.isFinal(type.getModifiers()) && !type.isEnum());
+  }
+
+  /**
+   * Tests built-in empty values directly, then delegates to the selected codec. Null omission is
+   * handled separately by the containing field's nullability contract.
+   */
+  @Internal
+  public static boolean isEmpty(Object value, JsonTypeInfo typeInfo, JsonWriter writer) {
+    if (value instanceof CharSequence) {
+      return ((CharSequence) value).length() == 0;
+    }
+    if (value instanceof Collection) {
+      return ((Collection<?>) value).isEmpty();
+    }
+    if (value instanceof Map) {
+      return ((Map<?, ?>) value).isEmpty();
+    }
+    if (value instanceof Optional) {
+      return !((Optional<?>) value).isPresent();
+    }
+    if (value instanceof OptionalInt) {
+      return !((OptionalInt) value).isPresent();
+    }
+    if (value instanceof OptionalLong) {
+      return !((OptionalLong) value).isPresent();
+    }
+    if (value instanceof OptionalDouble) {
+      return !((OptionalDouble) value).isPresent();
+    }
+    if (value == null) {
+      return false;
+    }
+    if (value.getClass().isArray()) {
+      return Array.getLength(value) == 0;
+    }
+    // A custom codec may handle a value whose ordinary object schema is unsupported. Use that
+    // selected codec, never resolve a replacement by runtime class just to decide field omission.
+    return typeInfo.valueCodec().isEmpty(writer, value);
+  }
+
   /** Makes a nullable language-model property explicit so output stays reconstructible. */
   public void includeNullWrite() {
     readIndexAndWriteNull |= WRITE_NULL_MASK;
+  }
+
+  /** Keeps empty language-model properties explicit so output stays reconstructible. */
+  public void includeEmptyWrite() {
+    readIndexAndWriteNull &= ~OMIT_EMPTY_MASK;
   }
 
   /** Returns whether this field carries explicit Kotlin-style occurrence nullability. */
@@ -463,6 +790,16 @@ public final class JsonFieldInfo {
     return writeKindId == KIND_RAW_STRING;
   }
 
+  /** Returns whether the resolved built-in Long binding writes quoted decimal digits. */
+  public boolean writesLongAsString() {
+    return writeKind == JsonFieldKind.LONG && isLongAsString(writeTypeInfo);
+  }
+
+  /** Returns whether this field writes a boolean token enclosed in quotes. */
+  public boolean writesBooleanAsString() {
+    return writeKindId == KIND_BOOLEAN_AS_STRING;
+  }
+
   public JsonFieldAccessor writeAccessor() {
     return writeAccessor;
   }
@@ -579,7 +916,21 @@ public final class JsonFieldInfo {
       }
       if (!rawString && writeRawType != void.class) {
         writeKind = writeTypeInfo.kind();
-        writeKindId = writeUnboxedValueCodec == null ? kindId(writeKind) : KIND_UNBOXED;
+        if (writeUnboxedValueCodec != null) {
+          writeKindId = KIND_UNBOXED;
+        } else if (formatAnnotation != null
+            && formatAnnotation.shape() == JsonFormat.Shape.STRING
+            && (writeRawType == boolean.class || writeRawType == Boolean.class)) {
+          // Specialize only this field's write operation after format validation. The occurrence
+          // codec still owns quoted reads and container elements; changing its kind would let
+          // container fast paths bypass the selected representation.
+          writeKind = JsonFieldKind.BOOLEAN;
+          writeKindId = KIND_BOOLEAN_AS_STRING;
+        } else if (writeKind == JsonFieldKind.LONG && isLongAsString(writeTypeInfo)) {
+          writeKindId = KIND_LONG_AS_STRING;
+        } else {
+          writeKindId = kindId(writeKind);
+        }
       }
       if (writeUnboxedValueCodec != null
           && !writeOccurrenceTypeInfo.nullable()
@@ -608,6 +959,12 @@ public final class JsonFieldInfo {
       readPrimitiveKindId =
           readUnboxedValueCodec == null ? primitiveKindId(readRawType, readKind) : KIND_UNBOXED;
     }
+  }
+
+  private static boolean isLongAsString(JsonTypeInfo typeInfo) {
+    Object codec = typeInfo.stringWriter();
+    return codec == ScalarCodecs.LongAsStringCodec.PRIMITIVE
+        || codec == ScalarCodecs.LongAsStringCodec.BOXED;
   }
 
   private UnboxedValueCodec requireUnboxed(
@@ -973,8 +1330,7 @@ public final class JsonFieldInfo {
     if (readIndex < 0 || readIndex > READ_INDEX_MASK) {
       throw new IllegalArgumentException("Invalid JSON field read index " + readIndex);
     }
-    readIndexAndWriteNull =
-        (readIndexAndWriteNull & (WRITE_NULL_MASK | REQUIRE_NON_NULL_MASK)) | readIndex;
+    readIndexAndWriteNull = (readIndexAndWriteNull & ~READ_INDEX_MASK) | readIndex;
   }
 
   public JsonTypeInfo writeTypeInfo() {
@@ -1066,7 +1422,42 @@ public final class JsonFieldInfo {
   }
 
   public boolean writeString(StringJsonWriter writer, Object object, int index) {
+    if (omitDefault()) {
+      if (writeRawType.isPrimitive()
+          && !writesUnboxedValue()
+          && (writeKind != JsonFieldKind.OBJECT || writesBooleanAsString())) {
+        return writeDefaultPrimitive(writer, object, index);
+      }
+      Object value = defaultWriteValue(object);
+      if (value == null && requiresNonNullWrite()) {
+        rejectNullWrite();
+      }
+      if (defaultEquals(value, defaultValue(object))) {
+        return false;
+      }
+      writer.writeFieldName(this, index);
+      if (writesUnboxedValue()) {
+        writeUnboxedValueCodec.writeStringCarrier(writer, value);
+      } else if (value == null && writesRawString()) {
+        writer.writeNull();
+      } else if (writesRawString()) {
+        writer.writeRawValue((String) value);
+      } else {
+        writeTypeInfo.stringWriter().writeString(writer, value);
+      }
+      return true;
+    }
+    if (writer.prettyPrint()) {
+      return writePrettyString(writer, object, index);
+    }
     switch (writeKindId) {
+      case KIND_BOOLEAN_AS_STRING:
+        if (!writeRawType.isPrimitive()) {
+          return writeStringBooleanAsString(writer, object, index);
+        }
+        writer.writeFieldName(this, index);
+        writer.writeBooleanAsString(writeAccessor.getBoolean(object));
+        return true;
       case KIND_NULL:
         writer.writeFieldName(this, index);
         writer.writeNull();
@@ -1106,6 +1497,13 @@ public final class JsonFieldInfo {
           return writeStringScalar(writer, object, index);
         }
         writer.writeLongField(
+            stringNamePrefix, stringCommaNamePrefix, index, writeAccessor.getLong(object));
+        return true;
+      case KIND_LONG_AS_STRING:
+        if (!writeRawType.isPrimitive()) {
+          return writeStringLongAsString(writer, object, index);
+        }
+        writer.writeLongAsStringField(
             stringNamePrefix, stringCommaNamePrefix, index, writeAccessor.getLong(object));
         return true;
       case KIND_FLOAT:
@@ -1151,7 +1549,42 @@ public final class JsonFieldInfo {
   }
 
   public boolean writeUtf8(Utf8JsonWriter writer, Object object, int index) {
+    if (omitDefault()) {
+      if (writeRawType.isPrimitive()
+          && !writesUnboxedValue()
+          && (writeKind != JsonFieldKind.OBJECT || writesBooleanAsString())) {
+        return writeDefaultPrimitive(writer, object, index);
+      }
+      Object value = defaultWriteValue(object);
+      if (value == null && requiresNonNullWrite()) {
+        rejectNullWrite();
+      }
+      if (defaultEquals(value, defaultValue(object))) {
+        return false;
+      }
+      writer.writeFieldName(this, index);
+      if (writesUnboxedValue()) {
+        writeUnboxedValueCodec.writeUtf8Carrier(writer, value);
+      } else if (value == null && writesRawString()) {
+        writer.writeNull();
+      } else if (writesRawString()) {
+        writer.writeRawValue((String) value);
+      } else {
+        writeTypeInfo.utf8Writer().writeUtf8(writer, value);
+      }
+      return true;
+    }
+    if (writer.prettyPrint()) {
+      return writePrettyUtf8(writer, object, index);
+    }
     switch (writeKindId) {
+      case KIND_BOOLEAN_AS_STRING:
+        if (!writeRawType.isPrimitive()) {
+          return writeUtf8BooleanAsString(writer, object, index);
+        }
+        writer.writeFieldName(this, index);
+        writer.writeBooleanAsString(writeAccessor.getBoolean(object));
+        return true;
       case KIND_NULL:
         writer.writeFieldName(this, index);
         writer.writeNull();
@@ -1188,6 +1621,13 @@ public final class JsonFieldInfo {
           return writeUtf8Scalar(writer, object, index);
         }
         writer.writeLongField(
+            utf8NamePrefix, utf8CommaNamePrefix, index, writeAccessor.getLong(object));
+        return true;
+      case KIND_LONG_AS_STRING:
+        if (!writeRawType.isPrimitive()) {
+          return writeUtf8LongAsString(writer, object, index);
+        }
+        writer.writeLongAsStringField(
             utf8NamePrefix, utf8CommaNamePrefix, index, writeAccessor.getLong(object));
         return true;
       case KIND_FLOAT:
@@ -1232,10 +1672,204 @@ public final class JsonFieldInfo {
     }
   }
 
+  private Object defaultWriteValue(Object object) {
+    if (!writeRawType.isPrimitive()) {
+      return writeAccessor.getObject(object);
+    }
+    switch (kind(writeRawType)) {
+      case BOOLEAN:
+        return writeAccessor.getBoolean(object);
+      case BYTE:
+        return writeAccessor.getByte(object);
+      case SHORT:
+        return writeAccessor.getShort(object);
+      case INT:
+        return writeAccessor.getInt(object);
+      case LONG:
+        return writeAccessor.getLong(object);
+      case FLOAT:
+        return writeAccessor.getFloat(object);
+      case DOUBLE:
+        return writeAccessor.getDouble(object);
+      case CHAR:
+        return writeAccessor.getChar(object);
+      default:
+        return null;
+    }
+  }
+
+  private boolean writeDefaultPrimitive(JsonWriter writer, Object object, int index) {
+    switch (writeKindId) {
+      case KIND_BOOLEAN:
+      case KIND_BOOLEAN_AS_STRING:
+        boolean b = writeAccessor.getBoolean(object);
+        if (b == defaultBoolean(object)) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        if (writeKindId == KIND_BOOLEAN_AS_STRING) {
+          writer.writeBooleanAsString(b);
+        } else {
+          writer.writeBoolean(b);
+        }
+        return true;
+      case KIND_BYTE:
+        byte by = writeAccessor.getByte(object);
+        if (by == defaultByte(object)) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        writer.writeInt(by);
+        return true;
+      case KIND_SHORT:
+        short s = writeAccessor.getShort(object);
+        if (s == defaultShort(object)) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        writer.writeInt(s);
+        return true;
+      case KIND_INT:
+        int i = writeAccessor.getInt(object);
+        if (i == defaultInt(object)) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        writer.writeInt(i);
+        return true;
+      case KIND_LONG:
+      case KIND_LONG_AS_STRING:
+        long l = writeAccessor.getLong(object);
+        if (l == defaultLong(object)) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        if (writeKindId == KIND_LONG_AS_STRING) {
+          writer.writeLongAsString(l);
+        } else {
+          writer.writeLong(l);
+        }
+        return true;
+      case KIND_FLOAT:
+        float f = writeAccessor.getFloat(object);
+        if (defaultEquals(f, defaultFloat(object))) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        writer.writeFloat(f);
+        return true;
+      case KIND_DOUBLE:
+        double d = writeAccessor.getDouble(object);
+        if (defaultEquals(d, defaultDouble(object))) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        writer.writeDouble(d);
+        return true;
+      case KIND_CHAR:
+        char c = writeAccessor.getChar(object);
+        if (c == defaultChar(object)) {
+          return false;
+        }
+        writer.writeComma(index);
+        writer.writeFieldName(this);
+        writer.writeChar(c);
+        return true;
+      default:
+        throw new AssertionError(writeKindId);
+    }
+  }
+
+  private boolean writePrettyString(StringJsonWriter writer, Object object, int index) {
+    if (writePrettyPrimitive(writer, object, index)) {
+      return true;
+    }
+    if (writeKindId == KIND_UNBOXED) {
+      return writeStringUnboxed(writer, object, index);
+    }
+    if (writeKindId == KIND_RAW_STRING) {
+      return writeStringRaw(writer, object, index);
+    }
+    return writeStringObject(writer, object, index);
+  }
+
+  private boolean writePrettyUtf8(Utf8JsonWriter writer, Object object, int index) {
+    if (writePrettyPrimitive(writer, object, index)) {
+      return true;
+    }
+    if (writeKindId == KIND_UNBOXED) {
+      return writeUtf8Unboxed(writer, object, index);
+    }
+    if (writeKindId == KIND_RAW_STRING) {
+      return writeUtf8Raw(writer, object, index);
+    }
+    return writeUtf8Object(writer, object, index);
+  }
+
+  private boolean writePrettyPrimitive(JsonWriter writer, Object object, int index) {
+    if (writeKindId != KIND_NULL
+        && (!writeRawType.isPrimitive()
+            || writeKindId > KIND_CHAR
+                && writeKindId != KIND_LONG_AS_STRING
+                && writeKindId != KIND_BOOLEAN_AS_STRING)) {
+      return false;
+    }
+    writer.writeComma(index);
+    writer.writeFieldName(this);
+    switch (writeKindId) {
+      case KIND_BOOLEAN:
+        writer.writeBoolean(writeAccessor.getBoolean(object));
+        break;
+      case KIND_BOOLEAN_AS_STRING:
+        writer.writeBooleanAsString(writeAccessor.getBoolean(object));
+        break;
+      case KIND_BYTE:
+        writer.writeInt(writeAccessor.getByte(object));
+        break;
+      case KIND_SHORT:
+        writer.writeInt(writeAccessor.getShort(object));
+        break;
+      case KIND_INT:
+        writer.writeInt(writeAccessor.getInt(object));
+        break;
+      case KIND_LONG:
+        writer.writeLong(writeAccessor.getLong(object));
+        break;
+      case KIND_LONG_AS_STRING:
+        writer.writeLongAsString(writeAccessor.getLong(object));
+        break;
+      case KIND_FLOAT:
+        writer.writeFloat(writeAccessor.getFloat(object));
+        break;
+      case KIND_DOUBLE:
+        writer.writeDouble(writeAccessor.getDouble(object));
+        break;
+      case KIND_CHAR:
+        writer.writeChar(writeAccessor.getChar(object));
+        break;
+      case KIND_NULL:
+        writer.writeNull();
+        break;
+      default:
+        throw new AssertionError(writeKindId);
+    }
+    return true;
+  }
+
   private boolean writeStringObject(StringJsonWriter writer, Object object, int index) {
     Object value = writeAccessor.getObject(object);
     if (value == null && !writeNull()) {
       return omitNullValue();
+    }
+    if (omitEmpty() && isEmpty(value, writeTypeInfo, writer)) {
+      return false;
     }
     writer.writeFieldName(this, index);
     writeTypeInfo.stringWriter().writeString(writer, value);
@@ -1292,6 +1926,35 @@ public final class JsonFieldInfo {
     }
   }
 
+  private boolean writeStringLongAsString(StringJsonWriter writer, Object object, int index) {
+    Long value = (Long) writeAccessor.getObject(object);
+    if (value == null && !writeNull()) {
+      return omitNullValue();
+    }
+    if (value == null) {
+      writer.writeFieldName(this, index);
+      writer.writeNull();
+    } else {
+      writer.writeLongAsStringField(
+          stringNamePrefix, stringCommaNamePrefix, index, value.longValue());
+    }
+    return true;
+  }
+
+  private boolean writeStringBooleanAsString(StringJsonWriter writer, Object object, int index) {
+    Boolean value = (Boolean) writeAccessor.getObject(object);
+    if (value == null && !writeNull()) {
+      return omitNullValue();
+    }
+    writer.writeFieldName(this, index);
+    if (value == null) {
+      writer.writeNull();
+    } else {
+      writer.writeBooleanAsString(value.booleanValue());
+    }
+    return true;
+  }
+
   private boolean writeUtf8Scalar(Utf8JsonWriter writer, Object object, int index) {
     Object value = writeAccessor.getObject(object);
     if (value == null && !writeNull()) {
@@ -1328,10 +1991,41 @@ public final class JsonFieldInfo {
     }
   }
 
+  private boolean writeUtf8LongAsString(Utf8JsonWriter writer, Object object, int index) {
+    Long value = (Long) writeAccessor.getObject(object);
+    if (value == null && !writeNull()) {
+      return omitNullValue();
+    }
+    if (value == null) {
+      writer.writeFieldName(this, index);
+      writer.writeNull();
+    } else {
+      writer.writeLongAsStringField(utf8NamePrefix, utf8CommaNamePrefix, index, value.longValue());
+    }
+    return true;
+  }
+
+  private boolean writeUtf8BooleanAsString(Utf8JsonWriter writer, Object object, int index) {
+    Boolean value = (Boolean) writeAccessor.getObject(object);
+    if (value == null && !writeNull()) {
+      return omitNullValue();
+    }
+    writer.writeFieldName(this, index);
+    if (value == null) {
+      writer.writeNull();
+    } else {
+      writer.writeBooleanAsString(value.booleanValue());
+    }
+    return true;
+  }
+
   private boolean writeStringText(StringJsonWriter writer, Object object, int index) {
     String value = (String) writeAccessor.getObject(object);
     if (value == null && !writeNull()) {
       return omitNullValue();
+    }
+    if (omitEmpty() && value != null && value.isEmpty()) {
+      return false;
     }
     if (value == null) {
       writer.writeFieldName(this, index);
@@ -1347,6 +2041,9 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
+    if (omitEmpty() && value != null && value.isEmpty()) {
+      return false;
+    }
     writer.writeFieldName(this, index);
     if (value == null) {
       writer.writeNull();
@@ -1360,6 +2057,9 @@ public final class JsonFieldInfo {
     Enum<?> value = (Enum<?>) writeAccessor.getObject(object);
     if (value == null && !writeNull()) {
       return omitNullValue();
+    }
+    if (omitEmpty() && isEmpty(value, writeTypeInfo, writer)) {
+      return false;
     }
     if (value == null) {
       writer.writeFieldName(this, index);
@@ -1376,6 +2076,9 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
+    if (omitEmpty() && value != null && Array.getLength(value) == 0) {
+      return false;
+    }
     // Field metadata owns omission only. Once present, the registered codec owns null semantics.
     writer.writeFieldName(this, index);
     writeTypeInfo.stringWriter().writeString(writer, value);
@@ -1387,6 +2090,9 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
+    if (omitEmpty() && value != null && value.isEmpty()) {
+      return false;
+    }
     writer.writeFieldName(this, index);
     writeTypeInfo.stringWriter().writeString(writer, value);
     return true;
@@ -1397,6 +2103,9 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
+    if (omitEmpty() && value != null && value.isEmpty()) {
+      return false;
+    }
     writer.writeFieldName(this, index);
     writeTypeInfo.stringWriter().writeString(writer, value);
     return true;
@@ -1406,6 +2115,9 @@ public final class JsonFieldInfo {
     Object value = writeAccessor.getObject(object);
     if (value == null && !writeNull()) {
       return omitNullValue();
+    }
+    if (omitEmpty() && isEmpty(value, writeTypeInfo, writer)) {
+      return false;
     }
     writer.writeFieldName(this, index);
     writeTypeInfo.stringWriter().writeString(writer, value);
@@ -1487,6 +2199,9 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
+    if (omitEmpty() && isEmpty(value, writeTypeInfo, writer)) {
+      return false;
+    }
     writer.writeFieldName(this, index);
     writeTypeInfo.utf8Writer().writeUtf8(writer, value);
     return true;
@@ -1506,6 +2221,9 @@ public final class JsonFieldInfo {
     String value = (String) writeAccessor.getObject(object);
     if (value == null && !writeNull()) {
       return omitNullValue();
+    }
+    if (omitEmpty() && value != null && value.isEmpty()) {
+      return false;
     }
     if (value == null) {
       writer.writeFieldName(this, index);
@@ -1534,6 +2252,9 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
+    if (omitEmpty() && value != null && value.isEmpty()) {
+      return false;
+    }
     writer.writeFieldName(this, index);
     if (value == null) {
       writer.writeNull();
@@ -1547,6 +2268,9 @@ public final class JsonFieldInfo {
     Enum<?> value = (Enum<?>) writeAccessor.getObject(object);
     if (value == null && !writeNull()) {
       return omitNullValue();
+    }
+    if (omitEmpty() && isEmpty(value, writeTypeInfo, writer)) {
+      return false;
     }
     if (value == null) {
       writer.writeFieldName(this, index);
@@ -1562,6 +2286,9 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
+    if (omitEmpty() && value != null && Array.getLength(value) == 0) {
+      return false;
+    }
     // Field metadata owns omission only. Once present, the registered codec owns null semantics.
     writer.writeFieldName(this, index);
     writeTypeInfo.utf8Writer().writeUtf8(writer, value);
@@ -1573,6 +2300,9 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
+    if (omitEmpty() && value != null && value.isEmpty()) {
+      return false;
+    }
     writer.writeFieldName(this, index);
     writeTypeInfo.utf8Writer().writeUtf8(writer, value);
     return true;
@@ -1583,6 +2313,9 @@ public final class JsonFieldInfo {
     if (value == null && !writeNull()) {
       return omitNullValue();
     }
+    if (omitEmpty() && value != null && value.isEmpty()) {
+      return false;
+    }
     writer.writeFieldName(this, index);
     writeTypeInfo.utf8Writer().writeUtf8(writer, value);
     return true;
@@ -1592,6 +2325,9 @@ public final class JsonFieldInfo {
     Object value = writeAccessor.getObject(object);
     if (value == null && !writeNull()) {
       return omitNullValue();
+    }
+    if (omitEmpty() && isEmpty(value, writeTypeInfo, writer)) {
+      return false;
     }
     writer.writeFieldName(this, index);
     writeTypeInfo.utf8Writer().writeUtf8(writer, value);
@@ -1687,22 +2423,22 @@ public final class JsonFieldInfo {
     return rawType == Object.class ? null : rawType;
   }
 
-  private static byte[][] enumValues(Class<?> enumType) {
+  private byte[][] enumValues(Class<?> enumType) {
     Object[] constants = enumType.getEnumConstants();
     byte[][] values = new byte[constants.length][];
     for (Object constant : constants) {
       Enum<?> enumValue = (Enum<?>) constant;
-      values[enumValue.ordinal()] = JsonStringEscaper.utf8Value(enumValue.name());
+      values[enumValue.ordinal()] = JsonStringEscaper.utf8Value(enumValue.name(), escapeNonAscii);
     }
     return values;
   }
 
-  private static byte[][] stringEnumValues(Class<?> enumType) {
+  private byte[][] stringEnumValues(Class<?> enumType) {
     Object[] constants = enumType.getEnumConstants();
     byte[][] values = new byte[constants.length][];
     for (Object constant : constants) {
       Enum<?> enumValue = (Enum<?>) constant;
-      values[enumValue.ordinal()] = JsonStringEscaper.stringValue(enumValue.name());
+      values[enumValue.ordinal()] = JsonStringEscaper.stringValue(enumValue.name(), escapeNonAscii);
     }
     return values;
   }

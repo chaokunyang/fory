@@ -45,10 +45,10 @@ import org.apache.fory.reflect.TypeRef;
  * per-path maps to reconcile on the hot path.
  *
  * <p>{@link JsonTypeResolver} owns canonical exact raw-class {@link ObjectCodec} identity and the
- * corresponding stable metadata owner. This binding stores only installed capabilities; custom
- * codecs, parameterized object bindings, containers, scalars, and dynamic {@code Object} bindings
- * retain their original semantic owner. Each complete capability is installed in its own
- * independently lazy slot.
+ * corresponding stable metadata owner. This binding stores installed capabilities; custom codecs,
+ * parameterized object bindings, containers, scalars, and dynamic {@code Object} bindings retain
+ * their original semantic owner. Each complete capability is installed in its own independently
+ * lazy slot.
  */
 public final class JsonTypeInfo {
   private final TypeRef<?> typeRef;
@@ -60,6 +60,8 @@ public final class JsonTypeInfo {
   private final UnboxedValueCodec unboxedValueCodec;
   private final String factoryKey;
   private final Class<?> exactCodecClass;
+  // Generated capabilities specialize I/O only; logical emptiness stays with the selected codec.
+  private final JsonValueCodec<Object> valueCodec;
   private StringWriterCodec<Object> stringWriter;
   private Utf8WriterCodec<Object> utf8Writer;
   private Latin1ReaderCodec<Object> latin1Reader;
@@ -98,6 +100,7 @@ public final class JsonTypeInfo {
     this.annotationCodec = annotationCodec;
     this.factoryKey = factoryKey;
     this.exactCodecClass = exactCodecClass;
+    valueCodec = codec;
     stringWriter = codec;
     utf8Writer = codec;
     latin1Reader = codec;
@@ -121,6 +124,12 @@ public final class JsonTypeInfo {
 
   public JsonFieldKind kind() {
     return kind;
+  }
+
+  /** Returns the selected complete codec for representation-independent value operations. */
+  @Internal
+  public JsonValueCodec<Object> valueCodec() {
+    return valueCodec;
   }
 
   /** Returns whether this exact declared occurrence rejects a JSON or Java {@code null}. */

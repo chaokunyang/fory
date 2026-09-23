@@ -30,6 +30,7 @@ import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonProperty;
+import org.apache.fory.json.annotation.JsonUnwrapped;
 import org.apache.fory.json.codec.AbstractJsonValueCodec;
 import org.apache.fory.json.codec.JsonObjectModel;
 import org.apache.fory.json.codec.TransparentNullCodec;
@@ -52,6 +53,52 @@ public class JsonCreatorTest extends ForyJsonTestModels {
   @Factory(dataProvider = "enableCodegen")
   public JsonCreatorTest(boolean codegen) {
     super(codegen);
+  }
+
+  @Test
+  public void requiredProperties() {
+    ForyJson strict = newJsonBuilder().failOnMissingRequiredProperties(true).build();
+    ForyJson lenient = newJsonBuilder().failOnMissingRequiredProperties(false).build();
+    for (String text :
+        new String[] {"{}", "{\"id\":0}", "{\"name\":\"中\"}", "{\"unknown\":1,\"name\":\"ok\"}"}) {
+      assertThrows(ForyJsonException.class, () -> strict.fromJson(text, User.class));
+      assertThrows(
+          ForyJsonException.class,
+          () -> strict.fromJson(text.getBytes(StandardCharsets.UTF_8), User.class));
+      assertEquals(lenient.fromJson("{}", User.class).id, 0L);
+      assertEquals(lenient.fromJson("{}".getBytes(StandardCharsets.UTF_8), User.class).name, null);
+    }
+    for (String text :
+        new String[] {
+          "{\"id\":0,\"name\":null}",
+          "{\"name\":\"中\",\"id\":0}",
+          "{\"id\":1,\"unknown\":true,\"name\":\"ok\"}"
+        }) {
+      User value = strict.fromJson(text, User.class);
+      User bytes = strict.fromJson(text.getBytes(StandardCharsets.UTF_8), User.class);
+      assertEquals(bytes.id, value.id);
+      assertEquals(bytes.name, value.name);
+    }
+    String factoryText = "{\"user_id\":0,\"display_name\":null}";
+    assertEquals(strict.fromJson(factoryText, FactoryUser.class).id, 0L);
+    assertThrows(ForyJsonException.class, () -> strict.fromJson("{}", FactoryUser.class));
+    assertEquals(strict.fromJson("{\"id\":0}", ContainerCreator.class).values, null);
+    assertThrows(ForyJsonException.class, () -> strict.fromJson("{}", ContainerCreator.class));
+    assertEquals(strict.fromJson("{}", InitializedBean.class).value, 7);
+  }
+
+  @Test
+  public void requiredUnwrappedProperties() {
+    ForyJson json = newJsonBuilder().failOnMissingRequiredProperties(true).build();
+    for (String text : new String[] {"{}", "{\"id\":1}"}) {
+      assertThrows(ForyJsonException.class, () -> json.fromJson(text, UnwrappedCreator.class));
+      assertThrows(
+          ForyJsonException.class,
+          () -> json.fromJson(text.getBytes(StandardCharsets.UTF_8), UnwrappedCreator.class));
+    }
+    UnwrappedCreator value = json.fromJson("{\"id\":1,\"name\":\"中\"}", UnwrappedCreator.class);
+    assertEquals(value.user.name, "中");
+    assertEquals(json.fromJson(json.toPrettyJsonBytes(value), UnwrappedCreator.class).user.id, 1L);
   }
 
   @Test
@@ -88,6 +135,7 @@ public class JsonCreatorTest extends ForyJsonTestModels {
             DeferredCarrierOwner.class.getConstructor(String.class),
             new JsonCreatorFieldInfo[] {deferred},
             new Object[1],
+            null,
             null);
     creator.resolveTypes(resolver);
   }
@@ -233,6 +281,61 @@ public class JsonCreatorTest extends ForyJsonTestModels {
         json.fromJson("{\"unknown\":\"值\",\"abcTwo\":6,\"abcOne\":5}", PrefixCreator.class);
     assertEquals(utf16.abcOne, 5);
     assertEquals(utf16.abcTwo, 6);
+  }
+
+  @Test
+  public void creatorHashCollisions() {
+    ForyJson json = newJson();
+    // Decoded names collide in two table slots. Escapes exercise generated hash fallback.
+    String input =
+        "{\"\\u0041\":3,\"\\u0051\":null,\"\\u0061q\":4,\"\\u0061Q\":5,\"\\u0061\":2,\"\\u0071\":1}";
+    HashCreator latin1 = json.fromJson(input, HashCreator.class);
+    HashCreator utf8 = json.fromJson(input.getBytes(StandardCharsets.UTF_8), HashCreator.class);
+    HashCreator utf16 = json.fromJson(input.replace("null", "\"值\""), HashCreator.class);
+    for (HashCreator value : new HashCreator[] {latin1, utf8, utf16}) {
+      assertEquals(value.q, 1);
+      assertEquals(value.a, 2);
+      assertEquals(value.upper, 3);
+      assertEquals(value.aq, 4);
+      assertEquals(value.aQ, 5);
+    }
+  }
+
+  @Test
+  public void creatorFieldWhitespace() {
+    ForyJson json = newJson();
+    for (String space : new String[] {"", " ", "\n  ", "\t", "\r\n"}) {
+      String input =
+          "{" + space + "\"id\"" + space + ": 7," + space + "\"name\"" + space + ":\"alice\"}";
+      User value = json.fromJson(input.getBytes(StandardCharsets.UTF_8), User.class);
+      assertEquals(value.id, 7L);
+      assertEquals(value.name, "alice");
+      PrefixCreator prefix =
+          json.fromJson(
+              ("{" + space + "\"abcOne\"" + space + ":3," + space + "\"abcTwo\"" + space + ":4}")
+                  .getBytes(StandardCharsets.UTF_8),
+              PrefixCreator.class);
+      assertEquals(prefix.abcOne, 3);
+      assertEquals(prefix.abcTwo, 4);
+    }
+    for (String input :
+        new String[] {
+          "{ \"id\" : 7, \"unknown\" : [1,{\"value\":2}], \"name\" : \"alice\"}",
+          "{ \"name\" : \"alice\", \"id\" : 7}",
+          "{ \"id\" : 1, \"name\" : \"alice\", \"id\" : 7}",
+          "{ \"i\\u0064\" : 7, \"name\" : \"alice\"}"
+        }) {
+      User value = json.fromJson(input.getBytes(StandardCharsets.UTF_8), User.class);
+      assertEquals(value.id, 7L);
+      assertEquals(value.name, "alice");
+    }
+    for (String input : new String[] {"{ \"id\" 7}", "{ \"id\" : null}", "{ \"id\" : 7, "}) {
+      assertThrows(
+          ForyJsonException.class,
+          () -> json.fromJson(input.getBytes(StandardCharsets.UTF_8), User.class));
+      assertEquals(
+          json.fromJson("{ \"id\" : 9}".getBytes(StandardCharsets.UTF_8), User.class).id, 9L);
+    }
   }
 
   @Test
@@ -392,6 +495,30 @@ public class JsonCreatorTest extends ForyJsonTestModels {
     }
   }
 
+  public static final class ContainerCreator {
+    public final int id;
+    public final java.util.List<String> values;
+
+    @JsonCreator({"id", "values"})
+    public ContainerCreator(int id, java.util.List<String> values) {
+      this.id = id;
+      this.values = values;
+    }
+  }
+
+  public static final class InitializedBean {
+    public int value = 7;
+  }
+
+  public static final class UnwrappedCreator {
+    @JsonUnwrapped public final User user;
+
+    @JsonCreator({"user"})
+    public UnwrappedCreator(User user) {
+      this.user = user;
+    }
+  }
+
   public static final class PrefixCreator {
     public final int abcOne;
     public final int abcTwo;
@@ -400,6 +527,26 @@ public class JsonCreatorTest extends ForyJsonTestModels {
     public PrefixCreator(int abcOne, int abcTwo) {
       this.abcOne = abcOne;
       this.abcTwo = abcTwo;
+    }
+  }
+
+  public static final class HashCreator {
+    public final int q;
+    public final int a;
+
+    @JsonProperty("A")
+    public final int upper;
+
+    public final int aq;
+    public final int aQ;
+
+    @JsonCreator({"q", "a", "upper", "aq", "aQ"})
+    public HashCreator(int q, int a, int upper, int aq, int aQ) {
+      this.q = q;
+      this.a = a;
+      this.upper = upper;
+      this.aq = aq;
+      this.aQ = aQ;
     }
   }
 

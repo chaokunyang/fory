@@ -209,6 +209,11 @@ export class MapAnySerializer {
         this.valueSerializer !== null
           ? this.valueSerializer
           : this.writeContext.typeResolver.getSerializerByData(v);
+      this.writeContext.writer.reserve(
+        (keySerializer ? keySerializer.fixedSize : 1) +
+          (valueSerializer ? valueSerializer.fixedSize : 1) +
+          2,
+      );
 
       const header = mapChunkWriter.next(
         new ElementInfo(
@@ -392,8 +397,10 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
   }
 
   private useDeclaredType(typeInfo: TypeInfo) {
-    const readWriteTypeInfo =
-      this.builder.resolver.getSerializerByTypeInfo(typeInfo)?.getTypeInfo() ?? typeInfo;
+    const serializer = this.builder.resolver.getSerializerByTypeInfo(typeInfo);
+    // Forward registrations expose a placeholder whose metadata is unavailable until the codec
+    // is registered. Keep the declared schema until that serializer is initialized.
+    const readWriteTypeInfo = serializer?._initialized ? serializer.getTypeInfo() : typeInfo;
     // Evolving structs need per-chunk TypeInfo so a compatible reader can discard a removed map
     // field. A fixed-schema serializer deliberately keeps the declared form: evolving=false is its
     // same-schema size and speed opt-out, even when the field declaration is only a placeholder.
@@ -421,6 +428,9 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
 
     return `
       ${this.builder.writer.writeVarUint32Small7(`${accessor}.size`)}
+      ${this.builder.writer.reserve(
+        `${this.keyGenerator.getFixedSize() + this.valueGenerator.getFixedSize() + 2} * ${accessor}.size`,
+      )};
       let ${lastKeyIsNull} = false;
       let ${lastValueIsNull} = false;
       let ${chunkSize} = 0;

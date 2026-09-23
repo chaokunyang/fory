@@ -346,7 +346,7 @@ impl ForyBuilder {
         self
     }
 
-    /// Sets the maximum accepted remote metadata versions for one logical type.
+    /// Sets the maximum cached remote metadata versions for one logical type.
     pub fn max_schema_versions_per_type(mut self, max_versions: usize) -> Self {
         assert!(
             max_versions > 0,
@@ -360,7 +360,7 @@ impl ForyBuilder {
         self
     }
 
-    /// Sets the maximum accepted average remote metadata versions across logical types.
+    /// Sets the maximum cached average remote metadata versions across logical types.
     pub fn max_average_schema_versions_per_type(mut self, max_versions: usize) -> Self {
         assert!(
             max_versions > 0,
@@ -449,6 +449,14 @@ pub struct Fory {
     /// the instance id and resolver snapshot, not the cold limit values.
     config: Config,
 }
+
+// Safety: Fory is the only cross-thread owner of its resolvers. Registration requires exclusive
+// access, and root operations permanently freeze the registry before the finalized resolver is
+// shared. Fory never exposes the Rc values in either resolver. Each thread deep-clones the
+// finalized resolver into thread-local contexts, so Rc counts and mutable context state remain
+// confined to one thread.
+unsafe impl Send for Fory {}
+unsafe impl Sync for Fory {}
 
 impl Default for Fory {
     fn default() -> Self {

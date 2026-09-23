@@ -904,7 +904,7 @@ func TestRemoteTypeKeyLimit(t *testing.T) {
 		false,
 		nil,
 	)
-	key, err := f.typeResolver.checkRemoteTypeDefLimit(last)
+	key, err := f.typeResolver.remoteTypeDefCacheKey(last)
 	require.NoError(t, err)
 	f.typeResolver.recordRemoteTypeDef(key)
 	require.Len(t, f.typeResolver.remoteSchemaVersionsByType, maxRemoteTypeKeys)
@@ -921,14 +921,14 @@ func TestRemoteTypeKeyLimit(t *testing.T) {
 		false,
 		nil,
 	)
-	_, err = f.typeResolver.checkRemoteTypeDefLimit(extra)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "remote logical type limit")
+	key, err = f.typeResolver.remoteTypeDefCacheKey(extra)
+	require.NoError(t, err)
+	require.Nil(t, key)
 	require.Len(t, f.typeResolver.remoteSchemaVersionsByType, beforeCount)
 	require.Equal(t, beforeTotal, f.typeResolver.totalAcceptedSchemaVersions)
 
 	existing := NewTypeDef(uint32(STRUCT), 0, nil, nil, false, false, nil)
-	_, err = f.typeResolver.checkRemoteTypeDefLimit(existing)
+	_, err = f.typeResolver.remoteTypeDefCacheKey(existing)
 	require.NoError(t, err)
 }
 

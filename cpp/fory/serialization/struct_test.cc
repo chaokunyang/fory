@@ -146,6 +146,20 @@ struct MaximumFieldTagStruct {
   FORY_STRUCT(MaximumFieldTagStruct, (value, fory::F(536870911)));
 };
 
+struct HighTagCompatibleWriter {
+  std::string removed;
+  int32_t shared;
+
+  FORY_STRUCT(HighTagCompatibleWriter, (removed, fory::F(65551)),
+              (shared, fory::F(536870911)));
+};
+
+struct HighTagCompatibleReader {
+  int32_t shared = 0;
+
+  FORY_STRUCT(HighTagCompatibleReader, (shared, fory::F(536870911)));
+};
+
 struct SignedToUnsignedWriter {
   int32_t value;
 
@@ -342,6 +356,13 @@ struct StringTestStruct {
            long_text == other.long_text;
   }
   FORY_STRUCT(StringTestStruct, empty, ascii, utf8, long_text);
+};
+
+struct HybridVarintStruct {
+  int32_t value;
+  std::string text;
+
+  FORY_STRUCT(HybridVarintStruct, value, text);
 };
 
 // Nested structs
@@ -1021,6 +1042,21 @@ TEST(StructComprehensiveTest, SceneMultipleNested) {
   test_roundtrip(Scene{{0, 0, 10}, {100, 100, 200}, {{0, 0}, {800, 600}}});
 }
 
+TEST(StructComprehensiveTest, HybridVarintReservesPhysicalStore) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  WriteContext write_ctx(fory.config(), fory.type_resolver().clone());
+  std::array<uint8_t, 8> storage{};
+  write_ctx.buffer() = Buffer(storage.data(), 5, false);
+
+  HybridVarintStruct value{std::numeric_limits<int32_t>::min(), "x"};
+  detail::write_struct_fields_impl(value, write_ctx,
+                                   std::make_index_sequence<2>{}, false);
+
+  EXPECT_FALSE(write_ctx.has_error());
+  EXPECT_NE(write_ctx.buffer().data(), storage.data());
+}
+
 TEST(StructComprehensiveTest, VectorStructEmpty) {
   test_roundtrip(VectorStruct{{}, {}, {}});
 }
@@ -1403,6 +1439,12 @@ TEST(StructComprehensiveTest, FieldTagRange) {
   invalid.field_id = 536870912;
   EXPECT_FALSE(invalid.to_bytes().ok());
 
+  Buffer invalid_wire;
+  invalid_wire.write_uint8(static_cast<uint8_t>((3u << 6) | (15u << 2)));
+  invalid_wire.write_var_uint32(536870912u - 15u);
+  invalid_wire.write_uint8(static_cast<uint8_t>(TypeId::INT32));
+  EXPECT_FALSE(FieldInfo::from_bytes(invalid_wire).ok());
+
   TypeMeta duplicate;
   duplicate.type_id = static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT);
   duplicate.user_type_id = 632;
@@ -1410,6 +1452,21 @@ TEST(StructComprehensiveTest, FieldTagRange) {
       make_test_field_info("first", 7, make_test_field_type(TypeId::INT32)),
       make_test_field_info("second", 7, make_test_field_type(TypeId::INT32))};
   EXPECT_FALSE(duplicate.to_bytes().ok());
+}
+
+TEST(StructComprehensiveTest, CompatibleHighTagsRead) {
+  auto writer =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  auto reader =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(writer.register_struct<HighTagCompatibleWriter>(633).ok());
+  ASSERT_TRUE(reader.register_struct<HighTagCompatibleReader>(633).ok());
+
+  auto encoded = writer.serialize(HighTagCompatibleWriter{"skip", 42});
+  ASSERT_TRUE(encoded.ok()) << encoded.error().to_string();
+  auto decoded = reader.deserialize<HighTagCompatibleReader>(*encoded);
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded->shared, 42);
 }
 
 TEST(StructComprehensiveTest, NonPrimitiveFieldsSortByFieldIdentifier) {

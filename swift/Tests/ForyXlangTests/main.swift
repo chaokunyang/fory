@@ -60,6 +60,16 @@ private struct SimpleStruct {
 }
 
 @ForyStruct
+private struct ExactFieldTags {
+    @ForyField(id: 15)
+    var first: Int32 = 0
+    @ForyField(id: 65551)
+    var second: Int32 = 0
+    @ForyField(id: 536870911)
+    var last: Int32 = 0
+}
+
+@ForyStruct
 private struct EvolvingOverrideStruct {
     var f1: String = ""
 }
@@ -695,6 +705,12 @@ private func handleSimpleStruct(_ bytes: [UInt8]) throws -> [UInt8] {
     return try roundTripSingle(bytes, fory: fory, as: SimpleStruct.self)
 }
 
+private func handleExactFieldTags(_ bytes: [UInt8]) throws -> [UInt8] {
+    let fory = Fory(config: .init(trackRef: false, compatible: false))
+    try fory.register(ExactFieldTags.self, id: 104)
+    return try roundTripSingle(bytes, fory: fory, as: ExactFieldTags.self)
+}
+
 private func handleNamedSimpleStruct(_ bytes: [UInt8]) throws -> [UInt8] {
     let fory = Fory(config: .init(trackRef: false, compatible: true))
     try fory.register(PeerColor.self, name: "demo.color")
@@ -1168,6 +1184,8 @@ private func rewritePayload(caseName: String, bytes: [UInt8]) throws -> [UInt8] 
         return try handleCrossLanguageSerializer(bytes)
     case "test_simple_struct":
         return try handleSimpleStruct(bytes)
+    case "test_exact_field_tags":
+        return try handleExactFieldTags(bytes)
     case "test_named_simple_struct":
         return try handleNamedSimpleStruct(bytes)
     case "test_struct_evolving_override":

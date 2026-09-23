@@ -23,6 +23,7 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNotSame;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
@@ -51,6 +52,7 @@ import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import org.apache.fory.json.ForyJson;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
 import org.apache.fory.json.meta.JsonAnySetterAccessor;
 import org.apache.fory.json.meta.JsonFieldAccessor;
@@ -278,6 +280,21 @@ public class JsonTypeProcessorTest {
       Object decoded = json.fromJson(text, target);
       assertEquals(target.getMethod("id").invoke(decoded), 9);
       assertEquals(target.getMethod("name").invoke(decoded), "record");
+      ForyJson strict =
+          ForyJson.builder()
+              .withCodegen(codegen)
+              .withAsyncCompilation(false)
+              .withClassLoader(loader)
+              .registerMixin(mixin)
+              .failOnMissingRequiredProperties(true)
+              .build();
+      assertThrows(ForyJsonException.class, () -> strict.fromJson("{}", target));
+      assertThrows(
+          ForyJsonException.class,
+          () -> strict.fromJson("{\"user_id\":9}".getBytes(StandardCharsets.UTF_8), target));
+      assertEquals(strict.fromJson(text, target), value);
+      assertEquals(strict.fromJson(strict.toPrettyJsonBytes(value), target), value);
+      assertEquals(target.getMethod("id").invoke(json.fromJson("{}", target)), 0);
     }
   }
 
@@ -504,6 +521,168 @@ public class JsonTypeProcessorTest {
     assertFalse(rules.contains("test.Plain_ForyJsonCodec$Factory"), rules);
     assertFalse(rules.contains("-keep,allowoptimization,allowobfuscation class test.Plain"), rules);
     assertTrue(result.hasGeneratedSource("test/Plain_ForyJsonCodec.java"));
+  }
+
+  @Test
+  public void generatedInclusion() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.InclusionModel",
+            "package test;\n"
+                + "import java.util.List;\n"
+                + "import java.util.Collections;\n"
+                + "import org.apache.fory.json.annotation.JsonProperty;\n"
+                + "import org.apache.fory.json.annotation.JsonType;\n"
+                + "@JsonType public final class InclusionModel {\n"
+                + "  @JsonProperty(include = JsonProperty.Include.NON_EMPTY)\n"
+                + "  public List<String> items = Collections.emptyList();\n"
+                + "  public String name = \"\";\n"
+                + "}\n");
+    assertTrue(result.success, result.diagnostics());
+    ClassLoader loader = result.classLoader();
+    Class<?> type = loader.loadClass("test.InclusionModel");
+    GeneratedJsonCodec<?> codec = generatedCodec(loader, "test.InclusionModel_ForyJsonCodec");
+    Object value = type.getConstructor().newInstance();
+    assertEquals(
+        fieldAccessor(codec.fieldAccessors(), "items").getObject(value), Collections.emptyList());
+    for (boolean codegen : new boolean[] {false, true}) {
+      ForyJson json =
+          ForyJson.builder()
+              .withClassLoader(loader)
+              .withCodegen(codegen)
+              .withAsyncCompilation(false)
+              .build();
+      assertEquals(json.toJson(value), "{\"name\":\"\"}");
+      assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), "{\"name\":\"\"}");
+    }
+  }
+
+  @Test
+  public void defaultInclusion() throws Exception {
+    for (boolean mixin : new boolean[] {false, true}) {
+      String authorization = "@JsonInclude(JsonProperty.Include.NON_DEFAULT) ";
+      CompilationResult result =
+          compile(
+              "test.DefaultModel",
+              "package test;\nimport org.apache.fory.json.annotation.*;\n"
+                  + (mixin ? "" : "@JsonType " + authorization)
+                  + "public class DefaultModel {\n"
+                  + "  public static int calls;\n"
+                  + "  public int number = 3;\n"
+                  + "  private String text = \"default\";\n"
+                  + "  @JsonProperty(include=JsonProperty.Include.ALWAYS) public int retained = 7;\n"
+                  + "  public DefaultModel() { calls++; }\n"
+                  + "  public String getText() { return text; }\n"
+                  + "  public void setText(String value) { text = value; }\n"
+                  + "}\n"
+                  + (mixin
+                      ? "@JsonMixin(target=DefaultModel.class) "
+                          + authorization
+                          + "abstract class DefaultMixin {}\n"
+                      : ""));
+      assertTrue(result.success, result.diagnostics());
+      ClassLoader loader = result.classLoader();
+      Class<?> type = loader.loadClass("test.DefaultModel");
+      String companion =
+          mixin
+              ? "test.DefaultMixin_ForyJsonMixin_test_x2e_DefaultModel_ForyJsonCodec"
+              : "test.DefaultModel_ForyJsonCodec";
+      GeneratedJsonCodec<?> codec = generatedCodec(loader, companion);
+      Object value = type.getConstructor().newInstance();
+      assertEquals(methodAccessor(codec.fieldAccessors(), "getText").getObject(value), "default");
+      String rules =
+          result.generatedResource(
+              (mixin ? MIXIN_RULE_PREFIX : RULE_PREFIX)
+                  + (mixin ? "test.DefaultMixin.pro" : "test.DefaultModel.pro"));
+      assertTrue(rules.contains("<init>();"), rules);
+      assertTrue(rules.contains("java.lang.String getText();"), rules);
+      assertTrue(rules.contains("@interface org.apache.fory.json.annotation.JsonInclude"), rules);
+      for (boolean codegen : new boolean[] {false, true}) {
+        org.apache.fory.json.ForyJsonBuilder builder =
+            ForyJson.builder()
+                .withClassLoader(loader)
+                .withCodegen(codegen)
+                .withAsyncCompilation(false);
+        if (mixin) {
+          builder.registerMixin(loader.loadClass("test.DefaultMixin"));
+        }
+        ForyJson json = builder.build();
+        int calls = type.getField("calls").getInt(null);
+        assertEquals(json.toJson(value), "{\"retained\":7}");
+        assertEquals(
+            new String(json.toJsonBytes(value), StandardCharsets.UTF_8), "{\"retained\":7}");
+        assertEquals(json.toPrettyJson(value), "{\n  \"retained\" : 7\n}");
+        assertEquals(
+            new String(json.toPrettyJsonBytes(value), StandardCharsets.UTF_8),
+            json.toPrettyJson(value));
+        assertEquals(type.getField("calls").getInt(null), calls + 1);
+        Object decoded = json.fromJson("{}", type);
+        assertEquals(type.getMethod("getText").invoke(decoded), "default");
+      }
+    }
+  }
+
+  @Test
+  public void requiredInclusion() throws Exception {
+    for (boolean mixin : new boolean[] {false, true}) {
+      String inclusion = "@JsonInclude(JsonProperty.Include.NON_DEFAULT) ";
+      CompilationResult result =
+          compile(
+              "test.RequiredModel",
+              "package test;\nimport org.apache.fory.json.annotation.*;\n"
+                  + (mixin ? "" : "@JsonType " + inclusion)
+                  + "public class RequiredModel {\n"
+                  + "  public static int calls;\n"
+                  + "  public final int count;\n"
+                  + "  public final String label;\n"
+                  + "  public RequiredModel() { this(3, \"default\"); }\n"
+                  + "  @JsonCreator public RequiredModel(@JsonProperty(\"count\") int count, "
+                  + "@JsonProperty(\"label\") String label) {\n"
+                  + "    calls++; this.count = count; this.label = label;\n  }\n}\n"
+                  + (mixin
+                      ? "@JsonMixin(target=RequiredModel.class) "
+                          + inclusion
+                          + "abstract class RequiredMixin {}\n"
+                      : ""));
+      assertTrue(result.success, result.diagnostics());
+      ClassLoader loader = result.classLoader();
+      Class<?> type = loader.loadClass("test.RequiredModel");
+      GeneratedJsonCodec<?> codec =
+          generatedCodec(
+              loader,
+              mixin
+                  ? "test.RequiredMixin_ForyJsonMixin_test_x2e_RequiredModel_ForyJsonCodec"
+                  : "test.RequiredModel_ForyJsonCodec");
+      Object value = type.getConstructor(int.class, String.class).newInstance(0, null);
+      assertEquals(fieldAccessor(codec.fieldAccessors(), "count").getInt(value), 0);
+      for (boolean codegen : new boolean[] {false, true}) {
+        org.apache.fory.json.ForyJsonBuilder builder =
+            ForyJson.builder()
+                .withClassLoader(loader)
+                .withCodegen(codegen)
+                .withAsyncCompilation(false);
+        if (mixin) {
+          builder.registerMixin(loader.loadClass("test.RequiredMixin"));
+        }
+        ForyJson json = builder.build();
+        int calls = type.getField("calls").getInt(null);
+        String compact = "{\"count\":0,\"label\":null}";
+        String pretty = "{\n  \"count\" : 0,\n  \"label\" : null\n}";
+        assertEquals(json.toJson(value), compact);
+        assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), compact);
+        assertEquals(json.toPrettyJson(value), pretty);
+        assertEquals(new String(json.toPrettyJsonBytes(value), StandardCharsets.UTF_8), pretty);
+        assertEquals(type.getField("calls").getInt(null), calls);
+        for (Object decoded :
+            new Object[] {
+              json.fromJson(compact, type),
+              json.fromJson(pretty.getBytes(StandardCharsets.UTF_8), type)
+            }) {
+          assertEquals(type.getField("count").getInt(decoded), 0);
+          assertEquals(type.getField("label").get(decoded), null);
+        }
+      }
+    }
   }
 
   @Test
@@ -869,6 +1048,89 @@ public class JsonTypeProcessorTest {
   }
 
   @Test
+  public void byteArrayMixinPipeline() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.BinaryTarget",
+            "package test;\n"
+                + "import org.apache.fory.json.annotation.*;\n"
+                + "public final class BinaryTarget { public byte[] value; public byte[] other; }\n"
+                + "@JsonMixin(target = BinaryTarget.class) abstract class BinaryMixin {\n"
+                + "  @JsonByteArray(JsonByteArray.Format.BASE16) byte[] value;\n"
+                + "}\n");
+    assertTrue(result.success, result.diagnostics());
+    String companion = "test.BinaryMixin_ForyJsonMixin_test_x2e_BinaryTarget_ForyJsonCodec";
+    ClassLoader loader = result.classLoader();
+    GeneratedJsonCodec<?> generated = generatedCodec(loader, companion);
+    Class<?> target = loader.loadClass("test.BinaryTarget");
+    Class<?> mixin = loader.loadClass("test.BinaryMixin");
+    byte[] bytes = {1, -2};
+    Object value = target.getConstructor().newInstance();
+    target.getField("value").set(value, bytes);
+    target.getField("other").set(value, bytes);
+    assertEquals(generated.type(), target);
+    assertEquals(fieldAccessor(generated.fieldAccessors(), "value").getObject(value), bytes);
+    String rules = result.generatedResource(MIXIN_RULE_PREFIX + "test.BinaryMixin.pro");
+    assertTrue(
+        rules.contains(
+            "class org.apache.fory.json.codec.Base16ByteArrayCodec { public <init>(); }"),
+        rules);
+    for (boolean codegen : new boolean[] {false, true}) {
+      ForyJson json =
+          ForyJson.builder()
+              .withCodegen(codegen)
+              .withAsyncCompilation(false)
+              .withClassLoader(loader)
+              .registerMixin(mixin)
+              .byteArrayFormat(JsonByteArray.Format.ARRAY)
+              .build();
+      String text = json.toJson(value);
+      assertTrue(text.contains("\"value\":\"01fe\""), text);
+      assertTrue(text.contains("\"other\":[1,-2]"), text);
+      assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), text);
+      Object decoded = json.fromJson(json.toPrettyJsonBytes(value), target);
+      assertEquals(target.getField("value").get(decoded), bytes);
+      assertEquals(target.getField("other").get(decoded), bytes);
+    }
+  }
+
+  @Test
+  public void escapedStringMixinPipeline() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.TextTarget",
+            "package test;\n"
+                + "import org.apache.fory.json.annotation.*;\n"
+                + "public final class TextTarget { public String value; }\n"
+                + "@JsonMixin(target = TextTarget.class) abstract class TextMixin {\n"
+                + "  @JsonProperty(\"café\") String value;\n"
+                + "}\n");
+    assertTrue(result.success, result.diagnostics());
+    ClassLoader loader = result.classLoader();
+    Class<?> target = loader.loadClass("test.TextTarget");
+    Class<?> mixin = loader.loadClass("test.TextMixin");
+    GeneratedJsonCodec<?> generated =
+        generatedCodec(loader, "test.TextMixin_ForyJsonMixin_test_x2e_TextTarget_ForyJsonCodec");
+    Object value = target.getConstructor().newInstance();
+    fieldAccessor(generated.fieldAccessors(), "value").putObject(value, "汉😀");
+    for (boolean codegen : new boolean[] {false, true}) {
+      ForyJson json =
+          ForyJson.builder()
+              .withCodegen(codegen)
+              .withAsyncCompilation(false)
+              .withClassLoader(loader)
+              .registerMixin(mixin)
+              .escapeNonAscii(true)
+              .build();
+      String text = "{\"caf\\u00e9\":\"\\u6c49\\ud83d\\ude00\"}";
+      assertEquals(json.toJson(value), text);
+      assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), text);
+      Object decoded = json.fromJson(json.toPrettyJsonBytes(value), target);
+      assertEquals(fieldAccessor(generated.fieldAccessors(), "value").getObject(decoded), "汉😀");
+    }
+  }
+
+  @Test
   public void encodedRecordPipeline() throws Exception {
     assumeJava16Source();
     CompilationResult result =
@@ -877,7 +1139,7 @@ public class JsonTypeProcessorTest {
             "package test;\n"
                 + "import org.apache.fory.json.annotation.*;\n"
                 + "@JsonType public record EncodedRecord(\n"
-                + "    @JsonRawValue String raw, @JsonBase64 byte[] bytes) {}\n");
+                + "    @JsonRawValue String raw, @JsonByteArray(JsonByteArray.Format.ARRAY) byte[] bytes) {}\n");
     assertTrue(result.success, result.diagnostics());
     ClassLoader loader = result.classLoader();
     Class<?> type = loader.loadClass("test.EncodedRecord");
@@ -885,8 +1147,8 @@ public class JsonTypeProcessorTest {
         type.getConstructor(String.class, byte[].class)
             .newInstance("{\"id\":1}", new byte[] {1, 2, 3});
     for (ForyJson json : jsonRuntimes(loader)) {
-      assertEquals(json.toJson(value), "{\"raw\":{\"id\":1},\"bytes\":\"AQID\"}");
-      Object decoded = json.fromJson("{\"raw\":\"text\",\"bytes\":\"AQI=\"}", type);
+      assertEquals(json.toJson(value), "{\"raw\":{\"id\":1},\"bytes\":[1,2,3]}");
+      Object decoded = json.fromJson("{\"raw\":\"text\",\"bytes\":[1,2]}", type);
       assertEquals(type.getMethod("raw").invoke(decoded), "text");
       assertTrue(
           Arrays.equals((byte[]) type.getMethod("bytes").invoke(decoded), new byte[] {1, 2}));
@@ -902,7 +1164,7 @@ public class JsonTypeProcessorTest {
                 + "import java.util.Arrays;\n"
                 + "import org.apache.fory.json.annotation.*;\n"
                 + "@JsonType public final class EncodedCreator {\n"
-                + "  @JsonBase64 public final byte[] bytes;\n"
+                + "  @JsonByteArray(JsonByteArray.Format.BASE64) public final byte[] bytes;\n"
                 + "  @JsonCreator({\"bytes\"}) public EncodedCreator(byte[] bytes) {\n"
                 + "    this.bytes = bytes;\n"
                 + "  }\n"
@@ -980,6 +1242,45 @@ public class JsonTypeProcessorTest {
       assertEquals(json.toJson(value), "{\"value\":\"2024-01-02 11:04:05 +08:00\"}");
       Object decoded = json.fromJson("{\"value\":\"2024-01-02 12:04:05 +08:00\"}", target);
       assertEquals(target.getField("value").get(decoded), instant.plusSeconds(3600));
+    }
+  }
+
+  @Test
+  public void scalarFormatPipeline() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.ScalarTarget",
+            "package test;\n"
+                + "import org.apache.fory.json.annotation.*;\n"
+                + "public final class ScalarTarget { public boolean expired; public long count = 7; }\n"
+                + "@JsonMixin(target = ScalarTarget.class) abstract class ScalarMixin {\n"
+                + "  @JsonFormat(shape = JsonFormat.Shape.STRING) boolean expired;\n"
+                + "  @JsonFormat(shape = JsonFormat.Shape.STRING) long count;\n"
+                + "}\n");
+    assertTrue(result.success, result.diagnostics());
+    assertTrue(
+        result.hasGeneratedSource(
+            "test/ScalarMixin_ForyJsonMixin_test_x2e_ScalarTarget_ForyJsonCodec.java"));
+    ClassLoader loader = result.classLoader();
+    Class<?> type = loader.loadClass("test.ScalarTarget");
+    Class<?> mixin = loader.loadClass("test.ScalarMixin");
+    Object value = type.getConstructor().newInstance();
+    for (boolean codegen : new boolean[] {false, true}) {
+      ForyJson json =
+          ForyJson.builder()
+              .withClassLoader(loader)
+              .withCodegen(codegen)
+              .withAsyncCompilation(false)
+              .registerMixin(mixin)
+              .build();
+      String expected = "{\"expired\":\"false\",\"count\":\"7\"}";
+      assertEquals(json.toJson(value), expected);
+      assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected);
+      assertEquals(type.getField("count").get(json.fromJson(expected, type)), 7L);
+      assertEquals(
+          type.getField("count")
+              .get(json.fromJson(expected.getBytes(StandardCharsets.UTF_8), type)),
+          7L);
     }
   }
 
@@ -1858,7 +2159,7 @@ public class JsonTypeProcessorTest {
   }
 
   @Test
-  public void valueRawAndBase64Rules() throws Exception {
+  public void valueRawAndByteArrayRules() throws Exception {
     Map<String, String> sources = new LinkedHashMap<>();
     sources.put(
         "test.ValueModel",
@@ -1875,7 +2176,9 @@ public class JsonTypeProcessorTest {
             + "import org.apache.fory.json.annotation.*;\n"
             + "@JsonType public final class RawModel {\n"
             + "  @JsonRawValue public String body;\n"
-            + "  @JsonBase64 public byte[] bytes;\n"
+            + "  @JsonByteArray(JsonByteArray.Format.BASE64) public byte[] bytes;\n"
+            + "  @JsonByteArray(JsonByteArray.Format.ARRAY) public byte[] numbers;\n"
+            + "  @JsonByteArray(JsonByteArray.Format.BASE16) public byte[] hex;\n"
             + "  private String other;\n"
             + "  @JsonRawValue public String getOther() { return other; }\n"
             + "  public void setOther(String other) { this.other = other; }\n"
@@ -1893,6 +2196,14 @@ public class JsonTypeProcessorTest {
         valueRules.contains("@interface org.apache.fory.json.annotation.JsonRawValue"), valueRules);
 
     String rawRules = result.generatedResource(RULE_PREFIX + "test.RawModel.pro");
+    assertTrue(
+        rawRules.contains(
+            "class org.apache.fory.json.codec.Base16ByteArrayCodec { public <init>(); }"),
+        rawRules);
+    assertTrue(
+        rawRules.contains(
+            "class org.apache.fory.json.codec.ArrayCodec$SignedByteArrayCodec { public <init>(); }"),
+        rawRules);
     assertTrue(result.hasGeneratedSource("test/RawModel_ForyJsonCodec.java"));
     assertTrue(rawRules.contains("java.lang.String body;"), rawRules);
     assertTrue(rawRules.contains("byte[] bytes;"), rawRules);
@@ -1900,7 +2211,7 @@ public class JsonTypeProcessorTest {
     assertTrue(
         rawRules.contains("@interface org.apache.fory.json.annotation.JsonRawValue"), rawRules);
     assertTrue(
-        rawRules.contains("@interface org.apache.fory.json.annotation.JsonBase64"), rawRules);
+        rawRules.contains("@interface org.apache.fory.json.annotation.JsonByteArray"), rawRules);
     assertFalse(
         rawRules.contains("@interface org.apache.fory.json.annotation.JsonCodec"), rawRules);
     assertTrue(

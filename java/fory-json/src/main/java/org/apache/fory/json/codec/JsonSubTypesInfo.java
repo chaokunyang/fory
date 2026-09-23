@@ -47,7 +47,11 @@ public final class JsonSubTypesInfo {
    */
   @Internal
   public JsonSubTypesInfo(
-      Inclusion inclusion, String property, Class<?>[] classes, String[] names) {
+      Inclusion inclusion,
+      String property,
+      Class<?>[] classes,
+      String[] names,
+      boolean escapeNonAscii) {
     this.inclusion = inclusion;
     this.classes = classes;
     scanInfo = new JsonSubtypeScanInfo(property, names);
@@ -56,26 +60,31 @@ public final class JsonSubTypesInfo {
     utf8SubtypePrefixes = new byte[names.length][];
     byte[] stringProperty =
         inclusion == Inclusion.PROPERTY
-            ? JsonStringEscaper.escapedNamePrefix(property, true)
+            ? JsonStringEscaper.escapedNamePrefix(property, escapeNonAscii ? 0x7f : 0xff)
                 .getBytes(StandardCharsets.ISO_8859_1)
             : null;
     byte[] utf8Property =
         inclusion == Inclusion.PROPERTY
-            ? JsonStringEscaper.escapedNamePrefix(property, false).getBytes(StandardCharsets.UTF_8)
+            ? JsonStringEscaper.escapedNamePrefix(property, escapeNonAscii ? 0x7f : 0xffff)
+                .getBytes(StandardCharsets.UTF_8)
             : null;
     for (int i = 0; i < names.length; i++) {
       if (inclusion == Inclusion.PROPERTY) {
-        stringSubtypePrefixes[i] = join(stringProperty, JsonStringEscaper.stringValue(names[i]));
-        utf8SubtypePrefixes[i] = join(utf8Property, JsonStringEscaper.utf8Value(names[i]));
+        stringSubtypePrefixes[i] =
+            join(stringProperty, JsonStringEscaper.stringValue(names[i], escapeNonAscii));
+        utf8SubtypePrefixes[i] =
+            join(utf8Property, JsonStringEscaper.utf8Value(names[i], escapeNonAscii));
       } else if (inclusion == Inclusion.WRAPPER_OBJECT) {
         stringSubtypePrefixes[i] =
-            JsonStringEscaper.escapedNamePrefix(names[i], true)
+            JsonStringEscaper.escapedNamePrefix(names[i], escapeNonAscii ? 0x7f : 0xff)
                 .getBytes(StandardCharsets.ISO_8859_1);
         utf8SubtypePrefixes[i] =
-            JsonStringEscaper.escapedNamePrefix(names[i], false).getBytes(StandardCharsets.UTF_8);
+            JsonStringEscaper.escapedNamePrefix(names[i], escapeNonAscii ? 0x7f : 0xffff)
+                .getBytes(StandardCharsets.UTF_8);
       } else {
-        stringSubtypePrefixes[i] = appendComma(JsonStringEscaper.stringValue(names[i]));
-        utf8SubtypePrefixes[i] = appendComma(JsonStringEscaper.utf8Value(names[i]));
+        stringSubtypePrefixes[i] =
+            appendComma(JsonStringEscaper.stringValue(names[i], escapeNonAscii));
+        utf8SubtypePrefixes[i] = appendComma(JsonStringEscaper.utf8Value(names[i], escapeNonAscii));
       }
       stringUtf16SubtypePrefixes[i] = toUtf16(stringSubtypePrefixes[i]);
     }

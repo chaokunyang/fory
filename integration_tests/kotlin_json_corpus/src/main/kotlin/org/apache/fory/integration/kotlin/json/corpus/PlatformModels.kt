@@ -20,13 +20,30 @@
 package org.apache.fory.integration.kotlin.json.corpus
 
 import kotlin.jvm.JvmInline
+import org.apache.fory.json.annotation.JsonByteArray
 import org.apache.fory.json.annotation.JsonCodec
+import org.apache.fory.json.annotation.JsonInclude
 import org.apache.fory.json.annotation.JsonMixin
+import org.apache.fory.json.annotation.JsonProperty
 import org.apache.fory.json.annotation.JsonSubTypes
 import org.apache.fory.json.annotation.JsonType
 import org.apache.fory.json.codec.AbstractJsonValueCodec
 import org.apache.fory.json.reader.JsonReader
 import org.apache.fory.json.writer.JsonWriter
+
+@JsonType
+@JsonInclude(JsonProperty.Include.NON_DEFAULT)
+public data class PlatformDefaults(
+  public val count: Int = 3,
+  public val values: MutableList<Int> = mutableListOf(1),
+  @get:JsonProperty(include = JsonProperty.Include.ALWAYS) public val retained: Int = 7,
+)
+
+public data class PlatformDefaultTarget(public val text: String = "default")
+
+@JsonMixin(target = PlatformDefaultTarget::class)
+@JsonInclude(JsonProperty.Include.NON_DEFAULT)
+public interface PlatformDefaultMixin
 
 @JsonType
 public data class PlatformAccount(
@@ -104,6 +121,13 @@ public data class PlatformRoot(
   public val profile: PlatformJavaProfile,
   @field:JsonCodec(PlatformTokenCodec::class) public val token: PlatformToken,
   public val box: PlatformBox<String>,
+  @field:JsonByteArray(JsonByteArray.Format.ARRAY)
+  public val numbers: ByteArray = byteArrayOf(1, -2, 3),
+  @get:JsonByteArray(JsonByteArray.Format.BASE64)
+  public val binary: ByteArray = byteArrayOf(1, -2, 3),
+  @field:JsonByteArray(JsonByteArray.Format.BASE16)
+  public val hex: ByteArray = byteArrayOf(1, -2, 3),
+  public val defaultBytes: ByteArray = byteArrayOf(1, -2, 3),
 )
 
 internal fun platformRootValue(): PlatformRoot =

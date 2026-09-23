@@ -26,6 +26,7 @@ import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.util.LinkedHashMap
+import java.util.function.Supplier
 import kotlin.ExperimentalContextParameters
 import kotlin.metadata.ClassKind
 import kotlin.metadata.ExperimentalContextReceivers
@@ -195,7 +196,37 @@ internal object KotlinMetadataModels {
       properties.map { it.type }.toTypedArray(),
       BooleanArray(properties.size) { properties[it].reconstructible },
       BooleanArray(properties.size) { properties[it].required },
+      Array(parameters.size) {
+        if (defaultMaskBits[it] < 0) typeDefault(parameterTypes[it]) else null
+      },
     )
+  }
+
+  internal fun typeDefault(type: TypeRef<*>): Supplier<*>? {
+    // Nullable parameters default to null even when their non-null type has a scalar zero value.
+    // Other non-null references still require a constructor default or an explicit JSON property.
+    if (nullable(type)) return Supplier { null }
+    val value: Any =
+      when (type.rawType) {
+        java.lang.Boolean.TYPE,
+        java.lang.Boolean::class.java -> false
+        java.lang.Byte.TYPE,
+        java.lang.Byte::class.java -> 0.toByte()
+        java.lang.Short.TYPE,
+        java.lang.Short::class.java -> 0.toShort()
+        java.lang.Integer.TYPE,
+        java.lang.Integer::class.java -> 0
+        java.lang.Long.TYPE,
+        java.lang.Long::class.java -> 0L
+        java.lang.Float.TYPE,
+        java.lang.Float::class.java -> 0F
+        java.lang.Double.TYPE,
+        java.lang.Double::class.java -> 0.0
+        java.lang.Character.TYPE,
+        java.lang.Character::class.java -> '\u0000'
+        else -> return null
+      }
+    return Supplier { value }
   }
 
   private fun selectCreator(
@@ -634,6 +665,8 @@ internal object KotlinMetadataTypes {
         ?: throw ForyJsonException("Unsupported Kotlin metadata on ${type.name}: missing @Metadata")
     val metadata =
       try {
+        // readStrict owns metadata-version compatibility. Callers validate the concrete Kotlin
+        // declaration and its matching JVM members instead of gating compiler minor versions.
         KotlinClassMetadata.readStrict(annotation)
       } catch (cause: IllegalArgumentException) {
         throw ForyJsonException("Unsupported Kotlin metadata on ${type.name}", cause)
@@ -641,12 +674,6 @@ internal object KotlinMetadataTypes {
     if (metadata !is KotlinClassMetadata.Class) {
       throw ForyJsonException(
         "Unsupported Kotlin metadata on ${type.name}: not a class declaration",
-      )
-    }
-    val version = metadata.version
-    if (version.major != 2 || version.minor != 3) {
-      throw ForyJsonException(
-        "Unsupported Kotlin metadata on ${type.name}: ABI $version; expected 2.3",
       )
     }
     return metadata

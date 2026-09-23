@@ -31,23 +31,31 @@ import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.PropertyNamingStrategy;
 import org.apache.fory.json.annotation.JsonAnyGetter;
 import org.apache.fory.json.annotation.JsonAnyProperty;
 import org.apache.fory.json.annotation.JsonAnySetter;
-import org.apache.fory.json.annotation.JsonBase64;
+import org.apache.fory.json.annotation.JsonByteArray;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.annotation.JsonIgnore;
+import org.apache.fory.json.annotation.JsonInclude;
 import org.apache.fory.json.annotation.JsonProperty;
+import org.apache.fory.json.annotation.JsonProperty.Include;
 import org.apache.fory.json.annotation.JsonPropertyOrder;
 import org.apache.fory.json.annotation.JsonRawValue;
 import org.apache.fory.json.annotation.JsonUnwrapped;
@@ -80,14 +88,14 @@ final class ObjectCodecBuilder {
       TypeRef<T> ownerType,
       boolean propertyDiscoveryEnabled,
       PropertyNamingStrategy propertyNamingStrategy,
-      boolean writeNullFields,
+      Include defaultPropertyInclusion,
       JsonSharedRegistry sharedRegistry,
       GeneratedJsonCodec<?> generatedCodec) {
     return build(
         ownerType,
         propertyDiscoveryEnabled,
         propertyNamingStrategy,
-        writeNullFields,
+        defaultPropertyInclusion,
         sharedRegistry,
         generatedCodec,
         null);
@@ -97,12 +105,16 @@ final class ObjectCodecBuilder {
       TypeRef<T> ownerType,
       boolean propertyDiscoveryEnabled,
       PropertyNamingStrategy propertyNamingStrategy,
-      boolean writeNullFields,
+      Include defaultPropertyInclusion,
       JsonSharedRegistry sharedRegistry,
       GeneratedJsonCodec<?> generatedCodec,
       JsonObjectModel objectModel) {
     Class<?> type = ownerType.getRawType();
     Annotations annotations = new Annotations(type, sharedRegistry);
+    JsonInclude classInclusion = annotations.get(type, JsonInclude.class);
+    if (classInclusion != null && classInclusion.value() != Include.DEFAULT) {
+      defaultPropertyInclusion = classInclusion.value();
+    }
     boolean record =
         generatedCodec == null ? RecordUtils.isRecord(type) : generatedCodec.validatedRecord();
     boolean hasAnyField =
@@ -196,6 +208,7 @@ final class ObjectCodecBuilder {
     boolean anyWrites = anyBuilder != null && anyBuilder.anyWriteEnabled();
     boolean orderWrites = propertyOrder != null || hasIndexedProperty(builders) || anyWrites;
     List<JsonFieldInfo> writes = new ArrayList<>();
+    List<JsonFieldInfo> referenceDefaults = new ArrayList<>();
     List<FieldBuilder> writeBuilders = orderWrites ? new ArrayList<>(builders.size()) : null;
     List<UnwrappedWriteBuilder> unwrappedWrites =
         hasUnwrapped ? new ArrayList<>(builders.size() + 1) : null;
@@ -221,7 +234,12 @@ final class ObjectCodecBuilder {
         if (objectModel != null && builder.anyReadEnabled() && builder.creatorArgumentIndex < 0) {
           JsonFieldInfo field =
               builder.build(
-                  record, ownerType, propertyNamingStrategy, writeNullFields, generatedCodec);
+                  record,
+                  ownerType,
+                  propertyNamingStrategy,
+                  defaultPropertyInclusion,
+                  generatedCodec,
+                  sharedRegistry.escapeNonAscii());
           anyConstructionIndex = creatorInfo.argumentCount() + deferredFields.size();
           deferredFields.add(field);
           deferredRequired.add(builder.requiredDeferred);
@@ -286,7 +304,21 @@ final class ObjectCodecBuilder {
         builder.validateUnwrapped(type, creatorInfo);
         JsonFieldInfo property =
             builder.build(
-                record, ownerType, propertyNamingStrategy, writeNullFields, generatedCodec);
+                record,
+                ownerType,
+                propertyNamingStrategy,
+                defaultPropertyInclusion,
+                generatedCodec,
+                sharedRegistry.escapeNonAscii());
+        configureInclusion(
+            property,
+            builder,
+            builders,
+            creatorInfo,
+            objectModel,
+            defaultPropertyInclusion,
+            referenceDefaults,
+            type);
         markRequiredWrite(property, builder, creatorInfo, objectModel);
         int unwrappedConstructionIndex = -1;
         if (creatorInfo != null && builder.creatorArgumentIndex >= 0) {
@@ -317,7 +349,22 @@ final class ObjectCodecBuilder {
         continue;
       }
       JsonFieldInfo field =
-          builder.build(record, ownerType, propertyNamingStrategy, writeNullFields, generatedCodec);
+          builder.build(
+              record,
+              ownerType,
+              propertyNamingStrategy,
+              defaultPropertyInclusion,
+              generatedCodec,
+              sharedRegistry.escapeNonAscii());
+      configureInclusion(
+          field,
+          builder,
+          builders,
+          creatorInfo,
+          objectModel,
+          defaultPropertyInclusion,
+          referenceDefaults,
+          type);
       markRequiredWrite(field, builder, creatorInfo, objectModel);
       if (!hasAny) {
         FieldBuilder priorProperty = canonicalNames.put(field.name(), builder);
@@ -393,6 +440,17 @@ final class ObjectCodecBuilder {
               : orderWriteFields(type, propertyOrder, writeBuilders, writes);
     }
     JsonFieldInfo[] readArray = reads.toArray(new JsonFieldInfo[0]);
+    ObjectInstantiator<?> instantiator =
+        creatorInfo == null
+            ? GraalvmSupport.isGraalRuntime()
+                ? ObjectInstantiators.getObjectInstantiator(type)
+                : ObjectInstantiators.createObjectInstantiator(type)
+            : null;
+    if (!referenceDefaults.isEmpty()) {
+      // Reference construction uses constructor defaults only. Required deferred properties
+      // validate JSON input; they need not be initialized on the comparison object.
+      initializeDefaults(type, creatorInfo, instantiator, referenceDefaults);
+    }
     if (objectModel != null && !deferredFields.isEmpty()) {
       creatorInfo =
           creatorInfo.withDeferredFields(
@@ -423,12 +481,6 @@ final class ObjectCodecBuilder {
                 generatedCodec,
                 annotations)
             : null;
-    ObjectInstantiator<?> instantiator =
-        creatorInfo == null
-            ? GraalvmSupport.isGraalRuntime()
-                ? ObjectInstantiators.getObjectInstantiator(type)
-                : ObjectInstantiators.createObjectInstantiator(type)
-            : null;
     String[] skipped = hasAny ? skippedNames.toArray(new String[0]) : null;
     JsonUnwrappedInfo unwrappedInfo =
         hasUnwrapped
@@ -447,26 +499,149 @@ final class ObjectCodecBuilder {
         validatorInfo);
   }
 
+  private static void configureInclusion(
+      JsonFieldInfo field,
+      FieldBuilder builder,
+      Map<String, FieldBuilder> builders,
+      JsonCreatorInfo creator,
+      JsonObjectModel model,
+      Include defaultInclusion,
+      List<JsonFieldInfo> referenceDefaults,
+      Class<?> type) {
+    Include inclusion =
+        builder.explicitInclude == Include.DEFAULT ? defaultInclusion : builder.explicitInclude;
+    if (inclusion != Include.NON_DEFAULT || !builder.hasWriteSource()) {
+      return;
+    }
+    int index = builder.creatorArgumentIndex;
+    field.includeNullWrite();
+    if (creator != null && index >= 0 && creator.defaultMethod(index) != null) {
+      Method method = creator.defaultMethod(index);
+      Method[] dependencies = Arrays.copyOf(model.accessors(), method.getParameterCount());
+      for (FieldBuilder dependency : builders.values()) {
+        int argumentIndex = dependency.creatorArgumentIndex;
+        if (argumentIndex >= 0
+            && argumentIndex < dependencies.length
+            && !dependency.hasWriteSource()) {
+          dependencies[argumentIndex] = null;
+        }
+      }
+      for (Method dependency : dependencies) {
+        if (dependency == null) {
+          throw unsupportedDefault(type, field, "a constructor-default dependency is not writable");
+        }
+      }
+      field.bindDefault(method, creator.defaultsReceiver(), dependencies);
+    } else {
+      // Authorization never turns reader type fallbacks into declared defaults. Only the
+      // selected no-arg/all-default construction path can supply a reference value.
+      if (model != null && !model.referenceDefaults()) {
+        return;
+      }
+      // Both field and class omission retain properties without defaults, including required
+      // constructor arguments and Kotlin lateinit properties. Keep null/zero/empty values too.
+      if (builder.requiredDeferred
+          || (creator != null && index >= 0 && creator.defaultMaskBit(index) < 0)) {
+        return;
+      }
+      if (model == null) {
+        if (creator != null) {
+          // A Java parameterized creator supplies no default baseline, even if the class also
+          // declares a no-argument constructor. Do not change the reader's creator selection.
+          if (!(creator.executable() instanceof Constructor) || creator.argumentCount() != 0) {
+            return;
+          }
+        } else {
+          try {
+            type.getDeclaredConstructor();
+          } catch (NoSuchMethodException e) {
+            return;
+          }
+        }
+      }
+      referenceDefaults.add(field);
+    }
+  }
+
+  private static void initializeDefaults(
+      Class<?> type,
+      JsonCreatorInfo creator,
+      ObjectInstantiator<?> instantiator,
+      List<JsonFieldInfo> fields) {
+    JsonFieldInfo first = fields.get(0);
+    Object reference;
+    try {
+      if (creator == null) {
+        try {
+          type.getDeclaredConstructor();
+        } catch (NoSuchMethodException e) {
+          throw unsupportedDefault(type, first, "no callable no-argument constructor");
+        }
+        // Match the ordinary reader's constructor. Never use its allocation-without-construction
+        // alternative to invent a default baseline from JVM zero values.
+        reference = instantiator.newInstance();
+      } else {
+        if (!(creator.executable() instanceof Constructor)) {
+          throw unsupportedDefault(type, first, "the selected creator is not a constructor");
+        }
+        for (int i = 0; i < creator.argumentCount(); i++) {
+          if (creator.defaultMaskBit(i) < 0) {
+            throw unsupportedDefault(
+                type,
+                first,
+                "the selected constructor has a required parameter or no supported reference default");
+          }
+        }
+        reference = creator.create(creator.newArguments());
+      }
+    } catch (RuntimeException cause) {
+      throw new ForyJsonException(
+          "Cannot initialize NON_DEFAULT for "
+              + type.getName()
+              + "."
+              + first.name()
+              + ": "
+              + cause.getMessage(),
+          cause);
+    }
+    for (JsonFieldInfo field : fields) {
+      try {
+        field.bindDefaultValue(reference);
+      } catch (RuntimeException cause) {
+        throw new ForyJsonException(
+            "Cannot read NON_DEFAULT reference property " + type.getName() + "." + field.name(),
+            cause);
+      }
+    }
+  }
+
+  private static ForyJsonException unsupportedDefault(
+      Class<?> type, JsonFieldInfo field, String reason) {
+    return new ForyJsonException(
+        "Unsupported NON_DEFAULT for " + type.getName() + "." + field.name() + ": " + reason);
+  }
+
   private static void markRequiredWrite(
       JsonFieldInfo field,
       FieldBuilder builder,
       JsonCreatorInfo creatorInfo,
       JsonObjectModel objectModel) {
     if (objectModel != null && field.requiresUnboxedBinding()) {
+      if (builder.explicitInclude == Include.NON_EMPTY && field.mayBeEmpty()) {
+        // A lowered carrier cannot prove the logical CharSequence/collection emptiness. Keep this
+        // unsupported shape separate from ordinary Kotlin property inclusion and default values.
+        throw new ForyJsonException(
+            "JSON property " + field.name() + " cannot check an unboxed logical empty value");
+      }
       // The logical codec is bound only after the recursive parent shell is published. Its exact
       // transparent-null action and physical carrier are normalized in JsonFieldInfo.resolveTypes.
       return;
     }
     if (objectModel != null && field.hasOccurrenceNullability()) {
-      if (field.occurrenceNullable()) {
-        if (builder.explicitInclude == JsonProperty.Include.NON_NULL) {
-          throw new ForyJsonException(
-              "Nullable reconstructible JSON property "
-                  + field.name()
-                  + " cannot omit an explicit null value");
-        }
-        field.includeNullWrite();
-      } else if (builder.hasWriteSource()
+      // Kotlin inclusion controls writing independently of constructor defaults. An omitted value
+      // may restore a different default or fail a required read; never override the chosen policy.
+      if (!field.occurrenceNullable()
+          && builder.hasWriteSource()
           && !field.occurrenceWrapsNull()
           && field.writeRawType() != null
           && !field.writeRawType().isPrimitive()) {
@@ -475,13 +650,19 @@ final class ObjectCodecBuilder {
       return;
     }
     int argumentIndex = builder.creatorArgumentIndex;
-    if (objectModel != null
-        && creatorInfo != null
-        && argumentIndex >= 0
-        && !creatorInfo.hasDefault(argumentIndex)
-        && builder.hasWriteSource()
-        && !field.writeNull()
-        && !field.writeRawType().isPrimitive()) {
+    boolean requiredArgument =
+        objectModel != null
+            && creatorInfo != null
+            && argumentIndex >= 0
+            && !creatorInfo.hasDefault(argumentIndex)
+            && builder.hasWriteSource();
+    if (requiredArgument && builder.explicitInclude == Include.NON_EMPTY && field.mayBeEmpty()) {
+      throw new ForyJsonException(
+          "Reconstructible JSON property " + field.name() + " cannot omit an empty value");
+    }
+    if (requiredArgument && !field.writeNull() && !field.writeRawType().isPrimitive()) {
+      // Language models without occurrence nullability still need every non-defaulted argument.
+      field.includeEmptyWrite();
       field.requireNonNullWrite();
     }
   }
@@ -1079,7 +1260,7 @@ final class ObjectCodecBuilder {
         || method.isAnnotationPresent(JsonAnySetter.class)
         || method.isAnnotationPresent(JsonValue.class)
         || method.isAnnotationPresent(JsonRawValue.class)
-        || method.isAnnotationPresent(JsonBase64.class)
+        || method.isAnnotationPresent(JsonByteArray.class)
         || method.isAnnotationPresent(JsonValidator.class)) {
       return true;
     }
@@ -1094,7 +1275,7 @@ final class ObjectCodecBuilder {
     return method.isAnnotationPresent(JsonAnyGetter.class)
         || method.isAnnotationPresent(JsonValue.class)
         || method.isAnnotationPresent(JsonRawValue.class)
-        || method.isAnnotationPresent(JsonBase64.class)
+        || method.isAnnotationPresent(JsonByteArray.class)
         || getterPropertyName(method) != null;
   }
 
@@ -1328,6 +1509,8 @@ final class ObjectCodecBuilder {
     // crash while reading annotations from desugared Record constructor parameters.
     Parameter[] parameters = generatedCodec == null ? constructor.getParameters() : null;
     List<JsonCreatorFieldInfo> fields = new ArrayList<>(names.length);
+    boolean[] required =
+        annotations.registry.failOnMissingRequiredProperties() ? new boolean[names.length] : null;
     for (int i = 0; i < names.length; i++) {
       FieldBuilder builder = builders.get(names[i]);
       if (builder == null || !builder.hasLogicalMember()) {
@@ -1344,13 +1527,16 @@ final class ObjectCodecBuilder {
       } else {
         bindCreatorType(ownerType, constructor, i, parameterTypes[i], builder);
       }
-      if (builder.isAny() || builder.unwrappedAnnotation != null) {
-        continue;
-      }
       TypeRef<?> resolved =
           parameterTypes == null
               ? builder.logicalTypeRef(ownerType)
               : ownerType.resolveType(parameterTypes[i]);
+      if (required != null) {
+        required[i] = !isOptionalContainer(resolved.getRawType());
+      }
+      if (builder.isAny() || builder.unwrappedAnnotation != null) {
+        continue;
+      }
       fields.add(
           new JsonCreatorFieldInfo(
               builder.jsonName(namingStrategy),
@@ -1365,7 +1551,7 @@ final class ObjectCodecBuilder {
     JsonCreatorFieldInfo[] fieldArray = fields.toArray(new JsonCreatorFieldInfo[0]);
     rejectCreatorHashCollisions(fieldArray);
     return new JsonCreatorInfo(
-        type, constructor, fieldArray, creatorDefaults(rawTypes), generatedCodec);
+        type, constructor, fieldArray, creatorDefaults(rawTypes), generatedCodec, required);
   }
 
   private static JsonCreatorInfo buildCreatorInfo(
@@ -1446,6 +1632,15 @@ final class ObjectCodecBuilder {
     Class<?>[] rawTypes = creator.getParameterTypes();
     Parameter[] parameters = creator.getParameters();
     List<JsonCreatorFieldInfo> fields = new ArrayList<>(parameterTypes.length);
+    boolean[] required =
+        annotations.registry.failOnMissingRequiredProperties()
+            ? new boolean[parameterTypes.length]
+            : null;
+    if (required != null) {
+      for (int i = 0; i < required.length; i++) {
+        required[i] = !isOptionalContainer(ownerType.resolveType(parameterTypes[i]).getRawType());
+      }
+    }
     String[] propertyNames = annotation.value();
     if (propertyNames.length != 0) {
       if (propertyNames.length != parameterTypes.length) {
@@ -1467,6 +1662,7 @@ final class ObjectCodecBuilder {
           throw new ForyJsonException("Unknown @JsonCreator Java property " + javaName);
         }
         bindCreatorType(ownerType, creator, i, parameterTypes[i], builder);
+        builder.mergeFormat(parameters[i]);
         builder.mergeCodec(parameters[i]);
         builder.mergeUnwrapped(parameters[i]);
         if (builder.isAny() && !builder.anyReadEnabled()) {
@@ -1546,7 +1742,14 @@ final class ObjectCodecBuilder {
                 : builder.codecAnnotation();
         Class<? extends JsonValueCodec<?>> valueCodecClass =
             builder == null ? null : builder.valueCodecClass();
-        JsonFormat formatAnnotation = builder == null ? null : builder.formatAnnotation();
+        JsonFormat formatAnnotation =
+            builder == null
+                ? annotations.get(parameters[i], JsonFormat.class)
+                : builder.formatAnnotation();
+        if (formatAnnotation != null && codecAnnotation != null) {
+          throw new ForyJsonException(
+              "@JsonFormat cannot coexist with @JsonCodec for creator property " + jsonName);
+        }
         JsonUnwrapped unwrapped =
             builder == null
                 ? annotations.get(parameters[i], JsonUnwrapped.class)
@@ -1568,7 +1771,8 @@ final class ObjectCodecBuilder {
                     null,
                     false,
                     true,
-                    i));
+                    i,
+                    null));
           }
         } else {
           fields.add(
@@ -1587,7 +1791,7 @@ final class ObjectCodecBuilder {
     JsonCreatorFieldInfo[] fieldArray = fields.toArray(new JsonCreatorFieldInfo[0]);
     rejectCreatorHashCollisions(fieldArray);
     return new JsonCreatorInfo(
-        type, creator, fieldArray, creatorDefaults(rawTypes), generatedCodec);
+        type, creator, fieldArray, creatorDefaults(rawTypes), generatedCodec, required);
   }
 
   private static void validateObjectModelCreatorAnnotation(
@@ -1639,8 +1843,11 @@ final class ObjectCodecBuilder {
     Executable creator = objectModel.creator();
     String[] names = objectModel.parameterNames();
     Method[] defaultMethods = objectModel.defaultMethods();
+    Supplier<?>[] defaultFactories = objectModel.defaultFactories();
     int[] defaultMaskBits = objectModel.defaultMaskBits();
     TypeRef<?>[] logicalParameterTypes = objectModel.parameterTypes();
+    boolean[] required =
+        annotations.registry.failOnMissingRequiredProperties() ? new boolean[names.length] : null;
     Type[] parameterTypes = creator.getGenericParameterTypes();
     Class<?>[] rawTypes = creator.getParameterTypes();
     Executable annotationSource = declaration == null ? creator : declaration.annotationSource();
@@ -1690,11 +1897,20 @@ final class ObjectCodecBuilder {
       bindCreatorType(ownerType, creator, i, parameterTypes[i], builder);
       builder.mergeCreatorParameter(type, parameters[i]);
       if (!builder.creatorReadAllowed()) {
-        if (defaultMethods[i] == null && defaultMaskBits[i] < 0) {
+        if (defaultMethods[i] == null
+            && defaultMaskBits[i] < 0
+            && (defaultFactories == null || defaultFactories[i] == null)) {
           throw new ForyJsonException(
               "Ignored constructor property " + names[i] + " requires a language default");
         }
         continue;
+      }
+      if (required != null) {
+        required[i] =
+            defaultMethods[i] == null
+                && defaultMaskBits[i] < 0
+                && !objectModel.parameterOptional(i)
+                && !isOptionalContainer(logicalParameterTypes[i].getRawType());
       }
       if (!builder.isAny() && builder.unwrappedAnnotation == null) {
         TypeRef<?> resolved = logicalParameterTypes[i];
@@ -1720,10 +1936,23 @@ final class ObjectCodecBuilder {
         creatorDefaults(rawTypes),
         generatedCodec,
         defaultMethods,
+        objectModel.defaultsReceiver(),
+        defaultFactories,
         names,
         objectModel.defaultConstructor(),
         defaultMaskBits,
-        objectModel.parameterNullable());
+        objectModel.parameterNullable(),
+        required);
+  }
+
+  private static boolean isOptionalContainer(Class<?> type) {
+    return type.isArray()
+        || Collection.class.isAssignableFrom(type)
+        || Map.class.isAssignableFrom(type)
+        || type == Optional.class
+        || type == OptionalInt.class
+        || type == OptionalLong.class
+        || type == OptionalDouble.class;
   }
 
   private static void validateGeneratedCreator(
@@ -1881,8 +2110,8 @@ final class ObjectCodecBuilder {
         if (annotations.has(field, JsonFormat.class)) {
           validateFormatField(field, annotations);
         }
-        if (annotations.has(field, JsonBase64.class)) {
-          validateBase64Field(field, annotations);
+        if (annotations.has(field, JsonByteArray.class)) {
+          validateByteArrayField(field, annotations);
         }
         if (annotations.has(field, JsonRawValue.class)) {
           validateRawField(field, annotations);
@@ -1939,8 +2168,8 @@ final class ObjectCodecBuilder {
           validateRawMethod(
               type, method, propertyDiscoveryEnabled, record, generatedCodec, annotations);
         }
-        if (annotations.has(method, JsonBase64.class)) {
-          validateBase64Method(
+        if (annotations.has(method, JsonByteArray.class)) {
+          validateByteArrayMethod(
               type, method, propertyDiscoveryEnabled, record, generatedCodec, annotations);
         }
         if (annotations.has(method, JsonUnwrapped.class)) {
@@ -2007,8 +2236,8 @@ final class ObjectCodecBuilder {
         validateRawMethod(
             type, method, propertyDiscoveryEnabled, record, generatedCodec, annotations);
       }
-      if (annotations.has(method, JsonBase64.class)) {
-        validateBase64Method(
+      if (annotations.has(method, JsonByteArray.class)) {
+        validateByteArrayMethod(
             type, method, propertyDiscoveryEnabled, record, generatedCodec, annotations);
       }
       if (annotations.has(method, JsonUnwrapped.class)) {
@@ -2306,7 +2535,7 @@ final class ObjectCodecBuilder {
       throw new ForyJsonException("Invalid @JsonRawValue field " + field);
     }
     if (annotations.has(field, JsonCodec.class)
-        || annotations.has(field, JsonBase64.class)
+        || annotations.has(field, JsonByteArray.class)
         || annotations.has(field, JsonAnyProperty.class)) {
       throw new ForyJsonException("Conflicting JSON annotations on @JsonRawValue field " + field);
     }
@@ -2338,24 +2567,24 @@ final class ObjectCodecBuilder {
       throw new ForyJsonException("Invalid @JsonRawValue method " + method);
     }
     if (annotations.has(method, JsonCodec.class)
-        || annotations.has(method, JsonBase64.class)
+        || annotations.has(method, JsonByteArray.class)
         || annotations.has(method, JsonAnyGetter.class)) {
       throw new ForyJsonException("Conflicting JSON annotations on @JsonRawValue method " + method);
     }
   }
 
-  private static void validateBase64Field(Field field, Annotations annotations) {
+  private static void validateByteArrayField(Field field, Annotations annotations) {
     if (!isEligibleField(field) || field.getType() != byte[].class) {
-      throw new ForyJsonException("Invalid @JsonBase64 field " + field);
+      throw new ForyJsonException("Invalid @JsonByteArray field " + field);
     }
     if (annotations.has(field, JsonCodec.class)
         || annotations.has(field, JsonRawValue.class)
         || annotations.has(field, JsonAnyProperty.class)) {
-      throw new ForyJsonException("Conflicting JSON annotations on @JsonBase64 field " + field);
+      throw new ForyJsonException("Conflicting JSON annotations on @JsonByteArray field " + field);
     }
     JsonIgnore ignore = annotations.get(field, JsonIgnore.class);
     if (ignore != null && ignore.ignoreRead() && ignore.ignoreWrite()) {
-      throw new ForyJsonException("@JsonBase64 has no JSON read or write direction: " + field);
+      throw new ForyJsonException("@JsonByteArray has no JSON read or write direction: " + field);
     }
   }
 
@@ -2364,7 +2593,7 @@ final class ObjectCodecBuilder {
       throw new ForyJsonException("Invalid @JsonFormat field " + field);
     }
     if (annotations.has(field, JsonCodec.class)
-        || annotations.has(field, JsonBase64.class)
+        || annotations.has(field, JsonByteArray.class)
         || annotations.has(field, JsonRawValue.class)
         || annotations.has(field, JsonAnyProperty.class)
         || annotations.has(field, JsonUnwrapped.class)
@@ -2377,7 +2606,7 @@ final class ObjectCodecBuilder {
     }
   }
 
-  private static void validateBase64Method(
+  private static void validateByteArrayMethod(
       Class<?> type,
       Method method,
       boolean propertyDiscoveryEnabled,
@@ -2387,7 +2616,7 @@ final class ObjectCodecBuilder {
     if ((!propertyDiscoveryEnabled
             && !(record
                 && isPropagatedRecordAnnotation(
-                    type, method, JsonBase64.class, generatedCodec, annotations)))
+                    type, method, JsonByteArray.class, generatedCodec, annotations)))
         || !isEligibleAccessor(method)
         || method.isVarArgs()
         || method.getTypeParameters().length != 0
@@ -2395,12 +2624,13 @@ final class ObjectCodecBuilder {
         || method.getReturnType() != byte[].class
         || ((!record && getterPropertyName(method) == null)
             || (record && !isRecordAccessor(type, method, generatedCodec)))) {
-      throw new ForyJsonException("Invalid @JsonBase64 method " + method);
+      throw new ForyJsonException("Invalid @JsonByteArray method " + method);
     }
     if (annotations.has(method, JsonCodec.class)
         || annotations.has(method, JsonRawValue.class)
         || annotations.has(method, JsonAnyGetter.class)) {
-      throw new ForyJsonException("Conflicting JSON annotations on @JsonBase64 method " + method);
+      throw new ForyJsonException(
+          "Conflicting JSON annotations on @JsonByteArray method " + method);
     }
   }
 
@@ -2920,7 +3150,6 @@ final class ObjectCodecBuilder {
       if (readSink && !ignoreRead) {
         readField = field;
       }
-      mergeFormat(field);
       mergeAnnotation(type, field);
       if (annotations.has(field, JsonAnyProperty.class)) {
         if (!writeSource && !readSink) {
@@ -2963,6 +3192,7 @@ final class ObjectCodecBuilder {
       mergeAnnotation(type, setter);
       Parameter parameter = setter.getParameters()[0];
       mergeIgnore(parameter);
+      mergeFormat(parameter);
       mergeCodec(parameter);
       mergeUnwrapped(parameter);
       if (ignoreRead || field != null && !fieldReadAllowed) {
@@ -3091,8 +3321,9 @@ final class ObjectCodecBuilder {
         boolean record,
         TypeRef<?> ownerType,
         PropertyNamingStrategy propertyNamingStrategy,
-        boolean defaultWriteNull,
-        GeneratedJsonCodec<?> generatedCodec) {
+        Include defaultInclusion,
+        GeneratedJsonCodec<?> generatedCodec,
+        boolean escapeNonAscii) {
       validateTypes(ownerType);
       if (explicitInclude != JsonProperty.Include.DEFAULT && !hasWriteSource()) {
         throw new ForyJsonException(
@@ -3103,11 +3334,10 @@ final class ObjectCodecBuilder {
         throw new ForyJsonException("JSON property name must not be empty for " + name);
       }
       Class<?> rawWriteType = hasWriteSource() ? writeRawType() : null;
-      boolean writeNull =
-          rawWriteType != null
-              && (rawWriteType.isPrimitive()
-                  || explicitInclude == JsonProperty.Include.ALWAYS
-                  || explicitInclude == JsonProperty.Include.DEFAULT && defaultWriteNull);
+      Include inclusion = explicitInclude == Include.DEFAULT ? defaultInclusion : explicitInclude;
+      if (rawWriteType != null && rawWriteType.isPrimitive()) {
+        inclusion = Include.ALWAYS;
+      }
       if (writeGetter != null) {
         writeAccessor = getterAccessor(generatedCodec, writeGetter);
       } else if (writeField != null) {
@@ -3131,7 +3361,7 @@ final class ObjectCodecBuilder {
       }
       return new JsonFieldInfo(
           jsonName,
-          writeNull,
+          inclusion,
           writeField,
           writeGetter,
           readField,
@@ -3143,7 +3373,8 @@ final class ObjectCodecBuilder {
           codecAnnotation,
           valueCodecClass,
           formatAnnotation,
-          rawValue);
+          rawValue,
+          escapeNonAscii);
     }
 
     private void validateUnwrapped(Class<?> type, JsonCreatorInfo creatorInfo) {
@@ -3158,7 +3389,9 @@ final class ObjectCodecBuilder {
                 + "."
                 + name);
       }
-      if (explicitInclude != JsonProperty.Include.DEFAULT) {
+      if (explicitInclude != Include.DEFAULT
+          && explicitInclude != Include.ALWAYS
+          && explicitInclude != Include.NON_DEFAULT) {
         throw new ForyJsonException(
             "@JsonUnwrapped property cannot declare an inclusion policy: "
                 + type.getName()
@@ -3210,7 +3443,8 @@ final class ObjectCodecBuilder {
           property.readAccessor(),
           hasWriteSource(),
           creatorParent ? constructionIndex >= 0 : hasReadSink(),
-          constructionIndex);
+          constructionIndex,
+          property);
     }
 
     private JsonCodec codecAnnotation() {
@@ -3226,6 +3460,9 @@ final class ObjectCodecBuilder {
     }
 
     private void mergeAnnotation(Class<?> type, AnnotatedElement source) {
+      // Scala constructor properties can carry format annotations on the parameter rather than
+      // the backing field. Merge every declaration into the same logical property.
+      mergeFormat(source);
       mergeCodec(source);
       if (annotations.has(source, JsonRawValue.class)) {
         if (formatAnnotation != null) {
@@ -3284,7 +3521,10 @@ final class ObjectCodecBuilder {
           explicitNameSource = source;
         }
       }
-      JsonProperty.Include declaredInclude = property.include();
+      mergeInclusion(property.include(), source);
+    }
+
+    private void mergeInclusion(Include declaredInclude, AnnotatedElement source) {
       if (declaredInclude != JsonProperty.Include.DEFAULT) {
         if (explicitInclude != JsonProperty.Include.DEFAULT && explicitInclude != declaredInclude) {
           throw new ForyJsonException(
@@ -3308,6 +3548,7 @@ final class ObjectCodecBuilder {
 
     private void mergeCreatorParameter(Class<?> type, Parameter parameter) {
       mergeIgnore(parameter);
+      mergeFormat(parameter);
       mergeCodec(parameter);
       mergeUnwrapped(parameter);
       JsonProperty property = annotations.get(parameter, JsonProperty.class);
@@ -3342,10 +3583,7 @@ final class ObjectCodecBuilder {
           explicitIndexSource = parameter;
         }
       }
-      if (property.include() != JsonProperty.Include.DEFAULT) {
-        throw new ForyJsonException(
-            "@JsonUnwrapped property cannot declare an inclusion policy: " + name);
-      }
+      mergeInclusion(property.include(), parameter);
     }
 
     private void mergeIgnore(AnnotatedElement source) {
@@ -3392,18 +3630,27 @@ final class ObjectCodecBuilder {
 
     private void mergeCodec(AnnotatedElement source) {
       JsonCodec declared = annotations.get(source, JsonCodec.class);
-      if (annotations.has(source, JsonBase64.class)) {
+      JsonByteArray byteArray = annotations.get(source, JsonByteArray.class);
+      if (byteArray != null) {
         if (formatAnnotation != null) {
-          throw formatConflict(source, "@JsonBase64");
+          throw formatConflict(source, "@JsonByteArray");
         }
         if (declared != null || codecAnnotation != null) {
           throw new ForyJsonException(
-              "@JsonBase64 cannot coexist with @JsonCodec for property " + name);
+              "@JsonByteArray cannot coexist with @JsonCodec for property " + name);
         }
-        if (valueCodecClass == null) {
-          valueCodecClass = Base64ByteArrayCodec.class;
-          codecSource = source;
+        Class<? extends JsonValueCodec<?>> codecClass =
+            byteArray.value() == JsonByteArray.Format.ARRAY
+                ? ArrayCodec.SignedByteArrayCodec.class
+                : byteArray.value() == JsonByteArray.Format.BASE16
+                    ? Base16ByteArrayCodec.class
+                    : Base64ByteArrayCodec.class;
+        if (valueCodecClass != null && valueCodecClass != codecClass) {
+          throw new ForyJsonException(
+              "Conflicting @JsonByteArray declarations for property " + name);
         }
+        valueCodecClass = codecClass;
+        codecSource = source;
         return;
       }
       if (declared != null && formatAnnotation != null) {
@@ -3411,7 +3658,7 @@ final class ObjectCodecBuilder {
       }
       if (declared != null && valueCodecClass != null) {
         throw new ForyJsonException(
-            "@JsonBase64 cannot coexist with @JsonCodec for property " + name);
+            "@JsonByteArray cannot coexist with @JsonCodec for property " + name);
       }
       if (declared == null) {
         return;

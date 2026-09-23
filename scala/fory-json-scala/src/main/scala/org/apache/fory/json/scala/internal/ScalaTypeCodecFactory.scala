@@ -20,6 +20,7 @@
 package org.apache.fory.json.scala.internal
 
 import java.lang.reflect.Modifier
+import java.util.function.Supplier
 
 import org.apache.fory.json.JsonCodecFactory
 import org.apache.fory.json.codec.JsonValueCodec
@@ -39,6 +40,12 @@ private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
     val name = rawType.getName
     val enumerationCodec = ScalaEnumerationTypes.createCodec(typeRef)
     if (enumerationCodec != null) return enumerationCodec
+    if (classOf[Enumeration#Value].isAssignableFrom(rawType)) {
+      throw ScalaTypeSupport.unsupported(
+        typeRef,
+        "Enumeration owner is erased; use ScalaTypeRef[Owner.Value] or @JsonEnumeration"
+      )
+    }
 
     if (isRejected(rawType)) throw ScalaTypeSupport.unsupported(typeRef, "runtime-state or lazy type")
     if (classOf[Range].isAssignableFrom(rawType)) {
@@ -104,10 +111,12 @@ private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
       val selection = iterableKind(rawType, runtimeType)
       if (selection == null)
         throw ScalaTypeSupport.unsupported(typeRef, "collection family requires an exact codec")
+      // A declared Seq proves the writer cast; generic Iterable can also contain sets.
       return new ScalaIterableCodec(
         selection._1,
         GraphMemoryEstimates.shallowObjectBytes(selection._2),
-        runtimeType
+        runtimeType,
+        classOf[scala.collection.Seq[_]].isAssignableFrom(rawType)
       )
     }
 
@@ -149,6 +158,26 @@ private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
     if (!runtimeType && !Modifier.isPublic(rawType.getModifiers)) {
       throw ScalaTypeSupport.unsupported(typeRef, "non-public implementation is write-only")
     }
+  }
+
+  def collectionDefault(typeRef: TypeRef[_]): Supplier[_] = {
+    val rawType = typeRef.getRawType
+    if (rawType == classOf[List[_]] || rawType == Nil.getClass) return () => Nil
+    if (rawType == classOf[scala.collection.immutable.BitSet])
+      return () => scala.collection.immutable.BitSet.empty
+    if (rawType == classOf[scala.collection.mutable.BitSet])
+      return () => scala.collection.mutable.BitSet.empty
+    val selection =
+      if (classOf[scala.collection.Map[_, _]].isAssignableFrom(rawType)) mapKind(rawType, false)
+      else if (classOf[scala.collection.Iterable[_]].isAssignableFrom(rawType)) iterableKind(rawType, false)
+      else null
+    if (selection == null) return null
+    val kind = selection._1
+    val tag =
+      if (kind == ScalaCollectionCodecs.ImmutableArraySeqKind || kind == ScalaCollectionCodecs.MutableArraySeqKind)
+        ScalaTypeSupport.classTag(ScalaTypeSupport.rawType(ScalaTypeSupport.arguments(typeRef, 1, "Scala collection")(0)))
+      else null
+    () => ScalaCollectionCodecs.emptyValue(kind, tag)
   }
 
   private def iterableKind(rawType: Class[_], runtimeWrite: Boolean): (Int, Class[_]) = {

@@ -53,6 +53,9 @@ func validateForyTags(t reflect.Type) error {
 	tagIDs := make(map[int32]string)
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
 		parsed, err := parseFieldTag(field)
 		if err != nil {
 			return err

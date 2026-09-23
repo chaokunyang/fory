@@ -21,7 +21,7 @@ repositories {
 }
 
 dependencies {
-  implementation("org.apache.fory:fory-json-kotlin:1.7.0-SNAPSHOT")
+  implementation("org.apache.fory:fory-json-kotlin:1.8.0-SNAPSHOT")
 }
 ```
 
@@ -36,7 +36,7 @@ plugins {
 }
 
 dependencies {
-  ksp("org.apache.fory:fory-json-kotlin-ksp:1.7.0-SNAPSHOT")
+  ksp("org.apache.fory:fory-json-kotlin-ksp:1.8.0-SNAPSHOT")
 }
 ```
 
@@ -68,6 +68,10 @@ val account = json.fromJson(text, accountType)
 Construct each `jsonTypeRef<T>()` once and reuse it. It preserves distinctions that a Java `Class`
 cannot express, including occurrence nullability, unsigned semantics, value-class identity, and
 nested generic arguments such as `List<Account?>`.
+
+For framework callbacks with a runtime Kotlin `KType`, use `jsonTypeRef<Any?>(kType)`.
+See [Kotlin integration](../../docs/json/integration.md#kotlin-integration)
+for controller method discovery and request/response conversion.
 
 `ForyJsonKotlin.builder()` is equivalent to installing the module explicitly:
 

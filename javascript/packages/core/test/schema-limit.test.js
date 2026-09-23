@@ -38,6 +38,68 @@ const { Type } = require("../dist/lib/typeInfo");
 
 const MAX_REMOTE_TYPE_KEYS = 8192;
 
+runTest("overflow unknown readers reuse root owners", () => {
+  const Fory = require("../dist").default;
+
+  for (const ref of [false, true]) {
+    for (const union of [false, true]) {
+      const reader = new Fory({ compatible: true, ref, maxSchemaVersionsPerType: 1 });
+      const registered = union ? reader.register(Type.union(7801, {})) : undefined;
+      const decode = (bytes) =>
+        registered ? registered.deserialize(bytes) : reader.deserialize(bytes);
+      const encode = (extra, value, tag) => {
+        const writer = new Fory({ compatible: true, ref });
+        class Remote {
+          constructor() {
+            this.value = value;
+            this[extra] = "extra";
+          }
+        }
+        Type.struct(7800, {
+          value: Type.int32().setId(1),
+          [extra]: Type.string().setId(tag),
+        })(Remote);
+        const child = writer.register(Remote);
+        return union
+          ? writer.register(Type.union(7801, {})).serialize({ case: 0, value: new Remote() })
+          : child.serialize(new Remote());
+      };
+      const first = encode("extraA", 17, 2);
+      const overflow = encode("extraB", 29, 3);
+      decode(first);
+      const context = reader.readContext;
+      for (const failure of [undefined, "truncated", "depth"]) {
+        if (failure === "truncated") {
+          assert.throws(() => decode(overflow.subarray(0, overflow.length - 1)));
+        } else if (failure === "depth") {
+          const maxDepth = context._maxDepth;
+          context._maxDepth = union ? 1 : 0;
+          assert.throws(() => decode(overflow));
+          context._maxDepth = maxDepth;
+        } else {
+          const value = (() => {
+            const result = decode(overflow);
+            return (union ? result.value : result).$tag1;
+          })();
+          assert.equal(value, 29);
+        }
+        assert.ok(context.typeMeta.length <= 1);
+        assert.ok(context.refReader.readObjects.length <= 1);
+        assert.equal(context.typeMetaCache.size, 1);
+      }
+      for (let tag = 4; tag < 20; tag++) {
+        const result = decode(encode(`extra${tag}`, tag, tag));
+        assert.equal((union ? result.value : result).$tag1, tag);
+        assert.equal(context.typeMeta.length, 1);
+        assert.ok(context.refReader.readObjects.length <= 1);
+        assert.equal(context.typeMetaCache.size, 1);
+      }
+      const reused = decode(first);
+      assert.equal((union ? reused.value : reused).$tag1, 17);
+    }
+  }
+});
+
 function context(typeResolver = {}, config = {}) {
   const fullConfig = {
     compatible: true,
@@ -164,7 +226,7 @@ function localSerializer(typeInfo) {
   };
 }
 
-runTest("remote schema limit rejects extra versions", () => {
+runTest("remote schema overflow is uncached", () => {
   const typeInfo = Type.struct({ namespace: "example", typeName: "Shared" }, {});
   const original = localSerializer(typeInfo);
   const readContext = context({
@@ -183,10 +245,10 @@ runTest("remote schema limit rejects extra versions", () => {
     },
   });
   readTypeMeta(readContext, remoteStruct("Shared", "first"));
-  assert.throws(
-    () => readTypeMeta(readContext, remoteStruct("Shared", "second")),
-    /maxSchemaVersionsPerType/,
-  );
+  readTypeMeta(readContext, remoteStruct("Shared", "second"));
+  readTypeMeta(readContext, remoteStruct("Shared", "second"));
+  assert.equal(readContext.typeMetaCache.size, 1);
+  assert.equal(readContext.totalAcceptedSchemaVersions, 1);
 });
 
 runTest("remote TypeMeta key cap preserves persistent owner state", () => {
@@ -217,7 +279,7 @@ runTest("remote TypeMeta key cap preserves persistent owner state", () => {
 
   const rejected = remoteNamedNonStruct("RemoteOverflow", TypeId.NAMED_ENUM);
   const cachedBeforeReject = readContext.cachedTypeMeta;
-  assert.throws(() => readTypeMeta(readContext, rejected), /Remote TypeMeta key limit exceeded/);
+  readTypeMeta(readContext, rejected);
   assert.equal(readContext.remoteSchemaVersionsByType.size, MAX_REMOTE_TYPE_KEYS);
   assert.equal(readContext.totalAcceptedSchemaVersions, MAX_REMOTE_TYPE_KEYS);
   assert.equal(readContext.typeMetaCache.size, MAX_REMOTE_TYPE_KEYS);
@@ -252,10 +314,9 @@ runTest("remote non-struct TypeMeta uses schema limit", () => {
     },
   });
   readTypeMeta(readContext, remoteNamedNonStruct("SharedEnum", TypeId.NAMED_ENUM));
-  assert.throws(
-    () => readTypeMeta(readContext, remoteNamedNonStruct("SharedEnum", TypeId.NAMED_EXT)),
-    /maxSchemaVersionsPerType/,
-  );
+  readTypeMeta(readContext, remoteNamedNonStruct("SharedEnum", TypeId.NAMED_EXT));
+  assert.equal(readContext.typeMetaCache.size, 1);
+  assert.equal(readContext.totalAcceptedSchemaVersions, 1);
 });
 
 runTest("failed non-struct TypeMeta does not consume schema limit", () => {

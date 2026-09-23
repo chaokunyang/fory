@@ -25,13 +25,15 @@ import org.apache.fory.json.codec.CompositeJsonCodec
 import org.apache.fory.json.meta.JsonFieldNameHash
 import org.apache.fory.json.reader.{Latin1JsonReader, Utf16JsonReader, Utf8JsonReader}
 import org.apache.fory.json.resolver.{JsonTypeInfo, JsonTypeResolver}
-import org.apache.fory.json.writer.{StringJsonWriter, Utf8JsonWriter}
+import org.apache.fory.json.writer.{JsonWriter, StringJsonWriter, Utf8JsonWriter}
 import org.apache.fory.reflect.TypeRef
 import org.apache.fory.serializer.GraphMemoryEstimates
 
 private[scala] final class ScalaOptionCodec(someOnly: Boolean, runtimeType: Boolean)
     extends CompositeJsonCodec[Option[Any]] {
   private var elementInfo: JsonTypeInfo = _
+
+  override def isEmpty(writer: JsonWriter, value: Option[Any]): Boolean = value.isEmpty
 
   override def resolveTypes(typeRef: TypeRef[_], resolver: JsonTypeResolver): Unit = {
     val arguments = ScalaTypeSupport.runtimeArguments(
@@ -70,17 +72,17 @@ private[scala] final class ScalaOptionCodec(someOnly: Boolean, runtimeType: Bool
   }
 
   override def readLatin1(reader: Latin1JsonReader): Option[Any] = {
-    if (reader.tryReadNullToken()) readNull()
+    if (reader.tryReadNextNullToken()) readNull()
     else newSome(reader, elementInfo.latin1Reader().readLatin1(reader))
   }
 
   override def readUtf16(reader: Utf16JsonReader): Option[Any] = {
-    if (reader.tryReadNullToken()) readNull()
+    if (reader.tryReadNextNullToken()) readNull()
     else newSome(reader, elementInfo.utf16Reader().readUtf16(reader))
   }
 
   override def readUtf8(reader: Utf8JsonReader): Option[Any] = {
-    if (reader.tryReadNullToken()) readNull()
+    if (reader.tryReadNextNullToken()) readNull()
     else newSome(reader, elementInfo.utf8Reader().readUtf8(reader))
   }
 
@@ -100,6 +102,8 @@ private[scala] object ScalaOptionCodec {
 }
 
 private[scala] object ScalaNoneCodec extends org.apache.fory.json.codec.AbstractJsonValueCodec[None.type] {
+  override def isEmpty(writer: JsonWriter, value: None.type): Boolean = true
+
   override def write(writer: org.apache.fory.json.writer.JsonWriter, value: None.type): Unit = {
     if (value != null && (value ne None))
       throw new ForyJsonException("Expected scala.None")

@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.json.annotation.JsonByteArray;
+import org.apache.fory.json.annotation.JsonProperty.Include;
 import org.apache.fory.json.resolver.CodecRegistry;
 
 /**
@@ -36,7 +38,11 @@ import org.apache.fory.json.resolver.CodecRegistry;
 public final class JsonConfig {
   private static final int MAX_CACHED_FIELD_NAMES = 1 << 29;
 
-  private final boolean writeNullFields;
+  private final Include defaultPropertyInclusion;
+  private final boolean writeLongAsString;
+  private final boolean escapeNonAscii;
+  private final boolean failOnMissingRequiredProperties;
+  private final JsonByteArray.Format byteArrayFormat;
   private final boolean codegenEnabled;
   private final boolean asyncCompilationEnabled;
   private final boolean propertyDiscoveryEnabled;
@@ -55,7 +61,11 @@ public final class JsonConfig {
   private final JsonTypeCheckContext typeCheckContext;
 
   JsonConfig(
-      boolean writeNullFields,
+      Include defaultPropertyInclusion,
+      boolean writeLongAsString,
+      boolean escapeNonAscii,
+      boolean failOnMissingRequiredProperties,
+      JsonByteArray.Format byteArrayFormat,
       boolean codegenEnabled,
       boolean asyncCompilationEnabled,
       boolean propertyDiscoveryEnabled,
@@ -71,7 +81,11 @@ public final class JsonConfig {
       JsonCodecFactory[] codecFactories,
       List<String> factoryIdentities,
       JsonTypeChecker typeChecker) {
-    this.writeNullFields = writeNullFields;
+    this.defaultPropertyInclusion = defaultPropertyInclusion;
+    this.writeLongAsString = writeLongAsString;
+    this.escapeNonAscii = escapeNonAscii;
+    this.failOnMissingRequiredProperties = failOnMissingRequiredProperties;
+    this.byteArrayFormat = Objects.requireNonNull(byteArrayFormat, "byteArrayFormat");
     this.codegenEnabled = codegenEnabled;
     this.asyncCompilationEnabled = asyncCompilationEnabled;
     this.propertyDiscoveryEnabled = propertyDiscoveryEnabled;
@@ -93,8 +107,34 @@ public final class JsonConfig {
     typeCheckContext = new JsonTypeCheckContext();
   }
 
-  public boolean writeNullFields() {
-    return writeNullFields;
+  /** Returns the concrete default inclusion used for object properties. */
+  public Include defaultPropertyInclusion() {
+    return defaultPropertyInclusion;
+  }
+
+  /**
+   * Returns whether built-in signed and module-provided unsigned 64-bit values write as strings.
+   */
+  public boolean writeLongAsString() {
+    return writeLongAsString;
+  }
+
+  /**
+   * Returns whether Fory-generated string contents escape characters above U+007F using lowercase
+   * hexadecimal digits and surrogate pairs. Caller-supplied raw JSON is unaffected.
+   */
+  public boolean escapeNonAscii() {
+    return escapeNonAscii;
+  }
+
+  /** Returns whether required creator properties must appear in the input. */
+  public boolean failOnMissingRequiredProperties() {
+    return failOnMissingRequiredProperties;
+  }
+
+  /** Returns the default byte-array representation for both reading and writing. */
+  public JsonByteArray.Format byteArrayFormat() {
+    return byteArrayFormat;
   }
 
   public boolean codegenEnabled() {

@@ -397,6 +397,14 @@ def build_jvm_artifacts(v, output):
     logger.info("Built unsigned JVM release repository: %s", output)
 
 
+def rebuild_for_verification(v, checkout, output):
+    """Run the current unsigned builders against an isolated RC checkout."""
+    global PROJECT_ROOT_DIR
+    PROJECT_ROOT_DIR = os.path.abspath(checkout)
+    build(v, skip_sign=True)
+    build_jvm_artifacts(v, output)
+
+
 def verify_ci_artifacts(
     v,
     rc_tag,
@@ -432,13 +440,23 @@ def verify_ci_artifacts(
     ).strip()
     _ensure_openjdk25()
 
-    with tempfile.TemporaryDirectory(prefix="fory-ci-artifact-verification-") as root:
+    with (
+        tempfile.TemporaryDirectory(prefix="fory-ci-artifact-verification-") as root,
+        tempfile.TemporaryDirectory(prefix="fg-", dir="/tmp") as gnupg_home,
+    ):
         checkout = os.path.join(root, "checkout")
         local_repository = os.path.join(root, "local-maven-repository")
         staged = os.path.join(root, "staged")
-        gnupg_home = os.path.join(root, "gnupg")
         os.makedirs(staged)
-        os.makedirs(gnupg_home, mode=0o700)
+        keys_path = os.path.join(root, "KEYS")
+        _download_file(keys_url, keys_path)
+        gpg_env = os.environ.copy()
+        gpg_env["GNUPGHOME"] = gnupg_home
+        subprocess.check_call(
+            ["gpg", "--batch", "--import", keys_path],
+            env=gpg_env,
+            stdout=subprocess.DEVNULL,
+        )
         subprocess.check_call(
             [
                 "git",
@@ -463,32 +481,20 @@ def verify_ci_artifacts(
         subprocess.check_call(
             ["git", "config", "user.email", "dev@fory.apache.org"], cwd=checkout
         )
-        release_script = os.path.join(checkout, "ci", "release.py")
-        subprocess.check_call(
-            [sys.executable, release_script, "build", "-v", v, "--skip-sign"],
-            cwd=checkout,
-        )
+        release_script = os.path.abspath(__file__)
         subprocess.check_call(
             [
                 sys.executable,
                 release_script,
-                "build_jvm_artifacts",
+                "rebuild_for_verification",
                 "-v",
                 v,
+                "--checkout",
+                checkout,
                 "--output",
                 local_repository,
             ],
             cwd=checkout,
-        )
-
-        keys_path = os.path.join(root, "KEYS")
-        _download_file(keys_url, keys_path)
-        gpg_env = os.environ.copy()
-        gpg_env["GNUPGHOME"] = gnupg_home
-        subprocess.check_call(
-            ["gpg", "--batch", "--import", keys_path],
-            env=gpg_env,
-            stdout=subprocess.DEVNULL,
         )
 
         rows = []
@@ -511,7 +517,7 @@ def verify_ci_artifacts(
         )
         local_source = os.path.join(checkout, "dist", source_archive)
         rows.append(
-            _compare_release_file("ATR", source_archive, staged_source, local_source)
+            _compare_release_file("Source", source_archive, staged_source, local_source)
         )
 
         staged_payloads = {}
@@ -537,12 +543,17 @@ def verify_ci_artifacts(
 
         local_payloads = set(_local_jvm_release_payloads(local_repository, v))
         staged_paths = set(staged_payloads)
-        missing_local = sorted(staged_paths.difference(local_payloads))
-        extra_local = sorted(local_payloads.difference(staged_paths))
-        if missing_local or extra_local:
-            raise RuntimeError(
-                "Local and staged JVM artifact sets differ: "
-                f"missing locally={missing_local}, extra locally={extra_local}"
+        for relative_path in sorted(local_payloads.difference(staged_paths)):
+            rows.append(
+                {
+                    "artifact": relative_path,
+                    "repository": "Local only",
+                    "staged_sha512": "-",
+                    "local_sha512": _sha512(
+                        os.path.join(local_repository, relative_path)
+                    ),
+                    "result": "Missing from staging",
+                }
             )
 
         for relative_path in sorted(staged_payloads):
@@ -587,7 +598,12 @@ def verify_ci_artifacts(
             toolchain,
             rows,
         )
-    logger.info("Verified %d CI artifacts byte-for-byte; report: %s", len(rows), output)
+    failures = [row for row in rows if row["result"] != "Match"]
+    if failures:
+        raise RuntimeError(
+            f"{len(failures)} of {len(rows)} artifacts did not match; report: {output}"
+        )
+    logger.info("Verified %d artifacts byte-for-byte; report: %s", len(rows), output)
 
 
 def _local_maven_command(command, repository_url):
@@ -769,19 +785,20 @@ def _local_jvm_release_payloads(repository, v):
 
 
 def _compare_release_file(repository, relative_path, staged_file, local_file):
-    if not os.path.isfile(local_file):
-        raise FileNotFoundError(f"Missing locally rebuilt artifact: {local_file}")
     staged_sha512 = _sha512(staged_file)
-    local_sha512 = _sha512(local_file)
-    if staged_sha512 != local_sha512 or not _files_equal(staged_file, local_file):
-        raise RuntimeError(
-            f"Reproducibility mismatch for {repository}/{relative_path}: "
-            f"staged={staged_sha512}, local={local_sha512}"
-        )
+    local_sha512 = _sha512(local_file) if os.path.isfile(local_file) else "-"
+    if local_sha512 == "-":
+        result = "Missing locally"
+    elif staged_sha512 != local_sha512 or not _files_equal(staged_file, local_file):
+        result = "Mismatch"
+    else:
+        result = "Match"
     return {
         "artifact": relative_path,
         "repository": repository,
-        "sha512": staged_sha512,
+        "staged_sha512": staged_sha512,
+        "local_sha512": local_sha512,
+        "result": result,
     }
 
 
@@ -827,20 +844,15 @@ def _write_ci_verification_report(
         f"- Release version: `{v}`",
         f"- RC tag: `{rc_tag}`",
         f"- Commit: `{release_commit}`",
-        f"- ATR candidate: {source_url}",
+        f"- Source candidate: {source_url}",
         f"- Java/Kotlin staging: `{java_kotlin_staging_id}`",
         f"- Scala staging: `{scala_staging_id}`",
         f"- Signing key: `{gpg_fingerprint}`",
         "",
         "## Local rebuild",
         "",
-        "The artifacts were rebuilt unsigned from the exact RC commit on trusted hardware.",
+        "The current release builders rebuilt artifacts unsigned from the exact RC commit on trusted hardware.",
         "The staged detached signatures were verified separately with the public key.",
-        "",
-        "```text",
-        f"python3 ci/release.py build -v {v} --skip-sign",
-        f"python3 ci/release.py build_jvm_artifacts -v {v} --output <local-repository>",
-        "```",
         "",
         "## Toolchain",
         "",
@@ -854,16 +866,23 @@ def _write_ci_verification_report(
             "",
             "## Byte-for-byte comparison",
             "",
-            "| Repository | Artifact | SHA-512 | Result |",
-            "| --- | --- | --- | --- |",
+            "| Repository | Artifact | Staged SHA-512 | Local SHA-512 | Result |",
+            "| --- | --- | --- | --- | --- |",
         ]
     )
     for row in rows:
         lines.append(
             f"| `{row['repository']}` | `{row['artifact']}` | "
-            f"`{row['sha512']}` | Match |"
+            f"`{row['staged_sha512']}` | `{row['local_sha512']}` | "
+            f"{row['result']} |"
         )
-    lines.extend(["", f"All {len(rows)} staged artifacts matched.", ""])
+    failures = sum(row["result"] != "Match" for row in rows)
+    summary = (
+        f"All {len(rows)} artifacts matched."
+        if failures == 0
+        else f"FAILED: {failures} of {len(rows)} artifacts did not match."
+    )
+    lines.extend(["", summary, ""])
     output_directory = os.path.dirname(output)
     if output_directory:
         os.makedirs(output_directory, exist_ok=True)
@@ -2751,6 +2770,15 @@ def _parse_args():
         help="new directory for the locally rebuilt Maven repository",
     )
     build_jvm_parser.set_defaults(func=build_jvm_artifacts)
+
+    rebuild_parser = subparsers.add_parser(
+        "rebuild_for_verification",
+        description="Rebuild source and JVM artifacts in an isolated RC checkout",
+    )
+    rebuild_parser.add_argument("-v", required=True)
+    rebuild_parser.add_argument("--checkout", required=True)
+    rebuild_parser.add_argument("--output", required=True)
+    rebuild_parser.set_defaults(func=rebuild_for_verification)
 
     stage_jvm_parser = subparsers.add_parser(
         "stage_jvm",

@@ -92,7 +92,8 @@ class KotlinDefaultArgumentsTest {
   @JsonInclude(Include.NON_DEFAULT)
   abstract class RequiredDefaultMixin(
     val required: Int,
-    @param:JsonProperty(include = Include.ALWAYS) val value: Int
+    // Match the target's default use sites: Kotlin 2.4 also annotates the backing field.
+    @JsonProperty(include = Include.ALWAYS) val value: Int
   )
 
   data class PlainDefault(val value: Int = 1) {

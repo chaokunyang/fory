@@ -35,8 +35,7 @@ The artifacts are signed with PGP key fingerprint
 ${gpg_fingerprint}. The key can be found in the KEYS file:
 https://downloads.apache.org/fory/KEYS
 
-The vote will remain open for at least 72 hours and close at
-${vote_deadline_utc}.
+The vote will remain open for at least 72 hours.
 
 Please vote accordingly:
 

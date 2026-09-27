@@ -197,10 +197,10 @@ release_manager_name="${FORY_RELEASE_MANAGER_NAME:?missing release manager name}
 ```
 
 Read [the vote email template](assets/vote-email.txt) and produce a complete,
-copyable email. Fill every placeholder from verified output, link the
-trusted-hardware report, and state that the vote remains open for at least
-72 hours without specifying a closing date or time. Do not send the email
-unless requested.
+copyable email. Fill every placeholder from verified output, attach the
+trusted-hardware report or link an existing public copy, and state that the vote
+remains open for at least 72 hours without specifying a closing date or time.
+Do not send the email unless requested.
 
 ## Explicit Manual Workflow
 

@@ -29,7 +29,7 @@ The release commit:
 https://github.com/apache/fory/commit/${release_commit}
 
 Independent trusted-hardware reproducibility report:
-${reproducibility_report_url}
+${reproducibility_report_reference}
 
 The artifacts are signed with PGP key fingerprint
 ${gpg_fingerprint}. The key can be found in the KEYS file:

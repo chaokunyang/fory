@@ -62,14 +62,19 @@ The command verifies the generated PGP signature and SHA-512 checksum.
 ## Upload the Source Release to ASF Subversion
 
 Use a clean, updated working copy of the ASF development distribution
-repository.
+repository. Upload only the source archive, its signature, and its checksum.
+Verification reports and logs are not distribution artifacts and must not be
+committed to SVN.
 
 ```bash
 test -d "$svn_wc/.svn" || \
   svn checkout https://dist.apache.org/repos/dist/dev/fory "$svn_wc"
 svn update "$svn_wc"
 mkdir -p "$svn_wc/$release_version"
-cp dist/* "$svn_wc/$release_version/"
+cp "dist/apache-fory-${release_version}-src.tar.gz" \
+  "dist/apache-fory-${release_version}-src.tar.gz.asc" \
+  "dist/apache-fory-${release_version}-src.tar.gz.sha512" \
+  "$svn_wc/$release_version/"
 svn add --force "$svn_wc/$release_version"
 svn status "$svn_wc/$release_version"
 svn commit "$svn_wc/$release_version" -m "Prepare Apache Fory ${rc_tag}"
@@ -102,4 +107,5 @@ python3 ci/release.py verify_ci_artifacts \
 ```
 
 This verification uses only the public signing key. It does not sign or upload
-artifacts. Link the generated reproducibility report in the vote email.
+artifacts. Keep the generated report locally; it can be attached to the vote
+email or referenced through an existing public URL, but not uploaded to SVN.

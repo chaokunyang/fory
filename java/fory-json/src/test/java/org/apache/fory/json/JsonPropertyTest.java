@@ -24,6 +24,7 @@ import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
+import com.google.common.collect.ImmutableList;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URL;
@@ -90,7 +91,7 @@ public class JsonPropertyTest extends ForyJsonTestModels {
             bytes
                 ? json.fromJson(text.getBytes(StandardCharsets.UTF_8), NullDefaults.class)
                 : json.fromJson(text, NullDefaults.class);
-        assertEquals(value.items, List.of("default"));
+        assertEquals(value.items, ImmutableList.of("default"));
         assertEquals(value.optional, Optional.of("default"));
         assertEquals(value.number, 42);
         assertEquals(value.name, null);
@@ -98,7 +99,7 @@ public class JsonPropertyTest extends ForyJsonTestModels {
     }
     assertEquals(
         json.fromJson("{\"items\":[\"new\"],\"items\":null}", NullDefaults.class).items,
-        List.of("new"));
+        ImmutableList.of("new"));
   }
 
   @Test
@@ -106,7 +107,7 @@ public class JsonPropertyTest extends ForyJsonTestModels {
     ForyJson json = newJsonBuilder().onNullRead(NullHandling.FAIL).build();
     assertEquals(
         json.fromJson("{\"items\":null,\"name\":null}", NullDefaults.class).items,
-        List.of("default"));
+        ImmutableList.of("default"));
     assertThrows(
         ForyJsonException.class, () -> json.fromJson("{\"number\":null}", NullDefaults.class));
     assertEquals(json.fromJson("{\"number\":7}", NullDefaults.class).number, 7);
@@ -119,7 +120,7 @@ public class JsonPropertyTest extends ForyJsonTestModels {
 
   public static class NullDefaults {
     @JsonProperty(onNullRead = NullHandling.SKIP)
-    public List<String> items = List.of("default");
+    public List<String> items = ImmutableList.of("default");
 
     public Optional<String> optional = Optional.of("default");
     public int number = 42;

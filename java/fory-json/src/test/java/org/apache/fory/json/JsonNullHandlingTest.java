@@ -24,6 +24,9 @@ import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertThrows;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import java.io.ByteArrayInputStream;
 import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
@@ -143,18 +146,19 @@ public class JsonNullHandlingTest extends ForyJsonTestModels {
             + "\"optional\":[null,\"d\"],\"numbers\":[null,1,null,2]}";
     for (int reader = 0; reader < 4; reader++) {
       Containers value = read(json, text, Containers.class, reader);
-      assertEquals(value.inherited, List.of("a"));
+      assertEquals(value.inherited, ImmutableList.of("a"));
       assertEquals(value.set, Arrays.asList(null, "b"));
-      assertEquals(value.nested, List.of(List.of("c")));
-      assertEquals(value.map, Map.of("a", 1));
-      assertEquals(value.optional, List.of(Optional.of("d")));
-      assertEquals(value.numbers, Set.of(1, 2));
+      assertEquals(value.nested, ImmutableList.of(ImmutableList.of("c")));
+      assertEquals(value.map, ImmutableMap.of("a", 1));
+      assertEquals(value.optional, ImmutableList.of(Optional.of("d")));
+      assertEquals(value.numbers, ImmutableSet.of(1, 2));
       assertEquals(
-          read(json, "{\"inherited\":[null,null]}", Containers.class, reader).inherited, List.of());
+          read(json, "{\"inherited\":[null,null]}", Containers.class, reader).inherited,
+          ImmutableList.of());
     }
     ForyJson defaults = newJson();
     Containers outerOnly = defaults.fromJson("{\"nested\":[null,[null,\"c\"]]}", Containers.class);
-    assertEquals(outerOnly.nested, List.of(Arrays.asList(null, "c")));
+    assertEquals(outerOnly.nested, ImmutableList.of(Arrays.asList(null, "c")));
     assertEquals(
         defaults.fromJson("{\"inherited\":[null]}", Containers.class).inherited,
         Arrays.asList((String) null));
@@ -169,7 +173,7 @@ public class JsonNullHandlingTest extends ForyJsonTestModels {
           Arrays.asList((String) null));
       assertEquals(
           read(fail, "{\"inherited\":[\"ok\"]}", Containers.class, reader).inherited,
-          List.of("ok"));
+          ImmutableList.of("ok"));
     }
   }
 
@@ -218,14 +222,16 @@ public class JsonNullHandlingTest extends ForyJsonTestModels {
   @Test
   public void rootContainers() {
     ForyJson skip = newJsonBuilder().onContentNullRead(NullHandling.SKIP).build();
-    assertEquals(skip.fromJson("[null,\"a\",null]", new TypeRef<List<String>>() {}), List.of("a"));
+    assertEquals(
+        skip.fromJson("[null,\"a\",null]", new TypeRef<List<String>>() {}), ImmutableList.of("a"));
     assertEquals(
         skip.fromJson(
             "{\"1\":\"a\",\"1\":null,\"2\":null}", new TypeRef<Map<Integer, String>>() {}),
-        Map.of(1, "a"));
+        ImmutableMap.of(1, "a"));
     assertEquals(
-        skip.fromJson("{\"x\":[null,1,null],\"y\":null}", Object.class), Map.of("x", List.of(1L)));
-    assertEquals(skip.fromJson("[null,\"null\"]", Object.class), List.of("null"));
+        skip.fromJson("{\"x\":[null,1,null],\"y\":null}", Object.class),
+        ImmutableMap.of("x", ImmutableList.of(1L)));
+    assertEquals(skip.fromJson("[null,\"null\"]", Object.class), ImmutableList.of("null"));
     assertEquals(skip.fromJson("[null,1,null,2]", AtomicIntegerArray.class).length(), 2);
     assertEquals(skip.fromJson("[null,1,null,2]", AtomicLongArray.class).get(1), 2L);
     assertEquals(

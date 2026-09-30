@@ -143,18 +143,21 @@ final class StringWriterCodegen extends JsonWriterCodegen {
     expressions.add(
         new Expression.Assign(
             stringPrefixRef(false, id),
-            new Expression.Invoke(property, "stringNamePrefix", TypeRef.of(byte[].class))
+            new Expression.Invoke(
+                    property, "stringNamePrefix", "", TypeRef.of(byte[].class), false, false)
                 .inline()));
     expressions.add(
         new Expression.Assign(
             stringPrefixRef(true, id),
-            new Expression.Invoke(property, "stringCommaNamePrefix", TypeRef.of(byte[].class))
+            new Expression.Invoke(
+                    property, "stringCommaNamePrefix", "", TypeRef.of(byte[].class), false, false)
                 .inline()));
     if (fields.name[id]) {
       expressions.add(
           new Expression.Assign(
               utf16PrefixRef(false, id),
-              new Expression.Invoke(property, "stringUtf16NamePrefix", TypeRef.of(byte[].class))
+              new Expression.Invoke(
+                      property, "stringUtf16NamePrefix", "", TypeRef.of(byte[].class), false, false)
                   .inline()));
     }
     if (fields.comma[id]) {
@@ -162,7 +165,12 @@ final class StringWriterCodegen extends JsonWriterCodegen {
           new Expression.Assign(
               utf16PrefixRef(true, id),
               new Expression.Invoke(
-                      property, "stringUtf16CommaNamePrefix", TypeRef.of(byte[].class))
+                      property,
+                      "stringUtf16CommaNamePrefix",
+                      "",
+                      TypeRef.of(byte[].class),
+                      false,
+                      false)
                   .inline()));
     }
   }
@@ -262,7 +270,8 @@ final class StringWriterCodegen extends JsonWriterCodegen {
       Expression writer) {
     return new Expression.ListExpression(
         writeFieldName(property, id, commaKnown, index, writer),
-        new Expression.Invoke(writer, "writeString", value));
+        new Expression.Invoke(
+            writer, "writeString", "", TypeRef.of(void.class), false, false, value));
   }
 
   @Override
@@ -284,6 +293,10 @@ final class StringWriterCodegen extends JsonWriterCodegen {
             new Expression.Invoke(
                 writer,
                 "writeRawValue",
+                "",
+                TypeRef.of(void.class),
+                false,
+                false,
                 stringPrefixRef(false, id),
                 stringPrefixRef(true, id),
                 utf16PrefixRef(false, id),

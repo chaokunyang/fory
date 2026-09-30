@@ -26,7 +26,10 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.apache.fory.codegen.Code;
 import org.apache.fory.codegen.CodegenContext;
@@ -78,20 +81,15 @@ abstract class JsonReaderCodegen {
 
   final JsonCodegen codegen;
   final JsonTypeResolver resolver;
-  private final int[] fastReadGroupEnds;
+  private int[] fastReadGroupEnds;
   private AnyInfo any;
   private Class<?> ownerType;
   private ObjectCodec<?> objectOwner;
   private boolean storesSelfReader;
 
   JsonReaderCodegen(JsonCodegen codegen, JsonTypeResolver resolver) {
-    this(codegen, resolver, null);
-  }
-
-  JsonReaderCodegen(JsonCodegen codegen, JsonTypeResolver resolver, int[] fastReadGroupEnds) {
     this.codegen = codegen;
     this.resolver = resolver;
-    this.fastReadGroupEnds = fastReadGroupEnds;
   }
 
   abstract Class<?> codecFieldType(JsonFieldInfo property);
@@ -160,7 +158,7 @@ abstract class JsonReaderCodegen {
     if (creatorInfo != null) {
       return genCreatorReaderCode(builder, type, creatorInfo);
     }
-    validateFastReadGroups(properties);
+    fastReadGroupEnds = groupEnds(properties);
     Class<?> readerType = readerType();
     String readMethod = readMethod();
     String slowMethod = readMethod + "Slow";
@@ -265,7 +263,7 @@ abstract class JsonReaderCodegen {
     if (creatorInfo != null) {
       return genAnyCreatorReaderCode(builder, type, creatorInfo);
     }
-    validateFastReadGroups(properties);
+    fastReadGroupEnds = groupEnds(properties);
     Class<?> concreteReaderType = readerType();
     String readMethod = readMethod();
     String anyReadMethod = readMethod + "Any";
@@ -2089,7 +2087,8 @@ abstract class JsonReaderCodegen {
       expressions.add(
           new Expression.AssignArrayElem(
               hashes,
-              new Expression.Invoke(property, "nameHash", TypeRef.of(long.class)).inline(),
+              new Expression.Invoke(property, "nameHash", "", TypeRef.of(long.class), false, false)
+                  .inline(),
               id));
       if (JsonCodegen.usesReadCodec(properties[i], resolver)) {
         if (usesReaderSlot(properties[i].readTypeInfo())) {
@@ -3391,26 +3390,16 @@ abstract class JsonReaderCodegen {
     return length == Long.BYTES ? -1L : (1L << (length << 3)) - 1L;
   }
 
-  private void validateFastReadGroups(JsonFieldInfo[] properties) {
-    if (fastReadGroupEnds == null || fastReadGroupEnds.length == 0) {
-      throw new IllegalArgumentException("Fast-read group boundaries are required");
+  private int[] groupEnds(JsonFieldInfo[] properties) {
+    int[] sizes = new int[properties.length];
+    for (int i = 0; i < properties.length; i++) {
+      // Hash comparison, current/next field reads, cursor tests and fallback calls. Packed name
+      // matching adds another branch/read pair. Count child reads as calls, not their bodies;
+      // shared prologues and wider local-variable encodings only increase the emitted size.
+      sizes[i] = 80 + (isDirectName(properties[i].name(), true) ? 48 : 0);
     }
-    if (properties.length == 0) {
-      if (fastReadGroupEnds.length != 1 || fastReadGroupEnds[0] != 0) {
-        throw new IllegalArgumentException("Empty readers require one empty group");
-      }
-      return;
-    }
-    int previous = 0;
-    for (int end : fastReadGroupEnds) {
-      if (end <= previous || end > properties.length) {
-        throw new IllegalArgumentException("Invalid fast-read group boundary " + end);
-      }
-      previous = end;
-    }
-    if (previous != properties.length) {
-      throw new IllegalArgumentException("Fast-read groups must cover every property");
-    }
+    int[] ends = JsonCodegen.groupEnds(sizes, 0);
+    return ends == null ? new int[] {properties.length} : ends;
   }
 
   final boolean shouldSplitFastRead() {
@@ -3435,7 +3424,8 @@ abstract class JsonReaderCodegen {
   }
 
   private Expression returnObject(Expression object) {
-    Expression exitDepth = new Expression.Invoke(readerRef(), "exitDepth");
+    Expression exitDepth =
+        new Expression.Invoke(readerRef(), "exitDepth", "", TypeRef.of(void.class), false, false);
     if (objectOwner.hasValidators()) {
       return new Expression.ListExpression(
           exitDepth,
@@ -3802,43 +3792,33 @@ abstract class JsonReaderCodegen {
 
   private Expression directFieldNameSwitch(
       Expression fieldIndex, Expression prefix, String[] names) {
-    int[] keys = new int[names.length];
-    int keyCount = 0;
-    for (String name : names) {
+    Map<Integer, List<Integer>> groups = new LinkedHashMap<>();
+    for (int field = 0; field < names.length; field++) {
+      String name = names[field];
       if (name.isEmpty() || !isDirectName(name, true)) {
         continue;
       }
       int key = (int) JsonAsciiToken.prefix(fieldNameToken(name));
-      boolean found = false;
-      for (int i = 0; i < keyCount; i++) {
-        if (keys[i] == key) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        keys[keyCount++] = key;
-      }
+      groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(field);
     }
-    Expression.Switch.Case[] cases = new Expression.Switch.Case[keyCount];
-    for (int keyIndex = 0; keyIndex < keyCount; keyIndex++) {
-      int key = keys[keyIndex];
+    // Classify once during construction. Rescanning all names for every prefix also rebuilt
+    // their tokens quadratically, although the generated switch only needs each field once.
+    Expression.Switch.Case[] cases = new Expression.Switch.Case[groups.size()];
+    int caseIndex = 0;
+    for (Map.Entry<Integer, List<Integer>> group : groups.entrySet()) {
       Expression resolve = new Expression.Empty();
-      for (int field = names.length - 1; field >= 0; field--) {
-        String name = names[field];
-        if (!name.isEmpty()
-            && isDirectName(name, true)
-            && (int) JsonAsciiToken.prefix(fieldNameToken(name)) == key) {
-          resolve =
-              new Expression.If(
-                  tryReadNextFieldNameColon(name),
-                  new Expression.Assign(fieldIndex, Expression.Literal.ofInt(field)),
-                  resolve);
-        }
+      List<Integer> fields = group.getValue();
+      for (int i = fields.size() - 1; i >= 0; i--) {
+        int field = fields.get(i);
+        resolve =
+            new Expression.If(
+                tryReadNextFieldNameColon(names[field]),
+                new Expression.Assign(fieldIndex, Expression.Literal.ofInt(field)),
+                resolve);
       }
-      cases[keyIndex] =
+      cases[caseIndex++] =
           new Expression.Switch.Case(
-              key, new Expression.ListExpression(resolve, new Expression.Break()));
+              group.getKey(), new Expression.ListExpression(resolve, new Expression.Break()));
     }
     return new Expression.Switch(prefix, cases, null);
   }
@@ -4111,38 +4091,28 @@ abstract class JsonReaderCodegen {
 
   private Expression directFieldIndexSwitch(
       Expression fieldIndex, Expression fieldHash, JsonFieldInfo[] properties) {
-    int[] keys = new int[properties.length];
-    int keyCount = 0;
-    for (JsonFieldInfo property : properties) {
-      int key = (int) property.nameHash();
-      boolean found = false;
-      for (int i = 0; i < keyCount; i++) {
-        if (keys[i] == key) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        keys[keyCount++] = key;
-      }
+    Map<Integer, List<Integer>> groups = new LinkedHashMap<>();
+    for (int field = 0; field < properties.length; field++) {
+      int key = (int) properties[field].nameHash();
+      groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(field);
     }
-    Expression.Switch.Case[] cases = new Expression.Switch.Case[keyCount];
-    for (int keyIndex = 0; keyIndex < keyCount; keyIndex++) {
-      int key = keys[keyIndex];
+    Expression.Switch.Case[] cases = new Expression.Switch.Case[groups.size()];
+    int caseIndex = 0;
+    for (Map.Entry<Integer, List<Integer>> group : groups.entrySet()) {
       Expression resolve = new Expression.Empty();
-      for (int field = properties.length - 1; field >= 0; field--) {
+      List<Integer> fields = group.getValue();
+      for (int i = fields.size() - 1; i >= 0; i--) {
+        int field = fields.get(i);
         long hash = properties[field].nameHash();
-        if ((int) hash == key) {
-          resolve =
-              new Expression.If(
-                  eq(fieldHash, Expression.Literal.ofLong(hash)),
-                  new Expression.Assign(fieldIndex, Expression.Literal.ofInt(field)),
-                  resolve);
-        }
+        resolve =
+            new Expression.If(
+                eq(fieldHash, Expression.Literal.ofLong(hash)),
+                new Expression.Assign(fieldIndex, Expression.Literal.ofInt(field)),
+                resolve);
       }
-      cases[keyIndex] =
+      cases[caseIndex++] =
           new Expression.Switch.Case(
-              key, new Expression.ListExpression(resolve, new Expression.Break()));
+              group.getKey(), new Expression.ListExpression(resolve, new Expression.Break()));
     }
     // UNKNOWN and SKIP are valid table results, so the generated local needs a distinct state
     // until a known hash or the table fallback resolves it.
@@ -4212,21 +4182,33 @@ abstract class JsonReaderCodegen {
   }
 
   final Expression expectExpr(char token) {
-    return new Expression.Invoke(readerRef(), "expectNextToken", Expression.Literal.ofChar(token));
+    // These concrete reader operations declare no exceptions. Use the explicit invocation
+    // contract rather than rediscovering every method in the reader hierarchy for every field.
+    return new Expression.Invoke(
+        readerRef(),
+        "expectNextToken",
+        "",
+        TypeRef.of(void.class),
+        false,
+        false,
+        Expression.Literal.ofChar(token));
   }
 
   final Expression consumeExpr(char token) {
     return new Expression.Invoke(
             readerRef(),
             "consumeNextToken",
+            "",
             TypeRef.of(boolean.class),
+            false,
+            false,
             Expression.Literal.ofChar(token))
         .inline();
   }
 
   Expression consumeCommaOrEndObjectExpr() {
     return new Expression.Invoke(
-            readerRef(), "consumeNextCommaOrEndObject", TypeRef.of(boolean.class))
+            readerRef(), "consumeNextCommaOrEndObject", "", TypeRef.of(boolean.class), false, false)
         .inline();
   }
 
@@ -4235,7 +4217,8 @@ abstract class JsonReaderCodegen {
   }
 
   final Expression tryReadNullExpr() {
-    return new Expression.Invoke(readerRef(), "tryReadNextNullToken", TypeRef.of(boolean.class))
+    return new Expression.Invoke(
+            readerRef(), "tryReadNextNullToken", "", TypeRef.of(boolean.class), false, false)
         .inline();
   }
 
@@ -4245,7 +4228,12 @@ abstract class JsonReaderCodegen {
 
   final Expression readBooleanExpr(boolean tokenValueRead) {
     return new Expression.Invoke(
-            readerRef(), readBooleanMethod(tokenValueRead), TypeRef.of(boolean.class))
+            readerRef(),
+            readBooleanMethod(tokenValueRead),
+            "",
+            TypeRef.of(boolean.class),
+            false,
+            false)
         .inline();
   }
 
@@ -4254,7 +4242,8 @@ abstract class JsonReaderCodegen {
   }
 
   final Expression readIntExpr(boolean tokenValueRead) {
-    return new Expression.Invoke(readerRef(), readIntMethod(tokenValueRead), TypeRef.of(int.class))
+    return new Expression.Invoke(
+            readerRef(), readIntMethod(tokenValueRead), "", TypeRef.of(int.class), false, false)
         .inline();
   }
 
@@ -4264,16 +4253,19 @@ abstract class JsonReaderCodegen {
 
   final Expression readLongExpr(boolean tokenValueRead) {
     return new Expression.Invoke(
-            readerRef(), readLongMethod(tokenValueRead), TypeRef.of(long.class))
+            readerRef(), readLongMethod(tokenValueRead), "", TypeRef.of(long.class), false, false)
         .inline();
   }
 
   final Expression readFloatExpr() {
-    return new Expression.Invoke(readerRef(), readFloatMethod(), TypeRef.of(float.class)).inline();
+    return new Expression.Invoke(
+            readerRef(), readFloatMethod(), "", TypeRef.of(float.class), false, false)
+        .inline();
   }
 
   final Expression readDoubleExpr() {
-    return new Expression.Invoke(readerRef(), readDoubleMethod(), TypeRef.of(double.class))
+    return new Expression.Invoke(
+            readerRef(), readDoubleMethod(), "", TypeRef.of(double.class), false, false)
         .inline();
   }
 
@@ -4283,7 +4275,12 @@ abstract class JsonReaderCodegen {
 
   final Expression readStringExpr(boolean tokenValueRead) {
     return new Expression.Invoke(
-            readerRef(), readStringMethod(tokenValueRead), TypeRef.of(String.class), true)
+            readerRef(),
+            readStringMethod(tokenValueRead),
+            "",
+            TypeRef.of(String.class),
+            true,
+            false)
         .inline();
   }
 
@@ -4315,12 +4312,18 @@ abstract class JsonReaderCodegen {
 
   final Expression readFieldNameHash(String namePrefix) {
     return new Expression.Invoke(
-        readerRef(), "readFieldNameHash", namePrefix, TypeRef.of(long.class), false);
+        readerRef(), "readFieldNameHash", namePrefix, TypeRef.of(long.class), false, false);
   }
 
   final Expression fieldIndexInvoke(Expression fieldHash) {
     return new Expression.Invoke(
-            readTableRef(), any == null ? "index" : "match", TypeRef.of(int.class), true, fieldHash)
+            readTableRef(),
+            any == null ? "index" : "match",
+            "",
+            TypeRef.of(int.class),
+            true,
+            false,
+            fieldHash)
         .inline();
   }
 
@@ -4334,7 +4337,10 @@ abstract class JsonReaderCodegen {
       return new Expression.Invoke(
               readerRef(),
               "tryReadNextFieldNameToken0",
+              "",
               TypeRef.of(boolean.class),
+              false,
+              false,
               Expression.Literal.ofLong(JsonAsciiToken.prefix(token)),
               Expression.Literal.ofLong(JsonAsciiToken.prefixMask(tokenLength)),
               Expression.Literal.ofInt(tokenLength))
@@ -4344,7 +4350,10 @@ abstract class JsonReaderCodegen {
       return new Expression.Invoke(
               readerRef(),
               "tryReadNextFieldNameToken8",
+              "",
               TypeRef.of(boolean.class),
+              false,
+              false,
               Expression.Literal.ofLong(JsonAsciiToken.prefix(token)),
               Expression.Literal.ofLong(JsonAsciiToken.suffixLong(token)),
               Expression.Literal.ofLong(JsonAsciiToken.suffixMask(tokenLength)),
@@ -4354,7 +4363,10 @@ abstract class JsonReaderCodegen {
     return new Expression.Invoke(
             readerRef(),
             "tryReadNextFieldNameToken" + suffixLength,
+            "",
             TypeRef.of(boolean.class),
+            false,
+            false,
             Expression.Literal.ofLong(JsonAsciiToken.prefix(token)),
             Expression.Literal.ofLong(JsonAsciiToken.prefixMask(tokenLength)),
             Expression.Literal.ofInt(JsonAsciiToken.suffix(token)),
@@ -4370,7 +4382,10 @@ abstract class JsonReaderCodegen {
       return new Expression.Invoke(
               readerRef(),
               "tryReadNextFieldNameUtf16Token2",
+              "",
               TypeRef.of(boolean.class),
+              false,
+              false,
               Expression.Literal.ofLong(utf16TokenWord(token, 0, Math.min(tokenLength, 4))),
               Expression.Literal.ofLong(utf16WordMask(Math.min(tokenLength, 4))),
               Expression.Literal.ofLong(tailLength == 0 ? 0 : utf16TokenWord(token, 4, tailLength)),
@@ -4381,7 +4396,10 @@ abstract class JsonReaderCodegen {
     return new Expression.Invoke(
             readerRef(),
             "tryReadNextFieldNameUtf16Token3",
+            "",
             TypeRef.of(boolean.class),
+            false,
+            false,
             Expression.Literal.ofLong(utf16TokenWord(token, 0, 4)),
             Expression.Literal.ofLong(utf16TokenWord(token, 4, 4)),
             Expression.Literal.ofLong(utf16TokenWord(token, 8, tokenLength - 8)),
@@ -4393,7 +4411,10 @@ abstract class JsonReaderCodegen {
     return new Expression.Invoke(
             readerRef(),
             "tryReadNextFieldNameColon",
+            "",
             TypeRef.of(boolean.class),
+            false,
+            false,
             Expression.Literal.ofLong(property.nameHash()),
             Expression.Literal.ofLong(packedNameMask(property.name().length())),
             Expression.Literal.ofInt(property.name().length()))

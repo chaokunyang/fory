@@ -40,6 +40,7 @@ import org.apache.fory.codegen.JaninoUtils;
 import org.apache.fory.codegen.JaninoUtils.DirectInvocation;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.annotation.JsonProperty.NullHandling;
 import org.apache.fory.json.codec.CollectionCodec;
 import org.apache.fory.json.codec.DirectUnboxedValueCodec;
 import org.apache.fory.json.codec.JsonUnwrappedInfo;
@@ -200,13 +201,16 @@ public final class JsonCodegen {
         key,
         elementType,
         compiler ->
-            compiler.buildUtf8CollectionReader(generatedPackage, key.stringCollectionElements()));
+            compiler.buildUtf8CollectionReader(
+                generatedPackage, key.stringCollectionElements(), key.collectionNullRead()));
   }
 
-  private Class<?> buildUtf8CollectionReader(String generatedPackage, boolean stringElements) {
+  private Class<?> buildUtf8CollectionReader(
+      String generatedPackage, boolean stringElements, NullHandling onContentNullRead) {
     String className = className();
     String code =
-        new Utf8CollectionReaderCodegen().genCode(generatedPackage, className, stringElements);
+        new Utf8CollectionReaderCodegen()
+            .genCode(generatedPackage, className, stringElements, onContentNullRead);
     return compileCodecClass(generatedPackage, className, code);
   }
 

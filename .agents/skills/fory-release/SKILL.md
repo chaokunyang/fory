@@ -1,6 +1,6 @@
 ---
 name: fory-release
-description: Stage or verify an Apache Fory release candidate. Use GitHub Actions by default for ATR source staging and Nexus JVM staging; use the retained local manual workflow only when the user explicitly requests manual publishing.
+description: Stage or verify an Apache Fory release candidate and prepare GitHub release notes. Use GitHub Actions by default for ATR source staging and Nexus JVM staging; use the retained local manual workflow only when the user explicitly requests manual publishing.
 ---
 
 # Apache Fory Release
@@ -213,6 +213,20 @@ to it automatically after a CI failure.
 For an existing CI-staged candidate, do not create another tag or staging
 repository. Confirm the exact tag, commit, workflow run, ATR URL, both Nexus
 repository IDs, and CI signing-key fingerprint, then run steps 6 and 7.
+
+## GitHub Release Title and Notes
+
+When authorized to create the final GitHub Release after the vote passes:
+
+- Set the title to the version tag alone, such as `v1.7.6`, not
+  `Apache Fory 1.7.6`. Use `--title "v${release_version}"` when creating it with
+  `gh release create`.
+- Put important features in a `## Highlights` section before the full change
+  list. Give each important feature its own named `###` subsection rather than
+  leaving it only as an entry in the change list. Explain what users can do with
+  it and include a concise example or documentation link where useful.
+- Describe only features included in that release; preserve the complete
+  change list after the highlights.
 
 ## Release retries
 

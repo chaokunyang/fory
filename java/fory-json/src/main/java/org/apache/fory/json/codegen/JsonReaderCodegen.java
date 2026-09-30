@@ -33,6 +33,7 @@ import org.apache.fory.codegen.CodegenContext;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Reference;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.annotation.JsonProperty.NullHandling;
 import org.apache.fory.json.codec.CollectionCodec;
 import org.apache.fory.json.codec.DirectUnboxedValueCodec;
 import org.apache.fory.json.codec.JsonUnwrappedInfo;
@@ -739,10 +740,13 @@ abstract class JsonReaderCodegen {
           new Expression.Switch.Case(
               i,
               new Expression.ListExpression(
-                  assignCreatorArgument(
-                      arguments,
-                      fields[i].argumentIndex(),
-                      readCreatorValue(builder, fields[i], i)),
+                  nullReadGuard(
+                      fields[i].onNullRead(),
+                      fields[i].name(),
+                      assignCreatorArgument(
+                          arguments,
+                          fields[i].argumentIndex(),
+                          readCreatorValue(builder, fields[i], i))),
                   new Expression.Break()));
     }
     loop.add(
@@ -813,7 +817,9 @@ abstract class JsonReaderCodegen {
             reserved,
             skip,
             new Expression.If(
-                eq(match, Expression.Literal.ofInt(JsonFieldTable.UNKNOWN)), read, skip)));
+                eq(match, Expression.Literal.ofInt(JsonFieldTable.UNKNOWN)),
+                nullReadGuard(resolver.sharedRegistry().onContentNullRead(), "Any value", read),
+                skip)));
   }
 
   private void addCreatorMethod(
@@ -1034,10 +1040,13 @@ abstract class JsonReaderCodegen {
           new Expression.Switch.Case(
               i,
               new Expression.ListExpression(
-                  assignCreatorArgument(
-                      arguments,
-                      fields[i].argumentIndex(),
-                      readCreatorValue(builder, fields[i], i)),
+                  nullReadGuard(
+                      fields[i].onNullRead(),
+                      fields[i].name(),
+                      assignCreatorArgument(
+                          arguments,
+                          fields[i].argumentIndex(),
+                          readCreatorValue(builder, fields[i], i))),
                   new Expression.Break()));
     }
     loop.add(
@@ -1077,8 +1086,11 @@ abstract class JsonReaderCodegen {
     for (int i = fields.length - 1; i >= 0; i--) {
       JsonCreatorFieldInfo field = fields[i];
       Expression read =
-          assignCreatorArgument(
-              arguments, field.argumentIndex(), readCreatorValue(builder, field, i));
+          nullReadGuard(
+              field.onNullRead(),
+              field.name(),
+              assignCreatorArgument(
+                  arguments, field.argumentIndex(), readCreatorValue(builder, field, i)));
       next =
           new Expression.If(
               tryReadOrderedCreatorField(field.name()),
@@ -2514,10 +2526,13 @@ abstract class JsonReaderCodegen {
           new Expression.Switch.Case(
               i,
               new Expression.ListExpression(
-                  new Expression.AssignArrayElem(
-                      root,
-                      readCreatorValue(builder, field, i),
-                      Expression.Literal.ofInt(field.argumentIndex())),
+                  nullReadGuard(
+                      field.onNullRead(),
+                      field.name(),
+                      new Expression.AssignArrayElem(
+                          root,
+                          readCreatorValue(builder, field, i),
+                          Expression.Literal.ofInt(field.argumentIndex()))),
                   new Expression.Break()));
     }
     return new Expression.Switch(index, cases, new Expression.Invoke(readerRef(), "skipValue"));
@@ -2596,8 +2611,14 @@ abstract class JsonReaderCodegen {
                 readCreatorValue(builder, field, id),
                 Expression.Literal.ofInt(field.argumentIndex())));
       }
-      read.add(new Expression.Break());
-      cases[i - start] = new Expression.Switch.Case(i, read);
+      NullHandling handling =
+          route.field() == null ? route.creatorField().onNullRead() : route.field().onNullRead();
+      String name = route.field() == null ? route.creatorField().name() : route.field().name();
+      cases[i - start] =
+          new Expression.Switch.Case(
+              i,
+              new Expression.ListExpression(
+                  nullReadGuard(handling, name, read), new Expression.Break()));
     }
     return new Expression.Switch(
         routeIndex, cases, new Expression.Invoke(readerRef(), "skipValue"));
@@ -3013,11 +3034,10 @@ abstract class JsonReaderCodegen {
     Expression.ListExpression expressions = new Expression.ListExpression();
     expressions.add(new Expression.Invoke(readerRef(), "enterDepth"));
     expressions.add(reserveObject(objectOwner));
-    expressions.add(object);
     Expression anyMap = anyMap(builder, object);
-    if (anyMap != null) {
-      expressions.add(anyMap);
-    }
+    // Generate the map variable first so its fixed helper-parameter name is reserved before a
+    // model named AnyMap chooses a local name. Its initializer also materializes the object.
+    expressions.add(anyMap == null ? object : anyMap);
     expressions.add(expectExpr('{'));
     expressions.add(new Expression.If(consumeExpr('}'), returnObject(object)));
     if (properties.length == 0) {
@@ -3054,11 +3074,8 @@ abstract class JsonReaderCodegen {
     Expression.ListExpression expressions = new Expression.ListExpression();
     expressions.add(new Expression.Invoke(readerRef(), "enterDepth"));
     expressions.add(reserveObject(objectOwner));
-    expressions.add(object);
     Expression anyMap = anyMap(builder, object);
-    if (anyMap != null) {
-      expressions.add(anyMap);
-    }
+    expressions.add(anyMap == null ? object : anyMap);
     expressions.add(expectExpr('{'));
     expressions.add(new Expression.If(consumeExpr('}'), returnObject(object)));
     Expression hashes =
@@ -4046,7 +4063,9 @@ abstract class JsonReaderCodegen {
         reserved,
         skip,
         new Expression.If(
-            eq(fieldIndex, Expression.Literal.ofInt(JsonFieldTable.UNKNOWN)), read, skip));
+            eq(fieldIndex, Expression.Literal.ofInt(JsonFieldTable.UNKNOWN)),
+            nullReadGuard(resolver.sharedRegistry().onContentNullRead(), "Any value", read),
+            skip));
   }
 
   private Expression updateExpectedIndex(Expression expectedIndex, Expression fieldIndex) {
@@ -4584,6 +4603,35 @@ abstract class JsonReaderCodegen {
   }
 
   private Expression readField(
+      JsonGeneratedCodecBuilder builder,
+      Class<?> type,
+      JsonFieldInfo property,
+      int id,
+      Expression object,
+      boolean tokenValueRead) {
+    return nullReadGuard(
+        property.onNullRead(),
+        property.name(),
+        readFieldValue(builder, type, property, id, object, tokenValueRead));
+  }
+
+  private Expression nullReadGuard(NullHandling handling, String name, Expression read) {
+    // Resolve the mode while generating: the default emits precisely the original read body.
+    if (handling == NullHandling.SET) {
+      return read;
+    }
+    Expression onNull =
+        handling == NullHandling.FAIL
+            ? new Expression.StaticInvoke(
+                JsonFieldInfo.class,
+                "rejectNullRead",
+                TypeRef.of(Object.class),
+                Expression.Literal.ofString(name))
+            : new Expression.Empty();
+    return new Expression.If(tryReadNullExpr(), onNull, read);
+  }
+
+  private Expression readFieldValue(
       JsonGeneratedCodecBuilder builder,
       Class<?> type,
       JsonFieldInfo property,

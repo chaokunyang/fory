@@ -323,7 +323,13 @@ final class Utf8WriterCodegen extends JsonWriterCodegen {
         Expression.ListExpression expressions =
             new Expression.ListExpression(
                 new Expression.Invoke(
-                    writer, "writeComma", commaKnown ? Expression.Literal.ofInt(1) : index),
+                    writer,
+                    "writeComma",
+                    "",
+                    TypeRef.of(void.class),
+                    false,
+                    false,
+                    commaKnown ? Expression.Literal.ofInt(1) : index),
                 new Expression.Invoke(
                     writer,
                     "writeRawValue",

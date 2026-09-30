@@ -3911,7 +3911,7 @@ abstract class JsonReaderCodegen {
         end,
         object,
         fieldIndex,
-        new Expression.Invoke(readerRef(), "skipValue"));
+        new Expression.Invoke(readerRef(), "skipValue", "", TypeRef.of(void.class), false, false));
   }
 
   private Expression fieldSwitchRange(
@@ -3927,7 +3927,8 @@ abstract class JsonReaderCodegen {
       Expression anyMapCreated) {
     Expression unknown =
         any == null
-            ? new Expression.Invoke(readerRef(), "skipValue")
+            ? new Expression.Invoke(
+                readerRef(), "skipValue", "", TypeRef.of(void.class), false, false)
             : readUnknown(object, fieldIndex, fieldHash, fieldStart, anyMapCreated);
     return fieldSwitchRange(builder, type, properties, start, end, object, fieldIndex, unknown);
   }
@@ -3969,7 +3970,8 @@ abstract class JsonReaderCodegen {
       Expression fieldStart,
       Expression anyMapCreated,
       boolean creatorWorkspace) {
-    Expression skip = new Expression.Invoke(readerRef(), "skipValue");
+    Expression skip =
+        new Expression.Invoke(readerRef(), "skipValue", "", TypeRef.of(void.class), false, false);
     Expression reserved = eq(fieldIndex, Expression.Literal.ofInt(JsonFieldTable.SKIP));
     Expression name =
         new Expression.Variable(

@@ -1,4 +1,3 @@
-
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -200,95 +199,68 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
-================================================================
 
-This source release includes code derived from third-party projects. The files below are relative
-to the root of the Java source-release archive.
+This product bundles code with separate copyright notices and license terms.
+Your use of that code is subject to the terms and conditions of the following
+licenses.
 
 ================================================================
 Apache-2.0 licenses
 ================================================================
-The following components are provided under the Apache-2.0 License. See each project link for
-details. The text of each license is the standard Apache 2.0 license included above.
+The following components are provided under the Apache-2.0 License. See project link for details.
+The text of each license is the standard Apache 2.0 license.
 
-* guava (https://github.com/google/guava)
+* dataclasses (https://github.com/ericvsmith/dataclasses)
     Files:
-      fory-core/src/main/java/org/apache/fory/util/Preconditions.java
-      fory-core/src/main/java/org/apache/fory/reflect/TypeParameter.java
-      fory-core/src/main/java/org/apache/fory/reflect/TypeRef.java
-      fory-core/src/main/java/org/apache/fory/util/concurrency/DirectExecutorService.java
+      pyfory/type_util.py (dataslots function)
 
-* spark (https://github.com/apache/spark)
+* abseil-cpp (https://github.com/abseil/abseil-cpp)
+    Compiled into the pyfory serialization extension module.
     Files:
-      fory-core/src/main/java/org/apache/fory/codegen/Code.java
-      fory-core/src/main/java/org/apache/fory/util/ClassLoaderUtils.java
-      fory-format/src/main/java/org/apache/fory/format/vectorized/ArrowWriter.java
-
-* commons-io (https://github.com/apache/commons-io)
-    Files:
-      fory-core/src/main/java/org/apache/fory/io/ClassLoaderObjectInputStream.java
-
-* commons-lang3 (https://github.com/apache/commons-lang)
-    Files:
-      fory-core/src/main/java/org/apache/fory/util/StringUtils.java
-
-* jackson-annotations (https://github.com/FasterXML/jackson-annotations)
-    Fory JSON implementations of the following annotation APIs are based on Jackson annotations.
-    Files:
-      fory-json/src/main/java/org/apache/fory/json/annotation/JsonAnyGetter.java
-      fory-json/src/main/java/org/apache/fory/json/annotation/JsonAnySetter.java
-      fory-json/src/main/java/org/apache/fory/json/annotation/JsonCreator.java
-      fory-json/src/main/java/org/apache/fory/json/annotation/JsonFormat.java
-      fory-json/src/main/java/org/apache/fory/json/annotation/JsonIgnore.java
-      fory-json/src/main/java/org/apache/fory/json/annotation/JsonInclude.java
-      fory-json/src/main/java/org/apache/fory/json/annotation/JsonProperty.java
-      fory-json/src/main/java/org/apache/fory/json/annotation/JsonPropertyOrder.java
-      fory-json/src/main/java/org/apache/fory/json/annotation/JsonRawValue.java
-      fory-json/src/main/java/org/apache/fory/json/annotation/JsonSubTypes.java
-      fory-json/src/main/java/org/apache/fory/json/annotation/JsonUnwrapped.java
-      fory-json/src/main/java/org/apache/fory/json/annotation/JsonValue.java
-
-* wast (https://github.com/wycst/wast)
-    Fory's probability-first printable-ASCII fast-path predicate is based in part on WAST's JSON
-    string escape predicate.
-    Files:
-      fory-json/src/main/java/org/apache/fory/json/writer/JsonAsciiWordPredicates.java
-
-================================================================
-BSD-3-Clause licenses
-================================================================
-The full BSD-3-Clause license text is included in
-fory-core/src/main/resources/META-INF/licenses/LICENSE-kryo.txt.
-
-* kryo (https://github.com/EsotericSoftware/kryo)
-    Files:
-      fory-core/src/main/java/org/apache/fory/collection/ForyObjectMap.java
-      fory-core/src/main/java/org/apache/fory/collection/IdentityMap.java
-      fory-core/src/main/java/org/apache/fory/collection/IdentityObjectIntMap.java
-      fory-core/src/main/java/org/apache/fory/collection/LongMap.java
-      fory-core/src/main/java/org/apache/fory/collection/LongLongByteMap.java
-      fory-core/src/main/java/org/apache/fory/collection/ObjectIntMap.java
-      fory-core/src/main/java/org/apache/fory/type/Generics.java
-      fory-core/src/test/java/org/apache/fory/type/GenericsTest.java
-
-================================================================
-Public Domain
-================================================================
-The following component is placed in the public domain. The author disclaims copyright to this
-source code. See the project link for details.
-
-* java_util (https://github.com/yonik/java_util)
-    Files:
-      fory-core/src/main/java/org/apache/fory/util/MurmurHash3.java
+      cpp/fory/thirdparty/flat_hash_map.h
 
 ================================================================
 MIT licenses
 ================================================================
-The full MIT license text is included in
-fory-json/src/main/resources/META-INF/licenses/LICENSE-zmij.txt.
+The following components are provided under the MIT License. See project link for details.
+The text of each license is included below.
 
-* zmij (https://github.com/vitaut/zmij)
-    zmij is dual-licensed under the MIT License or the Boost Software License 1.0;
-    Fory uses it under the MIT License.
+* fluentpython (https://github.com/fluentpython/example-code)
     Files:
-      fory-json/src/main/java/org/apache/fory/json/writer/FloatingDecimal.java
+      pyfory/type_util.py (record_class_factory function)
+
+    The MIT License (MIT)
+
+    Copyright (c) 2014 Luciano Ramalho
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+
+================================================================
+Public Domain
+================================================================
+The following components are placed in the public domain.
+The author hereby disclaims copyright to this source code.
+See project link for details.
+
+* smhasher (https://github.com/aappleby/smhasher)
+    Compiled into the pyfory mmh3 and serialization extension modules.
+    Files:
+      cpp/fory/thirdparty/MurmurHash3.cc
+      cpp/fory/thirdparty/MurmurHash3.h

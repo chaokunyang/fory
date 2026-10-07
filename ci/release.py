@@ -166,36 +166,27 @@ def prepare(v: str):
         raise
 
 
-def build(v: str, skip_sign: bool = False):
-    """Build source artifacts from the checked-out commit without changing Git state."""
-    logger.info("Start to prepare release artifacts for version %s", v)
+def build(v: str, rc_tag: str, skip_sign: bool = False):
+    """Build source artifacts directly from a release-candidate tag."""
+    logger.info("Start to prepare release artifacts for version %s from %s", v, rc_tag)
     _check_release_version(v)
+    if not re.fullmatch(rf"v{re.escape(v)}-rc\d+", rc_tag):
+        raise ValueError(f"RC tag {rc_tag} does not match release version {v}")
     os.chdir(PROJECT_ROOT_DIR)
     _check_all_committed()
-    release_commit = subprocess.check_output(
-        ["git", "rev-parse", "HEAD^{commit}"], text=True
-    ).strip()
-    license_text = subprocess.check_output(
-        ["git", "show", f"{release_commit}:LICENSE"], text=True, encoding="utf-8"
-    )
     if os.path.exists("dist"):
         shutil.rmtree("dist")
     os.mkdir("dist")
     src_tar = f"apache-fory-{v}-src.tar.gz"
-    prefix = f"apache-fory-{v}-src/"
-    # Keep the RC commit ID and timestamp in the archive. Prune benchmark-only
-    # licenses in the archive entry, never through a commit or worktree edit.
+    # Preserve the tag's tree and commit ID so voters can reproduce the source archive.
     subprocess.check_call(
         [
             "git",
             "archive",
             "--format=tar.gz",
             f"--output=dist/{src_tar}",
-            f"--prefix={prefix}",
-            f"--add-virtual-file={prefix}LICENSE:{_strip_unnecessary_license(license_text)}",
-            release_commit,
-            ".",
-            ":(exclude)LICENSE",
+            f"--prefix=apache-fory-{v}-src/",
+            f"refs/tags/{rc_tag}",
         ]
     )
     os.chdir("dist")
@@ -225,22 +216,6 @@ def _check_all_committed():
         raise RuntimeError(
             f"There are some uncommitted files: {proc.stdout}, please commit it."
         )
-
-
-def _strip_unnecessary_license(license_text):
-    lines = license_text.splitlines(keepends=True)
-    new_lines = []
-    line_number = 0
-    while line_number < len(lines):
-        line = lines[line_number]
-        if "fast-serialization" in line:
-            line_number += 4
-        elif "benchmark" in line:  # strip license in benchmark
-            line_number += 1
-        else:
-            new_lines.append(line)
-            line_number += 1
-    return "".join(new_lines)
 
 
 def verify(v, signature=True):
@@ -285,6 +260,14 @@ def publish_jvm(languages="all", mode="release"):
 def stage_jvm(v, rc_tag, output=None):
     """Publish, discover, close, and verify the JVM staging repositories."""
     _validate_release_candidate(v, rc_tag)
+    head, release_commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD", f"refs/tags/{rc_tag}^{{commit}}"],
+        cwd=PROJECT_ROOT_DIR,
+        text=True,
+    ).splitlines()
+    # JVM publication uses HEAD; it must identify the same candidate as the source tag.
+    if head != release_commit:
+        raise ValueError(f"HEAD {head} does not match {rc_tag} at {release_commit}")
     _require_jvm_release_version(v)
     authorization = _nexus_authorization()
     repositories_before = set(_nexus_repositories(authorization))
@@ -377,11 +360,11 @@ def build_jvm_artifacts(v, output):
     logger.info("Built unsigned JVM release repository: %s", output)
 
 
-def rebuild_for_verification(v, checkout, output):
+def rebuild_for_verification(v, rc_tag, checkout, output):
     """Run the current unsigned builders against an isolated RC checkout."""
     global PROJECT_ROOT_DIR
     PROJECT_ROOT_DIR = os.path.abspath(checkout)
-    build(v, skip_sign=True)
+    build(v, rc_tag, skip_sign=True)
     build_jvm_artifacts(v, output)
 
 
@@ -394,6 +377,7 @@ def verify_ci_artifacts(
     source_url=None,
     keys_url=FORY_KEYS_URL,
     output=None,
+    rebuild_dir=None,
 ):
     """Rebuild an RC locally and compare every signed CI artifact byte-for-byte."""
     _validate_release_candidate(v, rc_tag)
@@ -420,14 +404,20 @@ def verify_ci_artifacts(
     ).strip()
     _prepare_jvm_build()
 
-    with (
-        tempfile.TemporaryDirectory(prefix="fory-ci-artifact-verification-") as root,
-        tempfile.TemporaryDirectory(prefix="fg-", dir="/tmp") as gnupg_home,
-    ):
+    os.makedirs(os.path.dirname(output), exist_ok=True)
+    root = (
+        os.path.abspath(rebuild_dir)
+        if rebuild_dir
+        else tempfile.mkdtemp(
+            prefix=f"{rc_tag}-verification-", dir=os.path.dirname(output)
+        )
+    )
+    logger.info("Verification files (retained on failure): %s", root)
+    with tempfile.TemporaryDirectory(prefix="fg-", dir="/tmp") as gnupg_home:
         checkout = os.path.join(root, "checkout")
         local_repository = os.path.join(root, "local-maven-repository")
         staged = os.path.join(root, "staged")
-        os.makedirs(staged)
+        os.makedirs(staged, exist_ok=True)
         keys_path = os.path.join(root, "KEYS")
         _download_file(keys_url, keys_path)
         gpg_env = os.environ.copy()
@@ -437,35 +427,52 @@ def verify_ci_artifacts(
             env=gpg_env,
             stdout=subprocess.DEVNULL,
         )
-        subprocess.check_call(
-            [
-                "git",
-                "clone",
-                "--quiet",
-                "--no-checkout",
-                "--no-hardlinks",
-                os.path.abspath(PROJECT_ROOT_DIR),
-                checkout,
-            ]
-        )
-        subprocess.check_call(
-            ["git", "checkout", "--quiet", "--detach", release_commit], cwd=checkout
-        )
-        release_script = os.path.abspath(__file__)
-        subprocess.check_call(
-            [
-                sys.executable,
-                release_script,
-                "rebuild_for_verification",
-                "-v",
-                v,
-                "--checkout",
-                checkout,
-                "--output",
-                local_repository,
-            ],
-            cwd=checkout,
-        )
+        if rebuild_dir:
+            checkout_commit = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=checkout, text=True
+            ).strip()
+            if checkout_commit != release_commit:
+                raise ValueError(
+                    "Retained rebuild does not match the requested RC commit"
+                )
+            subprocess.check_call(["git", "diff", "--exit-code", "HEAD"], cwd=checkout)
+            if not os.path.isdir(local_repository):
+                raise FileNotFoundError(
+                    f"Missing retained JVM build: {local_repository}"
+                )
+            logger.info("Reusing unsigned rebuild from %s", root)
+        else:
+            subprocess.check_call(
+                [
+                    "git",
+                    "clone",
+                    "--quiet",
+                    "--no-checkout",
+                    "--no-hardlinks",
+                    os.path.abspath(PROJECT_ROOT_DIR),
+                    checkout,
+                ]
+            )
+            subprocess.check_call(
+                ["git", "checkout", "--quiet", "--detach", release_commit], cwd=checkout
+            )
+            release_script = os.path.abspath(__file__)
+            subprocess.check_call(
+                [
+                    sys.executable,
+                    release_script,
+                    "rebuild_for_verification",
+                    "-v",
+                    v,
+                    "--rc-tag",
+                    rc_tag,
+                    "--checkout",
+                    checkout,
+                    "--output",
+                    local_repository,
+                ],
+                cwd=checkout,
+            )
 
         rows = []
         source_archive = f"apache-fory-{v}-src.tar.gz"
@@ -571,8 +578,11 @@ def verify_ci_artifacts(
     failures = [row for row in rows if row["result"] != "Match"]
     if failures:
         raise RuntimeError(
-            f"{len(failures)} of {len(rows)} artifacts did not match; report: {output}"
+            f"{len(failures)} of {len(rows)} artifacts did not match; "
+            f"report: {output}; verification files: {root}"
         )
+    if not rebuild_dir:
+        shutil.rmtree(root)
     logger.info("Verified %d artifacts byte-for-byte; report: %s", len(rows), output)
 
 
@@ -609,7 +619,7 @@ def _download_file(url, path):
         headers={"User-Agent": "apache-fory-release-verifier/1"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=NEXUS_TIMEOUT_SECONDS) as response:
+        with _verification_response(request) as response:
             if response.status != 200:
                 raise RuntimeError(f"Download returned HTTP {response.status}: {url}")
             with open(path, "wb") as output:
@@ -618,6 +628,21 @@ def _download_file(url, path):
         raise RuntimeError(f"Download returned HTTP {exc.code}: {url}") from None
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Download failed for {url}: {exc.reason}") from None
+
+
+def _verification_response(request):
+    # Only retry read-only verification requests, never staging mutations.
+    for attempt in range(3):
+        try:
+            return urllib.request.urlopen(request, timeout=NEXUS_TIMEOUT_SECONDS)
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (429, 500, 502, 503, 504) or attempt == 2:
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 2:
+                raise
+        logger.warning("Retrying verification request: %s", request.full_url)
+        time.sleep(attempt + 1)
 
 
 def _sha512(path):
@@ -701,9 +726,7 @@ def _nexus_repository_files(staging_id):
             },
         )
         try:
-            with urllib.request.urlopen(
-                request, timeout=NEXUS_TIMEOUT_SECONDS
-            ) as response:
+            with _verification_response(request) as response:
                 payload = json.load(response)
         except urllib.error.HTTPError as exc:
             raise RuntimeError(
@@ -793,7 +816,8 @@ def _tool_version(command):
         text=True,
         check=True,
     )
-    return result.stdout.strip()
+    # Captured Maven/sbt output may retain terminal styling in non-TTY mode.
+    return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", result.stdout).strip()
 
 
 def _write_ci_verification_report(
@@ -2695,7 +2719,10 @@ def _parse_args():
         "build",
         description="Build release artifacts",
     )
-    release_parser.add_argument("-v", type=str, help="new version")
+    release_parser.add_argument("-v", type=str, required=True, help="release version")
+    release_parser.add_argument(
+        "--rc-tag", required=True, help="immutable release-candidate tag to archive"
+    )
     release_parser.add_argument(
         "--skip-sign",
         action="store_true",
@@ -2751,6 +2778,7 @@ def _parse_args():
         description="Rebuild source and JVM artifacts in an isolated RC checkout",
     )
     rebuild_parser.add_argument("-v", required=True)
+    rebuild_parser.add_argument("--rc-tag", required=True)
     rebuild_parser.add_argument("--checkout", required=True)
     rebuild_parser.add_argument("--output", required=True)
     rebuild_parser.set_defaults(func=rebuild_for_verification)
@@ -2844,7 +2872,7 @@ def _parse_args():
     )
     verify_ci_parser.add_argument(
         "--source-url",
-        help="ATR candidate directory; defaults to the Fory ATR version directory",
+        help="source candidate directory (ATR or SVN); defaults to the Fory ATR version directory",
     )
     verify_ci_parser.add_argument(
         "--keys-url",
@@ -2854,6 +2882,10 @@ def _parse_args():
     verify_ci_parser.add_argument(
         "--output",
         help="Markdown verification report path under the local trusted machine",
+    )
+    verify_ci_parser.add_argument(
+        "--rebuild-dir",
+        help="reuse an unchanged unsigned build directory retained by a failed verification",
     )
     verify_ci_parser.set_defaults(func=verify_ci_artifacts)
 

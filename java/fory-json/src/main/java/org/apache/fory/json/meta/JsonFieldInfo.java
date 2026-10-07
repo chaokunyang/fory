@@ -40,6 +40,7 @@ import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.annotation.JsonProperty.Include;
+import org.apache.fory.json.annotation.JsonProperty.NullHandling;
 import org.apache.fory.json.codec.CodecUtils;
 import org.apache.fory.json.codec.DirectUnboxedValueCodec;
 import org.apache.fory.json.codec.JsonValueCodec;
@@ -119,6 +120,8 @@ public final class JsonFieldInfo {
   private final JsonFormat formatAnnotation;
   private final boolean writeUnboxedRequired;
   private final boolean readUnboxedRequired;
+  private final NullHandling onNullRead;
+  private final NullHandling onContentNullRead;
   private JsonFieldKind writeKind;
   private JsonFieldKind readKind;
   private int writeKindId;
@@ -409,7 +412,11 @@ public final class JsonFieldInfo {
       Class<? extends JsonValueCodec<?>> valueCodecClass,
       JsonFormat formatAnnotation,
       boolean rawValue,
-      boolean escapeNonAscii) {
+      boolean escapeNonAscii,
+      NullHandling onNullRead,
+      NullHandling onContentNullRead) {
+    this.onNullRead = onNullRead;
+    this.onContentNullRead = onContentNullRead;
     this.name = name;
     this.escapeNonAscii = escapeNonAscii;
     // Inclusion, required-value, and read-index metadata become immutable with ObjectCodec.
@@ -551,6 +558,25 @@ public final class JsonFieldInfo {
     return name;
   }
 
+  public NullHandling onNullRead() {
+    return onNullRead;
+  }
+
+  public NullHandling onContentNullRead() {
+    return onContentNullRead;
+  }
+
+  /** Tests the input token before decoding so transparent codecs cannot erase null presence. */
+  public boolean skipNullRead(JsonReader reader) {
+    if (onNullRead == NullHandling.SET || !reader.tryReadNull()) {
+      return false;
+    }
+    if (onNullRead == NullHandling.FAIL) {
+      rejectNullRead(name);
+    }
+    return true;
+  }
+
   /** Returns parent-local metadata with a transformed JSON name and the same Java member owner. */
   public JsonFieldInfo withName(String transformedName, TypeRef<?> ownerType) {
     JsonFieldInfo copy =
@@ -569,7 +595,9 @@ public final class JsonFieldInfo {
             valueCodecClass,
             formatAnnotation,
             writesRawString(),
-            escapeNonAscii);
+            escapeNonAscii,
+            onNullRead,
+            onContentNullRead);
     copy.setReadIndex(readIndex());
     copy.defaultMethod = defaultMethod;
     copy.defaultDependencies = defaultDependencies;
@@ -600,7 +628,11 @@ public final class JsonFieldInfo {
 
   /**
    * Returns whether the logical write type can contain an empty value, independently of its
-   * carrier.
+   * carrier. This covers only the built-in empty types that {@link #isEmpty} tests before it
+   * delegates to the codec, so a false answer does not mean the value is never empty: a codec that
+   * overrides {@link JsonValueCodec#isEmpty} still decides. Generated writers combine both, so this
+   * must list every built-in empty type {@link #isEmpty} tests; object codec validation of required
+   * NON_EMPTY properties uses this type check alone.
    */
   public boolean mayBeEmpty() {
     Class<?> type = writeTypeRef == null ? null : writeTypeRef.getRawType();
@@ -613,12 +645,15 @@ public final class JsonFieldInfo {
             || type == OptionalInt.class
             || type == OptionalLong.class
             || type == OptionalDouble.class
+            // An enum constant body cannot add interfaces, so an enum value is never one of the
+            // built-in empty types above unless its declared enum is.
             || !Modifier.isFinal(type.getModifiers()) && !type.isEnum());
   }
 
   /**
    * Tests built-in empty values directly, then delegates to the selected codec. Null omission is
-   * handled separately by the containing field's nullability contract.
+   * handled separately by the containing field's nullability contract. A new built-in empty type
+   * here must also be added to {@link #mayBeEmpty}.
    */
   @Internal
   public static boolean isEmpty(Object value, JsonTypeInfo typeInfo, JsonWriter writer) {
@@ -940,7 +975,9 @@ public final class JsonFieldInfo {
     }
     if (readRawType != null) {
       if (readUnboxedRequired) {
-        JsonTypeInfo canonical = typeResolver.getTypeInfo(readTypeRef);
+        JsonTypeInfo canonical =
+            typeResolver.withContentNullRead(
+                typeResolver.getTypeInfo(readTypeRef), onContentNullRead);
         readUnboxedValueCodec = requireUnboxed(canonical, readRawType, "read");
         readOccurrenceTypeInfo = canonical;
         if (readUnboxedValueCodec instanceof DirectUnboxedValueCodec) {
@@ -952,7 +989,9 @@ public final class JsonFieldInfo {
         }
       } else {
         readTypeInfo =
-            selectedTypeInfo == null ? typeResolver.getTypeInfo(readTypeRef) : selectedTypeInfo;
+            typeResolver.withContentNullRead(
+                selectedTypeInfo == null ? typeResolver.getTypeInfo(readTypeRef) : selectedTypeInfo,
+                onContentNullRead);
         readOccurrenceTypeInfo = readTypeInfo;
       }
       readKind = readTypeInfo.kind();
@@ -993,6 +1032,9 @@ public final class JsonFieldInfo {
   }
 
   public void readLatin1(Latin1JsonReader reader, Object object) {
+    if (skipNullRead(reader)) {
+      return;
+    }
     if (readOccurrenceNull(reader)) {
       readAccessor.putObject(object, null);
       return;
@@ -1054,6 +1096,9 @@ public final class JsonFieldInfo {
   }
 
   public void readUtf16(Utf16JsonReader reader, Object object) {
+    if (skipNullRead(reader)) {
+      return;
+    }
     if (readOccurrenceNull(reader)) {
       readAccessor.putObject(object, null);
       return;
@@ -1115,6 +1160,9 @@ public final class JsonFieldInfo {
   }
 
   public void readUtf8(Utf8JsonReader reader, Object object) {
+    if (skipNullRead(reader)) {
+      return;
+    }
     if (readOccurrenceNull(reader)) {
       readAccessor.putObject(object, null);
       return;
@@ -1183,13 +1231,13 @@ public final class JsonFieldInfo {
       return false;
     }
     if (readOccurrenceTypeInfo.rejectsNull()) {
-      rejectNullRead();
+      rejectNullRead(name);
     }
     return true;
   }
 
   /** Throws the cold failure used by interpreted and generated readers. */
-  public Object rejectNullRead() {
+  public static Object rejectNullRead(String name) {
     throw new ForyJsonException("JSON property " + name + " is not nullable");
   }
 
@@ -1203,7 +1251,9 @@ public final class JsonFieldInfo {
         codecAnnotation,
         valueCodecClass,
         formatAnnotation,
-        readUnboxedRequired);
+        readUnboxedRequired,
+        onNullRead,
+        onContentNullRead);
   }
 
   /** Assigns one already decoded value through this property's validated read sink. */

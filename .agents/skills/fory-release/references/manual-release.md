@@ -42,19 +42,20 @@ until the vote passes.
 
 ## Build the Source Release
 
-Start from the clean release branch. The build temporarily commits the release
-archive LICENSE change and resets it, so require the original commit and clean
-tree afterward.
+Start from the clean release branch. Archive the exact RC tag without changing
+tracked files, creating commits, or moving refs. The root LICENSE and NOTICE
+must remain unchanged; benchmark attribution stays with the excluded benchmarks.
 
 ```bash
 test -z "$(git status --porcelain)"
 before_build="$(git rev-parse HEAD)"
-python3 ci/release.py build -v "$release_version"
+python3 ci/release.py build -v "$release_version" --rc-tag "$rc_tag"
 test "$(git rev-parse HEAD)" = "$before_build"
 test -z "$(git status --porcelain)"
 test -f "dist/apache-fory-${release_version}-src.tar.gz"
 test -f "dist/apache-fory-${release_version}-src.tar.gz.asc"
 test -f "dist/apache-fory-${release_version}-src.tar.gz.sha512"
+test "$(gzip -dc "dist/apache-fory-${release_version}-src.tar.gz" | git get-tar-commit-id)" = "$release_commit"
 ```
 
 The command verifies the generated PGP signature and SHA-512 checksum.

@@ -123,10 +123,11 @@ jobs:
       - name: Build source release
         shell: bash
         env:
+          RC_TAG: ${{ needs.validate.outputs.rc-tag }}
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
           set -euo pipefail
-          python3 ci/release.py build -v "$VERSION"
+          python3 ci/release.py build -v "$VERSION" --rc-tag "$RC_TAG"
 
       - name: Upload source release to ATR
         uses: apache/tooling-actions/upload-to-atr@ca6ed9e095c40db61c42a90db2599bb2fbc2319f

@@ -182,6 +182,16 @@ every source, JAR, POM, source JAR, documentation JAR, and distribution file
 byte-for-byte. Each JVM ecosystem is built once and may reuse the machine's
 normal dependency caches; only source and build outputs are clean. It writes a
 Markdown report under `dist/`. Any mismatch or missing artifact blocks the vote.
+Failed verification retains the local rebuild and downloaded artifacts beside
+the report for diagnosis; successful verification removes these temporary files.
+After a download failure, retry with `--rebuild-dir <retained-directory>` to
+reuse the completed unsigned build on the same machine without recompiling.
+The checkout must still match the RC commit and remain unchanged. Downloads,
+signature checks, and every byte comparison run again; retained files are not
+deleted in this mode.
+Source packaging uses a direct `git archive` of the RC tag without rewriting
+`LICENSE`, creating commits, or moving refs. Benchmark-specific attribution stays
+in `benchmarks/LICENSE` and `benchmarks/NOTICE` with the excluded benchmark sources.
 
 ### 8. Draft the vote email
 
@@ -210,9 +220,12 @@ to it automatically after a CI failure.
 
 ## Verification-Only Requests
 
-For an existing CI-staged candidate, do not create another tag or staging
-repository. Confirm the exact tag, commit, workflow run, ATR URL, both Nexus
-repository IDs, and CI signing-key fingerprint, then run steps 6 and 7.
+For an existing candidate, do not create another tag or staging repository.
+Confirm the exact tag, commit, source URL (ATR or manual SVN), both Nexus
+repository IDs, and signing-key fingerprint from the vote. Check the tag workflows
+and run step 7 against those artifacts. Rebuild the unmodified RC checkout, not
+the verifier's branch; never copy newer POMs or sources into the RC to force a
+match. Report any mismatch against the original candidate.
 
 ## GitHub Release Title and Notes
 
@@ -256,10 +269,10 @@ Before creating a new tag, stop if the Git tree is dirty, the tag already
 exists, or its target would differ from the release commit. A failed workflow,
 staging operation, or artifact check pauses the dependent step until it is
 diagnosed and recovered under [Release retries](#release-retries); failure alone
-does not require a higher RC. Before sending the vote, require the ATR candidate
-and both closed Nexus repositories to be public, the trusted-hardware report to
-show a complete byte-for-byte match, and tag workflows to be successful unless
-the release manager explicitly waived monitoring.
+does not require a higher RC. Before sending the vote, require the selected source
+candidate URL (ATR or manual SVN) and both closed Nexus repositories to be public,
+the trusted-hardware report to show a complete byte-for-byte match, and tag
+workflows to be successful unless the release manager explicitly waived monitoring.
 
 ## References
 

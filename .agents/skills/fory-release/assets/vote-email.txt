@@ -23,7 +23,7 @@ Scala:
 https://repository.apache.org/content/repositories/${scala_staging_id}/
 
 The release tag:
-https://github.com/apache/fory/releases/tag/${rc_tag}
+https://github.com/apache/fory/tree/${rc_tag}
 
 The release commit:
 https://github.com/apache/fory/commit/${release_commit}

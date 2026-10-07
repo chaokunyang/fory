@@ -415,15 +415,10 @@ class ScalaGenerator(ScalaServiceGeneratorMixin, BaseGenerator):
         parent_stack: Optional[List[Message]] = None,
     ) -> List[str]:
         ind = self.indent_str * indent
-        lines = [
-            f"{ind}@ForyUnion",
-            f"{ind}enum {union.name} derives ForySerializer {{",
-        ]
-        lines.append(f"{ind}    @ForyUnknownCase")
-        lines.append(f"{ind}    case Unknown(value: UnknownCase)")
-        lines.append("")
+        case_lines: List[str] = []
+        case_names: Set[str] = set()
         for field in union.fields:
-            lines.append(f"{ind}    @ForyCase(id = {field.number})")
+            case_lines.append(f"{ind}    @ForyCase(id = {field.number})")
             case_name = self.to_pascal_case(field.name)
             field_type = self.generate_type(
                 field.field_type,
@@ -434,9 +429,19 @@ class ScalaGenerator(ScalaServiceGeneratorMixin, BaseGenerator):
                 parent_stack=parent_stack,
             )
             case_name = self.union_case_name(field.field_type, field_type, case_name)
+            case_names.add(case_name)
             field_type = self.qualify_union_payload_type(field_type, case_name)
-            lines.append(f"{ind}    case {case_name}(value: {field_type})")
-            lines.append("")
+            case_lines.append(f"{ind}    case {case_name}(value: {field_type})")
+            case_lines.append("")
+        unknown_name = self.unknown_case_name(union.name, case_names)
+        lines = [
+            f"{ind}@ForyUnion",
+            f"{ind}enum {union.name} derives ForySerializer {{",
+            f"{ind}    @ForyUnknownCase",
+            f"{ind}    case {unknown_name}(value: UnknownCase)",
+            "",
+        ]
+        lines.extend(case_lines)
         lines.append(f"{ind}}}")
         lines.append("")
         return lines
@@ -1035,6 +1040,29 @@ class ScalaGenerator(ScalaServiceGeneratorMixin, BaseGenerator):
                 return nested
         return self.schema.get_type(name)
 
+    # Simple names imported inside the generated module file; generated types
+    # rooted at these names are shadowed there and must be referenced by their
+    # fully qualified name.
+    MODULE_SHADOWED_TYPE_NAMES = {
+        "Fory",
+        "ThreadSafeFory",
+        "ForyScala",
+        "ForySerializer",
+        "ScalaSerializers",
+    }
+
+    def module_type_ref(self, class_ref: str) -> str:
+        """Return a module-scope class reference for a generated type."""
+        if class_ref.split(".", 1)[0] not in self.MODULE_SHADOWED_TYPE_NAMES:
+            return class_ref
+        package = self.get_scala_package()
+        if package:
+            return f"{package}.{class_ref}"
+        raise ValueError(
+            f"Scala type name {class_ref} conflicts with a name used inside "
+            "the generated Fory module; declare a package or rename the type"
+        )
+
     def generate_type_registration(
         self,
         lines: List[str],
@@ -1042,7 +1070,9 @@ class ScalaGenerator(ScalaServiceGeneratorMixin, BaseGenerator):
         owner_path: Optional[str] = None,
         type_only: bool = False,
     ) -> None:
-        class_ref = f"{owner_path}.{type_def.name}" if owner_path else type_def.name
+        class_ref = self.module_type_ref(
+            f"{owner_path}.{type_def.name}" if owner_path else type_def.name
+        )
         namespace = self.schema.package or "default"
         type_name = type_def.name
         if owner_path:
@@ -1070,7 +1100,9 @@ class ScalaGenerator(ScalaServiceGeneratorMixin, BaseGenerator):
     def serializer_registration(
         self, lines: List[str], type_def, owner_path: Optional[str] = None
     ) -> None:
-        class_ref = f"{owner_path}.{type_def.name}" if owner_path else type_def.name
+        class_ref = self.module_type_ref(
+            f"{owner_path}.{type_def.name}" if owner_path else type_def.name
+        )
         lines.append(
             f"        ForySerializer.registerSerializer(fory, classOf[{class_ref}])"
         )

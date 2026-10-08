@@ -62,10 +62,10 @@ Eligible instance fields, including ordinary `final` fields, are restored when r
 When a subclass hides a superclass field with the same name, the subclass field is the JSON
 property in both directions. Ignoring that field does not expose the hidden superclass field.
 
-An ordinary object property uses its declared type for reading and writing. Writing a subclass
-instance through a concrete declared base type fails if that property has no subtype metadata;
-otherwise the subclass's fields could be lost. Use `@JsonSubTypes` or a custom codec when the
-property must preserve subtype state.
+An ordinary object property uses its declared type when reading. When writing a subclass instance
+through a concrete declared base type, Fory writes the subclass's mapped properties. Reading the
+same JSON through the base type creates a base instance and ignores subclass-only properties.
+Use `@JsonSubTypes` or a custom codec when the reader must restore the subtype.
 
 ### Field mode
 

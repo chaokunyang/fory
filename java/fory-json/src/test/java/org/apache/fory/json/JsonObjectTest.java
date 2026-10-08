@@ -29,6 +29,7 @@ import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -43,6 +44,7 @@ import org.apache.fory.json.data.ParentValue;
 import org.apache.fory.json.data.PrivateFields;
 import org.apache.fory.json.data.PublicFields;
 import org.apache.fory.platform.JdkVersion;
+import org.apache.fory.reflect.TypeRef;
 import org.testng.SkipException;
 import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
@@ -266,8 +268,10 @@ public class JsonObjectTest extends ForyJsonTestModels {
   @Test
   public void writeDeclaredObjectFieldType() {
     ForyJson json = newJson();
-    assertThrows(ForyJsonException.class, () -> json.toJson(new DeclaredParentField()));
-    assertThrows(ForyJsonException.class, () -> json.toJsonBytes(new DeclaredParentField()));
+    String expected = "{\"value\":{\"parent\":1,\"child\":2}}";
+    assertEquals(json.toJson(new DeclaredParentField()), expected);
+    assertEquals(
+        new String(json.toJsonBytes(new DeclaredParentField()), StandardCharsets.UTF_8), expected);
     DeclaredParentField read =
         json.fromJson("{\"value\":{\"child\":9,\"parent\":3}}", DeclaredParentField.class);
     assertEquals(read.value.getClass(), ParentValue.class);
@@ -291,14 +295,31 @@ public class JsonObjectTest extends ForyJsonTestModels {
   }
 
   @Test
-  public void rejectUndeclaredSubtype() {
-    ForyJson json = newJsonBuilder().withFieldMode(true).build();
-    Animal animal = new Animal();
-    assertEquals(json.toJson(animal), "{\"name\":\"generic\"}");
-    assertEquals(json.toJson(new Dog()), "{\"name\":\"rex\",\"breed\":\"lab\"}");
-    assertThrows(ForyJsonException.class, () -> json.toJson(new Dog(), Animal.class));
-    assertThrows(ForyJsonException.class, () -> json.toJson(new DogOwner()));
-    assertThrows(ForyJsonException.class, () -> json.toJsonBytes(new DogOwner()));
+  public void writeRuntimeSubtype() {
+    for (boolean fieldMode : new boolean[] {false, true}) {
+      ForyJson json = newJsonBuilder().withFieldMode(fieldMode).build();
+      String animalJson = "{\"name\":\"generic\"}";
+      String dogJson = "{\"name\":\"rex\",\"breed\":\"lab\"}";
+      String ownerJson = "{\"pet\":" + dogJson + "}";
+      assertEquals(json.toJson(new Animal()), animalJson);
+      assertEquals(json.toJson(new Dog(), Animal.class), dogJson);
+      assertEquals(
+          new String(json.toJsonBytes(new Dog(), Animal.class), StandardCharsets.UTF_8), dogJson);
+      assertEquals(json.toJson(new DogOwner()), ownerJson);
+      assertEquals(new String(json.toJsonBytes(new DogOwner()), StandardCharsets.UTF_8), ownerJson);
+      TypeRef<List<Animal>> animalsType = new TypeRef<List<Animal>>() {};
+      assertEquals(
+          json.toJson(Collections.<Animal>singletonList(new Dog()), animalsType),
+          "[" + dogJson + "]");
+
+      Animal decoded = json.fromJson(dogJson, Animal.class);
+      assertEquals(decoded.getClass(), Animal.class);
+      assertEquals(decoded.name, "rex");
+      DogOwner owner = json.fromJson(ownerJson, DogOwner.class);
+      assertEquals(owner.pet.getClass(), Animal.class);
+      assertEquals(owner.pet.name, "rex");
+      assertGeneratedWhenSupported(json, Animal.class);
+    }
   }
 
   @Test

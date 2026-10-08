@@ -266,14 +266,97 @@ public class JsonObjectTest extends ForyJsonTestModels {
   @Test
   public void writeDeclaredObjectFieldType() {
     ForyJson json = newJson();
-    String expected = "{\"value\":{\"parent\":1}}";
-    assertEquals(json.toJson(new DeclaredParentField()), expected);
-    assertEquals(
-        new String(json.toJsonBytes(new DeclaredParentField()), StandardCharsets.UTF_8), expected);
+    assertThrows(ForyJsonException.class, () -> json.toJson(new DeclaredParentField()));
+    assertThrows(ForyJsonException.class, () -> json.toJsonBytes(new DeclaredParentField()));
     DeclaredParentField read =
         json.fromJson("{\"value\":{\"child\":9,\"parent\":3}}", DeclaredParentField.class);
     assertEquals(read.value.getClass(), ParentValue.class);
     assertEquals(read.value.parent, 3);
+  }
+
+  @Test
+  public void restoreFinalFields() {
+    for (boolean fieldMode : new boolean[] {false, true}) {
+      ForyJson json = newJsonBuilder().withFieldMode(fieldMode).build();
+      FinalFields original = new FinalFields("value", 7);
+      String text = json.toJson(original);
+      assertEquals(text, "{\"name\":\"value\",\"count\":7}");
+      FinalFields decoded = json.fromJson(text, FinalFields.class);
+      assertEquals(decoded.name, original.name);
+      assertEquals(decoded.count, original.count);
+      decoded = json.fromJson(json.toJsonBytes(original), FinalFields.class);
+      assertEquals(decoded.name, original.name);
+      assertEquals(decoded.count, original.count);
+    }
+  }
+
+  @Test
+  public void rejectUndeclaredSubtype() {
+    ForyJson json = newJsonBuilder().withFieldMode(true).build();
+    Animal animal = new Animal();
+    assertEquals(json.toJson(animal), "{\"name\":\"generic\"}");
+    assertEquals(json.toJson(new Dog()), "{\"name\":\"rex\",\"breed\":\"lab\"}");
+    assertThrows(ForyJsonException.class, () -> json.toJson(new Dog(), Animal.class));
+    assertThrows(ForyJsonException.class, () -> json.toJson(new DogOwner()));
+    assertThrows(ForyJsonException.class, () -> json.toJsonBytes(new DogOwner()));
+  }
+
+  @Test
+  public void hiddenFieldUsesSubclass() {
+    for (boolean fieldMode : new boolean[] {false, true}) {
+      ForyJson json = newJsonBuilder().withFieldMode(fieldMode).build();
+      assertEquals(json.toJson(new DerivedHidden()), "{\"shared\":\"derived\"}");
+      DerivedHidden decoded = json.fromJson("{\"shared\":\"json\"}", DerivedHidden.class);
+      assertEquals(decoded.shared, "json");
+      assertEquals(((BaseHidden) decoded).shared, "base");
+      assertEquals(json.toJson(new IgnoredHidden()), "{}");
+    }
+  }
+
+  public static final class FinalFields {
+    private final String name;
+    public final int count;
+
+    public FinalFields() {
+      this(null, 0);
+    }
+
+    public FinalFields(String name, int count) {
+      this.name = name;
+      this.count = count;
+    }
+
+    public String getName() {
+      return name;
+    }
+  }
+
+  public static class Animal {
+    public String name = "generic";
+  }
+
+  public static final class Dog extends Animal {
+    public String breed = "lab";
+
+    public Dog() {
+      name = "rex";
+    }
+  }
+
+  public static final class DogOwner {
+    public Animal pet = new Dog();
+  }
+
+  public static class BaseHidden {
+    private String shared = "base";
+  }
+
+  public static final class DerivedHidden extends BaseHidden {
+    private String shared = "derived";
+  }
+
+  public static final class IgnoredHidden extends BaseHidden {
+    @JsonIgnore private String shared = "derived";
   }
 
   @Test

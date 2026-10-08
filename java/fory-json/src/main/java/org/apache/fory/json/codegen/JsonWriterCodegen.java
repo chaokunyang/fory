@@ -317,6 +317,7 @@ abstract class JsonWriterCodegen {
             + "  writer.writeNull();\n"
             + "  return;\n"
             + "}\n"
+            + exactWriteTypeCheck(ctx, type)
             + prettyEntry
             + bodyCode,
         void.class,
@@ -406,6 +407,7 @@ abstract class JsonWriterCodegen {
             + "  writer.writeNull();\n"
             + "  return;\n"
             + "}\n"
+            + exactWriteTypeCheck(ctx, type)
             + prettyEntry
             + bodyCode,
         void.class,
@@ -526,6 +528,7 @@ abstract class JsonWriterCodegen {
             + "  writer.writeNull();\n"
             + "  return;\n"
             + "}\n"
+            + exactWriteTypeCheck(ctx, type)
             + prettyEntry
             + code,
         void.class,
@@ -534,6 +537,17 @@ abstract class JsonWriterCodegen {
         Object.class,
         "value");
     return ctx.genCode();
+  }
+
+  private static String exactWriteTypeCheck(CodegenContext ctx, Class<?> type) {
+    String name = ctx.type(type);
+    return "if (value.getClass() != "
+        + name
+        + ".class) {\n"
+        + "  throw org.apache.fory.json.codec.ObjectCodec.subtypeWrite("
+        + name
+        + ".class, value.getClass());\n"
+        + "}\n";
   }
 
   private String addPrettyWriter(

@@ -1575,15 +1575,31 @@ public class ObjectCodec<T> implements CompositeJsonCodec<T> {
   }
 
   final void writeStringObject(StringJsonWriter writer, T value) {
+    if (value.getClass() != type) {
+      throw subtypeWrite(type, value.getClass());
+    }
     writer.writeObjectStart();
     writeMembers(writer, value, 0);
     writer.writeObjectEnd();
   }
 
   final void writeUtf8Object(Utf8JsonWriter writer, T value) {
+    if (value.getClass() != type) {
+      throw subtypeWrite(type, value.getClass());
+    }
     writer.writeObjectStart();
     writeMembers(writer, value, 0);
     writer.writeObjectEnd();
+  }
+
+  @Internal
+  public static ForyJsonException subtypeWrite(Class<?> declaredType, Class<?> actualType) {
+    return new ForyJsonException(
+        "JSON object declared as "
+            + declaredType.getName()
+            + " cannot write subtype "
+            + actualType.getName()
+            + " without subtype metadata");
   }
 
   /** Returns whether this object codec represents one pre-existing singleton. */

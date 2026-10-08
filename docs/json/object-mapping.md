@@ -58,8 +58,14 @@ Static, transient, synthetic, and `Class<?>` fields are excluded. `getClass()` a
 value type is `Class<?>` are also excluded. An annotation placed on an ineligible member is rejected
 instead of being silently ignored.
 
-An ordinary final field can be written but is not used as a mutable read sink. Use a record,
-`JsonCreator`, or a custom codec for immutable construction.
+Eligible instance fields, including ordinary `final` fields, are restored when reading JSON.
+When a subclass hides a superclass field with the same name, the subclass field is the JSON
+property in both directions. Ignoring that field does not expose the hidden superclass field.
+
+An ordinary object property uses its declared type for reading and writing. Writing a subclass
+instance through a concrete declared base type fails if that property has no subtype metadata;
+otherwise the subclass's fields could be lost. Use `@JsonSubTypes` or a custom codec when the
+property must preserve subtype state.
 
 ### Field mode
 

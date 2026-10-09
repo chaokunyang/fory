@@ -29,6 +29,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 
 ## Agent Operating Rules
 
+- Complete tasks in the main agent by default, including code review and test execution. Use subagents only when the user explicitly requests delegation or a bounded, independent subtask has a clear benefit to result quality or completion time that outweighs coordination overhead. If the benefit is unclear, keep the work in the main agent. Tool availability alone does not justify delegation.
 - Keep only rules shared across multiple languages in `AGENTS.md`. Put language-specific rules
   and corrections in `.agents/languages/<language>.md`, including language-specific details of a
   shared rule. Do not duplicate those rules in `AGENTS.md`.
@@ -303,8 +304,6 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 
 - For Apache Fory PR, branch, commit-range, and local-diff code reviews, load `.agents/ci-and-pr.md` and follow its review workflow, red flags, and validation guidance unless explicitly acting as the independent general reviewer required by `AI_POLICY.md`.
 - When explicitly acting as the independent general reviewer required by `AI_POLICY.md`, do not load `.agents/ci-and-pr.md` or use copied Fory-specific review checklist prompts. Still obey review-only safety rules, this carve-out, and any general instructions required by the reviewer tool.
-- When the task environment supports review subagents, run Fory-guided code review through a fresh read-only review subagent while the main agent coordinates scope, checks findings, and reports the final result.
-- Reuse the same review subagent for later review passes on the same feature unless a workflow explicitly requires a fresh reviewer; use a fresh review subagent for each different feature.
 - Review-only tasks are read-only: do not create task files, edit files, apply patches, run tests, run builds, run benchmarks, run linters, install packages, commit, push, fix tests, or update docs unless the user explicitly starts an implementation or verification task.
 - Review-only agents keep planning and findings in memory or in the final review response. They report missing validation evidence instead of running validation commands themselves.
 
@@ -313,8 +312,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Run the relevant tests for every touched language or subsystem before finishing.
 - A formatter-only pass after successful tests does not invalidate those test results. Do not rerun tests solely because formatting ran after the tests already passed.
 - When multiple independent language test suites are required, run them concurrently when the environment has enough resources instead of running them one by one; keep each language's logs and results separate, and rerun any failed suite with focused diagnostics.
-- Run applicable test commands in a subagent with a thinking budget one level lower than the main task budget, using medium when the current budget is unclear, unless the change is docs-only or the user explicitly asks to run them locally.
-- Reuse the same test subagent for repeated runs within one task and subsystem so it keeps failure context; create a fresh subagent when switching unrelated subsystems or when prior context may be stale or misleading.
+- Run applicable test commands from the main agent by default; concurrent test commands do not require subagents. Apply the delegation rule under Agent Operating Rules before using a test subagent, and reuse it for related reruns when delegation is warranted.
 - Use `integration_tests/` for cross-language compatibility validation when behavior crosses runtimes.
 - For a runtime-local xlang implementation or fixture change that does not alter the shared
   protocol, type mapping, wire semantics, or another runtime, run only that runtime's Java-driven

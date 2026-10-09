@@ -41,8 +41,8 @@ Typical flow:
 
 ## Review Subagents
 
-- When the task environment supports review subagents, perform Apache Fory code review in a fresh read-only review subagent. The main agent coordinates scope, sanity-checks findings, and reports the final review.
-- Reuse the same review subagent for later review passes on the same feature unless the user or workflow requires a fresh reviewer. Start a fresh review subagent for a different feature, PR, issue, branch, commit range, local diff topic, or subsystem review.
+- Perform Apache Fory code review in the main agent by default. Apply the delegation rule in `AGENTS.md` before using a review subagent. When delegating, the main agent coordinates scope, sanity-checks findings, and reports the final review.
+- If a review subagent is used, reuse it for later review passes on the same feature unless the user or workflow requires a fresh reviewer. Reassess whether delegation is warranted for a different review; when it is, use a fresh review subagent.
 - Keep review subagents read-only. They must not edit files, apply patches, run tests, run builds, run benchmarks, run linters, install packages, commit, push, fix tests, update docs, or perform implementation work.
 - Review subagents report findings or an explicit no-findings result to the caller. The main agent decides whether any separate implementation, CI fixing, or verification task should happen.
 

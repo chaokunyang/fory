@@ -1329,7 +1329,8 @@ jobs:
     name: C++ CI
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Keep the C++ toolchain stable across ubuntu-latest image upgrades.
+        os: [ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7.0.1
@@ -1454,7 +1455,7 @@ jobs:
     name: C++ Sanitizer (${{ matrix.sanitizer }})
     needs: changes
     if: needs.changes.outputs.cpp_code == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         sanitizer: [asan, ubsan]

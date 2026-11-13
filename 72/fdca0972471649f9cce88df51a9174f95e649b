@@ -1,0 +1,102 @@
+README.md
+  h_e94f2b5704cbef 28,172,179,201,209,218,240,252,263-264,297,303,313,884,891
+csharp/README.md
+  h_e94f2b5704cbef 54
+dart/CHANGELOG.md
+  h_e94f2b5704cbef 22-26
+dart/packages/fory/CHANGELOG.md
+  h_e94f2b5704cbef 22-26
+dart/packages/fory/README.md
+  h_e94f2b5704cbef 47
+docs/compiler/build-integration.md
+  h_e94f2b5704cbef 214
+docs/compiler/cli.md
+  h_e94f2b5704cbef 692
+docs/grpc/csharp.md
+  h_e94f2b5704cbef 42,51
+docs/grpc/dart.md
+  h_e94f2b5704cbef 41
+docs/grpc/rust.md
+  h_e94f2b5704cbef 40
+docs/json/getting-started.md
+  h_e94f2b5704cbef 46,60,69
+docs/json/kotlin.md
+  h_e94f2b5704cbef 44,57
+docs/json/scala.md
+  h_e94f2b5704cbef 28
+docs/object-serialization/cpp/index.md
+  h_e94f2b5704cbef 65,95,99,131
+docs/object-serialization/csharp/index.md
+  h_e94f2b5704cbef 49
+docs/object-serialization/dart/index.md
+  h_e94f2b5704cbef 50
+docs/object-serialization/java/index.md
+  h_e94f2b5704cbef 66,74
+docs/object-serialization/kotlin/index.md
+  h_e94f2b5704cbef 56,63
+docs/object-serialization/rust/basic-serialization.md
+  h_e94f2b5704cbef 185
+docs/object-serialization/rust/index.md
+  h_e94f2b5704cbef 40-42,55
+docs/object-serialization/scala/index.md
+  h_e94f2b5704cbef 52
+docs/row-format/java.md
+  h_e94f2b5704cbef 46,53
+docs/start/cpp.md
+  h_e94f2b5704cbef 48
+docs/start/csharp.md
+  h_e94f2b5704cbef 39
+docs/start/dart.md
+  h_e94f2b5704cbef 39
+docs/start/go.md
+  h_e94f2b5704cbef 41
+docs/start/java.md
+  h_e94f2b5704cbef 47,54,100
+docs/start/javascript.md
+  h_e94f2b5704cbef 39,75
+docs/start/kotlin.md
+  h_e94f2b5704cbef 47,91
+docs/start/python.md
+  h_e94f2b5704cbef 38
+docs/start/rust.md
+  h_e94f2b5704cbef 39
+docs/start/scala.md
+  h_e94f2b5704cbef 40
+docs/start/swift.md
+  h_e94f2b5704cbef 45
+examples/cpp/hello_row/MODULE.bazel.example
+  h_e94f2b5704cbef 31,39
+examples/cpp/hello_row/README.md
+  h_e94f2b5704cbef 99
+examples/cpp/hello_world/MODULE.bazel.example
+  h_e94f2b5704cbef 31,39
+examples/cpp/hello_world/README.md
+  h_e94f2b5704cbef 92
+java/README.md
+  h_e94f2b5704cbef 117,124,131,138,147,149,151,153
+java/fory-json/README.md
+  h_e94f2b5704cbef 64,71
+kotlin/fory-json-kotlin-ksp/README.md
+  h_e94f2b5704cbef 41-42
+kotlin/fory-json-kotlin/README.md
+  h_e94f2b5704cbef 43,58
+rust/README.md
+  h_e94f2b5704cbef 22,45-47,60
+scala/fory-json-scala/README.md
+  h_e94f2b5704cbef 29
+scala/fory-scala/README.md
+  h_e94f2b5704cbef 185
+swift/README.md
+  h_e94f2b5704cbef 56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "72fdca0972471649f9cce88df51a9174f95e649b",
+  "prompts": {},
+  "humans": {
+    "h_e94f2b5704cbef": {
+      "author": "chaokunyang <shawn.ck.yang@gmail.com>"
+    }
+  }
+}
